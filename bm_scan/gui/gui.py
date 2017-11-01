@@ -1,9 +1,15 @@
 import matplotlib
 matplotlib.use('WXAgg')
+from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg as FigureCanvas
+from matplotlib.backends.backend_wx import NavigationToolbar2Wx
+from matplotlib.figure import Figure
+
 import wx
 import os
+import numpy as np
 from os.path import exists, join
 from ..utils import Scanner, Plotter
+from tifffile import imsave
 
 
 class bm_scan_ui(wx.Frame):
@@ -240,9 +246,22 @@ class bm_scan_ui(wx.Frame):
             }
             scanner = Scanner(**params)
             scanner.generateScanRecord()
+            scandata_output = scanner.performScan()
 
-            plotter = Plotter('/Users/preawwy/RA/bm_scan/bm_scan/sample/raster.007')
-            plotter.produceImage(join(self.dir_picker.GetPath(),'result.tif'))
+            # TEMP
+            scandata_output = '/Users/preawwy/RA/bm_scan/bm_scan/sample/raster.007'
+
+            plotter = Plotter(scandata_output)
+            x, y, z = plotter.getPlot()
+            if x is not None:
+                plot = plot_gui(x, y, z, "raster.007")
+                plot.Show()
+
+                ## save image to tif file
+                img = np.array(z/z.max()*65535, dtype='uint16')
+                imsave(join(self.dir_picker.GetPath(),'result.tif'), img)
+
+
 
     def checkSettings(self):
         # Check settings before running the scan
@@ -271,6 +290,65 @@ class bm_scan_ui(wx.Frame):
         :return:
         """
         pass
+
+class plot_gui(wx.Frame):
+    def __init__(self, x, y, z, title=""):
+        super(plot_gui, self).__init__(None, title=title)
+        self.x = x
+        self.y = y
+        self.z = z
+        self.initUI()
+        self.setConnections()
+        self.plot()
+
+    def initUI(self):
+        """
+        Initial all ui
+        """
+        self.main_sizer = wx.BoxSizer(wx.VERTICAL)
+        self.panel = wx.Panel(self)
+        self.panel_sizer = wx.BoxSizer(wx.VERTICAL)
+
+        # Add Figure
+        self.figure = Figure()
+        self.axes = self.figure.add_subplot(111)
+        self.canvas = FigureCanvas(self, -1, self.figure)
+        self.panel_sizer.Add(self.canvas, 1, wx.LEFT | wx.TOP | wx.EXPAND)
+
+        # Add toolbar
+        self.toolbar = NavigationToolbar2Wx(self.canvas)
+        self.toolbar.Realize()
+        # By adding toolbar in sizer, we are able to put it at the bottom
+        # of the frame - so appearance is closer to GTK version.
+        self.panel_sizer.Add(self.toolbar, 0, wx.LEFT | wx.EXPAND)
+        # update the axes menu on the toolbar
+        self.toolbar.update()
+
+        self.panel.SetSizer(self.panel_sizer)
+        self.main_sizer.Add(self.panel, 1, wx.GROW)
+
+        self.SetSizer(self.main_sizer)
+        self.SetAutoLayout(True)
+        self.main_sizer.Fit(self)
+
+    def setConnections(self):
+        """
+        Set Event Handlers
+        """
+        self.canvas.mpl_connect('button_press_event', self.onClicked)
+
+    def plot(self):
+        self.axes.cla()
+        im = self.axes.pcolormesh(self.x, self.y, self.z, cmap='jet')
+        self.figure.colorbar(im)
+        self.figure.tight_layout()
+        self.canvas.draw()
+
+    def onClicked(self, e):
+        """
+        Handle when the plot is clicked
+        """
+        print e.xdata, e.ydata
 
 def begin():
     app = wx.App()

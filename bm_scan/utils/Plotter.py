@@ -1,5 +1,3 @@
-from tifffile import imsave
-import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 
@@ -41,31 +39,21 @@ class Plotter:
             print "Error : there are no column names"
 
 
-    def produceImage(self, image_file):
+    def getPlot(self):
         """
-        Create an image from scan data
-        :param image_file: output file
+        Create map from scan data, display map, and save map as an image to a file
+        :param image_file: output filename
         :return:
         """
-        if self.columns is not None and self.scandata is not None:
+
+        if self.scandata is not None:
             x = sorted(list(set(np.array(self.scandata['smx']))))
             y = sorted(list(set(np.array(self.scandata['smy']))))
             x_coor, y_coor = np.meshgrid(x, y)
             Io = np.array(self.scandata['Io'])
             It = np.array(self.scandata['It'])
             z = It/Io
-
-            intensity = np.reshape(z, (len(y), len(x)))
-            fig = plt.figure()
-            ax = fig.add_subplot(111)
-            ax.cla()
-            im = ax.pcolormesh(x_coor, y_coor, intensity)
-            # fig.colorbar(im)
-            # ax.imshow(intensity)
-            fig.tight_layout()
-            fig.show()
-
-            # save image to file
-            intensity = intensity.astype('float32')
-            imsave(image_file, intensity)
-
+            z = np.reshape(z, (len(y), len(x)))
+            return x_coor, y_coor, z
+        else:
+            return None, None, None

@@ -41,8 +41,9 @@ class Scanner():
     def performScan(self):
         """
         Performing scan by using scan record which produced from generateScanRecord()
+        and return scan data file name
         """
-        pass
+        return ""
         record_list = Mp.setup_database("/etc/mx/motor.dat") # Get record list from DB
         scan_database = join(self.dir_path, self.scanrecord_file)
         MpScan.load_scans(record_list, scan_database)
@@ -53,6 +54,5 @@ class Scanner():
         # Perform scan "vslit"
         print "performing vslit scan."
         scan.perform_scan()
-        scandata = open(self.x_motor+"_result.001", "r")
 
-        return scandata
+        return self.x_motor+"_result.001"
