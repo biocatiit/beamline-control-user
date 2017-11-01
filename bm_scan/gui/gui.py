@@ -2,11 +2,13 @@ import matplotlib
 matplotlib.use('WXAgg')
 import wx
 import os
-from ..scan import Scanner
+from os.path import exists, join
+from ..utils import Scanner, Plotter
+
 
 class bm_scan_ui(wx.Frame):
-    def __init__(self, parent, title):
-        super(bm_scan_ui, self).__init__(parent, title=title)
+    def __init__(self, title):
+        super(bm_scan_ui, self).__init__(None, title=title)
         self.all_scalars = []
         self.scalar_names = self.getScalars()
         self.xmotors = self.getXMotors()
@@ -16,7 +18,7 @@ class bm_scan_ui(wx.Frame):
         self.setConnections()
         self.Show()
         self.SetSizeHints((840, 320))
-        self.SetSize((840, 320))
+        self.SetSize((840, 330))
 
     def getScalars(self):
         """
@@ -71,11 +73,9 @@ class bm_scan_ui(wx.Frame):
         self.panel_sizer.Add(detector_sizer, pos=(1, 0), span=(1, 2), flag=wx.EXPAND)
 
         # Add directory field
-        self.directory = wx.TextCtrl(self.panel, value=os.getcwd())
-        self.browse_button = wx.Button(self, wx.ID_ANY, "Browse")
-        self.panel_sizer.Add(wx.StaticText(self, label='Output directory:'), pos=(2, 0), span=(1, 1), flag=wx.EXPAND)
-        self.panel_sizer.Add(self.directory, pos=(2, 1), span=(1, 1), flag=wx.EXPAND)
-        self.panel_sizer.Add(self.browse_button, pos=(2, 2), span=(1, 1), flag=wx.EXPAND)
+        self.dir_picker = wx.DirPickerCtrl(self, wx.ID_ANY, path=os.getcwd(), message="Select an output directory")
+        self.panel_sizer.Add(wx.StaticText(self, label='Output directory:'), pos=(2, 0), span=(1, 1), flag=wx.EXPAND|wx.ALIGN_BOTTOM)
+        self.panel_sizer.Add(self.dir_picker, pos=(2, 1), span=(1, 2), flag=wx.EXPAND)
 
         # Add start button
         self.start_button = wx.Button(self, wx.ID_ANY, "Start")
@@ -173,6 +173,16 @@ class bm_scan_ui(wx.Frame):
 
         return det_sizer
 
+    def setConnections(self):
+        """
+        Set Handlers to widget events
+        """
+        self.Bind(wx.EVT_SIZE, self.OnSize)
+        self.Bind(wx.EVT_TEXT, self.refreshScalar, self.numScalars)
+        self.Bind(wx.EVT_SPINCTRL, self.refreshScalar, self.numScalars)
+        self.Bind(wx.EVT_COMBOBOX, self.detectorChanged, self.detetor)
+        self.Bind(wx.EVT_BUTTON, self.startPressed, self.start_button)
+
     def refreshScalar(self, e):
         current = len(self.all_scalars)
         expected = self.numScalars.GetValue()
@@ -213,10 +223,26 @@ class bm_scan_ui(wx.Frame):
             detector = {
                 'name' : self.detetor.GetValue()
             }
-            scanner = Scanner("", self.motorx_name, self.motorx_start, self.motorx_step, self.motorx_step_size,
-                              self.motory_name, self.motory_start, self.motory_step, self.motory_step_size,
-                              scalars, dwell_time, detector)
+
+            params = {
+                'dir' : str(self.dir_picker.GetPath()),
+                'x_motor' : str(self.motorx_name.GetValue()),
+                'x_start' : str(self.motorx_start.GetValue()),
+                'x_step' : str(self.motorx_step.GetValue()),
+                'x_size' : str(self.motorx_step_size.GetValue()),
+                'y_motor' : str(self.motory_name.GetValue()),
+                'y_start' : str(self.motory_start.GetValue()),
+                'y_step' : str(self.motory_step.GetValue()),
+                'y_size' : str(self.motory_step_size.GetValue()),
+                'scalars' : scalars,
+                'dwell_time' : dwell_time,
+                'detector' : detector
+            }
+            scanner = Scanner(**params)
             scanner.generateScanRecord()
+
+            plotter = Plotter('/Users/preawwy/RA/bm_scan/bm_scan/sample/raster.007')
+            plotter.produceImage(join(self.dir_picker.GetPath(),'result.tif'))
 
     def checkSettings(self):
         # Check settings before running the scan
@@ -230,17 +256,13 @@ class bm_scan_ui(wx.Frame):
             print "Error : 2 scalars have the same name"
             return False
 
-        return True
+        # Check output directory
+        dir = self.dir_picker.GetPath()
+        if not exists(dir):
+            print "Error :",dir," does not exist. Please select another directory."
+            return False
 
-    def setConnections(self):
-        """
-        Set Handlers to widget events
-        """
-        self.Bind(wx.EVT_SIZE, self.OnSize)
-        self.Bind(wx.EVT_TEXT, self.refreshScalar, self.numScalars)
-        self.Bind(wx.EVT_SPINCTRL, self.refreshScalar, self.numScalars)
-        self.Bind(wx.EVT_COMBOBOX, self.detectorChanged, self.detetor)
-        self.Bind(wx.EVT_BUTTON, self.startPressed, self.start_button)
+        return True
 
     def OnSize(self, event):
         """
@@ -252,5 +274,5 @@ class bm_scan_ui(wx.Frame):
 
 def begin():
     app = wx.App()
-    bm_scan_ui(None, title='BMScan')
+    bm_scan_ui('BMScan')
     app.MainLoop()
