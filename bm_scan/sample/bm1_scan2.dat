@@ -1,0 +1,1 @@
+vslit                            scan linear_scan motor_scan "" "" 1 1 1  av_center 1  Io  0 0 preset_time "0.1 joerger_timer" text vslit_bmset.001 none $f[0]  -1500  50  61
