@@ -27,7 +27,7 @@ mxdir = "/opt/mx"
 
 #  Define the location of the example MX database.
 
-database_filename = "example.dat"
+database_filename = "db_soft.dat"
 
 #  Construct the name of the Mp package directory.
 
@@ -53,7 +53,7 @@ energy_motor_record = record_list.get_record("energy")
 
 i_zero_record = record_list.get_record("Io")
 
-i_trans_record = record_list.get_record("It")
+# i_trans_record = record_list.get_record("It")
 
 timer_record = record_list.get_record("timer1")
 
@@ -69,14 +69,23 @@ settling_time = 0.1     # in seconds
 
 fmt = "example2scan scan linear_scan motor_scan \"\" \"\" "
 
-fmt = fmt + "1 1 1 energy 2 Io It 0 %g preset_time \"%g timer1\" "
+# fmt = fmt + "1 1 1 energy 1 I1 0 %g preset_time \"%g timer1\" "
+#
+# fmt = fmt + "text example2scan.out none "
+#
+# fmt = fmt + "log($f[0]/$f[1]) %g %g %d"
+#
+# description = fmt % \
+# 	( settling_time, measurement_time, start, step_size, num_steps )
 
-fmt = fmt + "text example2scan.out gnuplot "
+fmt = fmt + "1 2 2 x1 x2 1 I1 0 %g preset_time \"%g timer1\" "
 
-fmt = fmt + "log($f[0]/$f[1]) %g %g %d"
+fmt = fmt + "text example2scan.out none "
+
+fmt = fmt + "log($f[0]/$f[1]) 1 0 1 1 3 4"
 
 description = fmt % \
-	( settling_time, measurement_time, start, step_size, num_steps )
+	( settling_time, measurement_time)
 
 print "Scan description = '%s'\n" % ( description )
 

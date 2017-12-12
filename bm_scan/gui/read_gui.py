@@ -1,5 +1,5 @@
-import matplotlib
-matplotlib.use('WXAgg')
+# import matplotlib
+# matplotlib.use('WXAgg')
 
 import wx
 import os
@@ -8,16 +8,20 @@ from os import listdir
 from os.path import exists, join
 from ..utils import Scanner
 from ..utils.formula import calculate
-from tifffile import imsave
+# from tifffile import imsave
 from plot_gui import plot_gui
 from threading import Thread
 from ..utils.Plotter import get_cols
 
 class read_gui(wx.Frame):
+    """
+    GUI for scan output file reader
+    """
     def __init__(self, title):
         super(read_gui, self).__init__(None, title=title)
         self.file_name = None
         self.files = None
+        self.columns = []
         self.initUI()
         self.setConnections()
         self.Show()
@@ -32,27 +36,27 @@ class read_gui(wx.Frame):
 
         # Add directory field
         self.dir_picker = wx.DirPickerCtrl(self.panel, wx.ID_ANY, message="Select a directory")
-        self.panel_sizer.Add(wx.StaticText(self, label='Directory:'), pos=(0, 0), span=(1, 1),
+        self.panel_sizer.Add(wx.StaticText(self.panel, label='Directory:'), pos=(0, 0), span=(1, 1),
                              flag=wx.ALIGN_CENTER_VERTICAL)
         self.panel_sizer.Add(self.dir_picker, pos=(0, 1), span=(1, 2), flag=wx.EXPAND)
 
         # Add Filename
-        self.panel_sizer.Add(wx.StaticText(self, label='Template Filename:'), pos=(1, 0), span=(1, 1), flag=wx.EXPAND)
-        self.filename_widget = wx.StaticText(self, label='-', size=(600, 20))
+        self.panel_sizer.Add(wx.StaticText(self.panel, label='Template Filename:'), pos=(1, 0), span=(1, 1), flag=wx.EXPAND)
+        self.filename_widget = wx.StaticText(self.panel, label='-', size=(600, 20))
         self.panel_sizer.Add(self.filename_widget, pos=(1, 1), span=(1, 2), flag=wx.EXPAND)
 
         # Add Scalers
-        self.panel_sizer.Add(wx.StaticText(self, label='Available Scalers:'), pos=(2, 0), span=(1, 1), flag=wx.EXPAND)
-        self.all_scalers = wx.StaticText(self, label='-', size=(600, 20))
+        self.panel_sizer.Add(wx.StaticText(self.panel, label='Available Scalers:'), pos=(2, 0), span=(1, 1), flag=wx.EXPAND)
+        self.all_scalers = wx.StaticText(self.panel, label='-', size=(600, 20))
         self.panel_sizer.Add(self.all_scalers, pos=(2, 1), span=(1, 2), flag=wx.EXPAND)
 
         # Add Formula
-        self.panel_sizer.Add(wx.StaticText(self, label='Plot Formula:'), pos=(3, 0), span=(1, 1), flag=wx.EXPAND)
+        self.panel_sizer.Add(wx.StaticText(self.panel, label='Plot Formula:'), pos=(3, 0), span=(1, 1), flag=wx.EXPAND)
         self.formula = wx.TextCtrl(self.panel, value='It/Io')
         self.panel_sizer.Add(self.formula, pos=(3, 1), span=(1, 2), flag=wx.EXPAND)
 
         # Add start button
-        self.plot_button = wx.Button(self, wx.ID_ANY, "Plot")
+        self.plot_button = wx.Button(self.panel, wx.ID_ANY, "Plot")
         self.panel_sizer.Add(self.plot_button, pos=(4, 0), span=(1, 3), flag=wx.ALIGN_CENTER)
 
         self.panel.SetSizer(self.panel_sizer)
@@ -71,7 +75,7 @@ class read_gui(wx.Frame):
         Handle when a directory is selected
         """
         path = self.dir_picker.GetPath()
-        print path, "is selected."
+        print(str(path+ " is selected."))
 
         # Get columns from a file
         all_files = listdir(path)
@@ -83,7 +87,7 @@ class read_gui(wx.Frame):
                 break
 
         if len(selected_file) < 0:
-            print "Error : No file"
+            print("Error : No file")
             return
 
         self.filename_widget.SetLabelText(self.file_name)
@@ -116,21 +120,34 @@ class read_gui(wx.Frame):
         :return:
         """
         for f in self.files:
-            full_path = join(self.dir_picker.GetPath(), f)
-            self.plot_panel.plot(full_path)
+            self.callPlot(join(self.dir_picker.GetPath(), f))
+
+
+    def callPlot(self, full_path):
+        """
+        Trigger plot panel to read the file and plot
+        :param full_path: full path of the file
+        :return:
+        """
+        self.plot_panel.plot(full_path)
+        # wx.CallAfter(self.plot_panel.plot, full_path)
 
     def checkSettings(self):
         """
         Check All Settings before generate plot
         :return:
         """
+        if len(self.columns) == 0:
+            print("Error : No Available Data")
+            return False
+
         d = {c:1 for c in self.columns}
         try:
             calculate(self.formula.GetValue(), d)
         except ZeroDivisionError:
             pass
         except:
-            print "Error : Invalid fomula"
+            print("Error : Invalid fomula")
             return False
 
         return True

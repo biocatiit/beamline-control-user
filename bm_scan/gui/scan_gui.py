@@ -1,5 +1,5 @@
-import matplotlib
-matplotlib.use('WXAgg')
+# import matplotlib
+# matplotlib.use('WXAgg')
 
 import wx
 import os
@@ -10,9 +10,13 @@ from plot_gui import plot_gui
 
 
 class scan_gui(wx.Frame):
+    """
+    GUI for scanner program. This program allows user to set start, end, and step size for motor x and y. Also, number of scalers and plot formula. (Detectors are not supported now)
+    """
     def __init__(self, title):
         super(scan_gui, self).__init__(None, title=title)
         self.all_scalers = []
+        self.double_digits = 4
         self.getDevices()
         self.initUI()
         self.setConnections()
@@ -25,6 +29,12 @@ class scan_gui(wx.Frame):
         Get list of devices from MX Database
         :return:
         """
+        self.xmotors = ['smx']
+        self.ymotors = ['smy']
+        self.scaler_names = ['Io', 'It', 'If']
+        self.detectors = ['None']
+
+        return
         self.xmotors = []
         self.ymotors = []
         self.scaler_names = []
@@ -66,33 +76,35 @@ class scan_gui(wx.Frame):
         self.panel_sizer = wx.GridBagSizer(10, 10)
 
         # Add MX DB Path
-        self.db_picker = wx.FilePickerCtrl(self, wx.ID_ANY, path=get_DB_Path(), message="Select MX Database")
-        self.panel_sizer.Add(wx.StaticText(self, label='MX Database:'), pos=(0, 0), span=(1, 1),
+        init_path = get_DB_Path()
+        self.db_picker = wx.FilePickerCtrl(self.panel, wx.ID_ANY, path=init_path, message="Select MX Database")
+        self.db_picker.SetPath(init_path)
+        self.panel_sizer.Add(wx.StaticText(self.panel, label='MX Database:'), pos=(0, 0), span=(1, 1),
                              flag=wx.ALIGN_CENTER_VERTICAL)
         self.panel_sizer.Add(self.db_picker, pos=(0, 1), span=(1, 2), flag=wx.EXPAND)
 
         # Add Motors Settings
-        motors_box = wx.StaticBox(self, wx.ID_ANY, "Motors")
+        motors_box = wx.StaticBox(self.panel, wx.ID_ANY, "Motors")
         motor_sizer = self.initMotorSizer(motors_box)
         self.panel_sizer.Add(motor_sizer, pos=(1,0), span=(1, 2))
 
         # Add scalers Settings
-        scaler_box = wx.StaticBox(self, wx.ID_ANY, "scalers")
+        scaler_box = wx.StaticBox(self.panel, wx.ID_ANY, "scalers")
         scaler_sizer = self.initscalersizer(scaler_box)
         self.panel_sizer.Add(scaler_sizer, pos=(1, 2), span=(2, 1),  flag=wx.EXPAND)
 
         # Add Detectors Settings
-        detector_box = wx.StaticBox(self, wx.ID_ANY, "Detector")
+        detector_box = wx.StaticBox(self.panel, wx.ID_ANY, "Detector")
         detector_sizer = self.initDetectorSizer(detector_box)
         self.panel_sizer.Add(detector_sizer, pos=(2, 0), span=(1, 2), flag=wx.EXPAND)
 
         # Add directory field
-        self.dir_picker = wx.DirPickerCtrl(self, wx.ID_ANY, path=os.getcwd(), message="Select an output directory")
-        self.panel_sizer.Add(wx.StaticText(self, label='Output directory:'), pos=(3, 0), span=(1, 1), flag=wx.ALIGN_CENTER_VERTICAL)
+        self.dir_picker = wx.DirPickerCtrl(self.panel, wx.ID_ANY, path=os.getcwd(), message="Select an output directory")
+        self.panel_sizer.Add(wx.StaticText(self.panel, label='Output directory:'), pos=(3, 0), span=(1, 1), flag=wx.ALIGN_CENTER_VERTICAL)
         self.panel_sizer.Add(self.dir_picker, pos=(3, 1), span=(1, 2), flag=wx.EXPAND)
 
         # Add start button
-        self.start_button = wx.Button(self, wx.ID_ANY, "Start")
+        self.start_button = wx.Button(self.panel, wx.ID_ANY, "Start")
         self.panel_sizer.Add(self.start_button, pos=(4, 0), span=(1, 3), flag=wx.ALIGN_CENTER)
 
         self.panel.SetSizer(self.panel_sizer)
@@ -112,36 +124,46 @@ class scan_gui(wx.Frame):
         grid_sizer = wx.GridBagSizer(5, 5)
 
         self.motorx_name = wx.ComboBox(self.panel, -1, choices=self.xmotors, style=wx.CB_READONLY)
-        self.motorx_start = wx.SpinCtrl(parent=self.panel, style=wx.SP_ARROW_KEYS, min=-10000000, max=10000000, initial=16000)
-        self.motorx_end = wx.SpinCtrl(parent=self.panel, style=wx.SP_ARROW_KEYS, min=-10000000, max=10000000, initial=36800)
-        self.motorx_step = wx.SpinCtrl(parent=self.panel, style=wx.SP_ARROW_KEYS, min=1, max=10000000, initial=50)
+        if 'smx' in self.xmotors:
+            self.motorx_name.SetValue('smx')
+        self.motorx_start = wx.SpinCtrlDouble(parent=self.panel, style=wx.SP_ARROW_KEYS, min=-10000000, max=10000000, initial=16000)
+        self.motorx_start.SetDigits(self.double_digits)
+        self.motorx_end = wx.SpinCtrlDouble(parent=self.panel, style=wx.SP_ARROW_KEYS, min=-10000000, max=10000000, initial=35800)
+        self.motorx_end.SetDigits(self.double_digits)
+        self.motorx_step = wx.SpinCtrlDouble(parent=self.panel, style=wx.SP_ARROW_KEYS, min=1, max=10000000, initial=600)
+        self.motorx_step.SetDigits(self.double_digits)
 
         self.motory_name = wx.ComboBox(self.panel, -1, choices=self.ymotors, style=wx.CB_READONLY)
-        self.motory_start = wx.SpinCtrl(parent=self.panel, style=wx.SP_ARROW_KEYS, min=-10000000, max=10000000, initial=89000)
-        self.motory_end = wx.SpinCtrl(parent=self.panel, style=wx.SP_ARROW_KEYS, min=-10000000, max=10000000, initial=105000)
-        self.motory_step = wx.SpinCtrl(parent=self.panel, style=wx.SP_ARROW_KEYS, min=1, max=10000000, initial=50)
+        if 'smy' in self.ymotors:
+            self.motory_name.SetValue('smy')
+        self.motory_start = wx.SpinCtrlDouble(parent=self.panel, style=wx.SP_ARROW_KEYS, min=-10000000, max=10000000, initial=89000)
+        self.motory_start.SetDigits(self.double_digits)
+        self.motory_end = wx.SpinCtrlDouble(parent=self.panel, style=wx.SP_ARROW_KEYS, min=-10000000, max=10000000, initial=105000)
+        self.motory_end.SetDigits(self.double_digits)
+        self.motory_step = wx.SpinCtrlDouble(parent=self.panel, style=wx.SP_ARROW_KEYS, min=1, max=10000000, initial=1000)
+        self.motory_step.SetDigits(self.double_digits)
 
         # Add X
-        grid_sizer.Add(wx.StaticText(parent=self, label="Motor X:"), pos=(0, 0), span=(1, 1))
+        grid_sizer.Add(wx.StaticText(parent=self.panel, label="Motor X:"), pos=(0, 0), span=(1, 1))
         grid_sizer.Add(self.motorx_name, pos=(0, 1), span=(1, 5))
-        grid_sizer.Add(wx.StaticText(parent=self, label="Start:"), pos=(1, 0), span=(1, 1))
+        grid_sizer.Add(wx.StaticText(parent=self.panel, label="Start:"), pos=(1, 0), span=(1, 1))
         grid_sizer.Add(self.motorx_start, pos=(1, 1), span=(1, 1))
-        grid_sizer.Add(wx.StaticText(parent=self, label="End:"), pos=(1, 2), span=(1, 1))
+        grid_sizer.Add(wx.StaticText(parent=self.panel, label="End:"), pos=(1, 2), span=(1, 1))
         grid_sizer.Add(self.motorx_end, pos=(1, 3), span=(1, 1))
-        grid_sizer.Add(wx.StaticText(parent=self, label="Step size:"), pos=(1, 4), span=(1, 1))
+        grid_sizer.Add(wx.StaticText(parent=self.panel, label="Step size:"), pos=(1, 4), span=(1, 1))
         grid_sizer.Add(self.motorx_step, pos=(1, 5), span=(1, 1))
 
-        separator = wx.StaticLine(self, -1, style=wx.LI_HORIZONTAL)
+        separator = wx.StaticLine(self.panel, -1, style=wx.LI_HORIZONTAL)
         grid_sizer.Add(separator, pos=(2, 0), span=(1, 6), flag=wx.GROW|wx.ALIGN_CENTER_VERTICAL|wx.ALL)
 
         # Add Y
-        grid_sizer.Add(wx.StaticText(parent=self, label="Motor Y:"), pos=(3, 0), span=(1, 1))
+        grid_sizer.Add(wx.StaticText(parent=self.panel, label="Motor Y:"), pos=(3, 0), span=(1, 1))
         grid_sizer.Add(self.motory_name, pos=(3, 1), span=(1, 5))
-        grid_sizer.Add(wx.StaticText(parent=self, label="Start:"), pos=(4, 0), span=(1, 1))
+        grid_sizer.Add(wx.StaticText(parent=self.panel, label="Start:"), pos=(4, 0), span=(1, 1))
         grid_sizer.Add(self.motory_start, pos=(4, 1), span=(1, 1))
-        grid_sizer.Add(wx.StaticText(parent=self, label="End:"), pos=(4, 2), span=(1, 1))
+        grid_sizer.Add(wx.StaticText(parent=self.panel, label="End:"), pos=(4, 2), span=(1, 1))
         grid_sizer.Add(self.motory_end, pos=(4, 3), span=(1, 1))
-        grid_sizer.Add(wx.StaticText(parent=self, label="Step size:"), pos=(4, 4), span=(1, 1))
+        grid_sizer.Add(wx.StaticText(parent=self.panel, label="Step size:"), pos=(4, 4), span=(1, 1))
         grid_sizer.Add(self.motory_step, pos=(4, 5), span=(1, 1))
 
         motor_sizer.Add(grid_sizer)
@@ -157,20 +179,24 @@ class scan_gui(wx.Frame):
         grid_sizer = wx.GridBagSizer(5, 5)
         self.numscalers = wx.SpinCtrl(parent=self.panel, style=wx.SP_ARROW_KEYS|wx.TE_PROCESS_ENTER, min=1, max=100, initial=1)
         self.dwell_time = wx.SpinCtrlDouble(parent=self.panel, style=wx.SP_ARROW_KEYS|wx.TE_PROCESS_ENTER, min=0.000000001, max=1000000000, initial=1.0, inc=0.5)
+        self.dwell_time.SetDigits(self.double_digits)
         self.scaler_list_sizer = wx.BoxSizer(wx.VERTICAL)
 
         init_fomula = ""
         if len(self.scaler_names) > 0:
-            init_fomula = self.scaler_names[0]
+            if 'Io' in self.scaler_names:
+                init_fomula = 'Io'
+            else:
+                init_fomula = self.scaler_names[0]
 
         self.formula = wx.TextCtrl(parent=self.panel, value=init_fomula)
 
-        grid_sizer.Add(wx.StaticText(parent=self, label="Number of scalers:"), pos=(0, 0), span=(1,2))
+        grid_sizer.Add(wx.StaticText(parent=self.panel, label="Number of scalers:"), pos=(0, 0), span=(1,2))
         grid_sizer.Add(self.numscalers, pos=(0, 2), span=(1, 1))
-        grid_sizer.Add(wx.StaticText(parent=self, label="Dwell time:"), pos=(1, 0), span=(1,1))
+        grid_sizer.Add(wx.StaticText(parent=self.panel, label="Dwell time:"), pos=(1, 0), span=(1,1))
         grid_sizer.Add(self.dwell_time, pos=(1, 2), span=(1, 1))
         grid_sizer.Add(self.scaler_list_sizer, pos=(2, 0), span=(1, 3))
-        grid_sizer.Add(wx.StaticText(parent=self, label="Plot Formula:"), pos=(3, 0), span=(1, 1))
+        grid_sizer.Add(wx.StaticText(parent=self.panel, label="Plot Formula:"), pos=(3, 0), span=(1, 1))
         grid_sizer.Add(self.formula, pos=(3, 1), span=(1,2))
 
         scaler_sizer.Add(grid_sizer)
@@ -186,10 +212,11 @@ class scan_gui(wx.Frame):
         """
         det_sizer = wx.StaticBoxSizer(box, wx.VERTICAL)
         grid_sizer = wx.GridBagSizer(5, 5)
-        self.detector = wx.ComboBox(self, -1, choices=self.detectors, style=wx.CB_READONLY)
+        self.detector = wx.ComboBox(self.panel, -1, choices=self.detectors, style=wx.CB_READONLY)
+        self.detector.SetValue('None')
 
-        grid_sizer.Add(wx.StaticText(parent=self, label="Detector:"), pos=(0, 0), span=(1,2))
-        grid_sizer.Add(self.detector, pos=(0, 2), span=(1, 1))
+        grid_sizer.Add(wx.StaticText(parent=self.panel, label="Detector:"), pos=(0, 0), span=(1,2))
+        grid_sizer.Add(self.detector, pos=(0, 2), span=(1, 5), flag = wx.EXPAND)
 
         det_sizer.Add(grid_sizer)
 
@@ -257,13 +284,18 @@ class scan_gui(wx.Frame):
             # Add scaler if expected number of scalers is higher than current number of scalers
             for i in range(expected - current):
                 scaler_items = wx.BoxSizer(wx.HORIZONTAL)
-                scaler = wx.ComboBox(self, -1, choices=self.scaler_names, style=wx.CB_READONLY)
-                scaler_items.Add(wx.StaticText(self, label=str(current+i+1)+'. '))
-                scaler_items.Add(scaler)
+                scaler = wx.ComboBox(self.panel, -1, choices=self.scaler_names, style=wx.CB_READONLY)
+                if len(self.scaler_names) > 0:
+                    if 'Io' in self.scaler_names:
+                        scaler.SetValue('Io')
+                    else:
+                        scaler.SetValue(self.scaler_names[0])
+                scaler_items.Add(wx.StaticText(self.panel, label=str(current+i+1)+'. '))
+                scaler_items.Add(scaler, flag = wx.EXPAND)
                 self.all_scalers.append(scaler)
                 self.scaler_list_sizer.Add(scaler_items)
                 self.main_sizer.Layout()
-                self.main_sizer.Fit(self)
+                self.main_sizer.Fit(self.panel)
 
         elif current > expected:
             # Remove scalers from bottom if expected number of scaler is less than current scalers
@@ -278,7 +310,7 @@ class scan_gui(wx.Frame):
         """
         Handle when detector is changed
         """
-        print "Current detector is", self.detector.GetValue()
+        print("Current detector is "+str(self.detector.GetValue()))
 
     def startPressed(self, e):
         """
@@ -311,7 +343,7 @@ class scan_gui(wx.Frame):
 
 
             plot_panel = plot_gui(motor_x=params['x_motor'], motor_y=params['y_motor'], formula=self.formula.GetValue(),
-                            xlim=(params['x_start'], params['x_end']), ylim=(params['y_start'], params['y_end']))
+                            xlim=(params['x_start'], params['x_end'], params['x_step']), ylim=(params['y_start'], params['y_end'], params['y_step']))
             plot_panel.Show()
 
             params['callback'] = plot_panel
@@ -335,20 +367,20 @@ class scan_gui(wx.Frame):
             d_scalers[str(scaler.GetValue())] = 1.0
 
         if len(scalers) != len(set(scalers)):
-            print "Error : 2 scalers have the same name"
+            print("Error : 2 scalers have the same name")
             return False
 
         # Check fomula
         try:
             calculate(str(self.formula.GetValue()), d_scalers)
         except:
-            print "Error : Invalid Formula"
+            print("Error : Invalid Formula")
             return False
 
         # Check output directory
         dir = self.dir_picker.GetPath()
         if not exists(dir):
-            print "Error :",dir," does not exist. Please select another directory."
+            print("Error :",dir," does not exist. Please select another directory.")
             return False
 
         return True

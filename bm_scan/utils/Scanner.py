@@ -4,7 +4,8 @@ import time
 import Mp
 import MpScan
 
-DB_PATH = "/Users/preawwy/RA/bm_scan/bm_scan/sample/example.dat"
+DB_PATH = "/etc/mx/mxmotor.dat"
+# DB_PATH = "/Users/jiranun/Work/RA/bm_scan/bm_scan/sample/motortst.dat"
 
 def get_record():
     global DB_PATH
@@ -34,13 +35,13 @@ class Scanner():
         self.detector = detector
         self.callback = callback
 
-        self.y_nsteps = ((self.y_end - self.y_start) / self.y_step) + 1
-        self.x_nsteps = ((self.x_end - self.x_start) / self.x_step) + 1
+        self.y_nsteps = int(round((self.y_end - self.y_start) / self.y_step)) + 1
+        self.x_nsteps = int(round((self.x_end - self.x_start) / self.x_step)) + 1
 
-        self.output = 'raster'
+        self.output = 'rast'
 
-        self.record_list = get_record()  # Get record list from DB
-        print "Database has been set up"
+        # self.record_list = get_record()  # Get record list from DB #jiranun - Add back
+        print("Database has been set up")
 
     def generateScanRecord(self):
         """
@@ -56,76 +57,102 @@ class Scanner():
         else:
             self.scanrecord_file = file_name
 
-        file = open(self.scanrecord_file, 'w')
+        file = open(join(self.dir_path, self.scanrecord_file), 'w')
 
         max_len = len(str(self.y_nsteps))
 
         for i in range(self.y_nsteps):
+
+            # Start constructing the scan description.
+            scan_name = 'row'+str(i)
             y = self.y_start + self.y_step*i
 
-            # Create a setup record
-            setup = ['row'+str(i), 'scan', 'linear_scan', 'motor_scan', '\"\" \"\"', '1', '2', '2', self.x_motor, self.y_motor]
+            description = \
+                ("%s scan linear_scan motor_scan \"\" \"\" " % (scan_name))
 
-            # Add Scalers
-            setup.append(len(self.scalers))
-            setup.extend(self.scalers)
+            num_scans = 1
 
-            # Add Detector : TODO
+            num_motors = 2
+            num_independent_variables = num_motors
 
-            setup.extend([0, 0]) # ?? TODO
+            description = description + \
+                          ("%d %d %d " % (num_scans, num_independent_variables, num_motors))
 
+            description = description + ("%s " % (str(self.x_motor)))
+            description = description + ("%s " % (str(self.y_motor)))
+
+            description = description + ("%d " % (len(self.scalers)))
+
+            for j in range(len(self.scalers)):
+                description = description + ("%s " % (self.scalers[j]))
+
+            scan_flags = 0x0
+            settling_time = 0.0
+            measurement_type = "preset_time"
+            measurement_time = self.dwell_time
+            timer_name = 'joerger_timer'
+            description = description + ("%x %f %s \"%f %s\" " %(scan_flags, settling_time, measurement_type, measurement_time, timer_name))
+
+            datafile_description = "text"
             file_name = self.output +'.'+str(i).zfill(max_len)
-            full_path = join(self.dir_path, file_name)
+            datafile_name = join(self.dir_path, file_name)
+            plot_description = "none"
+            plot_arguments = "$f[0]"
 
-            setup.extend(['\"'+str(self.dwell_time)+' joerger_timer\"', 'sff', full_path, 'none', '$f[0]', self.x_start, y, self.x_step, 1, self.x_nsteps, 1])
+            description = description + ("%s %s %s %s " %(datafile_description, datafile_name, plot_description, plot_arguments))
 
-            file.write(" ".join(map(str, setup)))
+            description = description + ("%f " % (self.x_start))
+            description = description + ("%f " % (y))
+
+            description = description + ("%f " % (self.x_step))
+            description = description + ("%f " % (1))
+
+            description = description + ("%d " % (self.x_nsteps))
+            description = description + ("%d " % (1))
+            # print(description)
+
+            file.write(description)
             file.write('\n')
+
         file.close()
-        print join(self.dir_path, self.scanrecord_file), 'is generated.'
+        print(str(join(self.dir_path, self.scanrecord_file))+' is generated.')
 
     def performScan(self):
         """
         Performing scan by using scan record which produced from generateScanRecord()
         and return scan data file name
         """
-
+        #### jiranun - Add back
+        # scan_database = join(self.dir_path, "scan_record.dat")
         # scan_database = join(self.dir_path, self.scanrecord_file)
-        scan_database = join(self.dir_path, "scan_record.dat")
-        MpScan.load_scans(self.record_list, scan_database)
-
-        scan = self.record_list.get_record("example2scan1")
-        scan.perform_scan()
-        scan = self.record_list.get_record("example2scan2")
-        scan.perform_scan()
-        scan = self.record_list.get_record("example2scan3")
-        scan.perform_scan()
+        # MpScan.load_scans(self.record_list, scan_database)
 
         # Create another thread to scan all records
-        # t = Thread(target=self.scan_all)
-        # t.start()
+        t = Thread(target=self.scan_all)
+        t.start()
 
 
     def scan_all(self):
-        for i in range(self.y_step):
+        for i in range(self.y_nsteps):
             self.scan(i)
 
-    def scan(self, name):
+    def scan(self, row):
         """
         scan a record
-        :param name: record scanning name
+        :param row: record scanning row
         :return:
         """
-        # scan_name = 'Row' + str(row)
-        # scan = self.record_list.get_record(scan_name)
-        # scan.perform_scan()
+        scan_name = 'Row' + str(row)
+        print("Scanning %s"%(scan_name))
+        # scan = self.record_list.get_record(scan_name) # jiranun - Add back
+        # scan.perform_scan() # jiranun - Add back
 
         time.sleep(2) # test
 
-        # After scanning done, trigger gui to plot at row
+        # After scanning is done, trigger gui to plot the row
         if self.callback is not None:
             max_len = len(str(self.y_nsteps))
             file_name = self.output + '.' + str(row).zfill(max_len)
             full_path = join(self.dir_path, file_name)
-            print full_path, "is ready."
+            print(str(full_path)+" is ready.")
             self.callback.plot(full_path)

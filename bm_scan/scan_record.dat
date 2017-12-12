@@ -1,3 +1,0 @@
-example2scan1 scan linear_scan motor_scan "" "" 1 1 1 energy 2 Io It 0 0.1 preset_time "1.0 timer1" text /Users/preawwy/RA/bm_scan/bm_scan/sample/example2scan.001 none log($f[0]/$f[1]) 8950 1 3
-example2scan2 scan linear_scan motor_scan "" "" 1 1 1 energy 2 Io It 0 0.1 preset_time "1.0 timer1" text /Users/preawwy/RA/bm_scan/bm_scan/sample/example2scan.002 none log($f[0]/$f[1]) 8953 1 3
-example2scan3 scan linear_scan motor_scan "" "" 1 1 1 energy 2 Io It 0 0.1 preset_time "1.0 timer1" text /Users/preawwy/RA/bm_scan/bm_scan/sample/example2scan.003 none log($f[0]/$f[1]) 8956 1 3
