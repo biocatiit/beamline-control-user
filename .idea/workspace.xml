@@ -1,47 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
   <component name="ChangeListManager">
-    <list default="true" id="246e2041-d06e-41eb-8dc7-84295c63b02a" name="Default" comment="">
-      <change beforePath="$PROJECT_DIR$/.idea/bm_scan.iml" afterPath="$PROJECT_DIR$/.idea/bm_scan.iml" />
-      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" afterPath="$PROJECT_DIR$/.idea/misc.xml" />
-      <change beforePath="$PROJECT_DIR$/.idea/modules.xml" afterPath="$PROJECT_DIR$/.idea/modules.xml" />
-      <change beforePath="$PROJECT_DIR$/.idea/vcs.xml" afterPath="$PROJECT_DIR$/.idea/vcs.xml" />
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" afterPath="$PROJECT_DIR$/.idea/workspace.xml" />
-      <change beforePath="$PROJECT_DIR$/bm_scan/__init__.py" afterPath="$PROJECT_DIR$/bm_scan/__init__.py" />
-      <change beforePath="$PROJECT_DIR$/bm_scan/gui/__init__.py" afterPath="$PROJECT_DIR$/bm_scan/gui/__init__.py" />
-      <change beforePath="$PROJECT_DIR$/bm_scan/gui/plot_gui.py" afterPath="$PROJECT_DIR$/bm_scan/gui/plot_gui.py" />
-      <change beforePath="$PROJECT_DIR$/bm_scan/gui/read_gui.py" afterPath="$PROJECT_DIR$/bm_scan/gui/read_gui.py" />
-      <change beforePath="$PROJECT_DIR$/bm_scan/gui/scan_gui.py" afterPath="$PROJECT_DIR$/bm_scan/gui/scan_gui.py" />
-      <change beforePath="$PROJECT_DIR$/bm_scan/i0.dat" afterPath="" />
-      <change beforePath="$PROJECT_DIR$/bm_scan/it.dat" afterPath="" />
-      <change beforePath="$PROJECT_DIR$/bm_scan/main.py" afterPath="$PROJECT_DIR$/bm_scan/main.py" />
-      <change beforePath="$PROJECT_DIR$/bm_scan/result.tif" afterPath="$PROJECT_DIR$/bm_scan/result.tif" />
-      <change beforePath="$PROJECT_DIR$/bm_scan/sample/bm1_scan.dat" afterPath="$PROJECT_DIR$/bm_scan/sample/bm1_scan.dat" />
-      <change beforePath="$PROJECT_DIR$/bm_scan/sample/bm1_scan2.dat" afterPath="" />
-      <change beforePath="$PROJECT_DIR$/bm_scan/sample/example.dat" afterPath="$PROJECT_DIR$/bm_scan/sample/example.dat" />
-      <change beforePath="$PROJECT_DIR$/bm_scan/sample/example2.py" afterPath="$PROJECT_DIR$/bm_scan/sample/example2.py" />
-      <change beforePath="$PROJECT_DIR$/bm_scan/sample/example_soft.dat" afterPath="" />
-      <change beforePath="$PROJECT_DIR$/bm_scan/sample/image.png" afterPath="" />
-      <change beforePath="$PROJECT_DIR$/bm_scan/sample/rast.000" afterPath="" />
-      <change beforePath="$PROJECT_DIR$/bm_scan/sample/rast.001" afterPath="" />
-      <change beforePath="$PROJECT_DIR$/bm_scan/sample/rast.002" afterPath="" />
-      <change beforePath="$PROJECT_DIR$/bm_scan/sample/rast.003" afterPath="" />
-      <change beforePath="$PROJECT_DIR$/bm_scan/sample/rast.004" afterPath="" />
-      <change beforePath="$PROJECT_DIR$/bm_scan/sample/raster.111" afterPath="" />
-      <change beforePath="$PROJECT_DIR$/bm_scan/scan_record.dat" afterPath="" />
-      <change beforePath="$PROJECT_DIR$/bm_scan/scan_record_1.dat" afterPath="" />
-      <change beforePath="$PROJECT_DIR$/bm_scan/scan_record_2.dat" afterPath="" />
-      <change beforePath="$PROJECT_DIR$/bm_scan/scan_record_3.dat" afterPath="" />
-      <change beforePath="$PROJECT_DIR$/bm_scan/scan_record_4.dat" afterPath="" />
-      <change beforePath="$PROJECT_DIR$/bm_scan/scan_record_5.dat" afterPath="" />
-      <change beforePath="$PROJECT_DIR$/bm_scan/scan_record_6.dat" afterPath="" />
-      <change beforePath="$PROJECT_DIR$/bm_scan/scan_record_7.dat" afterPath="" />
-      <change beforePath="$PROJECT_DIR$/bm_scan/scan_record_8.dat" afterPath="" />
-      <change beforePath="$PROJECT_DIR$/bm_scan/utils/Plotter.py" afterPath="$PROJECT_DIR$/bm_scan/utils/Plotter.py" />
-      <change beforePath="$PROJECT_DIR$/bm_scan/utils/Scanner.py" afterPath="$PROJECT_DIR$/bm_scan/utils/Scanner.py" />
-      <change beforePath="$PROJECT_DIR$/bm_scan/utils/__init__.py" afterPath="$PROJECT_DIR$/bm_scan/utils/__init__.py" />
-      <change beforePath="$PROJECT_DIR$/bm_scan/utils/formula.py" afterPath="$PROJECT_DIR$/bm_scan/utils/formula.py" />
-    </list>
+    <list default="true" id="246e2041-d06e-41eb-8dc7-84295c63b02a" name="Default" comment="" />
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
     <option name="TRACKING_ENABLED" value="true" />
     <option name="SHOW_DIALOG" value="false" />
@@ -52,46 +12,10 @@
   <component name="FileEditorManager">
     <leaf SIDE_TABS_SIZE_LIMIT_KEY="300">
       <file leaf-file-name="scan_gui.py" pinned="false" current-in-tab="true">
-        <entry file="file://$PROJECT_DIR$/bm_scan/gui/scan_gui.py">
+        <entry file="file://$PROJECT_DIR$/../mxmap/mxmap/gui/scan_gui.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="303">
-              <caret line="90" column="30" lean-forward="true" selection-start-line="90" selection-start-column="30" selection-end-line="90" selection-end-column="30" />
-              <folding>
-                <element signature="e#47#56#0" expanded="true" />
-              </folding>
-            </state>
-          </provider>
-        </entry>
-      </file>
-      <file leaf-file-name="Scanner.py" pinned="false" current-in-tab="false">
-        <entry file="file://$PROJECT_DIR$/bm_scan/utils/Scanner.py">
-          <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="-1358">
-              <caret line="35" column="13" lean-forward="false" selection-start-line="35" selection-start-column="13" selection-end-line="35" selection-end-column="13" />
-              <folding>
-                <element signature="e#0#32#0" expanded="true" />
-              </folding>
-            </state>
-          </provider>
-        </entry>
-      </file>
-      <file leaf-file-name="setup.py" pinned="false" current-in-tab="false">
-        <entry file="file://$PROJECT_DIR$/setup.py">
-          <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="105">
-              <caret line="7" column="22" lean-forward="false" selection-start-line="7" selection-start-column="22" selection-end-line="7" selection-end-column="22" />
-              <folding>
-                <element signature="e#23#55#0" expanded="true" />
-              </folding>
-            </state>
-          </provider>
-        </entry>
-      </file>
-      <file leaf-file-name="plot_gui.py" pinned="false" current-in-tab="false">
-        <entry file="file://$PROJECT_DIR$/bm_scan/gui/plot_gui.py">
-          <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="11">
-              <caret line="11" column="79" lean-forward="false" selection-start-line="11" selection-start-column="79" selection-end-line="11" selection-end-column="79" />
+            <state relative-caret-position="460">
+              <caret line="112" column="0" lean-forward="true" selection-start-line="112" selection-start-column="0" selection-end-line="112" selection-end-column="0" />
               <folding>
                 <element signature="e#0#9#0" expanded="true" />
               </folding>
@@ -99,24 +23,90 @@
           </provider>
         </entry>
       </file>
-      <file leaf-file-name="Plotter.py" pinned="false" current-in-tab="false">
-        <entry file="file://$PROJECT_DIR$/bm_scan/utils/Plotter.py">
+      <file leaf-file-name="__init__.py" pinned="false" current-in-tab="false">
+        <entry file="file://$PROJECT_DIR$/../mxmap/mxmap/gui/__init__.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="225">
-              <caret line="19" column="8" lean-forward="false" selection-start-line="19" selection-start-column="8" selection-end-line="19" selection-end-column="8" />
-              <folding />
+            <state relative-caret-position="0">
+              <caret line="0" column="0" lean-forward="false" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
+              <folding>
+                <element signature="e#0#26#0" expanded="true" />
+              </folding>
             </state>
           </provider>
         </entry>
       </file>
       <file leaf-file-name="read_gui.py" pinned="false" current-in-tab="false">
-        <entry file="file://$PROJECT_DIR$/bm_scan/gui/read_gui.py">
+        <entry file="file://$PROJECT_DIR$/../mxmap/mxmap/gui/read_gui.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="171">
-              <caret line="17" column="35" lean-forward="false" selection-start-line="17" selection-start-column="35" selection-end-line="17" selection-end-column="35" />
+            <state relative-caret-position="-153">
+              <caret line="3" column="9" lean-forward="false" selection-start-line="3" selection-start-column="9" selection-end-line="3" selection-end-column="9" />
+              <folding />
+            </state>
+          </provider>
+        </entry>
+      </file>
+      <file leaf-file-name="Scanner.py" pinned="false" current-in-tab="false">
+        <entry file="file://$PROJECT_DIR$/../mxmap/mxmap/utils/Scanner.py">
+          <provider selected="true" editor-type-id="text-editor">
+            <state relative-caret-position="-390">
+              <caret line="12" column="8" lean-forward="false" selection-start-line="12" selection-start-column="8" selection-end-line="12" selection-end-column="8" />
               <folding>
-                <element signature="e#47#56#0" expanded="true" />
+                <element signature="e#0#32#0" expanded="true" />
               </folding>
+            </state>
+          </provider>
+        </entry>
+      </file>
+      <file leaf-file-name="Plotter.py" pinned="false" current-in-tab="false">
+        <entry file="file://$PROJECT_DIR$/../mxmap/mxmap/utils/Plotter.py">
+          <provider selected="true" editor-type-id="text-editor">
+            <state relative-caret-position="213">
+              <caret line="36" column="26" lean-forward="false" selection-start-line="36" selection-start-column="26" selection-end-line="36" selection-end-column="26" />
+              <folding />
+            </state>
+          </provider>
+        </entry>
+      </file>
+      <file leaf-file-name="plot_gui.py" pinned="false" current-in-tab="false">
+        <entry file="file://$PROJECT_DIR$/../mxmap/mxmap/gui/plot_gui.py">
+          <provider selected="true" editor-type-id="text-editor">
+            <state relative-caret-position="105">
+              <caret line="7" column="18" lean-forward="false" selection-start-line="7" selection-start-column="18" selection-end-line="7" selection-end-column="18" />
+              <folding>
+                <element signature="e#4594#5357#0" expanded="false" />
+                <element signature="e#5395#5592#0" expanded="false" />
+                <element signature="e#5630#5827#0" expanded="false" />
+              </folding>
+            </state>
+          </provider>
+        </entry>
+      </file>
+      <file leaf-file-name="main.py" pinned="false" current-in-tab="false">
+        <entry file="file://$PROJECT_DIR$/../mxmap/mxmap/main.py">
+          <provider selected="true" editor-type-id="text-editor">
+            <state relative-caret-position="30">
+              <caret line="2" column="22" lean-forward="false" selection-start-line="2" selection-start-column="22" selection-end-line="2" selection-end-column="22" />
+              <folding />
+            </state>
+          </provider>
+        </entry>
+      </file>
+      <file leaf-file-name="formula.py" pinned="false" current-in-tab="false">
+        <entry file="file://$PROJECT_DIR$/../mxmap/mxmap/utils/formula.py">
+          <provider selected="true" editor-type-id="text-editor">
+            <state relative-caret-position="90">
+              <caret line="6" column="48" lean-forward="false" selection-start-line="6" selection-start-column="48" selection-end-line="6" selection-end-column="48" />
+              <folding />
+            </state>
+          </provider>
+        </entry>
+      </file>
+      <file leaf-file-name="mxmap_config.ini" pinned="false" current-in-tab="false">
+        <entry file="file://$PROJECT_DIR$/../mxmap/mxmap/gui/mxmap_config.ini">
+          <provider selected="true" editor-type-id="text-editor">
+            <state relative-caret-position="60">
+              <caret line="4" column="6" lean-forward="false" selection-start-line="4" selection-start-column="0" selection-end-line="4" selection-end-column="6" />
+              <folding />
             </state>
           </provider>
         </entry>
@@ -132,41 +122,47 @@
   </component>
   <component name="FindInProjectRecents">
     <findStrings>
-      <find>Plotter(</find>
+      <find>self.scaler_names</find>
+      <find>refreshscaler</find>
+      <find>GetD</find>
+      <find>getDevi</find>
+      <find>setDivices</find>
+      <find>self.detector</find>
+      <find>Set</find>
+      <find>get_database</find>
+      <find>db_picker.D</find>
+      <find>readConfigs</find>
+      <find>GetDe</find>
+      <find>download</find>
+      <find>stop</find>
+      <find>scan_name</find>
+      <find>self.scaler_names[0]d</find>
+      <find>scrolled</find>
+      <find>Thread</find>
+      <find>initscalerpanel</find>
+      <find>PLOT!</find>
+      <find>main_sizer</find>
+      <find>wx.Ca</find>
+      <find>minInt = min_val + ran * minInt / 100.</find>
+      <find>/ self.</find>
+      <find>use(</find>
+      <find>calculate</find>
+      <find>clicked</find>
+      <find>title</find>
       <find>plot_gui</find>
-      <find>plot_gui(</find>
-      <find>xlim</find>
-      <find>mxdir</find>
-      <find>database_filename</find>
-      <find>tiff</find>
-      <find>/User</find>
-      <find>ma</find>
-      <find>atplotlib.use</find>
-      <find>ComboBox</find>
-      <find>motorx_name</find>
-      <find>Combo</find>
-      <find>scaler</find>
-      <find>Mp.setup_database(DB_PATH)</find>
-      <find>self.dete</find>
-      <find>performScan</find>
-      <find>SpinCtrl</find>
-      <find>SpinCtrlDouble</find>
-      <find>scalers</find>
-      <find>Scanner</find>
-      <find>SetVal</find>
-      <find>ymotors</find>
-      <find>checkSettings.</find>
-      <find>generateScanRecord</find>
-      <find>Mp</find>
-      <find>self,</find>
-      <find>self.panel</find>
-      <find>get_DB_Path</find>
-      <find>startPlot</find>
+      <find>self.columns</find>
+      <find>getDevices</find>
     </findStrings>
     <replaceStrings>
       <replace>y_steps</replace>
       <replace>Scaler</replace>
       <replace>scaler</replace>
+      <replace>mx_thread</replace>
+      <replace>self.db_picker.GetValue()</replace>
+      <replace>choices=['None]</replace>
+      <replace>DBPathSelected</replace>
+      <replace>choices=['None']</replace>
+      <replace>self.scrolled_panel</replace>
     </replaceStrings>
   </component>
   <component name="Git.Settings">
@@ -181,26 +177,34 @@
         <option value="$PROJECT_DIR$/bm_scan/sample/raster.007_3" />
         <option value="$PROJECT_DIR$/bm_scan/gui/gui.py" />
         <option value="$PROJECT_DIR$/bm_scan/gui/__init__.py" />
-        <option value="$PROJECT_DIR$/bm_scan/utils/formula.py" />
-        <option value="$PROJECT_DIR$/bm_scan/utils/__init__.py" />
         <option value="$PROJECT_DIR$/bm_scan/example2scan.out" />
         <option value="$PROJECT_DIR$/bm_scan/scan_record.dat" />
         <option value="$PROJECT_DIR$/bm_scan/sample/2d_i0.dat" />
         <option value="$PROJECT_DIR$/bm_scan/sample/example2.py" />
-        <option value="$PROJECT_DIR$/bm_scan/main.py" />
         <option value="$PROJECT_DIR$/bm_scan/__init__.py" />
         <option value="$PROJECT_DIR$/bm_scan/sample/db_soft.dat" />
-        <option value="$PROJECT_DIR$/setup.py" />
-        <option value="$PROJECT_DIR$/bm_scan/utils/Scanner.py" />
-        <option value="$PROJECT_DIR$/bm_scan/utils/Plotter.py" />
-        <option value="$PROJECT_DIR$/bm_scan/gui/plot_gui.py" />
+        <option value="$PROJECT_DIR$/bm_scan/utils/formula.py" />
+        <option value="$PROJECT_DIR$/bm_scan/sample/rast.00" />
+        <option value="$PROJECT_DIR$/bm_scan/utils/__init__.py" />
+        <option value="$PROJECT_DIR$/bm_scan/main.py" />
         <option value="$PROJECT_DIR$/bm_scan/gui/read_gui.py" />
+        <option value="$PROJECT_DIR$/bm_scan/utils/Plotter.py" />
+        <option value="$PROJECT_DIR$/bm_scan/utils/Scanner.py" />
+        <option value="$PROJECT_DIR$/bm_scan/gui/plot_gui.py" />
+        <option value="$PROJECT_DIR$/bm_scan/gui/config.ini" />
         <option value="$PROJECT_DIR$/bm_scan/gui/scan_gui.py" />
+        <option value="$PROJECT_DIR$/setup.py" />
+        <option value="$PROJECT_DIR$/mxmap/gui/plot_gui.py" />
+        <option value="$PROJECT_DIR$/mxmap/gui/read_gui.py" />
+        <option value="$PROJECT_DIR$/mxmap/utils/formula.py" />
+        <option value="$PROJECT_DIR$/mxmap/utils/Plotter.py" />
+        <option value="$PROJECT_DIR$/mxmap/gui/scan_gui.py" />
       </list>
     </option>
   </component>
-  <component name="ProjectFrameBounds">
-    <option name="y" value="23" />
+  <component name="ProjectFrameBounds" extendedState="6">
+    <option name="x" value="86" />
+    <option name="y" value="100" />
     <option name="width" value="1920" />
     <option name="height" value="1053" />
   </component>
@@ -229,38 +233,36 @@
           <expand>
             <path>
               <item name="bm_scan" type="b2602c69:ProjectViewProjectNode" />
-              <item name="bm_scan" type="47feb1d3:ProjectViewModuleNode" />
+              <item name="mxmap" type="47feb1d3:ProjectViewModuleNode" />
             </path>
             <path>
               <item name="bm_scan" type="b2602c69:ProjectViewProjectNode" />
-              <item name="bm_scan" type="47feb1d3:ProjectViewModuleNode" />
-              <item name="bm_scan" type="462c0819:PsiDirectoryNode" />
+              <item name="mxmap" type="47feb1d3:ProjectViewModuleNode" />
+              <item name="mp" type="462c0819:PsiDirectoryNode" />
             </path>
             <path>
               <item name="bm_scan" type="b2602c69:ProjectViewProjectNode" />
-              <item name="bm_scan" type="47feb1d3:ProjectViewModuleNode" />
-              <item name="bm_scan" type="462c0819:PsiDirectoryNode" />
-              <item name="bm_scan" type="462c0819:PsiDirectoryNode" />
+              <item name="mxmap" type="47feb1d3:ProjectViewModuleNode" />
+              <item name="mxmap" type="462c0819:PsiDirectoryNode" />
             </path>
             <path>
               <item name="bm_scan" type="b2602c69:ProjectViewProjectNode" />
-              <item name="bm_scan" type="47feb1d3:ProjectViewModuleNode" />
-              <item name="bm_scan" type="462c0819:PsiDirectoryNode" />
-              <item name="bm_scan" type="462c0819:PsiDirectoryNode" />
+              <item name="mxmap" type="47feb1d3:ProjectViewModuleNode" />
+              <item name="mxmap" type="462c0819:PsiDirectoryNode" />
+              <item name="mxmap" type="462c0819:PsiDirectoryNode" />
+            </path>
+            <path>
+              <item name="bm_scan" type="b2602c69:ProjectViewProjectNode" />
+              <item name="mxmap" type="47feb1d3:ProjectViewModuleNode" />
+              <item name="mxmap" type="462c0819:PsiDirectoryNode" />
+              <item name="mxmap" type="462c0819:PsiDirectoryNode" />
               <item name="gui" type="462c0819:PsiDirectoryNode" />
             </path>
             <path>
               <item name="bm_scan" type="b2602c69:ProjectViewProjectNode" />
-              <item name="bm_scan" type="47feb1d3:ProjectViewModuleNode" />
-              <item name="bm_scan" type="462c0819:PsiDirectoryNode" />
-              <item name="bm_scan" type="462c0819:PsiDirectoryNode" />
-              <item name="sample" type="462c0819:PsiDirectoryNode" />
-            </path>
-            <path>
-              <item name="bm_scan" type="b2602c69:ProjectViewProjectNode" />
-              <item name="bm_scan" type="47feb1d3:ProjectViewModuleNode" />
-              <item name="bm_scan" type="462c0819:PsiDirectoryNode" />
-              <item name="bm_scan" type="462c0819:PsiDirectoryNode" />
+              <item name="mxmap" type="47feb1d3:ProjectViewModuleNode" />
+              <item name="mxmap" type="462c0819:PsiDirectoryNode" />
+              <item name="mxmap" type="462c0819:PsiDirectoryNode" />
               <item name="utils" type="462c0819:PsiDirectoryNode" />
             </path>
           </expand>
@@ -271,7 +273,7 @@
   </component>
   <component name="PropertiesComponent">
     <property name="last_opened_file_path" value="$PROJECT_DIR$" />
-    <property name="settings.editor.selected.configurable" value="com.jetbrains.python.configuration.PyActiveSdkModuleConfigurable" />
+    <property name="settings.editor.selected.configurable" value="project.propVCSSupport.Mappings" />
   </component>
   <component name="RecentsManager">
     <key name="MoveFile.RECENT_KEYS">
@@ -349,6 +351,93 @@
       <option name="EMULATE_TERMINAL" value="false" />
       <option name="MODULE_MODE" value="false" />
     </configuration>
+    <configuration default="true" type="Tox" factoryName="Tox">
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs />
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="" />
+      <option name="IS_MODULE_SDK" value="false" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <module name="bm_scan" />
+    </configuration>
+    <configuration default="true" type="tests" factoryName="Doctests">
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs />
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="" />
+      <option name="IS_MODULE_SDK" value="false" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <module name="bm_scan" />
+      <option name="SCRIPT_NAME" value="" />
+      <option name="CLASS_NAME" value="" />
+      <option name="METHOD_NAME" value="" />
+      <option name="FOLDER_NAME" value="" />
+      <option name="TEST_TYPE" value="TEST_SCRIPT" />
+      <option name="PATTERN" value="" />
+      <option name="USE_PATTERN" value="false" />
+    </configuration>
+    <configuration default="true" type="tests" factoryName="Nosetests">
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs />
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="" />
+      <option name="IS_MODULE_SDK" value="false" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <module name="bm_scan" />
+      <option name="_new_regexPattern" value="&quot;&quot;" />
+      <option name="_new_additionalArguments" value="&quot;&quot;" />
+      <option name="_new_target" value="&quot;&quot;" />
+      <option name="_new_targetType" value="&quot;PATH&quot;" />
+    </configuration>
+    <configuration default="true" type="tests" factoryName="Twisted Trial">
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs />
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="" />
+      <option name="IS_MODULE_SDK" value="false" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <module name="bm_scan" />
+      <option name="_new_additionalArguments" value="&quot;&quot;" />
+      <option name="_new_target" value="&quot;&quot;" />
+      <option name="_new_targetType" value="&quot;PATH&quot;" />
+    </configuration>
+    <configuration default="true" type="tests" factoryName="Unittests">
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs />
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="" />
+      <option name="IS_MODULE_SDK" value="false" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <module name="bm_scan" />
+      <option name="_new_additionalArguments" value="&quot;&quot;" />
+      <option name="_new_target" value="&quot;&quot;" />
+      <option name="_new_targetType" value="&quot;PATH&quot;" />
+    </configuration>
+    <configuration default="true" type="tests" factoryName="py.test">
+      <option name="INTERPRETER_OPTIONS" value="" />
+      <option name="PARENT_ENVS" value="true" />
+      <envs />
+      <option name="SDK_HOME" value="" />
+      <option name="WORKING_DIRECTORY" value="" />
+      <option name="IS_MODULE_SDK" value="false" />
+      <option name="ADD_CONTENT_ROOTS" value="true" />
+      <option name="ADD_SOURCE_ROOTS" value="true" />
+      <module name="bm_scan" />
+      <option name="_new_keywords" value="&quot;&quot;" />
+      <option name="_new_additionalArguments" value="&quot;&quot;" />
+      <option name="_new_target" value="&quot;&quot;" />
+      <option name="_new_targetType" value="&quot;PATH&quot;" />
+    </configuration>
     <list size="3">
       <item index="0" class="java.lang.String" itemvalue="Python.read" />
       <item index="1" class="java.lang.String" itemvalue="Python.scan" />
@@ -390,22 +479,22 @@
     <frame x="0" y="23" width="1920" height="1053" extended-state="6" />
     <editor active="true" />
     <layout>
-      <window_info id="Project" active="false" anchor="left" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="true" show_stripe_button="true" weight="0.17535545" sideWeight="0.5" order="0" side_tool="false" content_ui="combo" />
+      <window_info id="Project" active="false" anchor="left" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="true" show_stripe_button="true" weight="0.24749868" sideWeight="0.5" order="0" side_tool="false" content_ui="combo" />
       <window_info id="TODO" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.32985386" sideWeight="0.5" order="6" side_tool="false" content_ui="tabs" />
-      <window_info id="Event Log" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.32985386" sideWeight="0.5" order="7" side_tool="true" content_ui="tabs" />
-      <window_info id="Find" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.32985386" sideWeight="0.5" order="1" side_tool="false" content_ui="tabs" />
-      <window_info id="Run" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="true" show_stripe_button="true" weight="0.3308977" sideWeight="0.5" order="2" side_tool="false" content_ui="tabs" />
-      <window_info id="Version Control" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.32985386" sideWeight="0.5" order="7" side_tool="false" content_ui="tabs" />
-      <window_info id="Python Console" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.32985386" sideWeight="0.5" order="7" side_tool="false" content_ui="tabs" />
+      <window_info id="Event Log" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="true" show_stripe_button="true" weight="0.32985386" sideWeight="0.51869404" order="7" side_tool="true" content_ui="tabs" />
+      <window_info id="Run" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.32881" sideWeight="0.45286992" order="2" side_tool="false" content_ui="tabs" />
+      <window_info id="Version Control" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.32985386" sideWeight="0.49815693" order="7" side_tool="false" content_ui="tabs" />
+      <window_info id="Python Console" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="true" show_stripe_button="true" weight="0.32985386" sideWeight="0.48130596" order="7" side_tool="false" content_ui="tabs" />
       <window_info id="Structure" active="false" anchor="left" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.25" sideWeight="0.5" order="1" side_tool="false" content_ui="tabs" />
       <window_info id="Terminal" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.32985386" sideWeight="0.5" order="7" side_tool="false" content_ui="tabs" />
-      <window_info id="Debug" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.5052192" sideWeight="0.5" order="3" side_tool="false" content_ui="tabs" />
+      <window_info id="Debug" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.34237996" sideWeight="0.46550816" order="3" side_tool="false" content_ui="tabs" />
       <window_info id="Favorites" active="false" anchor="left" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.33" sideWeight="0.5" order="2" side_tool="true" content_ui="tabs" />
       <window_info id="Cvs" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.25" sideWeight="0.5" order="4" side_tool="false" content_ui="tabs" />
       <window_info id="Message" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.33" sideWeight="0.5" order="0" side_tool="false" content_ui="tabs" />
       <window_info id="Commander" active="false" anchor="right" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.4" sideWeight="0.5" order="0" side_tool="false" content_ui="tabs" />
       <window_info id="Inspection" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.4" sideWeight="0.5" order="5" side_tool="false" content_ui="tabs" />
       <window_info id="Hierarchy" active="false" anchor="right" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.25" sideWeight="0.5" order="2" side_tool="false" content_ui="combo" />
+      <window_info id="Find" active="false" anchor="bottom" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.32985386" sideWeight="0.5" order="1" side_tool="false" content_ui="tabs" />
       <window_info id="Ant Build" active="false" anchor="right" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.25" sideWeight="0.5" order="1" side_tool="false" content_ui="tabs" />
       <window_info id="Data View" active="false" anchor="right" auto_hide="false" internal_type="DOCKED" type="DOCKED" visible="false" show_stripe_button="true" weight="0.32960597" sideWeight="0.5" order="3" side_tool="false" content_ui="tabs" />
     </layout>
@@ -435,6 +524,13 @@
   </component>
   <component name="XDebuggerManager">
     <breakpoint-manager>
+      <breakpoints>
+        <line-breakpoint enabled="true" suspend="THREAD" type="python-line">
+          <url>file:///opt/mx/lib/mp/MpScan.py</url>
+          <line>80</line>
+          <option name="timeStamp" value="86" />
+        </line-breakpoint>
+      </breakpoints>
       <default-breakpoints>
         <breakpoint type="python-exception">
           <properties notifyOnTerminate="true" exception="BaseException">
@@ -442,51 +538,68 @@
           </properties>
         </breakpoint>
       </default-breakpoints>
-      <option name="time" value="83" />
+      <option name="time" value="104" />
     </breakpoint-manager>
     <watches-manager>
       <configuration name="PythonConfigurationType">
         <watch expression="current_record" language="Python" />
         <watch expression="len(description_list)" language="Python" />
+        <watch expression="list(db_list)" language="Python" />
+        <watch expression="config.has_option('mx', 'DATABASE')" language="Python" />
+        <watch expression="all_records[0]" language="Python" />
       </configuration>
     </watches-manager>
   </component>
+  <component name="debuggerHistoryManager">
+    <expressions id="watch">
+      <expression>
+        <expression-string>all_records[0]</expression-string>
+        <language-id>Python</language-id>
+        <evaluation-mode>EXPRESSION</evaluation-mode>
+      </expression>
+      <expression>
+        <expression-string>config.has_option('mx', 'DATABASE')</expression-string>
+        <language-id>Python</language-id>
+        <evaluation-mode>EXPRESSION</evaluation-mode>
+      </expression>
+      <expression>
+        <expression-string>str(self.db_picker.GetValue())</expression-string>
+        <language-id>Python</language-id>
+        <evaluation-mode>EXPRESSION</evaluation-mode>
+      </expression>
+      <expression>
+        <expression-string>self.db_picker.Value()</expression-string>
+        <language-id>Python</language-id>
+        <evaluation-mode>EXPRESSION</evaluation-mode>
+      </expression>
+      <expression>
+        <expression-string>config.get('mx','DATABASE').split(',')</expression-string>
+        <language-id>Python</language-id>
+        <evaluation-mode>EXPRESSION</evaluation-mode>
+      </expression>
+      <expression>
+        <expression-string>os.split(__file__)</expression-string>
+        <language-id>Python</language-id>
+        <evaluation-mode>EXPRESSION</evaluation-mode>
+      </expression>
+      <expression>
+        <expression-string>os.getcwd()</expression-string>
+        <language-id>Python</language-id>
+        <evaluation-mode>EXPRESSION</evaluation-mode>
+      </expression>
+      <expression>
+        <expression-string>__file__</expression-string>
+        <language-id>Python</language-id>
+        <evaluation-mode>EXPRESSION</evaluation-mode>
+      </expression>
+      <expression>
+        <expression-string>list(db_list)</expression-string>
+        <language-id>Python</language-id>
+        <evaluation-mode>EXPRESSION</evaluation-mode>
+      </expression>
+    </expressions>
+  </component>
   <component name="editorHistoryManager">
-    <entry file="file://$USER_HOME$/Library/Caches/PyCharmCE2017.2/python_stubs/-1247972723/wx/_core/TextCtrl.py" />
-    <entry file="file://$PROJECT_DIR$/bm_scan/result.tif">
-      <provider selected="true" editor-type-id="images">
-        <state />
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/bm_scan/utils/formula.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="45">
-          <caret line="3" column="20" lean-forward="false" selection-start-line="3" selection-start-column="20" selection-end-line="3" selection-end-column="20" />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$USER_HOME$/Library/Caches/PyCharmCE2017.2/python_stubs/-1247972723/wx/_core/StaticText.py" />
-    <entry file="file://$PROJECT_DIR$/bm_scan/gui/__init__.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="15">
-          <caret line="1" column="9" lean-forward="false" selection-start-line="1" selection-start-column="9" selection-end-line="1" selection-end-column="9" />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$USER_HOME$/Library/Caches/PyCharmCE2017.2/python_stubs/-1247972723/wx/_core/DirPickerCtrl.py" />
-    <entry file="file://$PROJECT_DIR$/bm_scan/utils/__init__.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="0">
-          <caret line="0" column="65" lean-forward="false" selection-start-line="0" selection-start-column="65" selection-end-line="0" selection-end-column="65" />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/bm_scan/scan_record_7.dat" />
-    <entry file="file://$PROJECT_DIR$/bm_scan/example2scan.out" />
-    <entry file="file://$USER_HOME$/Library/Caches/PyCharmCE2017.2/python_stubs/-1247972723/wx/_core/ComboBox.py" />
-    <entry file="file://$PROJECT_DIR$/bm_scan/sample/example2scan.002" />
-    <entry file="file://$PROJECT_DIR$/bm_scan/sample/example2scan.001" />
-    <entry file="file://$PROJECT_DIR$/bm_scan/it.dat" />
     <entry file="file:///System/Library/Frameworks/Python.framework/Versions/2.7/lib/python2.7/threading.py">
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="-155">
@@ -495,275 +608,249 @@
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/bm_scan/i0.dat" />
-    <entry file="file://$PROJECT_DIR$/bm_scan/sample/example2scan.out">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="0">
-          <caret line="0" column="0" lean-forward="false" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
-        </state>
-      </provider>
-    </entry>
+    <entry file="file://$PROJECT_DIR$/bm_scan/sample/example2scan.out" />
     <entry file="file://$PROJECT_DIR$/bm_scan/sample/example_soft.dat" />
-    <entry file="file://$PROJECT_DIR$/bm_scan/sample/rast.001">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="-34">
-          <caret line="0" column="0" lean-forward="false" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/bm_scan/main.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="180">
-          <caret line="12" column="28" lean-forward="false" selection-start-line="12" selection-start-column="28" selection-end-line="12" selection-end-column="28" />
-        </state>
-      </provider>
-    </entry>
+    <entry file="file://$PROJECT_DIR$/bm_scan/sample/rast.001" />
     <entry file="file://$PROJECT_DIR$/bm_scan/sample/image.png" />
     <entry file="file://$PROJECT_DIR$/bm_scan/sample/2d_i0.dat" />
+    <entry file="file://$PROJECT_DIR$/bm_scan/sample/motortst.dat" />
+    <entry file="file://$PROJECT_DIR$/bm_scan/sample/bm1_scan2.dat" />
+    <entry file="file://$PROJECT_DIR$/bm_scan/scan_record.dat" />
+    <entry file="file://$PROJECT_DIR$/bm_scan/scan_record_1.dat" />
+    <entry file="file://$PROJECT_DIR$/bm_scan/scan_record_2.dat" />
+    <entry file="file://$PROJECT_DIR$/bm_scan/sample/rast.000" />
+    <entry file="file://$PROJECT_DIR$/bm_scan/sample/rast.004" />
+    <entry file="file:///usr/local/lib/python2.7/site-packages/numpy/core/fromnumeric.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="504">
+          <caret line="251" column="58" lean-forward="false" selection-start-line="251" selection-start-column="58" selection-end-line="251" selection-end-column="58" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/../mxmap/mxmap/sample/example.dat">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="90">
+          <caret line="6" column="0" lean-forward="false" selection-start-line="6" selection-start-column="0" selection-end-line="6" selection-end-column="0" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/bm_scan/sample/scan_record_3.dat" />
+    <entry file="file://$PROJECT_DIR$/bm_scan/sample/db_soft.dat" />
+    <entry file="file://$PROJECT_DIR$/bm_scan/sample/example2.py" />
     <entry file="file:///opt/mx/lib/mp/MpScan.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="0">
-          <caret line="0" column="0" lean-forward="false" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file:///usr/local/lib/python2.7/site-packages/wx-3.0-osx_cocoa/wx/_controls.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="8790">
-          <caret line="587" column="4" lean-forward="false" selection-start-line="587" selection-start-column="4" selection-end-line="587" selection-end-column="4" />
+        <state relative-caret-position="330">
+          <caret line="22" column="4" lean-forward="false" selection-start-line="22" selection-start-column="4" selection-end-line="22" selection-end-column="4" />
           <folding />
         </state>
       </provider>
     </entry>
-    <entry file="file:///usr/local/lib/python2.7/site-packages/wx-3.0-osx_cocoa/wx/_core.py">
+    <entry file="file://$PROJECT_DIR$/bm_scan/sample/scan_record_5.dat" />
+    <entry file="file://$PROJECT_DIR$/bm_scan/sample/scan_record_1.dat" />
+    <entry file="file://$PROJECT_DIR$/bm_scan/sample/scan_record_2.dat" />
+    <entry file="file://$PROJECT_DIR$/bm_scan/sample/scan_record.dat" />
+    <entry file="file://$PROJECT_DIR$/bm_scan/sample/scan_record_6.dat" />
+    <entry file="file://$PROJECT_DIR$/../all_mx/mp/examples/simple/get_position.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="196005">
-          <caret line="13068" column="8" lean-forward="false" selection-start-line="13068" selection-start-column="8" selection-end-line="13068" selection-end-column="8" />
-          <folding />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$USER_HOME$/Library/Caches/PyCharmCE2017.3/python_stubs/-1199944087/MpPrivate.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="204">
-          <caret line="924" column="0" lean-forward="false" selection-start-line="924" selection-start-column="0" selection-end-line="924" selection-end-column="0" />
-          <folding />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file:///opt/mx/lib/mp/Mp.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="204">
-          <caret line="525" column="27" lean-forward="false" selection-start-line="525" selection-start-column="27" selection-end-line="525" selection-end-column="27" />
-          <folding />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/bm_scan/sample/motortst.dat">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="0">
-          <caret line="0" column="0" lean-forward="false" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
-          <folding />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/bm_scan/sample/example2.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="812">
-          <caret line="96" column="0" lean-forward="false" selection-start-line="96" selection-start-column="0" selection-end-line="96" selection-end-column="0" />
-          <folding />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/bm_scan/sample/bm1_scan2.dat">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="0">
-          <caret line="0" column="0" lean-forward="false" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="173" />
-          <folding />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/bm_scan/scan_record.dat">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="0">
-          <caret line="0" column="0" lean-forward="false" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
-          <folding />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/bm_scan/scan_record_1.dat">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="-1006">
-          <caret line="0" column="0" lean-forward="false" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
-          <folding />
+        <state relative-caret-position="165">
+          <caret line="11" column="57" lean-forward="false" selection-start-line="11" selection-start-column="34" selection-end-line="11" selection-end-column="57" />
         </state>
       </provider>
     </entry>
     <entry file="file://$PROJECT_DIR$/../all_mx/mp/test/mp_scan_2">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="61">
-          <caret line="6" column="0" lean-forward="true" selection-start-line="6" selection-start-column="0" selection-end-line="6" selection-end-column="0" />
-          <folding />
+        <state relative-caret-position="479">
+          <caret line="106" column="0" lean-forward="false" selection-start-line="99" selection-start-column="4" selection-end-line="106" selection-end-column="0" />
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/bm_scan/scan_record_2.dat">
+    <entry file="file://$PROJECT_DIR$/../mxmap/mxmap/sample/rast.02">
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="0">
           <caret line="0" column="0" lean-forward="false" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
-          <folding />
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/bm_scan/sample/rast.000">
+    <entry file="file://$PROJECT_DIR$/../mxmap/mxmap/sample/rast.01">
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="0">
           <caret line="0" column="0" lean-forward="false" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
-          <folding />
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/bm_scan/sample/raster.111">
+    <entry file="file://$PROJECT_DIR$/../mxmap/mxmap/sample/ra_ster.111">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="-420">
-          <caret line="7" column="6" lean-forward="true" selection-start-line="7" selection-start-column="6" selection-end-line="7" selection-end-column="6" />
-          <folding />
+        <state relative-caret-position="525">
+          <caret line="35" column="45" lean-forward="false" selection-start-line="35" selection-start-column="45" selection-end-line="35" selection-end-column="45" />
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/bm_scan/sample/rast.004">
+    <entry file="file://$PROJECT_DIR$/../mxmap/mxmap/sample/rast.00">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="390">
+          <caret line="26" column="56" lean-forward="false" selection-start-line="26" selection-start-column="56" selection-end-line="26" selection-end-column="56" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file:///usr/local/lib/python2.7/site-packages/wx-3.0-osx_cocoa/wx/_controls.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="37035">
+          <caret line="2470" column="8" lean-forward="false" selection-start-line="2470" selection-start-column="8" selection-end-line="2470" selection-end-column="8" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$APPLICATION_HOME_DIR$/helpers/pydev/_pydev_bundle/pydev_monkey_qt.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="-111">
+          <caret line="104" column="31" lean-forward="false" selection-start-line="104" selection-start-column="31" selection-end-line="104" selection-end-column="31" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/../mxmap/mxmap/utils/__init__.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="0">
+          <caret line="0" column="0" lean-forward="false" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="37" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/../mxmap/mxmap/sample/bm1_scan.dat">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="30">
+          <caret line="2" column="132" lean-forward="false" selection-start-line="2" selection-start-column="119" selection-end-line="2" selection-end-column="132" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/../mxmap/mxmap/__init__.py">
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="0">
           <caret line="0" column="0" lean-forward="false" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file:///usr/local/Cellar/python/2.7.14/Frameworks/Python.framework/Versions/2.7/lib/python2.7/threading.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="15645">
+          <caret line="1043" column="29" lean-forward="false" selection-start-line="1043" selection-start-column="25" selection-end-line="1043" selection-end-column="29" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$USER_HOME$/Library/Caches/PyCharmCE2017.3/python_stubs/-1199944087/MpPrivate.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="3240">
+          <caret line="216" column="11" lean-forward="false" selection-start-line="216" selection-start-column="11" selection-end-line="216" selection-end-column="11" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file:///opt/mx/lib/mp/Mp.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="8070">
+          <caret line="539" column="38" lean-forward="false" selection-start-line="539" selection-start-column="38" selection-end-line="539" selection-end-column="38" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file:///usr/local/lib/python2.7/site-packages/wx-3.0-osx_cocoa/wx/lib/scrolledpanel.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="480">
+          <caret line="33" column="8" lean-forward="false" selection-start-line="33" selection-start-column="8" selection-end-line="33" selection-end-column="8" />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file:///usr/local/lib/python2.7/site-packages/wx-3.0-osx_cocoa/wx/_core.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="145455">
+          <caret line="9698" column="75" lean-forward="false" selection-start-line="9698" selection-start-column="75" selection-end-line="9698" selection-end-column="75" />
           <folding />
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/bm_scan/sample/rast.01">
+    <entry file="file://$PROJECT_DIR$/../mxmap/mxmap/main.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="30">
+          <caret line="2" column="22" lean-forward="false" selection-start-line="2" selection-start-column="22" selection-end-line="2" selection-end-column="22" />
+          <folding />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/../mxmap/mxmap/gui/__init__.py">
       <provider selected="true" editor-type-id="text-editor">
         <state relative-caret-position="0">
           <caret line="0" column="0" lean-forward="false" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
-          <folding />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file:///usr/local/lib/python2.7/site-packages/numpy/core/fromnumeric.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="504">
-          <caret line="251" column="58" lean-forward="false" selection-start-line="251" selection-start-column="58" selection-end-line="251" selection-end-column="58" />
-          <folding />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/bm_scan/sample/example.dat">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="90">
-          <caret line="6" column="0" lean-forward="false" selection-start-line="6" selection-start-column="0" selection-end-line="6" selection-end-column="0" />
-          <folding />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/bm_scan/sample/bm1_scan.dat">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="105">
-          <caret line="7" column="0" lean-forward="false" selection-start-line="7" selection-start-column="0" selection-end-line="7" selection-end-column="0" />
-          <folding />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/bm_scan/sample/scan_record_1.dat">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="0">
-          <caret line="0" column="0" lean-forward="false" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
-          <folding />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/bm_scan/sample/scan_record_2.dat">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="0">
-          <caret line="0" column="0" lean-forward="false" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
-          <folding />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/bm_scan/sample/scan_record_3.dat">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="0">
-          <caret line="0" column="0" lean-forward="false" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
-          <folding />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/bm_scan/sample/db_soft.dat">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="165">
-          <caret line="11" column="0" lean-forward="true" selection-start-line="11" selection-start-column="0" selection-end-line="11" selection-end-column="0" />
-          <folding />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/bm_scan/__init__.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="0">
-          <caret line="0" column="0" lean-forward="false" selection-start-line="0" selection-start-column="0" selection-end-line="0" selection-end-column="0" />
-          <folding />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/setup.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="105">
-          <caret line="7" column="22" lean-forward="false" selection-start-line="7" selection-start-column="22" selection-end-line="7" selection-end-column="22" />
           <folding>
-            <element signature="e#23#55#0" expanded="true" />
+            <element signature="e#0#26#0" expanded="true" />
           </folding>
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/bm_scan/utils/Scanner.py">
+    <entry file="file://$PROJECT_DIR$/../mxmap/setup.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="-1358">
-          <caret line="35" column="13" lean-forward="false" selection-start-line="35" selection-start-column="13" selection-end-line="35" selection-end-column="13" />
+        <state relative-caret-position="75">
+          <caret line="5" column="17" lean-forward="false" selection-start-line="5" selection-start-column="17" selection-end-line="5" selection-end-column="17" />
+          <folding>
+            <element signature="e#23#55#0" expanded="false" />
+          </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/../mxmap/mxmap/gui/mxmap_config.ini">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="60">
+          <caret line="4" column="6" lean-forward="false" selection-start-line="4" selection-start-column="0" selection-end-line="4" selection-end-column="6" />
+          <folding />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/../mxmap/mxmap/gui/plot_gui.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="105">
+          <caret line="7" column="18" lean-forward="false" selection-start-line="7" selection-start-column="18" selection-end-line="7" selection-end-column="18" />
+          <folding>
+            <element signature="e#4594#5357#0" expanded="false" />
+            <element signature="e#5395#5592#0" expanded="false" />
+            <element signature="e#5630#5827#0" expanded="false" />
+          </folding>
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/../mxmap/mxmap/utils/formula.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="90">
+          <caret line="6" column="48" lean-forward="false" selection-start-line="6" selection-start-column="48" selection-end-line="6" selection-end-column="48" />
+          <folding />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/../mxmap/mxmap/utils/Plotter.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="213">
+          <caret line="36" column="26" lean-forward="false" selection-start-line="36" selection-start-column="26" selection-end-line="36" selection-end-column="26" />
+          <folding />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/../mxmap/mxmap/gui/read_gui.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="-153">
+          <caret line="3" column="9" lean-forward="false" selection-start-line="3" selection-start-column="9" selection-end-line="3" selection-end-column="9" />
+          <folding />
+        </state>
+      </provider>
+    </entry>
+    <entry file="file://$PROJECT_DIR$/../mxmap/mxmap/utils/Scanner.py">
+      <provider selected="true" editor-type-id="text-editor">
+        <state relative-caret-position="-390">
+          <caret line="12" column="8" lean-forward="false" selection-start-line="12" selection-start-column="8" selection-end-line="12" selection-end-column="8" />
           <folding>
             <element signature="e#0#32#0" expanded="true" />
           </folding>
         </state>
       </provider>
     </entry>
-    <entry file="file://$PROJECT_DIR$/bm_scan/gui/plot_gui.py">
+    <entry file="file://$PROJECT_DIR$/../mxmap/mxmap/gui/scan_gui.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="11">
-          <caret line="11" column="79" lean-forward="false" selection-start-line="11" selection-start-column="79" selection-end-line="11" selection-end-column="79" />
+        <state relative-caret-position="460">
+          <caret line="112" column="0" lean-forward="true" selection-start-line="112" selection-start-column="0" selection-end-line="112" selection-end-column="0" />
           <folding>
             <element signature="e#0#9#0" expanded="true" />
-          </folding>
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/bm_scan/utils/Plotter.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="225">
-          <caret line="19" column="8" lean-forward="false" selection-start-line="19" selection-start-column="8" selection-end-line="19" selection-end-column="8" />
-          <folding />
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/bm_scan/gui/read_gui.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="171">
-          <caret line="17" column="35" lean-forward="false" selection-start-line="17" selection-start-column="35" selection-end-line="17" selection-end-column="35" />
-          <folding>
-            <element signature="e#47#56#0" expanded="true" />
-          </folding>
-        </state>
-      </provider>
-    </entry>
-    <entry file="file://$PROJECT_DIR$/bm_scan/gui/scan_gui.py">
-      <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="303">
-          <caret line="90" column="30" lean-forward="true" selection-start-line="90" selection-start-column="30" selection-end-line="90" selection-end-column="30" />
-          <folding>
-            <element signature="e#47#56#0" expanded="true" />
           </folding>
         </state>
       </provider>

@@ -2,13 +2,9 @@
 # matplotlib.use('WXAgg')
 
 import wx
-import os
-import numpy as np
 from os import listdir
-from os.path import exists, join
-from ..utils import Scanner
+from os.path import join
 from ..utils.formula import calculate
-# from tifffile import imsave
 from plot_gui import plot_gui
 from threading import Thread
 from ..utils.Plotter import get_cols
@@ -46,7 +42,7 @@ class read_gui(wx.Frame):
         self.panel_sizer.Add(self.filename_widget, pos=(1, 1), span=(1, 2), flag=wx.EXPAND)
 
         # Add Scalers
-        self.panel_sizer.Add(wx.StaticText(self.panel, label='Available Scalers:'), pos=(2, 0), span=(1, 1), flag=wx.EXPAND)
+        self.panel_sizer.Add(wx.StaticText(self.panel, label='Available Devices:'), pos=(2, 0), span=(1, 1), flag=wx.EXPAND)
         self.all_scalers = wx.StaticText(self.panel, label='-', size=(600, 20))
         self.panel_sizer.Add(self.all_scalers, pos=(2, 1), span=(1, 2), flag=wx.EXPAND)
 
@@ -81,7 +77,7 @@ class read_gui(wx.Frame):
         all_files = listdir(path)
         selected_file = ""
         for f in all_files:
-            if '.0' in f:
+            if '.0' in f and f.find('.') == f.rfind('.'):
                 self.file_name = f[:f.find('.')]
                 selected_file = f
                 break
@@ -90,7 +86,7 @@ class read_gui(wx.Frame):
             print("Error : No file")
             return
 
-        self.filename_widget.SetLabelText(self.file_name)
+        self.filename_widget.SetLabelText(str(self.file_name))
 
         # Get all columns
         self.columns = get_cols(join(path, selected_file))
@@ -98,7 +94,7 @@ class read_gui(wx.Frame):
 
         self.files = []
         for f in all_files:
-            if self.file_name in f:
+            if self.file_name in f and f.find('.') == f.rfind('.'):
                 self.files.append(f)
         self.files = sorted(self.files)
 
@@ -107,12 +103,13 @@ class read_gui(wx.Frame):
         Handle when "Plot" is clicked
         """
         if self.checkSettings():
-            self.plot_panel = plot_gui(motor_x=self.columns[1], motor_y=self.columns[0], formula=self.formula.GetValue())
+            self.plot_panel = plot_gui(motor_x=self.columns[0], motor_y=self.columns[1], formula=self.formula.GetValue())
             self.plot_panel.Show()
 
             # Running plot on another thread
             t = Thread(target=self.startPlot)
             t.start()
+
 
     def startPlot(self):
         """
@@ -130,7 +127,6 @@ class read_gui(wx.Frame):
         :return:
         """
         self.plot_panel.plot(full_path)
-        # wx.CallAfter(self.plot_panel.plot, full_path)
 
     def checkSettings(self):
         """

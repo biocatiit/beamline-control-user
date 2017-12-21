@@ -1,7 +1,12 @@
 import numpy as np
 
 def log(x):
-    return np.log(x)
+    try:
+        res = np.log(x)
+    except Exception as e:
+        print("Exception : %s . Result will be 0" %(e))
+        res = 0
+    return res
 
 def calculate(formula, d):
     """

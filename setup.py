@@ -3,7 +3,7 @@
 from distutils.core import setup
 from setuptools import find_packages
 
-setup(name="fran2",
+setup(name="mxmap",
       version='1.0',
       description="-",
       author="Jiranun Jiratrakanvong",
@@ -12,7 +12,9 @@ setup(name="fran2",
       packages=find_packages(),
       entry_points={
         'console_scripts': [
-            'fran2=bm_scan.main:main',
+            'mxmap=mxmap.main:main',
         ],
       },
+      data_files=[('/etc', ['mxmap/gui/mxmap_config.ini']),
+                  ('mxmap/gui/', ['mxmap/gui/mxmap_config.ini'])]
      )

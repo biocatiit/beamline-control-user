@@ -8,11 +8,11 @@ class Plotter:
     """
     A class to create a plot (image) for scan data which performs by Scanner
     """
-    def __init__(self, motor_x, motor_y, formula, x_step=None, y_step=None):
+    def __init__(self, motor_x, motor_y, formula, x_step=None, y_step=None, columns=None):
         self.motor_x = motor_x
         self.motor_y = motor_y
         self.formula = formula
-        self.columns = None
+        self.columns = columns
         self.scandata = None
         self.x_step = x_step
         self.y_step = y_step
@@ -22,15 +22,20 @@ class Plotter:
         Read scan data file and encapsulate data
         """
         if not exists(full_path):
-            # time.sleep(2)
             print(str(full_path)+ " does not exist")
             return False
 
         # Load data
         data = np.loadtxt(full_path)
 
+        # Number of column
+        n_cols = data.shape[1]
+
         # Get Column names
         self.columns = get_cols(full_path)
+
+        # Remove detectors
+        self.columns = self.columns[:n_cols]
 
         # Put/Add data to pandas dataframe
         scandata = pd.DataFrame(data, columns=self.columns)
@@ -78,10 +83,13 @@ class Plotter:
             d = {}
             for c in self.columns:
                 d[c] = np.array(scan_data[c])
+
             z = calculate(self.formula, d)
 
             # Reshape for displaying
             z = np.reshape(z, (len(y), len(x)))
+
+            z[np.isinf(z)] = 0.
 
             # Add 1 row and 1 column to support pcolormesh (pcolormesh requires 1 extra row and column to display)
             x.append(max(x) + xs)
