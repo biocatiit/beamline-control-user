@@ -69,6 +69,7 @@ class SerialComm():
         :param size: Number of bytes to read.
         :type size: int
 
+        :returns: The ascii (decoded) value of the ``Serial.read()``
         :rtype: str
         """
         with self.ser as s:
@@ -78,8 +79,9 @@ class SerialComm():
 
     def read_all(self):
         """This wraps the Serial.read() function, and returns all of the
-        waiting bytes. It automatically decodes the return value.
+        waiting bytes.
 
+        :returns: The ascii (decoded) value of the ``Serial.read()``
         :rtype: str
         """
         with self.ser as s:
@@ -229,11 +231,11 @@ class M50Pump(Pump):
 
     def wait_for_response(self, timeout=3.):
         """Waits for a response from the pump, up to the set timeout.
-        Returns the response.
 
         :param timeout: The timeoutat which we stop waiting for a response
         :type timeout: float
 
+        :returns: Response from the pump
         :rtype: str
         """
         response = ''
@@ -248,6 +250,7 @@ class M50Pump(Pump):
     def get_response(self):
         """Gets any and all response from the pump.
 
+        :returns: Response from the pump
         :rtype: str
         """
         response = self.pump_comm.read_all()
@@ -257,6 +260,7 @@ class M50Pump(Pump):
     def is_moving(self):
         """Queries the pump about whether or not it's moving.
 
+        :returns: True if the pump is moving, False otherwise
         :rtype: bool
         """
         self.send_cmd("PR MV")
