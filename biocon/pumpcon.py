@@ -85,11 +85,11 @@ class SerialComm():
         :rtype: str
         """
         with self.ser as s:
-            ret = s.read(s.inWaiting())
+            ret = s.read(s.in_waiting())
 
         return ret.decode()
 
-    def write(self, data):
+    def write(self, data, get_response=False, term_char='>'):
         """This warps the Serial.write() function. It encodes the input
         data if necessary.
 
@@ -97,16 +97,72 @@ class SerialComm():
         :type data: str, bytes
         """
         if isinstance(data, str):
+            if not data.endswith('\r\n'):
+                data += '\r\n'
             data = data.encode()
 
+        out = ''
         try:
             with self.ser as s:
                 s.write(data)
+                if get_response:
+                    while not out.endswith(term_char):
+                        if s.in_waiting > 0:
+                            ret = s.read(s.in_waiting)
+                            out += ret.decode('ascii')
+
+                        time.sleep(.001)
         except ValueError as err:
             with print_lock:
                 traceback.print_tb(err.__traceback__)
 
+        return out
 
+class MForceSerialComm(SerialComm):
+    """This class subclases ``SerialComm`` to handle MForce specific 
+    errors.
+    """
+
+    def write(self, data, get_response=True, term_char='>'):
+        """This warps the Serial.write() function. It encodes the input
+        data if necessary.
+
+        :param data: Data to be written to the serial device.
+        :type data: str, bytes
+
+        :param term_char: The terminal character expected in a response
+        :type term_char: str
+
+        :returns: The requested response, or an empty string
+        :rtype: str
+        """
+        if isinstance(data, str):
+            if not data.endswith('\r\n'):
+                data += '\r\n'
+            data = data.encode()
+
+        out = ''
+        try:
+            with self.ser as s:
+                s.write(data)
+                if get_response:
+                    while not out.strip().endswith(term_char):
+                        if s.in_waiting > 0:
+                            ret = s.read(s.in_waiting)
+                            out += ret.decode('ascii')
+                            # print(out)
+
+                        if out.strip().endswith('?'):
+                            print('sending error command')
+                            s.write('PR ER\r\n'.encode())
+                            out = ''
+
+                        time.sleep(.001)
+        except ValueError as err:
+            with print_lock:
+                traceback.print_tb(err.__traceback__)
+
+        return out
 
 class Pump():
     """
@@ -158,19 +214,23 @@ class M50Pump(Pump):
         """
         Pump.__init__(self, device, name)
 
-        self.pump_comm = SerialComm(device)
+        self.pump_comm = MForceSerialComm(device)
 
         #Make sure parameters are set right
-        self.send_cmd('MS=256') #Microstepping to 256, MForce default
-        self.send_cmd('VI=1000') #Initial velocity to 1000, MForce default
-        self.send_cmd('A=1000000') #Acceleration to 1000000, MForce default
-        self.send_cmd('D=1000000') #Deceleration to 1000000, MForce default
-        self.send_cmd('HC=5') #Hold current to 5%, MForce default
-        self.send_cmd('RC=50') #Run current to 50%, specified by VICI (MForce default is 25%)
-        # self.send_cmd('S') #Saves current settings in non-volatile memory
+        self.send_cmd('EM 0') #Echo mode to full duplex
+        self.send_cmd('MS 256') #Microstepping to 256, MForce default
+        self.send_cmd('VI 1000') #Initial velocity to 1000, MForce default
+        self.send_cmd('A 1000000') #Acceleration to 1000000, MForce default
+        self.send_cmd('D 1000000') #Deceleration to 1000000, MForce default
+        self.send_cmd('HC 5') #Hold current to 5%, MForce default
+        self.send_cmd('RC 25') #Run current to 25%, MForce default is 25%
+        # # self.send_cmd('S') #Saves current settings in non-volatile memory
 
         self._is_flowing = False
         self._is_dispensing = False
+
+        self._units = 'uL/min'
+        self._flow_rate = 0
 
         self._flow_cal = flow_cal
         self._backlash_cal = backlash_cal
@@ -178,84 +238,102 @@ class M50Pump(Pump):
         self.cal = 51200/self._flow_cal #Calibration value in (micro)steps/uL
 
     @property
-    def flow_rate(self, units='uL/min'):
+    def flow_rate(self):
         """Sets and returns the pump flow rate in uL/min. Can be set while the
         pump is moving, and it will update the flow rate appropriately.
 
         :type: float
         """
-        rate = self._flow_rate*60/self.cal
+        rate = self._flow_rate/self.cal
 
-        if units == 'mL/min':
+        if self.units.split('/')[1] == 'min':
+            rate = rate*60.
+
+        if self.units.split('/')[0] == 'mL':
             rate = rate/1000.
-        elif units == 'nL/min':
+        elif self.units.split('/')[0] == 'nL':
             rate = rate*1000
 
         return rate
 
     @flow_rate.setter
-    def flow_rate(self, rate, units='uL/min'):
-        if units == 'mL/min':
+    def flow_rate(self, rate):
+        if self.units.split('/')[0] == 'mL':
             rate = rate*1000.
-        elif units == 'nL/min':
+        elif self.units.split('/')[0] == 'nL':
             rate = rate/1000.
 
+        if self.units.split('/')[1] == 'min':
+            rate = rate/60.
+
         #Maximum continuous flow rate is 25 mL/min
-        if rate>25000:
-            rate = 25000
-        elif rate<-25000:
-            rate = -25000
+        if rate>25000/60.:
+            rate = 25000/60.
+        elif rate<-25000/60.:
+            rate = -25000/60.
 
         #Minimum flow rate is 1 uL/min
-        if abs(rate) < 1:
+        if abs(rate) < 1/60. and rate != 0:
             if rate>0:
-                rate = 1
+                rate = 1/60.
             else:
-                rate = -1
+                rate = -1/60.
 
-        rate = rate/60.
-        self._flow_rate = rate*self.cal
+        
+        self._flow_rate = int(round(rate*self.cal))
 
         if self._is_flowing:
             self.send_cmd("SL {}".format(self._flow_rate))
         elif self._is_dispensing:
-            self.send_cmd("V {}".format(vol))
+            self.send_cmd("VM {}".format(self._flow_rate))
 
-    def send_cmd(self, cmd):
+    @property
+    def units(self):
+        return self._units
+
+    @units.setter
+    def units(self, units):
+        old_units = self._units
+        flow_rate = self.flow_rate
+
+        if units in ['nL/s', 'nL/min', 'uL/s', 'uL/min', 'mL/s', 'mL/min']:
+            self._units = units
+            old_vu, old_tu = old_units.split('/')
+            new_vu, new_tu = self._units.split('/')[0]
+            if old_vu != new_vu:
+                if (old_vu == 'nL' and new_vu == 'uL') or (old_vu == 'uL' and new_vu == 'mL'):
+                    flow_rate = flow_rate/1000.
+                elif old_vu == 'nL' and new_vu == 'mL':
+                    flow_rate = flow_rate/1000000.
+                elif (old_vu == 'mL' and new_vu == 'uL') or (old_vu == 'uL' and new_vu == 'nL'):
+                    flow_rate = flow_rate*1000.
+                elif old_vu == 'mL' and new_vu == 'nL':
+                    flow_rate = flow_rate*1000000.
+            if old_tu != new_tu:
+                if old_tu == 'min':
+                    flow_rate = flow_rate/60
+                else:
+                    flow_rate = flow_rate*60
+        else:
+            print('Units must be one of: {}'.format(', '.join(['nL/s', 'nL/min', 'uL/s', 'uL/min', 'mL/s', 'mL/min'])))
+
+
+
+    def send_cmd(self, cmd, get_response=True):
         """Sends a command to the pump.
 
         :param cmd: The command to send to the pump.
         :type cmd: str, bytes
         """
-        self.pump_comm.write(cmd)
+        with print_lock:
+            print("Sending cmd: {!r} to {}".format(cmd, self.name))
+        ret = self.pump_comm.write(cmd, get_response)
+        
+        if get_response:
+            with print_lock:
+                print('Returned: {!r}'.format(ret))
+        return ret
 
-    def wait_for_response(self, timeout=3.):
-        """Waits for a response from the pump, up to the set timeout.
-
-        :param timeout: The timeoutat which we stop waiting for a response
-        :type timeout: float
-
-        :returns: Response from the pump
-        :rtype: str
-        """
-        response = ''
-
-        start_time = time.time()
-
-        while not response and time.time()-start_time<timeout:
-            response = self.get_response()
-
-        return response
-
-    def get_response(self):
-        """Gets any and all response from the pump.
-
-        :returns: Response from the pump
-        :rtype: str
-        """
-        response = self.pump_comm.read_all()
-
-        return response
 
     def is_moving(self):
         """Queries the pump about whether or not it's moving.
@@ -263,8 +341,9 @@ class M50Pump(Pump):
         :returns: True if the pump is moving, False otherwise
         :rtype: bool
         """
-        self.send_cmd("PR MV")
-        status = self.wait_for_response
+        status = self.send_cmd("PR MV")
+
+        status = status.split('\r\n')[-1]
         status = bool(int(status))
 
         return status
@@ -274,7 +353,7 @@ class M50Pump(Pump):
         ``M50Pump.flow_rate`` variable.
         """
         self.send_cmd("SL {}".format(self._flow_rate))
-        self.is_flowing = True
+        self._is_flowing = True
 
     def dispense(self, vol, units='uL'):
         """
@@ -291,9 +370,9 @@ class M50Pump(Pump):
         elif units == 'nL':
             vol = vol/1000.
 
-        vol = vol*self.cal
+        vol =int(round(vol*self.cal))
 
-        self.send_cmd("V {}".format(self._flow_rate))
+        self.send_cmd("VM {}".format(self._flow_rate))
         self.send_cmd("MR {}".format(vol))
         self._is_dispensing = True
 
@@ -315,3 +394,7 @@ class M50Pump(Pump):
         self.send_cmd("\x1B")
         self.is_flowing = False
         self._is_dispensing = False
+
+
+if __name__ == '__main__':
+    my_pump = M50Pump('COM6', 'pump2', 626.2, 9.278)
