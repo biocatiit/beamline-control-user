@@ -91,10 +91,17 @@ class SerialComm():
 
     def write(self, data, get_response=False, term_char='>'):
         """This warps the Serial.write() function. It encodes the input
-        data if necessary.
+        data if necessary. It can return any expected response from the
+        controller.
 
         :param data: Data to be written to the serial device.
         :type data: str, bytes
+
+        :param term_char: The terminal character expected in a response
+        :type term_char: str
+
+        :returns: The requested response, or an empty string
+        :rtype: str
         """
         if isinstance(data, str):
             if not data.endswith('\r\n'):
@@ -119,13 +126,14 @@ class SerialComm():
         return out
 
 class MForceSerialComm(SerialComm):
-    """This class subclases ``SerialComm`` to handle MForce specific 
+    """This class subclases ``SerialComm`` to handle MForce specific
     errors.
     """
 
     def write(self, data, get_response=True, term_char='>'):
         """This warps the Serial.write() function. It encodes the input
-        data if necessary.
+        data if necessary. It can return any expected response from the
+        controller.
 
         :param data: Data to be written to the serial device.
         :type data: str, bytes
@@ -189,6 +197,110 @@ class Pump():
     def __str__(self):
         return '{} {}, connected to {}'.format(self.__class__.__name__, self.name, self.device)
 
+    @property
+    def flow_rate(self):
+        """Sets and returns the pump flow rate in units specified by ``Pump.units``.
+        Can be set while the pump is moving, and it will update the flow rate
+        appropriately.
+
+        :type: float
+        """
+        pass #Should be implimented in each subclass
+
+    @flow_rate.setter
+    def flow_rate(self, rate):
+        pass #Should be implimented in each subclass
+
+    @property
+    def units(self):
+        """Sets and returns the pump flow rate units. This can be set to:
+        nL/s, nL/min, uL/s, uL/min, mL/s, mL/min. Changing units keeps the
+        flow rate constant, i.e. if the flow rate was set to 100 uL/min, and
+        the units are changed to mL/min, the flow rate is set to 0.1 mL/min.
+
+        :type: str
+        """
+        return self._units
+
+    @units.setter
+    def units(self, units):
+        old_units = self._units
+        flow_rate = self.flow_rate
+
+        if units in ['nL/s', 'nL/min', 'uL/s', 'uL/min', 'mL/s', 'mL/min']:
+            self._units = units
+            old_vu, old_tu = old_units.split('/')
+            new_vu, new_tu = self._units.split('/')[0]
+            if old_vu != new_vu:
+                if (old_vu == 'nL' and new_vu == 'uL') or (old_vu == 'uL' and new_vu == 'mL'):
+                    flow_rate = flow_rate/1000.
+                elif old_vu == 'nL' and new_vu == 'mL':
+                    flow_rate = flow_rate/1000000.
+                elif (old_vu == 'mL' and new_vu == 'uL') or (old_vu == 'uL' and new_vu == 'nL'):
+                    flow_rate = flow_rate*1000.
+                elif old_vu == 'mL' and new_vu == 'nL':
+                    flow_rate = flow_rate*1000000.
+            if old_tu != new_tu:
+                if old_tu == 'min':
+                    flow_rate = flow_rate/60
+                else:
+                    flow_rate = flow_rate*60
+        else:
+            print('Units must be one of: {}'.format(', '.join(['nL/s', 'nL/min', 'uL/s', 'uL/min', 'mL/s', 'mL/min'])))
+
+    def send_cmd(self, cmd, get_response=True):
+        """Sends a command to the pump.
+
+        :param cmd: The command to send to the pump.
+
+        :param get_response: Whether the program should get a response from the pump
+        :type get_response: bool
+        """
+        pass #Should be implimented in each subclass
+
+
+    def is_moving(self):
+        """Queries the pump about whether or not it's moving.
+
+        :returns: True if the pump is moving, False otherwise
+        :rtype: bool
+        """
+        pass #Should be implimented in each subclass
+
+    def start_flow(self):
+        """Starts a continuous flow at the flow rate specified by the
+        ``Pump.flow_rate`` variable.
+        """
+        pass #Should be implimented in each subclass
+
+    def dispense(self, vol, units='uL'):
+        """
+        Dispenses a fixed volume.
+
+        :param vol: Volume to dispense
+        :type vol: float
+
+        :param units: Volume units, defaults to uL, also accepts mL or nL
+        :type units: str
+        """
+        pass #Should be implimented in each subclass
+
+    def aspirate(self, vol, units='uL'):
+        """
+        Aspirates a fixed volume.
+
+        :param vol: Volume to aspirate
+        :type vol: float
+
+        :param units: Volume units, defaults to uL, also accepts mL or nL
+        :type units: str
+        """
+        pass #Should be implimented in each subclass
+
+    def stop(self):
+        """Stops all pump flow."""
+        pass #Should be implimented in each subclass
+
 class M50Pump(Pump):
     """This class contains information for initializing and communicating with
     a VICI M50 Pump using an MForce Controller.
@@ -197,8 +309,7 @@ class M50Pump(Pump):
     def __init__(self, device, name, flow_cal=628., backlash_cal=1.5):
         """
         This makes the initial serial connection, and then sets the MForce
-        controller parameters to the correct values. These correct values are then
-        saved in non-volatile memory.
+        controller parameters to the correct values.
 
         :param device: The device comport as sent to pyserial
         :type device: str
@@ -234,16 +345,13 @@ class M50Pump(Pump):
 
         self._flow_cal = flow_cal
         self._backlash_cal = backlash_cal
+        self.gear_ratio = 14.915 #Gear ratio provided by manufacturer, for M50 pumps
 
-        self.cal = 51200/self._flow_cal #Calibration value in (micro)steps/uL
+        self.cal = 200*256*self.gear_ratio/self._flow_cal #Calibration value in (micro)steps/useful
+            #full steps/rev * microsteps/full step * gear ratio / uL/revolution = microsteps/uL
 
     @property
     def flow_rate(self):
-        """Sets and returns the pump flow rate in uL/min. Can be set while the
-        pump is moving, and it will update the flow rate appropriately.
-
-        :type: float
-        """
         rate = self._flow_rate/self.cal
 
         if self.units.split('/')[1] == 'min':
@@ -279,7 +387,7 @@ class M50Pump(Pump):
             else:
                 rate = -1/60.
 
-        
+
         self._flow_rate = int(round(rate*self.cal))
 
         if self._is_flowing:
@@ -287,48 +395,20 @@ class M50Pump(Pump):
         elif self._is_dispensing:
             self.send_cmd("VM {}".format(self._flow_rate))
 
-    @property
-    def units(self):
-        return self._units
-
-    @units.setter
-    def units(self, units):
-        old_units = self._units
-        flow_rate = self.flow_rate
-
-        if units in ['nL/s', 'nL/min', 'uL/s', 'uL/min', 'mL/s', 'mL/min']:
-            self._units = units
-            old_vu, old_tu = old_units.split('/')
-            new_vu, new_tu = self._units.split('/')[0]
-            if old_vu != new_vu:
-                if (old_vu == 'nL' and new_vu == 'uL') or (old_vu == 'uL' and new_vu == 'mL'):
-                    flow_rate = flow_rate/1000.
-                elif old_vu == 'nL' and new_vu == 'mL':
-                    flow_rate = flow_rate/1000000.
-                elif (old_vu == 'mL' and new_vu == 'uL') or (old_vu == 'uL' and new_vu == 'nL'):
-                    flow_rate = flow_rate*1000.
-                elif old_vu == 'mL' and new_vu == 'nL':
-                    flow_rate = flow_rate*1000000.
-            if old_tu != new_tu:
-                if old_tu == 'min':
-                    flow_rate = flow_rate/60
-                else:
-                    flow_rate = flow_rate*60
-        else:
-            print('Units must be one of: {}'.format(', '.join(['nL/s', 'nL/min', 'uL/s', 'uL/min', 'mL/s', 'mL/min'])))
-
-
 
     def send_cmd(self, cmd, get_response=True):
         """Sends a command to the pump.
 
         :param cmd: The command to send to the pump.
         :type cmd: str, bytes
+
+        :param get_response: Whether the program should get a response from the pump
+        :type get_response: bool
         """
         with print_lock:
             print("Sending cmd: {!r} to {}".format(cmd, self.name))
         ret = self.pump_comm.write(cmd, get_response)
-        
+
         if get_response:
             with print_lock:
                 print('Returned: {!r}'.format(ret))
@@ -336,11 +416,6 @@ class M50Pump(Pump):
 
 
     def is_moving(self):
-        """Queries the pump about whether or not it's moving.
-
-        :returns: True if the pump is moving, False otherwise
-        :rtype: bool
-        """
         status = self.send_cmd("PR MV")
 
         status = status.split('\r\n')[-1]
@@ -349,22 +424,10 @@ class M50Pump(Pump):
         return status
 
     def start_flow(self):
-        """Starts a continuous flow at the flow rate specified by the
-        ``M50Pump.flow_rate`` variable.
-        """
         self.send_cmd("SL {}".format(self._flow_rate))
         self._is_flowing = True
 
     def dispense(self, vol, units='uL'):
-        """
-        Dispenses a fixed volume.
-
-        :param vol: Volume to dispense
-        :type vol: float
-
-        :param units: Volume units, defaults to uL, also accepts mL or nL
-        :type units: str
-        """
         if units == 'mL':
             vol = vol*1000.
         elif units == 'nL':
@@ -377,23 +440,21 @@ class M50Pump(Pump):
         self._is_dispensing = True
 
     def aspirate(self, vol, units='uL'):
-        """
-        Aspirates a fixed volume.
-
-        :param vol: Volume to aspirate
-        :type vol: float
-
-        :param units: Volume units, defaults to uL, also accepts mL or nL
-        :type units: str
-        """
         self.dispense(-1*vol, units)
 
     def stop(self):
-        """Stops all pump flow."""
         self.send_cmd("SL 0")
         self.send_cmd("\x1B")
         self.is_flowing = False
         self._is_dispensing = False
+
+class PumpCommThread(threading.Thread):
+    """
+    This class creates a control thread for pumps attached to the system.
+    """
+
+    def __init__(self):
+        threading.Thread.__init__(self)
 
 
 if __name__ == '__main__':
