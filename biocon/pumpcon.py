@@ -29,7 +29,7 @@ import queue
 import serial
 import wx
 
-print_lock = threading.Lock()
+print_lock = threading.RLock()
 
 class SerialComm():
     """This class impliments a generic serial communication setup. The goal is
@@ -153,11 +153,13 @@ class MForceSerialComm(SerialComm):
             data = data.encode()
 
         out = ''
+        timeout = 1
+        start_time = time.time()
         try:
             with self.ser as s:
                 s.write(data)
                 if get_response:
-                    while not out.strip().endswith(term_char):
+                    while not out.strip().endswith(term_char) and time.time()-start_time<timeout:
                         if s.in_waiting > 0:
                             ret = s.read(s.in_waiting)
                             out += ret.decode('ascii')
@@ -424,7 +426,7 @@ class M50Pump(Pump):
     def is_moving(self):
         status = self.send_cmd("PR MV")
 
-        status = status.split('\r\n')[-1]
+        status = status.split('\r\n')[-2][-1]
         status = bool(int(status))
 
         return status
@@ -473,7 +475,8 @@ class PumpCommThread(threading.Thread):
         threading.Thread.__init__(self)
 
         self.command_queue = command_queue
-        self.abort_event = abort_event
+        self._abort_event = abort_event
+        self._stop_event = threading.Event()
 
         self._commands = {'connect'     : self._connect_pump,
                         'set_flow_rate' : self._set_flow_rate,
@@ -501,12 +504,21 @@ class PumpCommThread(threading.Thread):
             else:
                 command = None
 
-            if self.abort_event.is_set():
+            if self._abort_event.is_set():
                 self._abort()
                 command = None
 
+            if self._stop_event.is_set():
+                break
+
             if command is not None:
+                with print_lock:
+                    print(command)
+                    print(args)
+                    print(kwargs)
                 self._commands[command](*args, **kwargs)
+
+        self._abort()
 
     def _connect_pump(self, device, name, pump_type, **kwargs):
         """
@@ -544,6 +556,10 @@ class PumpCommThread(threading.Thread):
         pump = self._connected_pumps[name]
         pump.flow_rate = flow_rate
 
+        with print_lock:
+            print(pump)
+            print(pump.flow_rate)
+
     def _set_units(self, name, units):
         """
         This method sets the units for the flow rate for a pump. This can be set to:
@@ -568,6 +584,10 @@ class PumpCommThread(threading.Thread):
         """
         pump = self._connected_pumps[name]
         pump.start_flow()
+
+        with print_lock:
+            print(pump)
+            print(pump.is_moving())
 
     def _stop(self, name):
         """
@@ -651,19 +671,38 @@ class PumpCommThread(threading.Thread):
         for name, pump in self._connected_pumps.items():
             pump.stop()
 
-        self.abort_event.clear()
+        self._abort_event.clear()
 
+    def stop(self):
+        self._stop_event.set()
 
 
 if __name__ == '__main__':
     # my_pump = M50Pump('COM6', 'pump2', 626.2, 9.278)
     pmp_cmd_q = deque()
-    my_pumpcon = PumpCommThread(pmp_cmd_q)
+    abort_event = threading.Event()
+    my_pumpcon = PumpCommThread(pmp_cmd_q, abort_event)
 
-    init_cmd = ('connect', ('COM6' 'pump2', 'VICI_M50'),
+    my_pumpcon.start()
+
+
+    init_cmd = ('connect', ('COM6', 'pump2', 'VICI_M50'),
         {'flow_cal': 626.2, 'backlash_cal': 9.278})
     pmp_cmd_q.append(init_cmd)
 
-    fr_cmd = ('set_flow_rate', ('pump2', 100), {})
+    fr_cmd = ('set_flow_rate', ('pump2', 2000), {})
     pmp_cmd_q.append(fr_cmd)
+
+    start_cmd = ('start_flow', ('pump2',), {})
+    pmp_cmd_q.append(start_cmd)
+    
+    # for i in range(10):
+    #     with print_lock:
+    #         print('sleeping {}'.format(i))
+    #     time.sleep(1)
+
+    stop_cmd = ('stop', ('pump2',), {})
+    # pmp_cmd_q.append(stop_cmd)
+
+    # time.sleep(5)
 
