@@ -26,6 +26,7 @@ import collections
 from collections import OrderedDict, deque
 import queue
 import logging
+import sys
 
 logger = logging.getLogger(__name__)
 
@@ -159,7 +160,7 @@ class MForceSerialComm(SerialComm):
         :returns: The requested response, or an empty string
         :rtype: str
         """
-        logger.debug("Sending '%s' to serial device on port %s", data, self.ser.port)
+        logger.debug("Sending %r to serial device on port %s", data, self.ser.port)
         if isinstance(data, str):
             if not data.endswith('\r\n'):
                 data += '\r\n'
@@ -185,9 +186,9 @@ class MForceSerialComm(SerialComm):
 
                         time.sleep(.001)
         except ValueError:
-            logger.exception("Failed to write '%s' to serial device on port %s", data, self.ser.port)
+            logger.exception("Failed to write %r to serial device on port %s", data, self.ser.port)
 
-        logger.debug("Recived '%s' after writing to serial device on port %s", out, self.ser.port)
+        logger.debug("Recived %r after writing to serial device on port %s", out, self.ser.port)
 
         return out
 
@@ -355,10 +356,10 @@ class M50Pump(Pump):
         :type backlash_cal: float
         """
         Pump.__init__(self, device, name)
-
-        logger.info(("Initializing pump %s on serial port %s, flow "
-            "calibration: %f uL/rev, backlash calibration: %f uL", self.name,
+        logstr = ("Initializing pump {} on serial port {}, flow "
+            "calibration: {} uL/rev, backlash calibration: {} uL".format(self.name,
             self.device, flow_cal, backlash_cal))
+        logger.info(logstr)
 
         self.pump_comm = MForceSerialComm(device)
 
@@ -448,8 +449,7 @@ class M50Pump(Pump):
         :type get_response: bool
         """
         logger.debug("Sending pump %s cmd %r", self.name, cmd)
-        with print_lock:
-            print("Sending cmd: {!r} to {}".format(cmd, self.name))
+
         ret = self.pump_comm.write(cmd, get_response)
 
         if get_response:
@@ -483,10 +483,14 @@ class M50Pump(Pump):
             self._flow_dir = -1
 
     def dispense(self, vol, units='uL'):
+        if self._is_flowing or self._is_dispensing:
+            logger.debug("Stopping pump %s current motion before starting continuous flow", self.name)
+            self.stop()
+
         if vol > 0:
             logger.info("Pump %s dispensing %f %s at %f %s", self.name, vol, units, self.flow_rate, self.units)
         elif vol < 0:
-            logger.info("Pump %s aspirating %f %s at %f %s", self.name, vol, units, self.flow_rate, self.units)
+            logger.info("Pump %s aspirating %f %s at %f %s", self.name, abs(vol), units, self.flow_rate, self.units)
 
         if units == 'mL':
             vol = vol*1000.
@@ -502,10 +506,6 @@ class M50Pump(Pump):
 
         vol =int(round(vol*self.cal))
 
-        if self._is_flowing or self._is_dispensing:
-            logger.debug("Stopping pump %s current motion before starting continuous flow", self.name)
-            self.stop()
-
         self.send_cmd("VM {}".format(abs(self._flow_rate)))
         self.send_cmd("MR {}".format(vol))
 
@@ -519,7 +519,7 @@ class M50Pump(Pump):
         self.dispense(-1*vol, units)
 
     def stop(self):
-        logger.info("Pump %s stopping all motions", self.name, vol, units, self.flow_rate, self.units)
+        logger.info("Pump %s stopping all motions", self.name)
         self.send_cmd("SL 0")
         self.send_cmd("\x1B")
         self._is_flowing = False
@@ -763,12 +763,13 @@ class PumpCommThread(threading.Thread):
 if __name__ == '__main__':
     logger = logging.getLogger(__name__)
     logger.setLevel(logging.DEBUG)
+    h1 = logging.StreamHandler(sys.stdout)
+    h1.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    h1.setFormatter(formatter)
+    logger.addHandler(h1)
 
-    sh = logging.StreamHandler()
-    sh.setLevel(logging.DEBUG)
-    formatter = logging.Formatter('%(asctime)s - %(name)s %(levelname)s - %(message)s')
-
-    my_pump = M50Pump('COM6', 'pump2', 626.2, 9.278)
+    my_pump = M50Pump('COM6', '2', 626.2, 9.278)
 
     # pmp_cmd_q = deque()
     # abort_event = threading.Event()
