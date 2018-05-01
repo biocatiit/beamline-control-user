@@ -25,6 +25,9 @@ import time
 import collections
 from collections import OrderedDict, deque
 import queue
+import logging
+
+logger = logging.getLogger(__name__)
 
 import serial
 import wx
@@ -46,15 +49,16 @@ class SerialComm():
         """
         self.ser = None
 
+        logger.info("Attempting to connect to serial device on port %s", port)
+
         try:
             self.ser = serial.Serial(port, baudrate, bytesize, parity, stopbits, timeout,
                 xonxoff, rtscts, write_timeout, dsrdtr, inter_byte_timeout, exclusive)
-        except ValueError as err:
-            with print_lock:
-                traceback.print_tb(err.__traceback__)
-        except serial.SerialException as err:
-            with print_lock:
-                traceback.print_tb(err.__traceback__)
+            logger.info("Connected to serial device on port %s", port)
+        except ValueError:
+            logger.exception("Failed to connect to serial device on port %s", port)
+        except serial.SerialException:
+            logger.exception("Failed to connect to serial device on port %s", port)
         finally:
             if self.ser is not None:
                 self.ser.close()
@@ -78,6 +82,9 @@ class SerialComm():
         with self.ser as s:
             ret = s.read(size)
 
+        logger.debug("Read %i bytes from serial device on port %s", size, self.ser.port)
+        logger.debug("Serial device on port %s returned %s", self.ser.port, ret.decode())
+
         return ret.decode()
 
     def read_all(self):
@@ -89,6 +96,9 @@ class SerialComm():
         """
         with self.ser as s:
             ret = s.read(s.in_waiting())
+
+        logger.debug("Read all waiting bytes from serial device on port %s", self.ser.port)
+        logger.debug("Serial device on port %s returned %s", self.ser.port, ret.decode())
 
         return ret.decode()
 
@@ -106,6 +116,7 @@ class SerialComm():
         :returns: The requested response, or an empty string
         :rtype: str
         """
+        logger.debug("Sending '%s' to serial device on port %s", data, self.ser.port)
         if isinstance(data, str):
             if not data.endswith('\r\n'):
                 data += '\r\n'
@@ -122,9 +133,10 @@ class SerialComm():
                             out += ret.decode('ascii')
 
                         time.sleep(.001)
-        except ValueError as err:
-            with print_lock:
-                traceback.print_tb(err.__traceback__)
+        except ValueError:
+            logger.exception("Failed to write '%s' to serial device on port %s", data, self.ser.port)
+
+        logger.debug("Recived '%s' after writing to serial device on port %s", out, self.ser.port)
 
         return out
 
@@ -147,6 +159,7 @@ class MForceSerialComm(SerialComm):
         :returns: The requested response, or an empty string
         :rtype: str
         """
+        logger.debug("Sending '%s' to serial device on port %s", data, self.ser.port)
         if isinstance(data, str):
             if not data.endswith('\r\n'):
                 data += '\r\n'
@@ -171,9 +184,10 @@ class MForceSerialComm(SerialComm):
                             out = ''
 
                         time.sleep(.001)
-        except ValueError as err:
-            with print_lock:
-                traceback.print_tb(err.__traceback__)
+        except ValueError:
+            logger.exception("Failed to write '%s' to serial device on port %s", data, self.ser.port)
+
+        logger.debug("Recived '%s' after writing to serial device on port %s", out, self.ser.port)
 
         return out
 
@@ -253,8 +267,11 @@ class Pump():
                     flow_rate = flow_rate/60
                 else:
                     flow_rate = flow_rate*60
+
+            logger.info("Changed pump %s units from %s to %s", self.name, old_units, units)
         else:
-            print('Units must be one of: {}'.format(', '.join(['nL/s', 'nL/min', 'uL/s', 'uL/min', 'mL/s', 'mL/min'])))
+            logger.warning("Failed to change pump %s units, units supplied were invalid: %s", self.name, units)
+
 
     def send_cmd(self, cmd, get_response=True):
         """Sends a command to the pump.
@@ -318,9 +335,6 @@ class M50Pump(Pump):
         >>> my_pump.flow_rate = 2000
         >>> my_pump.start_flow()
         >>> my_pump.stop_flow()
-
-    .. todo::
-        This needs to have a backlash correction for dispensing/aspirating
     """
 
     def __init__(self, device, name, flow_cal=628., backlash_cal=1.5):
@@ -342,6 +356,10 @@ class M50Pump(Pump):
         """
         Pump.__init__(self, device, name)
 
+        logger.info(("Initializing pump %s on serial port %s, flow "
+            "calibration: %f uL/rev, backlash calibration: %f uL", self.name,
+            self.device, flow_cal, backlash_cal))
+
         self.pump_comm = MForceSerialComm(device)
 
         #Make sure parameters are set right
@@ -351,7 +369,7 @@ class M50Pump(Pump):
         self.send_cmd('A 1000000') #Acceleration to 1000000, MForce default
         self.send_cmd('D 1000000') #Deceleration to 1000000, MForce default
         self.send_cmd('HC 5') #Hold current to 5%, MForce default
-        self.send_cmd('RC 25') #Run current to 25%, MForce default is 25%
+        self.send_cmd('RC 25') #Run current to 25%, MForce default
         # # self.send_cmd('S') #Saves current settings in non-volatile memory
 
         self._is_flowing = False
@@ -384,6 +402,8 @@ class M50Pump(Pump):
 
     @flow_rate.setter
     def flow_rate(self, rate):
+        logger.info("Setting pump %s flow rate to %f %s", self.name, rate, self.units)
+
         if self.units.split('/')[0] == 'mL':
             rate = rate*1000.
         elif self.units.split('/')[0] == 'nL':
@@ -395,14 +415,18 @@ class M50Pump(Pump):
         #Maximum continuous flow rate is 25 mL/min
         if rate>25000/60.:
             rate = 25000/60.
+            logger.warning("Requested flow rate > 25 mL/min, setting pump %s flow rate to 25 mL/min", self.name)
         elif rate<-25000/60.:
             rate = -25000/60.
+            logger.warning("Requested flow rate > 25 mL/min, setting pump %s flow rate to -25 mL/min", self.name)
 
         #Minimum flow rate is 1 uL/min
         if abs(rate) < 1/60. and rate != 0:
             if rate>0:
+                logger.warning("Requested flow rate < 1 uL/min, setting pump %s flow rate to 1 uL/min", self.name)
                 rate = 1/60.
             else:
+                logger.warning("Requested flow rate < 1 uL/min, setting pump %s flow rate to -1 uL/min", self.name)
                 rate = -1/60.
 
 
@@ -423,13 +447,14 @@ class M50Pump(Pump):
         :param get_response: Whether the program should get a response from the pump
         :type get_response: bool
         """
+        logger.debug("Sending pump %s cmd %r", self.name, cmd)
         with print_lock:
             print("Sending cmd: {!r} to {}".format(cmd, self.name))
         ret = self.pump_comm.write(cmd, get_response)
 
         if get_response:
-            with print_lock:
-                print('Returned: {!r}'.format(ret))
+            logger.debug("Pump %s returned %r", self.name, ret)
+
         return ret
 
 
@@ -439,12 +464,16 @@ class M50Pump(Pump):
         status = status.split('\r\n')[-2][-1]
         status = bool(int(status))
 
+        logger.debug("Pump %s moving: %s", self.name, str(status))
+
         return status
 
     def start_flow(self):
         if self._is_flowing or self._is_dispensing:
+            logger.debug("Stopping pump %s current motion before starting continuous flow", self.name)
             self.stop()
-            
+
+        logger.info("Pump %s starting continuous flow at %f %s", self.name, self.flow_rate, self.units)
         self.send_cmd("SL {}".format(self._flow_rate))
 
         self._is_flowing = True
@@ -454,6 +483,11 @@ class M50Pump(Pump):
             self._flow_dir = -1
 
     def dispense(self, vol, units='uL'):
+        if vol > 0:
+            logger.info("Pump %s dispensing %f %s at %f %s", self.name, vol, units, self.flow_rate, self.units)
+        elif vol < 0:
+            logger.info("Pump %s aspirating %f %s at %f %s", self.name, vol, units, self.flow_rate, self.units)
+
         if units == 'mL':
             vol = vol*1000.
         elif units == 'nL':
@@ -461,12 +495,15 @@ class M50Pump(Pump):
 
         if vol > 0 and self._flow_dir < 0:
             vol = vol + self._backlash_cal
+            logger.debug("Pump %s added backlash correction for dispensing/aspirating", self.name)
         elif vol < 0 and self._flow_dir > 0:
             vol = vol - self._backlash_cal
+            logger.debug("Pump %s added backlash correction for dispensing/aspirating", self.name)
 
         vol =int(round(vol*self.cal))
 
         if self._is_flowing or self._is_dispensing:
+            logger.debug("Stopping pump %s current motion before starting continuous flow", self.name)
             self.stop()
 
         self.send_cmd("VM {}".format(abs(self._flow_rate)))
@@ -482,6 +519,7 @@ class M50Pump(Pump):
         self.dispense(-1*vol, units)
 
     def stop(self):
+        logger.info("Pump %s stopping all motions", self.name, vol, units, self.flow_rate, self.units)
         self.send_cmd("SL 0")
         self.send_cmd("\x1B")
         self._is_flowing = False
@@ -723,7 +761,15 @@ class PumpCommThread(threading.Thread):
 
 
 if __name__ == '__main__':
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.DEBUG)
+
+    sh = logging.StreamHandler()
+    sh.setLevel(logging.DEBUG)
+    formatter = logging.Formatter('%(asctime)s - %(name)s %(levelname)s - %(message)s')
+
     my_pump = M50Pump('COM6', 'pump2', 626.2, 9.278)
+
     # pmp_cmd_q = deque()
     # abort_event = threading.Event()
     # my_pumpcon = PumpCommThread(pmp_cmd_q, abort_event)
