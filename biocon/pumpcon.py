@@ -181,7 +181,10 @@ class Pump():
     """
     This class contains the settings and communication for a generic pump.
     It is intended to be subclassed by other pump classes, which contain
-    specific information for communicating with a given pump.
+    specific information for communicating with a given pump. A pump object
+    can be wrapped in a thread for using a GUI, implimented in :py:class:`PumpCommThread`
+    or it can be used directly from the command line. The :py:class:`M5Pump`
+    documentation contains an example.
     """
 
     def __init__(self, device, name):
@@ -308,7 +311,13 @@ class Pump():
 
 class M50Pump(Pump):
     """This class contains information for initializing and communicating with
-    a VICI M50 Pump using an MForce Controller.
+    a VICI M50 Pump using an MForce Controller. Below is an example that
+    initializes an M50 pump, starts a flow of 2000 uL/min, and then stops the flow. ::
+
+        >>> my_pump = M50Pump('COM6', 'pump2', flow_cal=626.2, backlash_cal=9.278)
+        >>> my_pump.flow_rate = 2000
+        >>> my_pump.start_flow()
+        >>> my_pump.stop_flow()
 
     .. todo::
         This needs to have a backlash correction for dispensing/aspirating
@@ -350,6 +359,7 @@ class M50Pump(Pump):
 
         self._units = 'uL/min'
         self._flow_rate = 0
+        self._flow_dir = 0
 
         self._flow_cal = flow_cal
         self._backlash_cal = backlash_cal
@@ -401,7 +411,7 @@ class M50Pump(Pump):
         if self._is_flowing:
             self.send_cmd("SL {}".format(self._flow_rate))
         elif self._is_dispensing:
-            self.send_cmd("VM {}".format(self._flow_rate))
+            self.send_cmd("VM {}".format(abs(self._flow_rate)))
 
 
     def send_cmd(self, cmd, get_response=True):
@@ -433,7 +443,12 @@ class M50Pump(Pump):
 
     def start_flow(self):
         self.send_cmd("SL {}".format(self._flow_rate))
+
         self._is_flowing = True
+        if self._flow_rate > 0:
+            self._flow_dir = 1
+        elif self._flow_rate < 0:
+            self._flow_dir = -1
 
     def dispense(self, vol, units='uL'):
         if units == 'mL':
@@ -441,11 +456,21 @@ class M50Pump(Pump):
         elif units == 'nL':
             vol = vol/1000.
 
+        if vol > 0 and self._flow_dir < 0:
+            vol = vol + self._backlash_cal
+        elif vol < 0 and self._flow_dir > 0:
+            vol = vol - self._backlash_cal
+
         vol =int(round(vol*self.cal))
 
-        self.send_cmd("VM {}".format(self._flow_rate))
+        self.send_cmd("VM {}".format(abs(self._flow_rate)))
         self.send_cmd("MR {}".format(vol))
+
         self._is_dispensing = True
+        if vol > 0:
+            self._flow_dir = 1
+        elif vol < 0:
+            self._flow_dir = -1
 
     def aspirate(self, vol, units='uL'):
         self.dispense(-1*vol, units)
@@ -459,6 +484,33 @@ class M50Pump(Pump):
 class PumpCommThread(threading.Thread):
     """
     This class creates a control thread for pumps attached to the system.
+    This thread is designed for using a GUI application. For command line
+    use, most people will find working directly with a pump object much
+    more transparent. Below you'll find an example that initializes an
+    :py:class:`M50Pump`, starts a flow of 2000 uL/min, and stops the flow
+    5 s later. ::
+
+        import collections
+        import threading
+
+        pump_cmd_q = collections.deque()
+        abort_event = threading.Event()
+        my_pumpcon = PumpCommThread(pump_cmd_q, abort_event)
+        my_pumpcon.start()
+
+        init_cmd = ('connect', ('COM6', 'pump2', 'VICI_M50'),
+            {'flow_cal': 626.2, 'backlash_cal': 9.278})
+        flow_rate_cmd = ('set_flow_rate', ('pump2', 2000), {})
+        start_cmd = ('start_flow', ('pump2',), {})
+        stop_cmd = ('stop', ('pump2',), {})
+
+        pump_cmd_q.append(init_cmd)
+        pump_cmd_q.append(start_cmd)
+        pump_cmd_q.append(flow_rate_cmd)
+        time.sleep(5)
+        pump_cmd_q.append(stop_cmd)
+
+        my_pumpcon.stop()
     """
 
     def __init__(self, command_queue, abort_event):
@@ -512,10 +564,6 @@ class PumpCommThread(threading.Thread):
                 break
 
             if command is not None:
-                with print_lock:
-                    print(command)
-                    print(args)
-                    print(kwargs)
                 self._commands[command](*args, **kwargs)
 
         self._abort()
@@ -556,10 +604,6 @@ class PumpCommThread(threading.Thread):
         pump = self._connected_pumps[name]
         pump.flow_rate = flow_rate
 
-        with print_lock:
-            print(pump)
-            print(pump.flow_rate)
-
     def _set_units(self, name, units):
         """
         This method sets the units for the flow rate for a pump. This can be set to:
@@ -584,10 +628,6 @@ class PumpCommThread(threading.Thread):
         """
         pump = self._connected_pumps[name]
         pump.start_flow()
-
-        with print_lock:
-            print(pump)
-            print(pump.is_moving())
 
     def _stop(self, name):
         """
@@ -662,9 +702,7 @@ class PumpCommThread(threading.Thread):
         pump.send_cmd(cmd, get_response)
 
     def _abort(self):
-        """
-        Clears the ``command_queue`` and aborts all current pump motions.
-        """
+        """Clears the ``command_queue`` and aborts all current pump motions."""
 
         self.command_queue.clear()
 
@@ -674,35 +712,26 @@ class PumpCommThread(threading.Thread):
         self._abort_event.clear()
 
     def stop(self):
+        """Stops the thread cleanly."""
         self._stop_event.set()
 
 
 if __name__ == '__main__':
     # my_pump = M50Pump('COM6', 'pump2', 626.2, 9.278)
-    pmp_cmd_q = deque()
-    abort_event = threading.Event()
-    my_pumpcon = PumpCommThread(pmp_cmd_q, abort_event)
+    # pmp_cmd_q = deque()
+    # abort_event = threading.Event()
+    # my_pumpcon = PumpCommThread(pmp_cmd_q, abort_event)
+    # my_pumpcon.start()
 
-    my_pumpcon.start()
+    # init_cmd = ('connect', ('COM6', 'pump2', 'VICI_M50'),
+    #     {'flow_cal': 626.2, 'backlash_cal': 9.278})
+    # fr_cmd = ('set_flow_rate', ('pump2', 2000), {})
+    # start_cmd = ('start_flow', ('pump2',), {})
+    # stop_cmd = ('stop', ('pump2',), {})
 
-
-    init_cmd = ('connect', ('COM6', 'pump2', 'VICI_M50'),
-        {'flow_cal': 626.2, 'backlash_cal': 9.278})
-    pmp_cmd_q.append(init_cmd)
-
-    fr_cmd = ('set_flow_rate', ('pump2', 2000), {})
-    pmp_cmd_q.append(fr_cmd)
-
-    start_cmd = ('start_flow', ('pump2',), {})
-    pmp_cmd_q.append(start_cmd)
-    
-    # for i in range(10):
-    #     with print_lock:
-    #         print('sleeping {}'.format(i))
-    #     time.sleep(1)
-
-    stop_cmd = ('stop', ('pump2',), {})
-    # pmp_cmd_q.append(stop_cmd)
-
+    # pmp_cmd_q.append(init_cmd)
+    # pmp_cmd_q.append(start_cmd)
+    # pmp_cmd_q.append(fr_cmd)
     # time.sleep(5)
+    # pmp_cmd_q.append(stop_cmd)
 
