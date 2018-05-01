@@ -22,6 +22,9 @@
 import traceback
 import threading
 import time
+import collections
+from collections import OrderedDict, deque
+import queue
 
 import serial
 import wx
@@ -304,6 +307,9 @@ class Pump():
 class M50Pump(Pump):
     """This class contains information for initializing and communicating with
     a VICI M50 Pump using an MForce Controller.
+
+    .. todo::
+        This needs to have a backlash correction for dispensing/aspirating
     """
 
     def __init__(self, device, name, flow_cal=628., backlash_cal=1.5):
@@ -453,9 +459,211 @@ class PumpCommThread(threading.Thread):
     This class creates a control thread for pumps attached to the system.
     """
 
-    def __init__(self):
+    def __init__(self, command_queue, abort_event):
+        """
+        Initializes the custom thread. Important parameters here are the
+        list of known commands ``_commands`` and known pumps ``_known_pumps``.
+
+        :param collections.deque command_queue: The queue used to pass commands to
+            the thread.
+
+        :param threading.Event abort_event: An event that is set when the thread
+            needs to abort, and otherwise is not set.
+        """
         threading.Thread.__init__(self)
+
+        self.command_queue = command_queue
+        self.abort_event = abort_event
+
+        self._commands = {'connect'     : self._connect_pump,
+                        'set_flow_rate' : self._set_flow_rate,
+                        'set_units'     : self._set_units,
+                        'start_flow'    : self._start_flow,
+                        'stop'          : self._stop,
+                        'aspirate'      : self._aspirate,
+                        'dispense'      : self._dispense,
+                        'is_moving'     : self._is_moving,
+                        'send_cmd'      : self._send_cmd,
+                        }
+
+        self._connected_pumps = OrderedDict()
+
+        self._known_pumps = {'VICI_M50' : M50Pump,
+                            }
+
+    def run(self):
+        """
+        Custom run method for the thread.
+        """
+        while True:
+            if len(self.command_queue) > 0:
+                command, args, kwargs = self.command_queue.popleft()
+            else:
+                command = None
+
+            if self.abort_event.is_set():
+                self._abort()
+                command = None
+
+            if command is not None:
+                self._commands[command](*args, **kwargs)
+
+    def _connect_pump(self, device, name, pump_type, **kwargs):
+        """
+        This method connects to a pump by creating a new :py:class:`Pump` subclass
+        object (e.g. a new :py:class:`M50Pump` object). This pump is saved in the thread
+        and can be called later to do stuff. All pumps must be connected before
+        they can be used.
+
+        :param device: The device comport as sent to pyserial
+        :type device: str
+
+        :param name: A unique identifier for the pump
+        :type name: str
+
+        :param pump_type: A pump type in the ``_known_pumps`` dictionary.
+        :type pump_type: str
+
+        :param \*\*kwargs: This function accepts arbitrary keyword args that are passed
+            directly to the :py:class:`Pump` subclass that is called. For example,
+            for an :py:class:`M50Pump` you could pass ``flow_cal`` and ``backlash``.
+        """
+        new_pump = self._known_pumps[pump_type](device, name, **kwargs)
+
+        self._connected_pumps[name] = new_pump
+
+    def _set_flow_rate(self, name, flow_rate):
+        """
+        This method sets the flow rate for a pump.
+
+        :param str name: The unique identifier for a pump that was used in the
+            :py:func:`_connect_pump` method.
+
+        :param float flow_rate: The flow rate for the pump.
+        """
+        pump = self._connected_pumps[name]
+        pump.flow_rate = flow_rate
+
+    def _set_units(self, name, units):
+        """
+        This method sets the units for the flow rate for a pump. This can be set to:
+        nL/s, nL/min, uL/s, uL/min, mL/s, mL/min. Changing units keeps the
+        flow rate constant, i.e. if the flow rate was set to 100 uL/min, and
+        the units are changed to mL/min, the flow rate is set to 0.1 mL/min.
+
+        :param str name: The unique identifier for a pump that was used in the
+            :py:func:`_connect_pump` method.
+
+        :param float units: The flow rate for the pump.
+        """
+        pump = self._connected_pumps[name]
+        pump.units = units
+
+    def _start_flow(self, name):
+        """
+        This method starts continuous flow for a pump.
+
+        :param str name: The unique identifier for a pump that was used in the
+            :py:func:`_connect_pump` method.
+        """
+        pump = self._connected_pumps[name]
+        pump.start_flow()
+
+    def _stop(self, name):
+        """
+        This method stops all flow (continuous or finite) for a pump.
+
+        :param str name: The unique identifier for a pump that was used in the
+            :py:func:`_connect_pump` method.
+        """
+        pump = self._connected_pumps[name]
+        pump.stop()
+
+    def _aspirate(self, name, vol, units='uL'):
+        """
+        This method aspirates a fixed volume.
+
+        :param str name: The unique identifier for a pump that was used in the
+            :py:func:`_connect_pump` method.
+
+        :param float vol: The volume to aspriate.
+
+        :param str units: The units of the volume, can be nL, uL, or mL. Defaults to uL.
+        """
+        pump = self._connected_pumps[name]
+        pump.aspirate(vol, units)
+
+    def _dispense(self, name, vol, units='uL'):
+        """
+        This method dispenses a fixed volume.
+
+        :param str name: The unique identifier for a pump that was used in the
+            :py:func:`_connect_pump` method.
+
+        :param float vol: The volume to aspriate.
+
+        :param str units: The units of the volume, can be nL, uL, or mL. Defaults to uL.
+        """
+        pump = self._connected_pumps[name]
+        pump.dispense(vol, units)
+
+    def _is_moving(self, name, return_queue):
+        """
+        This method returns where or not the pump is moving.
+
+        :param str name: The unique identifier for a pump that was used in the
+            :py:func:`_connect_pump` method.
+
+        :param return_queue: The return queue to put the response in.
+        :type return_queue: queue.Queue
+
+        :rtype: bool
+        """
+        pump = self._connected_pumps[name]
+        is_moving = pump.is_moving()
+
+        return_queue.put_nowait(is_moving)
+
+    def _send_cmd(self, name, cmd, get_response=True):
+        """
+        This method can be used to send an arbitrary command to the pump.
+        If something is going to be used frequently, it probably should be
+        added as a pump method.
+
+        :param str name: The unique identifier for a pump that was used in the
+            :py:func:`_connect_pump` method.
+
+        :param cmd: The command to send, in an appropriate format for the pump.
+
+        :param bool get_response: Whether the software should wait for a
+            response from the pump. Defaults to ``True``.
+        """
+        pump = self._connected_pumps[name]
+        pump.send_cmd(cmd, get_response)
+
+    def _abort(self):
+        """
+        Clears the ``command_queue`` and aborts all current pump motions.
+        """
+
+        self.command_queue.clear()
+
+        for name, pump in self._connected_pumps.items():
+            pump.stop()
+
+        self.abort_event.clear()
+
 
 
 if __name__ == '__main__':
-    my_pump = M50Pump('COM6', 'pump2', 626.2, 9.278)
+    # my_pump = M50Pump('COM6', 'pump2', 626.2, 9.278)
+    pmp_cmd_q = deque()
+    my_pumpcon = PumpCommThread(pmp_cmd_q)
+
+    init_cmd = ('connect', ('COM6' 'pump2', 'VICI_M50'),
+        {'flow_cal': 626.2, 'backlash_cal': 9.278})
+    pmp_cmd_q.append(init_cmd)
+
+    fr_cmd = ('set_flow_rate', ('pump2', 100), {})
+    pmp_cmd_q.append(fr_cmd)
+
