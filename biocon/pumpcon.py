@@ -442,6 +442,9 @@ class M50Pump(Pump):
         return status
 
     def start_flow(self):
+        if self._is_flowing or self._is_dispensing:
+            self.stop()
+            
         self.send_cmd("SL {}".format(self._flow_rate))
 
         self._is_flowing = True
@@ -463,6 +466,9 @@ class M50Pump(Pump):
 
         vol =int(round(vol*self.cal))
 
+        if self._is_flowing or self._is_dispensing:
+            self.stop()
+
         self.send_cmd("VM {}".format(abs(self._flow_rate)))
         self.send_cmd("MR {}".format(vol))
 
@@ -478,7 +484,7 @@ class M50Pump(Pump):
     def stop(self):
         self.send_cmd("SL 0")
         self.send_cmd("\x1B")
-        self.is_flowing = False
+        self._is_flowing = False
         self._is_dispensing = False
 
 class PumpCommThread(threading.Thread):
@@ -717,7 +723,7 @@ class PumpCommThread(threading.Thread):
 
 
 if __name__ == '__main__':
-    # my_pump = M50Pump('COM6', 'pump2', 626.2, 9.278)
+    my_pump = M50Pump('COM6', 'pump2', 626.2, 9.278)
     # pmp_cmd_q = deque()
     # abort_event = threading.Event()
     # my_pumpcon = PumpCommThread(pmp_cmd_q, abort_event)
