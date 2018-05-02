@@ -328,7 +328,12 @@ class Pump():
         pass #Should be implimented in each subclass
 
 class M50Pump(Pump):
-    """This class contains information for initializing and communicating with
+    """
+    .. todo:: This class doesn't know when the pump is done dispensing. This leads
+        to unncessary stop signals being sent to the pump, and makes the log harder
+        to follow. This could be fixed, when I have time.
+
+    This class contains information for initializing and communicating with
     a VICI M50 Pump using an MForce Controller. Below is an example that
     initializes an M50 pump, starts a flow of 2000 uL/min, and then stops the flow. ::
 
@@ -527,6 +532,8 @@ class M50Pump(Pump):
 
 class PumpCommThread(threading.Thread):
     """
+    .. todo:: Add logging to this
+
     This class creates a control thread for pumps attached to the system.
     This thread is designed for using a GUI application. For command line
     use, most people will find working directly with a pump object much
@@ -570,6 +577,8 @@ class PumpCommThread(threading.Thread):
         """
         threading.Thread.__init__(self)
 
+        logger.info("Starting pump control thread: %s", self.name)
+
         self.command_queue = command_queue
         self._abort_event = abort_event
         self._stop_event = threading.Event()
@@ -596,21 +605,26 @@ class PumpCommThread(threading.Thread):
         """
         while True:
             if len(self.command_queue) > 0:
+                logger.debug("Getting new command")
                 command, args, kwargs = self.command_queue.popleft()
             else:
                 command = None
 
             if self._abort_event.is_set():
+                logger.debug("Abort event detected")
                 self._abort()
                 command = None
 
             if self._stop_event.is_set():
+                logger.debug("Stop event detected")
                 break
 
             if command is not None:
+                logger.debug("Processing cmd '%s' with args: %s and kwargs: %s ", cmd, ' ,'.join(args), ' ,'.join(args))
                 self._commands[command](*args, **kwargs)
 
         self._abort()
+        logger.info("Quitting pump control thread: %s", self.name)
 
     def _connect_pump(self, device, name, pump_type, **kwargs):
         """
@@ -632,9 +646,10 @@ class PumpCommThread(threading.Thread):
             directly to the :py:class:`Pump` subclass that is called. For example,
             for an :py:class:`M50Pump` you could pass ``flow_cal`` and ``backlash``.
         """
+        logger.info("Connecting pump %s", name)
         new_pump = self._known_pumps[pump_type](device, name, **kwargs)
-
         self._connected_pumps[name] = new_pump
+        logger.debug("Pump %s connected", name)
 
     def _set_flow_rate(self, name, flow_rate):
         """
@@ -645,8 +660,10 @@ class PumpCommThread(threading.Thread):
 
         :param float flow_rate: The flow rate for the pump.
         """
+        logger.info("Setting pump %s flow rate", name)
         pump = self._connected_pumps[name]
         pump.flow_rate = flow_rate
+        logger.debug("Pump %s flow rate set", name)
 
     def _set_units(self, name, units):
         """
@@ -658,10 +675,12 @@ class PumpCommThread(threading.Thread):
         :param str name: The unique identifier for a pump that was used in the
             :py:func:`_connect_pump` method.
 
-        :param float units: The flow rate for the pump.
+        :param str units: The units for the pump.
         """
+        logger.info("Setting pump %s units", name)
         pump = self._connected_pumps[name]
         pump.units = units
+        logger.debug("Pump %s units set", name)
 
     def _start_flow(self, name):
         """
@@ -670,8 +689,10 @@ class PumpCommThread(threading.Thread):
         :param str name: The unique identifier for a pump that was used in the
             :py:func:`_connect_pump` method.
         """
+        logger.info("Starting pump %s continuous flow", name)
         pump = self._connected_pumps[name]
         pump.start_flow()
+        logger.debug("Pump %s flow started", name)
 
     def _stop(self, name):
         """
@@ -680,8 +701,10 @@ class PumpCommThread(threading.Thread):
         :param str name: The unique identifier for a pump that was used in the
             :py:func:`_connect_pump` method.
         """
+        logger.info("Stopping pump %s", name)
         pump = self._connected_pumps[name]
         pump.stop()
+        logger.debug("Pump %s stopped", name)
 
     def _aspirate(self, name, vol, units='uL'):
         """
@@ -694,8 +717,10 @@ class PumpCommThread(threading.Thread):
 
         :param str units: The units of the volume, can be nL, uL, or mL. Defaults to uL.
         """
+        logger.info("Aspirating pump %s", name)
         pump = self._connected_pumps[name]
         pump.aspirate(vol, units)
+        logger.debug("Pump %s aspiration started", name)
 
     def _dispense(self, name, vol, units='uL'):
         """
@@ -708,8 +733,11 @@ class PumpCommThread(threading.Thread):
 
         :param str units: The units of the volume, can be nL, uL, or mL. Defaults to uL.
         """
+        logger.info("Dispensing pump %s", name)
         pump = self._connected_pumps[name]
         pump.dispense(vol, units)
+
+        logger.debug("Pump %s dispensing started", name)
 
     def _is_moving(self, name, return_queue):
         """
@@ -723,10 +751,12 @@ class PumpCommThread(threading.Thread):
 
         :rtype: bool
         """
+        logger.info("Checking if pump %s is moving", name)
         pump = self._connected_pumps[name]
         is_moving = pump.is_moving()
 
         return_queue.put_nowait(is_moving)
+        logger.debug("Pump %s is moving: %s", name, str(is_moving))
 
     def _send_cmd(self, name, cmd, get_response=True):
         """
@@ -742,21 +772,25 @@ class PumpCommThread(threading.Thread):
         :param bool get_response: Whether the software should wait for a
             response from the pump. Defaults to ``True``.
         """
+        logger.info("Sending pump %s cmd %r", name. cmd)
         pump = self._connected_pumps[name]
         pump.send_cmd(cmd, get_response)
+        logger.debug("Pump %s command sent", name)
 
     def _abort(self):
         """Clears the ``command_queue`` and aborts all current pump motions."""
-
+        logger.info("Aborting pump %s current and future commands", name)
         self.command_queue.clear()
 
         for name, pump in self._connected_pumps.items():
             pump.stop()
 
         self._abort_event.clear()
+        logger.debug("Pump %s aborted", name)
 
     def stop(self):
         """Stops the thread cleanly."""
+        logger.info("Starting to clean up and shut down pump control thread: %s", self.name)
         self._stop_event.set()
 
 
