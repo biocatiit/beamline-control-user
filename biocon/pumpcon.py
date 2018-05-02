@@ -27,6 +27,7 @@ from collections import OrderedDict, deque
 import queue
 import logging
 import sys
+import queue
 
 logger = logging.getLogger(__name__)
 
@@ -617,12 +618,12 @@ class PumpCommThread(threading.Thread):
 
             if self._stop_event.is_set():
                 logger.debug("Stop event detected")
+                self._abort()
                 break
 
             if command is not None:
-                logger.debug("Processing cmd '%s' with args: %s and kwargs: %s ", cmd, ' ,'.join(args), ' ,'.join(args))
+                logger.debug("Processing cmd '%s' with args: %s and kwargs: %s ", command, ', '.join(['{}'.format(a) for a in args]), ', '.join(['{}:{}'.format(kw, item) for kw, item in kwargs.items()]))
                 self._commands[command](*args, **kwargs)
-
         self._abort()
         logger.info("Quitting pump control thread: %s", self.name)
 
@@ -713,7 +714,7 @@ class PumpCommThread(threading.Thread):
         :param str name: The unique identifier for a pump that was used in the
             :py:func:`_connect_pump` method.
 
-        :param float vol: The volume to aspriate.
+        :param float vol: The volume to aspirate.
 
         :param str units: The units of the volume, can be nL, uL, or mL. Defaults to uL.
         """
@@ -729,7 +730,7 @@ class PumpCommThread(threading.Thread):
         :param str name: The unique identifier for a pump that was used in the
             :py:func:`_connect_pump` method.
 
-        :param float vol: The volume to aspriate.
+        :param float vol: The volume to dispense.
 
         :param str units: The units of the volume, can be nL, uL, or mL. Defaults to uL.
         """
@@ -754,7 +755,6 @@ class PumpCommThread(threading.Thread):
         logger.info("Checking if pump %s is moving", name)
         pump = self._connected_pumps[name]
         is_moving = pump.is_moving()
-
         return_queue.put_nowait(is_moving)
         logger.debug("Pump %s is moving: %s", name, str(is_moving))
 
@@ -779,14 +779,14 @@ class PumpCommThread(threading.Thread):
 
     def _abort(self):
         """Clears the ``command_queue`` and aborts all current pump motions."""
-        logger.info("Aborting pump %s current and future commands", name)
+        logger.info("Aborting pump control thread%s current and future commands", self.name)
         self.command_queue.clear()
 
         for name, pump in self._connected_pumps.items():
             pump.stop()
 
         self._abort_event.clear()
-        logger.debug("Pump %s aborted", name)
+        logger.debug("Pump control thread %s aborted", self.name)
 
     def stop(self):
         """Stops the thread cleanly."""
@@ -799,26 +799,36 @@ if __name__ == '__main__':
     logger.setLevel(logging.DEBUG)
     h1 = logging.StreamHandler(sys.stdout)
     h1.setLevel(logging.DEBUG)
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
     h1.setFormatter(formatter)
     logger.addHandler(h1)
 
-    my_pump = M50Pump('COM6', '2', 626.2, 9.278)
+    # my_pump = M50Pump('COM6', '2', 626.2, 9.278)
 
-    # pmp_cmd_q = deque()
-    # abort_event = threading.Event()
-    # my_pumpcon = PumpCommThread(pmp_cmd_q, abort_event)
-    # my_pumpcon.start()
+    pmp_cmd_q = deque()
+    abort_event = threading.Event()
+    my_pumpcon = PumpCommThread(pmp_cmd_q, abort_event)
+    my_pumpcon.daemon = True
+    my_pumpcon.name = 'PumpCon'
+    my_pumpcon.start()
+    return_q = queue.Queue()
 
-    # init_cmd = ('connect', ('COM6', 'pump2', 'VICI_M50'),
-    #     {'flow_cal': 626.2, 'backlash_cal': 9.278})
-    # fr_cmd = ('set_flow_rate', ('pump2', 2000), {})
-    # start_cmd = ('start_flow', ('pump2',), {})
-    # stop_cmd = ('stop', ('pump2',), {})
+    init_cmd = ('connect', ('COM6', 'pump2', 'VICI_M50'),
+        {'flow_cal': 626.2, 'backlash_cal': 9.278})
+    fr_cmd = ('set_flow_rate', ('pump2', 2000), {})
+    start_cmd = ('start_flow', ('pump2',), {})
+    stop_cmd = ('stop', ('pump2',), {})
+    dispense_cmd = ('dispense', ('pump2', 200), {})
+    aspirate_cmd = ('aspirate', ('pump2', 200), {})
+    moving_cmd = ('is_moving', ('pump2', return_q), {})
 
     # pmp_cmd_q.append(init_cmd)
-    # pmp_cmd_q.append(start_cmd)
     # pmp_cmd_q.append(fr_cmd)
+    # pmp_cmd_q.append(start_cmd)
+    # pmp_cmd_q.append(dispense_cmd)
+    # pmp_cmd_q.append(aspirate_cmd)
+    # pmp_cmd_q.append(moving_cmd)
     # time.sleep(5)
     # pmp_cmd_q.append(stop_cmd)
+    # my_pumpcon.stop()
 
