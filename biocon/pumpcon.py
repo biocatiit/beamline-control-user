@@ -801,9 +801,64 @@ class PumpCommThread(threading.Thread):
         self._stop_event.set()
 
 class PumpPanel(wx.Panel):
+    """
+    .. todo:: This panel should be able to take inputs for ``pump_type``, ``comport``,
+        ``pump_args``, and ``pump_kwargs`` and set up and connect the pump. This
+        would a wrapper program to save/load a known pump configruation. Right
+        now it takes them, but doesn't use them.
+
+    This pump panel supports standard flow controls and settings, including
+    connection settings, for a pump. It is meant to be embedded in a larger application
+    and can be instanced several times, once for each pump. It communciates
+    with the pumps using the :py:class:`PumpCommThread`. Currently it only supports
+    the :py:class:`M50Pump`, but it should be easy to extend for other pumps. The
+    only things that should have to be changed are the are adding in pump-specific
+    settings, modeled after how the ``m50_pump_sizer`` is constructed in the
+    :py:func:`_create_layout` function, and then add in type switching in the
+    :py:func:`_on_type` function.
+    """
     def __init__(self, parent, panel_id, panel_name, all_comports, pump_cmd_q,
         known_pumps, pump_name, pump_type=None, comport=None, pump_args=[],
         pump_kwargs={}):
+        """
+        Initializes the custom thread. Important parameters here are the
+        list of known commands ``_commands`` and known pumps ``known_pumps``.
+
+        :param wx.Window parent: Parent class for the panel.
+
+        :param int panel_id: wx ID for the panel.
+
+        :param str panel_name: Name for the panel
+
+        :param list all_comports: A list containing all comports that the pump
+            could be connected to.
+
+        :param collections.deque pump_cmd_q: The ``pump_cmd_q`` that was passed to
+            the :py:class:`PumpCommThread`.
+
+        :param list known_pumps: The list of known pump types, obtained from
+            the :py:class:`PumpCommThread`.
+
+        :param str pump_name: An identifier for the pump, displayed in the pump
+            panel.
+
+        :param str pump_type: One of the ``known_pumps``, corresponding to the pump
+            connected to this panel. Only required if you are connecting the pump
+            when the panel is first set up (rather than manually later).
+
+        :param str comport: The comport the pump is connected to. Only required
+            if you are connecting the pump when the panel is first set up (rather
+            than manually later).
+
+        :param list pump_args: Pump specific arguments for initialization.
+            Only required if you are connecting the pump when the panel is first
+            set up (rather than manually later).
+
+        :param dict pump_kwargs: Pump specific keyword arguments for initialization.
+            Only required if you are connecting the pump when the panel is first
+            set up (rather than manually later).
+
+        """
 
         wx.Panel.__init__(self, parent, panel_id, name=panel_name)
 
@@ -825,6 +880,7 @@ class PumpPanel(wx.Panel):
 
 
     def _create_layout(self):
+        """Creates the layout for the panel."""
         self.status = wx.StaticText(self, label='Not connected')
 
         status_grid = wx.FlexGridSizer(rows=2, cols=2, vgap=2, hgap=2)
@@ -956,12 +1012,14 @@ class PumpPanel(wx.Panel):
         return top_sizer
 
     def _on_type(self, evt):
+        """Called when the pump type is changed in the GUI."""
         pump = self.type_ctrl.GetStringSelection()
 
         if pump == 'VICI M50':
             self.control_box_sizer.Show(self.m50_settings_sizer, recursive=True)
 
     def _on_units(self, evt):
+        """Called when the units are changed in the GUI."""
         vol_unit = self.vol_unit_ctrl.GetStringSelection()
         t_unit = self.time_unit_ctrl.GetStringSelection()
 
@@ -992,6 +1050,7 @@ class PumpPanel(wx.Panel):
         self.flow_rate_ctrl.ChangeValue('{0:.3f}'.format(flow_rate))
 
     def _on_mode(self, evt):
+        """Called when the flow mode is changed in the GUI"""
         mode = self.mode_ctrl.GetStringSelection()
 
         if mode == 'Continuous flow':
@@ -1003,9 +1062,8 @@ class PumpPanel(wx.Panel):
             self.volume_ctrl.Show()
             self.vol_units_lbl.Show()
 
-        self.Layout()
-
     def _on_run(self, evt):
+        """Called when flow is started or stopped in the GUI."""
         if self.connected:
             if self.run_button.GetLabel() == 'Start':
                 fr_set = self._set_flowrate()
@@ -1048,9 +1106,11 @@ class PumpPanel(wx.Panel):
             wx.MessageBox(msg, "Error starting flow")
 
     def _on_fr_change(self, evt):
+        """Called when the flow rate is started or stopped in the GUI."""
         self._set_flowrate()
 
     def _on_connect(self, evt):
+        """Called when a pump is connected in the GUI."""
         pump = self.type_ctrl.GetStringSelection().replace(' ', '_')
 
         if pump == 'VICI_M50':
@@ -1070,9 +1130,20 @@ class PumpPanel(wx.Panel):
         return
 
     def _set_status(self, status):
+        """
+        Changes the status in the GUI.
+
+        :param str status: The status to display.
+        """
         self.status.SetLabel(status)
 
     def _set_flowrate(self):
+        """
+        Sets the flowrate for the pump.
+
+        :returns: ``True`` if the flow rate is set successfully, ``False`` otherwise.
+        :rtype: bool
+        """
         self._send_cmd('set_units')
         try:
             fr = float(self.flow_rate_ctrl.GetValue())
@@ -1086,6 +1157,11 @@ class PumpPanel(wx.Panel):
         return success
 
     def _on_flow_timer(self, evt):
+        """
+        Called every second when the pump is moving in fixed volume mode.
+        It checks the pump status, and if it is done moving it updates the GUI
+        status.
+        """
         self._send_cmd('is_moving')
         is_moving = self.answer_q.get(timeout=0.5)
 
@@ -1096,6 +1172,13 @@ class PumpPanel(wx.Panel):
             self._set_status('Done')
 
     def _send_cmd(self, cmd):
+        """
+        Sends commands to the pump using the ``pump_cmd_q`` that was given
+        to :py:class:`PumpCommThread`.
+
+        :param str cmd: The command to send, matching the command in the
+            :py:class:`PumpCommThread` ``_commands`` dictionary.
+        """
         if cmd == 'is_moving':
             self.pump_cmd_q.append(('is_moving', (self.name, self.answer_q), {}))
         elif cmd == 'start_flow':
@@ -1136,7 +1219,11 @@ class PumpPanel(wx.Panel):
 
 
 class PumpFrame(wx.Frame):
-
+    """
+    A lightweight frame allowing one to work with arbitrary number of pumps.
+    Only meant to be used when the pumpcon module is run directly,
+    rather than when it is imported into another program.
+    """
     def __init__(self, *args, **kwargs):
         super(PumpFrame, self).__init__(*args, **kwargs)
 
@@ -1159,7 +1246,7 @@ class PumpFrame(wx.Frame):
         self.Raise()
 
     def _create_layout(self):
-
+        """Creates the layout"""
         pump_panel = PumpPanel(self, wx.ID_ANY, 'stand_in', self.ports,
             self.pump_cmd_q, self.pump_con.known_pumps, 'stand_in')
 
@@ -1186,6 +1273,11 @@ class PumpFrame(wx.Frame):
         return top_sizer
 
     def _on_addpump(self, evt):
+        """Called when the Add pump button is used. Adds a new pump to the control
+        panel.
+
+        .. note:: Pump names must be distinct.
+        """
         if not self.pumps:
             self.pump_sizer.Remove(0)
 
@@ -1210,10 +1302,17 @@ class PumpFrame(wx.Frame):
         return
 
     def _get_ports(self):
+        """
+        Gets a list of active comports.
+
+        .. note:: This doesn't update after the program is opened, so you need
+            to start the program after all pumps are connected to the computer.
+            """
         port_info = list_ports.comports()
         self.ports = [port.device for port in port_info]
 
     def _on_exit(self, evt):
+        """Stops all current pump motions and then closes the frame."""
         self.pump_con.stop()
         while self.pump_con.is_alive():
             time.sleep(0.001)
