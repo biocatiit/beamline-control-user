@@ -802,11 +802,6 @@ class PumpCommThread(threading.Thread):
 
 class PumpPanel(wx.Panel):
     """
-    .. todo:: This panel should be able to take inputs for ``pump_type``, ``comport``,
-        ``pump_args``, and ``pump_kwargs`` and set up and connect the pump. This
-        would a wrapper program to save/load a known pump configruation. Right
-        now it takes them, but doesn't use them.
-
     This pump panel supports standard flow controls and settings, including
     connection settings, for a pump. It is meant to be embedded in a larger application
     and can be instanced several times, once for each pump. It communciates
@@ -1010,6 +1005,10 @@ class PumpPanel(wx.Panel):
         return top_sizer
 
     def _initpump(self, pump_type, comport, pump_args, pump_kwargs):
+        """
+        Initializes the pump parameters if any were provided. If enough are
+        provided the pump is automatically connected.
+        """
         if pump_type in self.known_pumps:
             self.type_ctrl.SetStringSelection(pump_type)
 
@@ -1143,6 +1142,7 @@ class PumpPanel(wx.Panel):
         self._connect()
 
     def _connect(self):
+        """Initializes the pump in the PumpCommThread"""
         pump = self.type_ctrl.GetStringSelection().replace(' ', '_')
 
         if pump == 'VICI_M50':
@@ -1320,19 +1320,25 @@ class PumpFrame(wx.Frame):
         This is a convenience function for initalizing pumps on startup, if you
         already know what pumps you want to add. You can comment it out in
         the ``__init__`` if you want to not load any pumps on startup.
+
+        If you want to add pumps here, add them to the ``setup_pumps`` list.
+        Each entry should be an iterable with the following parameters: name,
+        pump type, comport, arg list, and kwarg dict in that order. How the
+        arg list and kwarg dict are handled are defined in the
+        :py:func:`PumpPanel._initpump` function, and depends on the pump type.
         """
         if not self.pumps:
             self.pump_sizer.Remove(0)
 
-        known_pumps = [('1', 'VICI M50', 'COM5', ['623.52', '12.222']),
-                    ('2', 'VICI M50', 'COM6', ['623.52', '12.222'])
+        setup_pumps = [('1', 'VICI M50', 'COM5', ['623.52', '12.222'], {}),
+                    ('2', 'VICI M50', 'COM6', ['623.52', '12.222'], {})
                     ]
 
-        logger.info('Initializing %s pumps on startup', str(len(known_pumps)))
+        logger.info('Initializing %s pumps on startup', str(len(setup_pumps)))
 
-        for pump in known_pumps:
+        for pump in setup_pumps:
             new_pump = PumpPanel(self, wx.ID_ANY, pump[0], self.ports, self.pump_cmd_q,
-                self.pump_con.known_pumps, pump[0], pump[1], pump[2], pump[3])
+                self.pump_con.known_pumps, pump[0], pump[1], pump[2], pump[3], pump[4])
 
             self.pump_sizer.Add(new_pump)
             self.pumps.append(new_pump)
