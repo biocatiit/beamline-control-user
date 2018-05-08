@@ -861,6 +861,7 @@ class PumpPanel(wx.Panel):
         """
 
         wx.Panel.__init__(self, parent, panel_id, name=panel_name)
+        logger.debug('Initializing PumpPanel for pump %s', pump_name)
 
         self.name = pump_name
         self.type = pump_type
@@ -1014,6 +1015,7 @@ class PumpPanel(wx.Panel):
     def _on_type(self, evt):
         """Called when the pump type is changed in the GUI."""
         pump = self.type_ctrl.GetStringSelection()
+        logger.info('Changed the pump type to %s for pump %s', pump, self.name)
 
         if pump == 'VICI M50':
             self.control_box_sizer.Show(self.m50_settings_sizer, recursive=True)
@@ -1049,6 +1051,8 @@ class PumpPanel(wx.Panel):
 
         self.flow_rate_ctrl.ChangeValue('{0:.3f}'.format(flow_rate))
 
+        logger.debug('Changed the pump units to %s and %s for pump %s', vol_unit, t_unit, self.name)
+
     def _on_mode(self, evt):
         """Called when the flow mode is changed in the GUI"""
         mode = self.mode_ctrl.GetStringSelection()
@@ -1061,6 +1065,8 @@ class PumpPanel(wx.Panel):
             self.volume_lbl.Show()
             self.volume_ctrl.Show()
             self.vol_units_lbl.Show()
+
+        logger.debug('Changed the pump mode to %s for pump %s', mode, self.name)
 
     def _on_run(self, evt):
         """Called when flow is started or stopped in the GUI."""
@@ -1077,8 +1083,10 @@ class PumpPanel(wx.Panel):
                     except Exception:
                         msg = "Volume must be a number."
                         wx.MessageBox(msg, "Error setting volume")
+                        logger.debug('Failed to set dispense/aspirate volume to %s for pump %s', vol, self.name)
                         return
 
+                logger.info('Starting pump %s flow', self.name)
                 if mode == 'Fixed volume':
                     self._flow_timer.Start(1000)
                     cmd = self.direction_ctrl.GetStringSelection().lower()
@@ -1092,6 +1100,7 @@ class PumpPanel(wx.Panel):
                 self.run_button.SetLabel('Stop')
 
             else:
+                logger.info('Stopping pump %s flow', self.name)
                 self._send_cmd('stop')
 
                 self.run_button.SetLabel('Start')
@@ -1104,6 +1113,7 @@ class PumpPanel(wx.Panel):
         else:
             msg = "Cannot start pump flow before the pump is connected."
             wx.MessageBox(msg, "Error starting flow")
+            logger.debug('Failed to start flow for pump %s because it is not connected', self.name)
 
     def _on_fr_change(self, evt):
         """Called when the flow rate is started or stopped in the GUI."""
@@ -1120,8 +1130,10 @@ class PumpPanel(wx.Panel):
             except Exception:
                 msg = "Calibration values must be numbers."
                 wx.MessageBox(msg, "Error setting calibration values")
+                logger.debug('Failed to connect to pump %s because the M50 calibration values were bad', self.name)
                 return
 
+        logger.info('Connected to pump %s', self.name)
         self.connected = True
         self.connect_button.SetLabel('Reconnect')
         self._send_cmd('connect')
@@ -1135,6 +1147,7 @@ class PumpPanel(wx.Panel):
 
         :param str status: The status to display.
         """
+        logger.debug('Setting pump %s status to %s', self.name, status)
         self.status.SetLabel(status)
 
     def _set_flowrate(self):
@@ -1149,10 +1162,12 @@ class PumpPanel(wx.Panel):
             fr = float(self.flow_rate_ctrl.GetValue())
             self._send_cmd('set_flow_rate')
             success = True
+            logger.debug('Set pump %s flow rate to %s', self.name, str(fr))
         except Exception:
             msg = "Flow rate must be a number."
             wx.MessageBox(msg, "Error setting flow rate")
             success = False
+            logger.debug('Failed to set pump %s flow rate', self.name)
 
         return success
 
@@ -1179,6 +1194,7 @@ class PumpPanel(wx.Panel):
         :param str cmd: The command to send, matching the command in the
             :py:class:`PumpCommThread` ``_commands`` dictionary.
         """
+        logger.debug('Sending pump %s command %s', self.name, cmd)
         if cmd == 'is_moving':
             self.pump_cmd_q.append(('is_moving', (self.name, self.answer_q), {}))
         elif cmd == 'start_flow':
@@ -1226,7 +1242,7 @@ class PumpFrame(wx.Frame):
     """
     def __init__(self, *args, **kwargs):
         super(PumpFrame, self).__init__(*args, **kwargs)
-
+        logger.debug('Setting up the PumpFrame')
         self.pump_cmd_q = deque()
         self.abort_event = threading.Event()
         self.pump_con = PumpCommThread(self.pump_cmd_q, self.abort_event, 'PumpCon')
@@ -1288,11 +1304,12 @@ class PumpFrame(wx.Frame):
                 if name == pump.name:
                     msg = "Pump names must be distinct. Please choose a different name."
                     wx.MessageBox(msg, "Failed to add pump")
+                    logger.debug('Attempted to add a pump with the same name (%s) as another pump.', name)
                     return
 
             new_pump = PumpPanel(self, wx.ID_ANY, name, self.ports, self.pump_cmd_q,
                 self.pump_con.known_pumps, name)
-
+            logger.info('Added new pump %s to the pump control panel.', name)
             self.pump_sizer.Add(new_pump)
             self.pumps.append(new_pump)
 
@@ -1311,8 +1328,11 @@ class PumpFrame(wx.Frame):
         port_info = list_ports.comports()
         self.ports = [port.device for port in port_info]
 
+        logger.debug('Found the following comports for the PumpFrame: %s', ' '.join(self.ports))
+
     def _on_exit(self, evt):
         """Stops all current pump motions and then closes the frame."""
+        logger.debug('Closing the PumpFrame')
         self.pump_con.stop()
         while self.pump_con.is_alive():
             time.sleep(0.001)
@@ -1355,6 +1375,7 @@ if __name__ == '__main__':
     # my_pumpcon.stop()
 
     app = wx.App()
+    logger.debug('Setting up wx app')
     frame = PumpFrame(None, title='Pump Control')
     frame.Show()
     app.MainLoop()
