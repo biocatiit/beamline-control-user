@@ -1303,12 +1303,15 @@ class PumpFrame(wx.Frame):
         button_sizer = wx.BoxSizer(wx.HORIZONTAL)
         button_sizer.Add(add_pump)
 
-        button_panel.SetSizer(button_sizer)
+        button_panel_sizer = wx.BoxSizer(wx.VERTICAL)
+        button_panel_sizer.Add(wx.StaticLine(self), flag=wx.EXPAND|wx.TOP|wx.BOTTOM, border=2)
+        button_panel_sizer.Add(button_sizer, flag=wx.ALIGN_RIGHT|wx.BOTTOM|wx.RIGHT, border=2)
+
+        button_panel.SetSizer(button_panel_sizer)
 
         top_sizer = wx.BoxSizer(wx.VERTICAL)
         top_sizer.Add(self.pump_sizer, flag=wx.EXPAND)
-        top_sizer.Add(wx.StaticLine(self), flag=wx.EXPAND|wx.TOP|wx.BOTTOM, border=2)
-        top_sizer.Add(button_panel, flag=wx.ALIGN_RIGHT|wx.BOTTOM|wx.RIGHT, border=2)
+        top_sizer.Add(button_panel, flag=wx.EXPAND)
 
         return top_sizer
 
