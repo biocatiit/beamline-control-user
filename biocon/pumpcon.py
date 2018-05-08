@@ -387,7 +387,7 @@ class M50Pump(Pump):
 
         self._flow_cal = flow_cal
         self._backlash_cal = backlash_cal
-        self.gear_ratio = 14.915 #Gear ratio provided by manufacturer, for M50 pumps
+        self.gear_ratio = 9.88 #Gear ratio provided by manufacturer, for M50 pumps
 
         self.cal = 200*256*self.gear_ratio/self._flow_cal #Calibration value in (micro)steps/useful
             #full steps/rev * microsteps/full step * gear ratio / uL/revolution = microsteps/uL
@@ -859,9 +859,9 @@ class PumpPanel(wx.Panel):
         basic_ctrl_sizer.Add(wx.StaticText(self, label='Flow rate:'), (2,0))
         basic_ctrl_sizer.Add(self.flow_rate_ctrl, (2,1), flag=wx.EXPAND)
         basic_ctrl_sizer.Add(self.flow_units_lbl, (2,2))
-        basic_ctrl_sizer.Add(self.volume_lbl, (3,0))
-        basic_ctrl_sizer.Add(self.volume_ctrl, (3,1), flag=wx.EXPAND)
-        basic_ctrl_sizer.Add(self.vol_units_lbl, (3,2))
+        basic_ctrl_sizer.Add(self.volume_lbl, (3,0), flag=wx.RESERVE_SPACE_EVEN_IF_HIDDEN)
+        basic_ctrl_sizer.Add(self.volume_ctrl, (3,1), flag=wx.EXPAND|wx.RESERVE_SPACE_EVEN_IF_HIDDEN)
+        basic_ctrl_sizer.Add(self.vol_units_lbl, (3,2), flag=wx.RESERVE_SPACE_EVEN_IF_HIDDEN)
         basic_ctrl_sizer.AddGrowableCol(1)
         basic_ctrl_sizer.SetEmptyCellSize((0,0))
 
@@ -965,8 +965,31 @@ class PumpPanel(wx.Panel):
         vol_unit = self.vol_unit_ctrl.GetStringSelection()
         t_unit = self.time_unit_ctrl.GetStringSelection()
 
+        old_units = self.flow_units_lbl.GetLabel()
+
         self.flow_units_lbl.SetLabel('{}/{}'.format(vol_unit, t_unit))
         self.vol_units_lbl.SetLabel(vol_unit)
+
+        flow_rate = float(self.flow_rate_ctrl.GetValue())
+
+        old_vol, old_t = old_units.split('/')
+
+        if old_vol != vol_unit:
+            if (old_vol == 'nL' and vol_unit == 'uL') or (old_vol == 'uL' and vol_unit == 'mL'):
+                flow_rate = flow_rate/1000.
+            elif old_vol == 'nL' and vol_unit == 'mL':
+                flow_rate = flow_rate/1000000.
+            elif (old_vol == 'mL' and vol_unit == 'uL') or (old_vol == 'uL' and vol_unit == 'nL'):
+                flow_rate = flow_rate*1000.
+            elif old_vol == 'mL' and vol_unit == 'nL':
+                flow_rate = flow_rate*1000000.
+        if old_t != t_unit:
+            if old_t == 'min':
+                flow_rate = flow_rate/60
+            else:
+                flow_rate = flow_rate*60
+
+        self.flow_rate_ctrl.ChangeValue('{0:.3f}'.format(flow_rate))
 
     def _on_mode(self, evt):
         mode = self.mode_ctrl.GetStringSelection()
@@ -1006,9 +1029,10 @@ class PumpPanel(wx.Panel):
                 else:
                     self._send_cmd('start_flow')
                     self._set_status('Flowing')
+                    self.fr_button.Show()
 
                 self.run_button.SetLabel('Stop')
-                self.fr_button.Show()
+
             else:
                 self._send_cmd('stop')
 
@@ -1144,16 +1168,20 @@ class PumpFrame(wx.Frame):
 
         self.pump_sizer.Hide(pump_panel, recursive=True)
 
-        add_pump = wx.Button(self, label='Add pump')
+        button_panel = wx.Panel(self)
+
+        add_pump = wx.Button(button_panel, label='Add pump')
         add_pump.Bind(wx.EVT_BUTTON, self._on_addpump)
 
         button_sizer = wx.BoxSizer(wx.HORIZONTAL)
         button_sizer.Add(add_pump)
 
+        button_panel.SetSizer(button_sizer)
+
         top_sizer = wx.BoxSizer(wx.VERTICAL)
         top_sizer.Add(self.pump_sizer, flag=wx.EXPAND)
         top_sizer.Add(wx.StaticLine(self), flag=wx.EXPAND|wx.TOP|wx.BOTTOM, border=2)
-        top_sizer.Add(button_sizer, flag=wx.ALIGN_RIGHT|wx.BOTTOM|wx.RIGHT, border=2)
+        top_sizer.Add(button_panel, flag=wx.ALIGN_RIGHT|wx.BOTTOM|wx.RIGHT, border=2)
 
         return top_sizer
 
