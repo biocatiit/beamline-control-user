@@ -179,10 +179,8 @@ class MForceSerialComm(SerialComm):
                         if s.in_waiting > 0:
                             ret = s.read(s.in_waiting)
                             out += ret.decode('ascii')
-                            # print(out)
 
                         if out.strip().endswith('?'):
-                            print('sending error command')
                             s.write('PR ER\r\n'.encode())
                             out = ''
 
@@ -587,7 +585,7 @@ class PumpCommThread(threading.Thread):
                         'set_flow_rate' : self._set_flow_rate,
                         'set_units'     : self._set_units,
                         'start_flow'    : self._start_flow,
-                        'stop'          : self._stop,
+                        'stop'          : self._stop_flow,
                         'aspirate'      : self._aspirate,
                         'dispense'      : self._dispense,
                         'is_moving'     : self._is_moving,
@@ -630,7 +628,10 @@ class PumpCommThread(threading.Thread):
                         ', '.join(['{}'.format(a) for a in args]),
                         ', '.join(['{}:{}'.format(kw, item) for kw, item in kwargs.items()])))
                     logger.exception(msg)
-        self._abort()
+        if self._stop_event.is_set():
+            self._stop_event.clear()
+        else:
+            self._abort()
         logger.info("Quitting pump control thread: %s", self.name)
 
     def _connect_pump(self, device, name, pump_type, **kwargs):
@@ -701,7 +702,7 @@ class PumpCommThread(threading.Thread):
         pump.start_flow()
         logger.debug("Pump %s flow started", name)
 
-    def _stop(self, name):
+    def _stop_flow(self, name):
         """
         This method stops all flow (continuous or finite) for a pump.
 
@@ -805,7 +806,7 @@ class PumpPanel(wx.Panel):
         pump_kwargs={}):
 
         wx.Panel.__init__(self, parent, panel_id, name=panel_name)
-        print(all_comports)
+
         self.name = pump_name
         self.type = pump_type
         self.comport = comport
@@ -879,7 +880,8 @@ class PumpPanel(wx.Panel):
         self.type_ctrl = wx.Choice(self,
             choices=[item.replace('_', ' ') for item in self.known_pumps.keys()],
             style=wx.CB_SORT)
-        self.com_ctrl = wx.Choice(self, choices=self.all_comports)
+        self.type_ctrl.SetSelection(0)
+        self.com_ctrl = wx.Choice(self, choices=self.all_comports, style=wx.CB_SORT)
         self.vol_unit_ctrl = wx.Choice(self, choices=['nL', 'uL', 'mL'])
         self.vol_unit_ctrl.SetSelection(1)
         self.time_unit_ctrl = wx.Choice(self, choices=['s', 'min'])
@@ -1115,8 +1117,8 @@ class PumpFrame(wx.Frame):
         super(PumpFrame, self).__init__(*args, **kwargs)
 
         self.pump_cmd_q = deque()
-        abort_event = threading.Event()
-        self.pump_con = PumpCommThread(self.pump_cmd_q, abort_event, 'PumpCon')
+        self.abort_event = threading.Event()
+        self.pump_con = PumpCommThread(self.pump_cmd_q, self.abort_event, 'PumpCon')
         self.pump_con.start()
 
         self.Bind(wx.EVT_CLOSE, self._on_exit)
@@ -1185,6 +1187,8 @@ class PumpFrame(wx.Frame):
 
     def _on_exit(self, evt):
         self.pump_con.stop()
+        while self.pump_con.is_alive():
+            time.sleep(0.001)
         self.Destroy()
 
 if __name__ == '__main__':
