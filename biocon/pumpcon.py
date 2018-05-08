@@ -32,6 +32,7 @@ import queue
 logger = logging.getLogger(__name__)
 
 import serial
+import serial.tools.list_ports as list_ports
 import wx
 
 print_lock = threading.RLock()
@@ -533,8 +534,6 @@ class M50Pump(Pump):
 
 class PumpCommThread(threading.Thread):
     """
-    .. todo:: Add logging to this
-
     This class creates a control thread for pumps attached to the system.
     This thread is designed for using a GUI application. For command line
     use, most people will find working directly with a pump object much
@@ -565,10 +564,10 @@ class PumpCommThread(threading.Thread):
         my_pumpcon.stop()
     """
 
-    def __init__(self, command_queue, abort_event):
+    def __init__(self, command_queue, abort_event, name=None):
         """
         Initializes the custom thread. Important parameters here are the
-        list of known commands ``_commands`` and known pumps ``_known_pumps``.
+        list of known commands ``_commands`` and known pumps ``known_pumps``.
 
         :param collections.deque command_queue: The queue used to pass commands to
             the thread.
@@ -576,7 +575,7 @@ class PumpCommThread(threading.Thread):
         :param threading.Event abort_event: An event that is set when the thread
             needs to abort, and otherwise is not set.
         """
-        threading.Thread.__init__(self)
+        threading.Thread.__init__(self, name=name, daemon=True)
 
         logger.info("Starting pump control thread: %s", self.name)
 
@@ -597,7 +596,7 @@ class PumpCommThread(threading.Thread):
 
         self._connected_pumps = OrderedDict()
 
-        self._known_pumps = {'VICI_M50' : M50Pump,
+        self.known_pumps = {'VICI_M50' : M50Pump,
                             }
 
     def run(self):
@@ -623,7 +622,14 @@ class PumpCommThread(threading.Thread):
 
             if command is not None:
                 logger.debug("Processing cmd '%s' with args: %s and kwargs: %s ", command, ', '.join(['{}'.format(a) for a in args]), ', '.join(['{}:{}'.format(kw, item) for kw, item in kwargs.items()]))
-                self._commands[command](*args, **kwargs)
+                try:
+                    self._commands[command](*args, **kwargs)
+                except Exception:
+                    msg = ("Pump control thread failed to run command '%s' "
+                        "with args: %s and kwargs: %s " %(command,
+                        ', '.join(['{}'.format(a) for a in args]),
+                        ', '.join(['{}:{}'.format(kw, item) for kw, item in kwargs.items()])))
+                    logger.exception(msg)
         self._abort()
         logger.info("Quitting pump control thread: %s", self.name)
 
@@ -640,7 +646,7 @@ class PumpCommThread(threading.Thread):
         :param name: A unique identifier for the pump
         :type name: str
 
-        :param pump_type: A pump type in the ``_known_pumps`` dictionary.
+        :param pump_type: A pump type in the ``known_pumps`` dictionary.
         :type pump_type: str
 
         :param \*\*kwargs: This function accepts arbitrary keyword args that are passed
@@ -648,7 +654,7 @@ class PumpCommThread(threading.Thread):
             for an :py:class:`M50Pump` you could pass ``flow_cal`` and ``backlash``.
         """
         logger.info("Connecting pump %s", name)
-        new_pump = self._known_pumps[pump_type](device, name, **kwargs)
+        new_pump = self.known_pumps[pump_type](device, name, **kwargs)
         self._connected_pumps[name] = new_pump
         logger.debug("Pump %s connected", name)
 
@@ -793,6 +799,388 @@ class PumpCommThread(threading.Thread):
         logger.info("Starting to clean up and shut down pump control thread: %s", self.name)
         self._stop_event.set()
 
+class PumpPanel(wx.Panel):
+    def __init__(self, parent, panel_id, panel_name, all_comports, pump_cmd_q,
+        known_pumps, pump_name, pump_type=None, comport=None, pump_args=[],
+        pump_kwargs={}):
+
+        wx.Panel.__init__(self, parent, panel_id, name=panel_name)
+        print(all_comports)
+        self.name = pump_name
+        self.type = pump_type
+        self.comport = comport
+        self.pump_cmd_q = pump_cmd_q
+        self.all_comports = all_comports
+        self.known_pumps = known_pumps
+        self.answer_q = queue.Queue()
+        self.connected = False
+
+        self.top_sizer = self._create_layout()
+
+        self._flow_timer = wx.Timer(self)
+        self.Bind(wx.EVT_TIMER, self._on_flow_timer, self._flow_timer)
+
+        self.SetSizer(self.top_sizer)
+
+
+    def _create_layout(self):
+        self.status = wx.StaticText(self, label='Not connected')
+
+        status_grid = wx.FlexGridSizer(rows=2, cols=2, vgap=2, hgap=2)
+        status_grid.AddGrowableCol(1)
+        status_grid.Add(wx.StaticText(self, label='Pump name:'))
+        status_grid.Add(wx.StaticText(self, label=self.name), 1, wx.EXPAND)
+        status_grid.Add(wx.StaticText(self, label='Status: '))
+        status_grid.Add(self.status, 1, wx.EXPAND)
+
+        status_sizer = wx.StaticBoxSizer(wx.StaticBox(self, label='Info'),
+            wx.VERTICAL)
+        status_sizer.Add(status_grid, 1, wx.EXPAND)
+
+
+        self.mode_ctrl = wx.Choice(self, choices=['Continuous flow', 'Fixed volume'])
+        self.mode_ctrl.SetSelection(0)
+        self.direction_ctrl = wx.Choice(self, choices=['Dispense', 'Aspirate'])
+        self.direction_ctrl.SetSelection(0)
+        self.flow_rate_ctrl = wx.TextCtrl(self)
+        self.flow_units_lbl = wx.StaticText(self, label='uL/min')
+        self.volume_lbl = wx.StaticText(self, label='Volume:')
+        self.volume_ctrl = wx.TextCtrl(self)
+        self.vol_units_lbl = wx.StaticText(self, label='uL')
+
+        self.mode_ctrl.Bind(wx.EVT_CHOICE, self._on_mode)
+
+        basic_ctrl_sizer = wx.GridBagSizer(vgap=2, hgap=2)
+        basic_ctrl_sizer.Add(wx.StaticText(self, label='Mode:'), (0,0))
+        basic_ctrl_sizer.Add(self.mode_ctrl, (0,1), span=(1,2), flag=wx.EXPAND)
+        basic_ctrl_sizer.Add(wx.StaticText(self, label='Direction:'), (1,0))
+        basic_ctrl_sizer.Add(self.direction_ctrl, (1,1), span=(1,2), flag=wx.EXPAND)
+        basic_ctrl_sizer.Add(wx.StaticText(self, label='Flow rate:'), (2,0))
+        basic_ctrl_sizer.Add(self.flow_rate_ctrl, (2,1), flag=wx.EXPAND)
+        basic_ctrl_sizer.Add(self.flow_units_lbl, (2,2))
+        basic_ctrl_sizer.Add(self.volume_lbl, (3,0))
+        basic_ctrl_sizer.Add(self.volume_ctrl, (3,1), flag=wx.EXPAND)
+        basic_ctrl_sizer.Add(self.vol_units_lbl, (3,2))
+        basic_ctrl_sizer.AddGrowableCol(1)
+        basic_ctrl_sizer.SetEmptyCellSize((0,0))
+
+
+        self.run_button = wx.Button(self, label='Start')
+        self.fr_button = wx.Button(self, label='Change flow rate')
+
+        self.run_button.Bind(wx.EVT_BUTTON, self._on_run)
+        self.fr_button.Bind(wx.EVT_BUTTON, self._on_fr_change)
+
+        button_ctrl_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        button_ctrl_sizer.Add(self.run_button, 0, wx.ALIGN_CENTER_VERTICAL)
+        button_ctrl_sizer.Add(self.fr_button, 0, wx.ALIGN_CENTER_VERTICAL|wx.RESERVE_SPACE_EVEN_IF_HIDDEN)
+
+
+        self.type_ctrl = wx.Choice(self,
+            choices=[item.replace('_', ' ') for item in self.known_pumps.keys()],
+            style=wx.CB_SORT)
+        self.com_ctrl = wx.Choice(self, choices=self.all_comports)
+        self.vol_unit_ctrl = wx.Choice(self, choices=['nL', 'uL', 'mL'])
+        self.vol_unit_ctrl.SetSelection(1)
+        self.time_unit_ctrl = wx.Choice(self, choices=['s', 'min'])
+        self.time_unit_ctrl.SetSelection(1)
+
+        if self.comport in self.all_comports:
+            self.com_ctrl.SetStringSelection(self.comport)
+
+        self.type_ctrl.Bind(wx.EVT_CHOICE, self._on_type)
+        self.vol_unit_ctrl.Bind(wx.EVT_CHOICE, self._on_units)
+        self.time_unit_ctrl.Bind(wx.EVT_CHOICE, self._on_units)
+
+        gen_settings_sizer = wx.FlexGridSizer(rows=4, cols=2, vgap=2, hgap=2)
+        gen_settings_sizer.AddGrowableCol(1)
+        gen_settings_sizer.Add(wx.StaticText(self, label='Pump type:'))
+        gen_settings_sizer.Add(self.type_ctrl, 1, wx.EXPAND)
+        gen_settings_sizer.Add(wx.StaticText(self, label='COM port:'))
+        gen_settings_sizer.Add(self.com_ctrl, 1, wx.EXPAND)
+        gen_settings_sizer.Add(wx.StaticText(self, label='Volume unit:'))
+        gen_settings_sizer.Add(self.vol_unit_ctrl)
+        gen_settings_sizer.Add(wx.StaticText(self, label='Time unit:'))
+        gen_settings_sizer.Add(self.time_unit_ctrl)
+
+
+        self.m50_fcal = wx.TextCtrl(self, value='628')
+        self.m50_bcal = wx.TextCtrl(self, value='1.5')
+
+        self.m50_settings_sizer = wx.FlexGridSizer(rows=2, cols=3, vgap=2, hgap=2)
+        self.m50_settings_sizer.AddGrowableCol(1)
+        self.m50_settings_sizer.Add(wx.StaticText(self, label='Flow Cal.:'))
+        self.m50_settings_sizer.Add(self.m50_fcal,1, wx.EXPAND)
+        self.m50_settings_sizer.Add(wx.StaticText(self, label='uL/rev.'))
+        self.m50_settings_sizer.Add(wx.StaticText(self, label='Backlash:'))
+        self.m50_settings_sizer.Add(self.m50_bcal, 1, wx.EXPAND)
+        self.m50_settings_sizer.Add(wx.StaticText(self, label='uL'))
+
+
+        self.connect_button = wx.Button(self, label='Connect')
+        self.connect_button.Bind(wx.EVT_BUTTON, self._on_connect)
+
+
+        self.control_box_sizer = wx.StaticBoxSizer(wx.StaticBox(self, label='Controls'),
+            wx.VERTICAL)
+        self.control_box_sizer.Add(basic_ctrl_sizer, flag=wx.EXPAND)
+        self.control_box_sizer.Add(button_ctrl_sizer, flag=wx.ALIGN_CENTER_HORIZONTAL|wx.TOP, border=2)
+
+        settings_box_sizer = wx.StaticBoxSizer(wx.StaticBox(self, label='Settings'),
+            wx.VERTICAL)
+        settings_box_sizer.Add(gen_settings_sizer, flag=wx.EXPAND)
+        settings_box_sizer.Add(self.m50_settings_sizer, flag=wx.EXPAND|wx.TOP, border=2)
+        settings_box_sizer.Add(self.connect_button, flag=wx.ALIGN_CENTER_HORIZONTAL|wx.TOP, border=2)
+
+        top_sizer = wx.BoxSizer(wx.VERTICAL)
+        top_sizer.Add(status_sizer, flag=wx.EXPAND)
+        top_sizer.Add(self.control_box_sizer, flag=wx.EXPAND)
+        top_sizer.Add(settings_box_sizer, flag=wx.EXPAND)
+
+        self.volume_lbl.Hide()
+        self.volume_ctrl.Hide()
+        self.vol_units_lbl.Hide()
+        self.fr_button.Hide()
+
+        if self.type_ctrl.GetStringSelection() != 'VICI M50':
+            self.control_box_sizer.Show(self.m50_settings_sizer, recursive=True)
+
+        vol_unit = self.vol_unit_ctrl.GetStringSelection()
+        t_unit = self.time_unit_ctrl.GetStringSelection()
+        self.flow_units_lbl.SetLabel('{}/{}'.format(vol_unit, t_unit))
+        self.vol_units_lbl.SetLabel(vol_unit)
+        self.Refresh()
+
+        return top_sizer
+
+    def _on_type(self, evt):
+        pump = self.type_ctrl.GetStringSelection()
+
+        if pump == 'VICI M50':
+            self.control_box_sizer.Show(self.m50_settings_sizer, recursive=True)
+
+    def _on_units(self, evt):
+        vol_unit = self.vol_unit_ctrl.GetStringSelection()
+        t_unit = self.time_unit_ctrl.GetStringSelection()
+
+        self.flow_units_lbl.SetLabel('{}/{}'.format(vol_unit, t_unit))
+        self.vol_units_lbl.SetLabel(vol_unit)
+
+    def _on_mode(self, evt):
+        mode = self.mode_ctrl.GetStringSelection()
+
+        if mode == 'Continuous flow':
+            self.volume_lbl.Hide()
+            self.volume_ctrl.Hide()
+            self.vol_units_lbl.Hide()
+        else:
+            self.volume_lbl.Show()
+            self.volume_ctrl.Show()
+            self.vol_units_lbl.Show()
+
+        self.Layout()
+
+    def _on_run(self, evt):
+        if self.connected:
+            if self.run_button.GetLabel() == 'Start':
+                fr_set = self._set_flowrate()
+                if not fr_set:
+                    return
+
+                mode = self.mode_ctrl.GetStringSelection()
+                if mode == 'Fixed volume':
+                    try:
+                        vol = float(self.volume_ctrl.GetValue())
+                    except Exception:
+                        msg = "Volume must be a number."
+                        wx.MessageBox(msg, "Error setting volume")
+                        return
+
+                if mode == 'Fixed volume':
+                    self._flow_timer.Start(1000)
+                    cmd = self.direction_ctrl.GetStringSelection().lower()
+                    self._send_cmd(cmd)
+                    self._set_status(cmd.capitalize())
+                else:
+                    self._send_cmd('start_flow')
+                    self._set_status('Flowing')
+
+                self.run_button.SetLabel('Stop')
+                self.fr_button.Show()
+            else:
+                self._send_cmd('stop')
+
+                self.run_button.SetLabel('Start')
+                self.fr_button.Hide()
+                if self._flow_timer.IsRunning():
+                    self._flow_timer.Stop()
+
+                self._set_status('Done')
+
+        else:
+            msg = "Cannot start pump flow before the pump is connected."
+            wx.MessageBox(msg, "Error starting flow")
+
+    def _on_fr_change(self, evt):
+        self._set_flowrate()
+
+    def _on_connect(self, evt):
+        pump = self.type_ctrl.GetStringSelection().replace(' ', '_')
+
+        if pump == 'VICI_M50':
+            try:
+                fc = float(self.m50_fcal.GetValue())
+                bc = float(self.m50_bcal.GetValue())
+            except Exception:
+                msg = "Calibration values must be numbers."
+                wx.MessageBox(msg, "Error setting calibration values")
+                return
+
+        self.connect_button.SetLabel('Reconnect')
+        self._send_cmd('connect')
+        self._set_status('Connected')
+
+        return
+
+    def _set_status(self, status):
+        self.status.SetLabel(status)
+
+    def _set_flowrate(self):
+        self._send_cmd('set_units')
+
+        try:
+            fr = float(self.flow_rate_ctrl.GetValue())
+            self._send_cmd('set_flow_rate')
+            success = True
+        except Exception:
+            msg = "Flow rate must be a number."
+            wx.MessageBox(msg, "Error setting flow rate")
+            success = False
+
+        return success
+
+    def _on_flow_timer(self, evt):
+        self._send_cmd('is_moving')
+        is_moving = self.answer_q.get(timeout=0.5)
+
+        if not is_moving:
+            self.run_button.SetLabel('Start')
+            self.fr_button.Hide()
+            self._flow_timer.Stop()
+            self._set_status('Done')
+
+    def _send_cmd(self, cmd):
+        if cmd == 'is_moving':
+            self.pump_cmd_q.append(('is_moving', (self.name, self.answer_q), {}))
+        elif cmd == 'start_flow':
+            self.pump_cmd_q.append(('start_flow', (self.name,), {}))
+        elif cmd == 'stop':
+            self.pump_cmd_q.append(('stop', (self.name,), {}))
+        elif cmd == 'dispense':
+            vol = float(self.volume_ctrl.GetValue())
+            self.pump_cmd_q.append(('dispense', (self.name, vol), {}))
+        elif cmd == 'aspirate':
+            vol = float(self.volume_ctrl.GetValue())
+            self.pump_cmd_q.append(('aspirate', (self.name, vol), {}))
+        elif cmd == 'set_flow_rate':
+            fr = float(self.flow_rate_ctrl.GetValue())
+            self.pump_cmd_q.append(('set_flow_rate', (self.name, fr), {}))
+        elif cmd == 'set_units':
+            units = self.flow_units_lbl.GetLabel()
+            self.pump_cmd_q.append(('set_units', (self.name, units), {}))
+        elif cmd == 'connect':
+            com = self.com_ctrl.GetStringSelection()
+            pump = self.type_ctrl.GetStringSelection().replace(' ', '_')
+
+            args = (com, self.name, pump)
+
+            if pump == 'VICI_M50':
+                fc = float(self.m50_fcal.GetValue())
+                bc = float(self.m50_bcal.GetValue())
+                kwargs = {'flow_cal': fc, 'backlash_cal':bc}
+            else:
+                kwargs = {}
+
+            self.pump_cmd_q.append(('connect', args, kwargs))
+
+
+class PumpFrame(wx.Frame):
+
+    def __init__(self, *args, **kwargs):
+        super(PumpFrame, self).__init__(*args, **kwargs)
+
+        self.pump_cmd_q = deque()
+        abort_event = threading.Event()
+        self.pump_con = PumpCommThread(self.pump_cmd_q, abort_event, 'PumpCon')
+        self.pump_con.start()
+
+        self.Bind(wx.EVT_CLOSE, self._on_exit)
+
+        self._get_ports()
+
+        self.pumps =[]
+
+        top_sizer = self._create_layout()
+
+        self.SetSizer(top_sizer)
+
+        self.Fit()
+        self.Raise()
+
+    def _create_layout(self):
+
+        pump_panel = PumpPanel(self, wx.ID_ANY, 'stand_in', self.ports,
+            self.pump_cmd_q, self.pump_con.known_pumps, 'stand_in')
+
+        self.pump_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        self.pump_sizer.Add(pump_panel, flag=wx.RESERVE_SPACE_EVEN_IF_HIDDEN)
+
+        self.pump_sizer.Hide(pump_panel, recursive=True)
+
+        add_pump = wx.Button(self, label='Add pump')
+        add_pump.Bind(wx.EVT_BUTTON, self._on_addpump)
+
+        button_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        button_sizer.Add(add_pump)
+
+        top_sizer = wx.BoxSizer(wx.VERTICAL)
+        top_sizer.Add(self.pump_sizer, flag=wx.EXPAND)
+        top_sizer.Add(wx.StaticLine(self), flag=wx.EXPAND|wx.TOP|wx.BOTTOM, border=2)
+        top_sizer.Add(button_sizer, flag=wx.ALIGN_RIGHT|wx.BOTTOM|wx.RIGHT, border=2)
+
+        return top_sizer
+
+    def _on_addpump(self, evt):
+        if not self.pumps:
+            self.pump_sizer.Remove(0)
+
+        dlg = wx.TextEntryDialog(self, "Enter pump name:", "Create new pump")
+        if dlg.ShowModal() == wx.ID_OK:
+            name = dlg.GetValue()
+            for pump in self.pumps:
+                if name == pump.name:
+                    msg = "Pump names must be distinct. Please choose a different name."
+                    wx.MessageBox(msg, "Failed to add pump")
+                    return
+
+            new_pump = PumpPanel(self, wx.ID_ANY, name, self.ports, self.pump_cmd_q,
+                self.pump_con.known_pumps, name)
+
+            self.pump_sizer.Add(new_pump)
+            self.pumps.append(new_pump)
+
+            self.Layout()
+            self.Fit()
+
+        return
+
+    def _get_ports(self):
+        port_info = list_ports.comports()
+        self.ports = [port.device for port in port_info]
+
+    def _on_exit(self, evt):
+        self.pump_con.stop()
+        self.Destroy()
 
 if __name__ == '__main__':
     logger = logging.getLogger(__name__)
@@ -805,22 +1193,20 @@ if __name__ == '__main__':
 
     # my_pump = M50Pump('COM6', '2', 626.2, 9.278)
 
-    pmp_cmd_q = deque()
-    abort_event = threading.Event()
-    my_pumpcon = PumpCommThread(pmp_cmd_q, abort_event)
-    my_pumpcon.daemon = True
-    my_pumpcon.name = 'PumpCon'
-    my_pumpcon.start()
-    return_q = queue.Queue()
+    # pmp_cmd_q = deque()
+    # abort_event = threading.Event()
+    # my_pumpcon = PumpCommThread(pmp_cmd_q, abort_event, 'PumpCon')
+    # my_pumpcon.start()
+    # return_q = queue.Queue()
 
-    init_cmd = ('connect', ('COM6', 'pump2', 'VICI_M50'),
-        {'flow_cal': 626.2, 'backlash_cal': 9.278})
-    fr_cmd = ('set_flow_rate', ('pump2', 2000), {})
-    start_cmd = ('start_flow', ('pump2',), {})
-    stop_cmd = ('stop', ('pump2',), {})
-    dispense_cmd = ('dispense', ('pump2', 200), {})
-    aspirate_cmd = ('aspirate', ('pump2', 200), {})
-    moving_cmd = ('is_moving', ('pump2', return_q), {})
+    # init_cmd = ('connect', ('COM6', 'pump2', 'VICI_M50'),
+    #     {'flow_cal': 626.2, 'backlash_cal': 9.278})
+    # fr_cmd = ('set_flow_rate', ('pump2', 2000), {})
+    # start_cmd = ('start_flow', ('pump2',), {})
+    # stop_cmd = ('stop', ('pump2',), {})
+    # dispense_cmd = ('dispense', ('pump2', 200), {})
+    # aspirate_cmd = ('aspirate', ('pump2', 200), {})
+    # moving_cmd = ('is_moving', ('pump2', return_q), {})
 
     # pmp_cmd_q.append(init_cmd)
     # pmp_cmd_q.append(fr_cmd)
@@ -831,4 +1217,10 @@ if __name__ == '__main__':
     # time.sleep(5)
     # pmp_cmd_q.append(stop_cmd)
     # my_pumpcon.stop()
+
+    app = wx.App()
+    frame = PumpFrame(None, title='Pump Control')
+    frame.Show()
+    app.MainLoop()
+
 
