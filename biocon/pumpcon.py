@@ -1047,7 +1047,6 @@ class PumpPanel(wx.Panel):
 
     def _set_flowrate(self):
         self._send_cmd('set_units')
-
         try:
             fr = float(self.flow_rate_ctrl.GetValue())
             self._send_cmd('set_flow_rate')
@@ -1083,7 +1082,12 @@ class PumpPanel(wx.Panel):
             vol = float(self.volume_ctrl.GetValue())
             self.pump_cmd_q.append(('aspirate', (self.name, vol), {}))
         elif cmd == 'set_flow_rate':
-            fr = float(self.flow_rate_ctrl.GetValue())
+            direction = self.direction_ctrl.GetStringSelection().lower()
+            if direction == 'dispense':
+                mult = 1
+            else:
+                mult = -1
+            fr = mult*float(self.flow_rate_ctrl.GetValue())
             self.pump_cmd_q.append(('set_flow_rate', (self.name, fr), {}))
         elif cmd == 'set_units':
             units = self.flow_units_lbl.GetLabel()
