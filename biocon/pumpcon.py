@@ -1010,7 +1010,9 @@ class PumpPanel(wx.Panel):
         return top_sizer
 
     def _initpump(self, pump_type, comport, pump_args, pump_kwargs):
-        if pump_type in self.known_pumps:
+        my_pumps = [item.replace('_', ' ') for item in self.known_pumps.keys()]
+        if pump_type in my_pumps:
+            print(pump_type)
             self.type_ctrl.SetStringSelection(pump_type)
 
         if comport in self.all_comports:
@@ -1027,7 +1029,7 @@ class PumpPanel(wx.Panel):
             if len(pump_args) == 2:
                 self.m50_bcal.ChangeValue(pump_args[1])
 
-        if pump_type in self.known_pumps and comport in self.all_comports:
+        if pump_type in my_pumps and comport in self.all_comports:
             logger.info('Initialized pump %s on startup', self.name)
             self._connect()
 
@@ -1283,7 +1285,7 @@ class PumpFrame(wx.Frame):
         self.Fit()
         self.Raise()
 
-        # self._initpumps()
+        self._initpumps()
 
     def _create_layout(self):
         """Creates the layout"""
@@ -1324,8 +1326,8 @@ class PumpFrame(wx.Frame):
         if not self.pumps:
             self.pump_sizer.Remove(0)
 
-        known_pumps = [('1', 'VICI M50', 'COM5', ['623.52', '12.222']),
-                    ('2', 'VICI M50', 'COM6', ['623.52', '12.222'])
+        known_pumps = [('1', 'VICI M50', 'COM5', ['623.56', '12.222']),
+                    ('2', 'VICI M50', 'COM6', ['626.2', '9.278'])
                     ]
 
         logger.info('Initializing %s pumps on startup', str(len(known_pumps)))
