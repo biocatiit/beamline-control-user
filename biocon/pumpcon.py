@@ -864,8 +864,6 @@ class PumpPanel(wx.Panel):
         logger.debug('Initializing PumpPanel for pump %s', pump_name)
 
         self.name = pump_name
-        self.type = pump_type
-        self.comport = comport
         self.pump_cmd_q = pump_cmd_q
         self.all_comports = all_comports
         self.known_pumps = known_pumps
@@ -878,6 +876,8 @@ class PumpPanel(wx.Panel):
         self.Bind(wx.EVT_TIMER, self._on_flow_timer, self._flow_timer)
 
         self.SetSizer(self.top_sizer)
+
+        self._initpump(pump_type, comport, pump_args, pump_kwargs)
 
 
     def _create_layout(self):
@@ -944,9 +944,6 @@ class PumpPanel(wx.Panel):
         self.time_unit_ctrl = wx.Choice(self, choices=['s', 'min'])
         self.time_unit_ctrl.SetSelection(1)
 
-        if self.comport in self.all_comports:
-            self.com_ctrl.SetStringSelection(self.comport)
-
         self.type_ctrl.Bind(wx.EVT_CHOICE, self._on_type)
         self.vol_unit_ctrl.Bind(wx.EVT_CHOICE, self._on_units)
         self.time_unit_ctrl.Bind(wx.EVT_CHOICE, self._on_units)
@@ -1011,6 +1008,28 @@ class PumpPanel(wx.Panel):
         self.Refresh()
 
         return top_sizer
+
+    def _initpump(self, pump_type, comport, pump_args, pump_kwargs):
+        if pump_type in self.known_pumps:
+            self.type_ctrl.SetStringSelection(pump_type)
+
+        if comport in self.all_comports:
+            self.com_ctrl.SetStringSelection(comport)
+
+        if pump_type == 'VICI M50':
+            if 'flow_cal' in pump_kwargs.keys():
+                self.m50_fcal.ChangeValue(pump_kwargs['flow_cal'])
+            if 'backlash' in pump_kwargs.keys():
+                self.m50_bcal.ChangeValue(pump_kwargs['backlash'])
+
+            if len(pump_args) >= 1:
+                self.m50_fcal.ChangeValue(pump_args[0])
+            if len(pump_args) == 2:
+                self.m50_bcal.ChangeValue(pump_args[1])
+
+        if pump_type in self.known_pumps and comport in self.all_comports:
+            logger.info('Initialized pump %s on startup', self.name)
+            self._connect()
 
     def _on_type(self, evt):
         """Called when the pump type is changed in the GUI."""
@@ -1121,6 +1140,9 @@ class PumpPanel(wx.Panel):
 
     def _on_connect(self, evt):
         """Called when a pump is connected in the GUI."""
+        self._connect()
+
+    def _connect(self):
         pump = self.type_ctrl.GetStringSelection().replace(' ', '_')
 
         if pump == 'VICI_M50':
@@ -1261,6 +1283,8 @@ class PumpFrame(wx.Frame):
         self.Fit()
         self.Raise()
 
+        self._initpumps()
+
     def _create_layout(self):
         """Creates the layout"""
         pump_panel = PumpPanel(self, wx.ID_ANY, 'stand_in', self.ports,
@@ -1287,6 +1311,31 @@ class PumpFrame(wx.Frame):
         top_sizer.Add(button_panel, flag=wx.ALIGN_RIGHT|wx.BOTTOM|wx.RIGHT, border=2)
 
         return top_sizer
+
+    def _initpumps(self):
+        """
+        This is a convenience function for initalizing pumps on startup, if you
+        already know what pumps you want to add. You can comment it out in
+        the ``__init__`` if you want to not load any pumps on startup.
+        """
+        if not self.pumps:
+            self.pump_sizer.Remove(0)
+
+        known_pumps = [('1', 'VICI M50', 'COM5', ['623.52', '12.222']),
+                    ('2', 'VICI M50', 'COM6', ['623.52', '12.222'])
+                    ]
+
+        logger.info('Initializing %s pumps on startup', str(len(known_pumps)))
+
+        for pump in known_pumps:
+            new_pump = PumpPanel(self, wx.ID_ANY, pump[0], self.ports, self.pump_cmd_q,
+                self.pump_con.known_pumps, pump[0], pump[1], pump[2], pump[3])
+
+            self.pump_sizer.Add(new_pump)
+            self.pumps.append(new_pump)
+
+        self.Layout()
+        self.Fit()
 
     def _on_addpump(self, evt):
         """Called when the Add pump button is used. Adds a new pump to the control
