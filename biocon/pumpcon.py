@@ -1036,6 +1036,7 @@ class PumpPanel(wx.Panel):
                 wx.MessageBox(msg, "Error setting calibration values")
                 return
 
+        self.connected = True
         self.connect_button.SetLabel('Reconnect')
         self._send_cmd('connect')
         self._set_status('Connected')
