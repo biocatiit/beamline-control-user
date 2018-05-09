@@ -38,7 +38,8 @@ import wx
 print_lock = threading.RLock()
 
 class SerialComm():
-    """This class impliments a generic serial communication setup. The goal is
+    """
+    This class impliments a generic serial communication setup. The goal is
     to provide a lightweight wrapper around a pyserial Serial device to make sure
     ports are properly opened and closed whenever used.
     """
@@ -46,7 +47,8 @@ class SerialComm():
         parity=serial.PARITY_NONE, stopbits=serial.STOPBITS_ONE, timeout=None,
         xonxoff=False, rtscts=False, write_timeout=None, dsrdtr=False,
         inter_byte_timeout=None, exclusive=None):
-        """Parameters are all of those accepted by a
+        """
+        Parameters are all of those accepted by a
         `pyserial.Serial <https://pyserial.readthedocs.io/en/latest/pyserial_api.html#serial.Serial>`_
         device, defaults are set to those default values.
         """
@@ -73,7 +75,8 @@ class SerialComm():
         return print(self.ser)
 
     def read(self, size=1):
-        """This wraps the Serial.read() function for reading in a specified
+        """
+        This wraps the Serial.read() function for reading in a specified
         number of bytes. It automatically decodes the return value.
 
         :param size: Number of bytes to read.
@@ -91,7 +94,8 @@ class SerialComm():
         return ret.decode()
 
     def read_all(self):
-        """This wraps the Serial.read() function, and returns all of the
+        """
+        This wraps the Serial.read() function, and returns all of the
         waiting bytes.
 
         :returns: The ascii (decoded) value of the ``Serial.read()``
@@ -106,7 +110,8 @@ class SerialComm():
         return ret.decode()
 
     def write(self, data, get_response=False, term_char='>'):
-        """This warps the Serial.write() function. It encodes the input
+        """
+        This warps the Serial.write() function. It encodes the input
         data if necessary. It can return any expected response from the
         controller.
 
@@ -144,12 +149,14 @@ class SerialComm():
         return out
 
 class MForceSerialComm(SerialComm):
-    """This class subclases ``SerialComm`` to handle MForce specific
+    """
+    This class subclases ``SerialComm`` to handle MForce specific
     errors.
     """
 
     def write(self, data, get_response=True, term_char='>'):
-        """This warps the Serial.write() function. It encodes the input
+        """
+        This warps the Serial.write() function. It encodes the input
         data if necessary. It can return any expected response from the
         controller.
 
@@ -222,7 +229,8 @@ class Pump():
 
     @property
     def flow_rate(self):
-        """Sets and returns the pump flow rate in units specified by ``Pump.units``.
+        """
+        Sets and returns the pump flow rate in units specified by ``Pump.units``.
         Can be set while the pump is moving, and it will update the flow rate
         appropriately.
 
@@ -236,7 +244,8 @@ class Pump():
 
     @property
     def units(self):
-        """Sets and returns the pump flow rate units. This can be set to:
+        """
+        Sets and returns the pump flow rate units. This can be set to:
         nL/s, nL/min, uL/s, uL/min, mL/s, mL/min. Changing units keeps the
         flow rate constant, i.e. if the flow rate was set to 100 uL/min, and
         the units are changed to mL/min, the flow rate is set to 0.1 mL/min.
@@ -275,7 +284,8 @@ class Pump():
 
 
     def send_cmd(self, cmd, get_response=True):
-        """Sends a command to the pump.
+        """
+        Sends a command to the pump.
 
         :param cmd: The command to send to the pump.
 
@@ -286,7 +296,8 @@ class Pump():
 
 
     def is_moving(self):
-        """Queries the pump about whether or not it's moving.
+        """
+        Queries the pump about whether or not it's moving.
 
         :returns: True if the pump is moving, False otherwise
         :rtype: bool
@@ -294,7 +305,8 @@ class Pump():
         pass #Should be implimented in each subclass
 
     def start_flow(self):
-        """Starts a continuous flow at the flow rate specified by the
+        """
+        Starts a continuous flow at the flow rate specified by the
         ``Pump.flow_rate`` variable.
         """
         pass #Should be implimented in each subclass
@@ -445,7 +457,8 @@ class M50Pump(Pump):
 
 
     def send_cmd(self, cmd, get_response=True):
-        """Sends a command to the pump.
+        """
+        Sends a command to the pump.
 
         :param cmd: The command to send to the pump.
         :type cmd: str, bytes
@@ -1005,17 +1018,13 @@ class PumpPanel(wx.Panel):
         return top_sizer
 
     def _initpump(self, pump_type, comport, pump_args, pump_kwargs):
-<<<<<<< HEAD
         """
         Initializes the pump parameters if any were provided. If enough are
         provided the pump is automatically connected.
         """
-        if pump_type in self.known_pumps:
-=======
         my_pumps = [item.replace('_', ' ') for item in self.known_pumps.keys()]
         if pump_type in my_pumps:
-            print(pump_type)
->>>>>>> 6bb5da5eb98c5065742d4139ed0177a0703fe032
+
             self.type_ctrl.SetStringSelection(pump_type)
 
         if comport in self.all_comports:
@@ -1353,7 +1362,8 @@ class PumpFrame(wx.Frame):
         self.Fit()
 
     def _on_addpump(self, evt):
-        """Called when the Add pump button is used. Adds a new pump to the control
+        """
+        Called when the Add pump button is used. Adds a new pump to the control
         panel.
 
         .. note:: Pump names must be distinct.
@@ -1388,7 +1398,7 @@ class PumpFrame(wx.Frame):
 
         .. note:: This doesn't update after the program is opened, so you need
             to start the program after all pumps are connected to the computer.
-            """
+        """
         port_info = list_ports.comports()
         self.ports = [port.device for port in port_info]
 
