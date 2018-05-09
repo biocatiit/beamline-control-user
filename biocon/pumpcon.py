@@ -1,7 +1,7 @@
 # coding: utf-8
 #
 #    Project: BioCAT beamline control software (BioCON)
-#             https://github.com/silx-kit/fabio
+#             https://github.com/biocatiit/beamline-control
 #
 #
 #    Principal author:       Jesse Hopkins
