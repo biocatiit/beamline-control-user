@@ -1024,7 +1024,6 @@ class PumpPanel(wx.Panel):
         """
         my_pumps = [item.replace('_', ' ') for item in self.known_pumps.keys()]
         if pump_type in my_pumps:
-
             self.type_ctrl.SetStringSelection(pump_type)
 
         if comport in self.all_comports:
