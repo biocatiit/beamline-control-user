@@ -1,24 +1,78 @@
 from os.path import exists, join
-from threading import Thread
+import threading
 import time
-import Mp
-import MpScan
-import numpy as np
+import multiprocessing
 try:
     import queue
 except ImportError:
-    import Queue
+    import Queue as queue
 
-class Scanner():
-    def __init__(self):
-        self.queue = Queue.Queue() # Queue for adding commands
-        self.wait = True # Waiting for command status
-        self.mx_database = None
-        self.mx_thread = Thread(target=self.mx_main_loop) # MX Thread
-        self.mx_thread.start()
+import wx
+import numpy as np
 
-    def setDivices(self, dir, x_motor, x_start, x_step, x_end, y_motor, y_start, y_step, y_end, scalers, dwell_time, detector, timer=None, file_name='output', callback = None, main_win = None):
-        self.dir_path = dir
+import Mp
+import MpScan
+
+
+class Scanner(multiprocessing.Process):
+
+    def __init__(self, command_queue, return_queue, abort_event):
+        multiprocessing.Process.__init__(self)
+        self.daemon = True
+
+        self.command_queue = command_queue
+        self.return_queue = return_queue
+        self._abort_event = abort_event
+        self._stop_event = multiprocessing.Event()
+
+        self._commands = {'start_mxdb'  : self._start_mxdb,
+                        'set_devices'   : self._set_devices,
+                        'scan'          : self._run_scan,
+                        'get_devices'   : self._get_devices,
+                        }
+
+
+    def run(self):
+        while True:
+            try:
+                cmd, args, kwargs = self.command_queue.get_nowait()
+                print(cmd)
+            except queue.Empty:
+                cmd = None
+
+            if self._abort_event.is_set():
+                self._abort()
+                cmd = None
+
+            if self._stop_event.is_set():
+                self._abort()
+                break
+
+            if cmd is not None:
+                try:
+                    self.working=True
+                    self._commands[cmd](*args, **kwargs)
+                    self.working=False
+                except Exception as e:
+                    self.working=False
+                    print('What was that? Sorry, I could not run that command.')
+                    print(e)
+
+        if self._stop_event.is_set():
+            self._stop_event.clear()
+        else:
+            self._abort()
+
+    def _start_mxdb(self, db_path):
+        self.db_path = db_path
+        print("MX Database : %s is being downloaded..."%(self.db_path))
+        self.mx_database = Mp.setup_database(self.db_path)
+        self.mx_database.set_plot_enable(2)
+        print("Database has been set up")
+
+    def _set_devices(self, dir_path, x_motor, x_start, x_step, x_end, y_motor, y_start,
+        y_step, y_end, scalers, dwell_time, detector, timer=None, file_name='output'):
+        self.dir_path = dir_path
         self.x_motor = x_motor
         self.x_start = x_start
         self.x_step = x_step
@@ -30,60 +84,12 @@ class Scanner():
         self.scalers = scalers
         self.dwell_time = dwell_time
         self.detector = detector
-        self.callback = callback
         self.y_nsteps = int(np.floor((self.y_end - self.y_start) / self.y_step)) + 1
         self.x_nsteps = int(np.floor((self.x_end - self.x_start) / self.x_step)) + 1
         self.timer = timer
         self.output = file_name
-        self.main_win = main_win
 
-    def runCommand(self, cm):
-        """
-        Trigger mx_thread to run specific cm by adding command to queue
-        :param cm: command
-        :return:
-        """
-        self.queue.put(cm)
-
-    def set_db_path(self, path):
-        """
-        Set MX DB path
-        :param path: str full path of MX DB
-        :return:
-        """
-        self.db_path = path
-
-    def mx_main_loop(self):
-        """
-        Waiting command to perform
-        :return:
-        """
-        while self.wait:
-            if not self.queue.empty():
-                command = self.queue.get()
-                # print(command)
-                if command == 'load_db':
-                    if len(self.db_path) > 0:
-                        # Load DB
-                        print("MX Database : %s is being downloaded..."%(self.db_path))
-                        self.mx_database = Mp.setup_database(self.db_path)
-                        print("Database has been set up")
-                    else:
-                        print("Error : Please select MX Database")
-                elif command == 'scan':
-                    # Perform scan
-                    print("Scan is performing")
-                    self.performScan()
-                elif command == 'stop':
-                    # Stop thread
-                    self.wait = False
-                    break
-                else:
-                    print("%s : invalid command" % (command))
-                    self.wait = False
-                    break
-
-    def performScan(self):
+    def _run_scan(self):
         """
         Performing scan by create a scan descriptions for each row and perform
         """
@@ -95,30 +101,51 @@ class Scanner():
         name = 'row'+str(i)+'_'
 
         for i in range(self.y_nsteps):
-            self.scan(name, i)
+            self._scan(name, i)
         print("All scans are performed. Output files are at %s" %(self.dir_path))
 
-        if self.main_win is not None:
-            # Notify main window that all scans are done
-            try:
-                self.main_win.scan_done()
-            except:
-                pass
+        self.return_queue.put_nowait(['stop_live_plotting'])
 
-    def scan(self, name, row):
+    def _get_devices(self, scaler_fields, det_fields):
+        xmotor_list = []
+        ymotor_list = []
+        scaler_list = []
+        detector_list = []
+
+        record_list = self.mx_database
+        list_head_record = record_list.list_head_record
+        list_head_name = list_head_record.name
+        current_record = list_head_record.get_next_record()
+
+        while (current_record.name != list_head_name):
+            current_record_class = current_record.get_field('mx_class')
+            current_record_superclass = current_record.get_field('mx_superclass')
+            current_record_type = current_record.get_field('mx_type')
+            print current_record.name, current_record_class, current_record_superclass, current_record_type
+
+            # if current_record_superclass == 'device':
+            #     # ignore a record if it's not a device
+            if current_record_class == 'motor':
+                # Add a record to x and y motors
+               xmotor_list.append(current_record.name)
+               ymotor_list.append(current_record.name)
+            elif current_record_class in scaler_fields:
+                # Add a record to scalers
+               scaler_list.append(current_record.name)
+            elif current_record_class in det_fields:
+                # Add a record to detectors
+               detector_list.append(current_record.name)
+
+            current_record = current_record.get_next_record()
+
+        self.return_queue.put_nowait([xmotor_list, ymotor_list, scaler_list, detector_list])
+
+    def _scan(self, name, row):
         """
         scan a record
         :param row: record scanning row
         :return:
         """
-        if self.callback is not None:
-            try:
-                # Wait for GUI to be updated before starting scan
-                while self.callback.plotting:
-                    time.sleep(0.5)
-                    continue
-            except:
-                self.callback = None
 
         scan_name = name + str(row)
         print("Scanning %s" % (scan_name))
@@ -153,7 +180,12 @@ class Scanner():
         settling_time = 0.0
         measurement_type = "preset_time"
         measurement_time = self.dwell_time
-        timer_name = self.timer if self.timer is not None and len(self.timer) > 0 else "joerger_timer"
+
+        if self.timer is not None and len(self.timer) > 0:
+            timer_name = self.timer
+        else:
+            timer_name = "joerger_timer"
+
         description = description + (
                 "%x %f %s \"%f %s\" " % (scan_flags, settling_time, measurement_type, measurement_time, timer_name))
 
@@ -185,19 +217,20 @@ class Scanner():
 
         scan.perform_scan()
 
-        # time.sleep(2) # test
-
         print("%s has been performed" % (scan_name))
 
-        # After scanning is done, trigger gui to plot the row
-        if self.callback is not None:
-            # self.callback.plot(datafile_name)
+        self.return_queue.put_nowait([datafile_name])
+
+    def _abort(self):
+        """Clears the ``command_queue`` and aborts all current actions."""
+        while True:
             try:
-                print("Plotting %s" % (scan_name))
-                # t = Thread(target=self.callback.plot, args=(datafile_name,))
-                # t.start()
-                self.callback.plot(datafile_name)
-            except Exception as e:
-                print(e)
-                print("Warning : Program is unable to plot, but scans are still performing")
-                self.callback = None
+                self.command_queue.get_nowait()
+            except queue.Empty:
+                break
+
+        self._abort_event.clear()
+
+    def stop(self):
+        """Stops the thread cleanly."""
+        self._stop_event.set()

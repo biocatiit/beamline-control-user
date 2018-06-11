@@ -1,9 +1,18 @@
-import wx
-import wx.lib.scrolledpanel as scrolled
 import os
 from os.path import exists, join, split
+import threading
+import multiprocessing
+import time
+import queue
+
+import wx
+import wx.lib.scrolledpanel as scrolled
+
+
+
 from ..utils.Scanner import Scanner
 from ..utils.formula import calculate
+from ..utils import mputils
 from plot_gui import plot_gui
 
 try:
@@ -23,7 +32,14 @@ class scan_gui(wx.Frame):
         self.ymotor_list = ['None']
         self.scaler_list = ['None']
         self.detector_list = ['None']
-        self.scanner = Scanner()
+
+        self.manager = multiprocessing.Manager()
+        self.mx_cmd_q = self.manager.Queue()
+        self.mx_return_q = self.manager.Queue()
+        self.mx_abort_event = self.manager.Event()
+        self.scanner = Scanner(self.mx_cmd_q, self.mx_return_q, self.mx_abort_event)
+        self.scanner.start()
+
         self.double_digits = 4
         self.readConfigs()
         self.initUI()
@@ -38,7 +54,7 @@ class scan_gui(wx.Frame):
         """
         config_path = "/etc/mxmap_config.ini"
         if not exists(config_path):
-            print("WARNING : %s does not exists. Default configuration will be used instead.")
+            print("WARNING : {} does not exists. Default configuration will be used instead.".format(config_path))
             path, name = split(__file__)
             config_path = join(path, 'mxmap_config.ini')
         # print(config_path)
@@ -48,7 +64,10 @@ class scan_gui(wx.Frame):
 
         # Get available database list
         if config.has_option('mx', 'DATABASE'):
-            self.db_list.extend(config.get('mx','DATABASE').split(','))
+            dbs = config.get('mx','DATABASE').split(',')
+            for db in dbs:
+                if db not in self.db_list and os.path.exists(db):
+                    self.db_list.append(db)
         else:
             # Default
             self.db_list.extend(['/opt/mx/etc/mvortex.dat','/etc/mx/mxmotor.dat'])
@@ -74,44 +93,33 @@ class scan_gui(wx.Frame):
             # Default
             self.timer = 'joerger_timer'
 
+
+        if "MXDATBASE" in os.environ:
+            database_filename = os.environ["MXDATABASE"]
+            if database_filename not in self.db_list and os.path.exists(database_filename):
+                self.db_list.append(database_filename)
+
+        mxdir = mputils.get_mxdir()
+        database_filename = os.path.join(mxdir, "etc", "mxmotor.dat")
+        database_filename = os.path.normpath(database_filename)
+        if database_filename not in self.db_list and os.path.exists(database_filename):
+            self.db_list.append(database_filename)
+
     def getDevices(self):
         """
         Get list of devices from MX Database
         :return:
         """
-        while self.scanner.mx_database is None:
-            continue
+        self.mx_cmd_q.put_nowait(['get_devices', [self.scaler_fields, self.det_fields], {}])
+        response = None
+        while response is None:
+            try:
+                response = self.mx_return_q.get_nowait()
+            except queue.Empty:
+                pass
+            time.sleep(.001)
 
-        self.xmotor_list = []
-        self.ymotor_list = []
-        self.scaler_list = []
-        self.detector_list = []
-
-        record_list = self.scanner.mx_database
-        list_head_record = record_list.list_head_record
-        list_head_name = list_head_record.name
-        current_record = list_head_record.get_next_record()
-
-        while (current_record.name != list_head_name):
-            current_record_class = current_record.get_field('mx_class')
-            current_record_superclass = current_record.get_field('mx_superclass')
-            current_record_type = current_record.get_field('mx_type')
-            print current_record.name, current_record_class, current_record_superclass, current_record_type
-
-            # if current_record_superclass == 'device':
-            #     # ignore a record if it's not a device
-            if current_record_class == 'motor':
-                # Add a record to x and y motors
-                self.xmotor_list.append(current_record.name)
-                self.ymotor_list.append(current_record.name)
-            elif current_record_class in self.scaler_fields:
-                # Add a record to scalers
-                self.scaler_list.append(current_record.name)
-            elif current_record_class in self.det_fields:
-                # Add a record to detectors
-                self.detector_list.append(current_record.name)
-
-            current_record = current_record.get_next_record()
+        self.xmotor_list, self.ymotor_list, self.scaler_list, self.detector_list = response
 
     def initUI(self):
         """
@@ -285,8 +293,7 @@ class scan_gui(wx.Frame):
         self.Bind(wx.EVT_BUTTON, self.startPressed, self.start_button)
 
     def OnClose(self, e):
-        self.scanner.main_win = None
-        self.scanner.runCommand('stop')
+        self.scanner.stop()
         self.Destroy()
 
     def DBPathSelected(self, e):
@@ -303,16 +310,11 @@ class scan_gui(wx.Frame):
             return
 
         # Set DB Path for Scanner
-        self.scanner.set_db_path(picked)
-        self.scanner.runCommand('load_db')
+        self.mx_cmd_q.put_nowait(['start_mxdb', [picked], {}])
 
         # Disable DB Path picker
         self.db_picker.Disable()
-        
-        # Wait for DB to be setup
-        while self.scanner.mx_database is None:
-            continue
-            
+
         # Get Device list
         self.getDevices()
 
@@ -425,7 +427,7 @@ class scan_gui(wx.Frame):
                 }
 
             params = {
-                'dir' : str(self.dir_picker.GetPath()),
+                'dir_path' : str(self.dir_picker.GetPath()),
                 'file_name' : str(self.filename.GetValue()),
                 'x_motor' : str(self.motorx_name.GetValue()),
                 'x_start' : self.motorx_start.GetValue(),
@@ -441,16 +443,43 @@ class scan_gui(wx.Frame):
                 'timer' : self.timer
             }
 
-            plot_panel = plot_gui(motor_x=params['x_motor'], motor_y=params['y_motor'], formula=self.formula.GetValue(),
-                            xlim=(params['x_start'], params['x_end'], params['x_step']), ylim=(params['y_start'], params['y_end'], params['y_step']))
-            plot_panel.Show(True)
+            self.plot_panel = plot_gui(motor_x=params['x_motor'], motor_y=params['y_motor'],
+                formula=self.formula.GetValue(), xlim=(params['x_start'],
+                    params['x_end'], params['x_step']), ylim=(params['y_start'],
+                    params['y_end'], params['y_step']))
+            self.plot_panel.Show(True)
 
-            params['callback'] = plot_panel
-            params['main_win'] = self
+            wx.Yield()
 
-            self.scanner.setDivices(**params)
-            self.scanner.runCommand('scan')
+            # params['callback'] = plot_panel
+            # params['main_win'] = self
+
+            self.mx_cmd_q.put_nowait(['set_devices', [], params])
+            # self.scanner.setDevices(**params)
+
+            self.mx_cmd_q.put_nowait(['scan', [], {}])
+            # self.scanner.runCommand('scan')
             print("Running")
+            plot_thread = threading.Thread(target=self.update_plot)
+            plot_thread.daemon = True
+            plot_thread.start()
+
+    def update_plot(self):
+        while True:
+            try:
+                datafile_name = self.mx_return_q.get_nowait()[0]
+            except queue.Empty:
+                datafile_name = None
+
+            if datafile_name is not None and datafile_name != 'stop_live_plotting':
+                print(datafile_name)
+                self.plot_panel.plot(datafile_name)
+                wx.Yield()
+            elif datafile_name == 'stop_live_plotting':
+                break
+            time.sleep(.01)
+
+        self.scan_done()
 
     def checkSettings(self):
         """
@@ -501,6 +530,13 @@ class scan_gui(wx.Frame):
         :return:
         """
         self.start_button.Enable()
+
+        #This is a hack
+        self.scanner.stop()
+        self.scanner = Scanner(self.mx_cmd_q, self.mx_return_q, self.mx_abort_event)
+        self.scanner.start()
+        picked = str(self.db_picker.GetValue())
+        self.mx_cmd_q.put_nowait(['start_mxdb', [picked], {}])
 
     def OnSize(self, event):
         """
