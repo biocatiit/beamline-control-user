@@ -1,7 +1,7 @@
 # coding: utf-8
 #
-#    Project: BioCAT beamline control software (BioCON)
-#             https://github.com/biocatiit/beamline-control
+#    Project: BioCAT user beamline control software (BioCON)
+#             https://github.com/biocatiit/beamline-control-user
 #
 #
 #    Principal author:       Jesse Hopkins
@@ -18,6 +18,9 @@
 #
 #    You should have received a copy of the GNU General Public License
 #    along with this software.  If not, see <http://www.gnu.org/licenses/>.
+from __future__ import absolute_import, division, print_function, unicode_literals
+from builtins import object, range, map
+from io import open
 
 import traceback
 import threading
@@ -27,7 +30,6 @@ from collections import OrderedDict, deque
 import queue
 import logging
 import sys
-import queue
 
 logger = logging.getLogger(__name__)
 
@@ -1021,6 +1023,16 @@ class PumpPanel(wx.Panel):
         """
         Initializes the pump parameters if any were provided. If enough are
         provided the pump is automatically connected.
+
+        :param str pump_type: The pump type, corresponding to a ``known_pump``.
+
+        :param str comport: The comport the pump is attached to.
+
+        :param list pump_args: The pump positional initialization values.
+            Appropriate values depend on the pump.
+
+        :param dict pump_kwargs: The pump key word arguments. Appropriate
+            values depend on the pump.
         """
         my_pumps = [item.replace('_', ' ') for item in self.known_pumps.keys()]
         if pump_type in my_pumps:
@@ -1277,6 +1289,9 @@ class PumpFrame(wx.Frame):
     rather than when it is imported into another program.
     """
     def __init__(self, *args, **kwargs):
+        """
+        Initializes the pump frame. Takes args and kwargs for the wx.Frame class.
+        """
         super(PumpFrame, self).__init__(*args, **kwargs)
         logger.debug('Setting up the PumpFrame')
         self.pump_cmd_q = deque()
