@@ -1,0 +1,7 @@
+timescan                            scan linear_scan input_scan "" "" 1 1 0  4  Io It Iref If  0 0 preset_time "0.25 joerger_timer" text time.100 gnuplot $f[1]  0  1  100000000
+raster                              scan linear_scan motor_scan "" "" 1 2 2  smx smy 4  Io It Iref If  0 0 preset_time "0.2 joerger_timer" sff raster.100 gnuplot $f[1]/$f[0]  -5000 -5000  500 500  21 21
+xafs                                scan xafs_scan_class xafs_scan "" "" 2 0 0  4  Io It Iref If  0 0.2 preset_time "0 joerger_timer" xafs xafs.100 gnuxafs log($f[0]/$f[1]) 6 3 3 7  -250 -150 -25 30 6 12 15  10 5 0.5 0.05 0.05 0.05  0.5 0.5 1 2 4 8
+foil                                scan xafs_scan_class xafs_scan "" "" 1 0 0  4  Io It Iref If  0 0.2 preset_time "0 joerger_timer" xafs foil.100 gnuxafs log($f[1]/$f[2]) 6 3 3 7  -250 -20 -10 30 6 12 15  10 5 0.5 0.05 0.05 0.05  0.25 0.25 0.5 0.25 0.25 0.25
+vslit                                  scan linear_scan motor_scan "" "" 1 1 1  av_center 1  Io  0 0 preset_time "0.1 joerger_timer" sff av.100 gnuplot $f[0]  -2000  25  161
+foil_qk                                  scan quick_scan mcs_qscan "" "" 1 1 1  energy 5  mcs2 mcs3 mcs4 mcs31 mcs32  0 0 preset_time "0.2 mcs_timer" xafs V_foil.101 gnuplot log($f[0]/$f[1])  5263  5563 1001
+quick_qk                                 scan quick_scan mcs_qscan "" "" 1 1 1  energy 6  mcs2 mcs3 mcs4 mcs5 mcs31 mcs32  0 0 preset_time "0.2 mcs_timer" xafs Mo_foil.501 gnuplot $f[2]/$f[0]  19750  20600 851
