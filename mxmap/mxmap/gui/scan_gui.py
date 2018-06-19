@@ -156,17 +156,25 @@ class scan_gui(wx.Frame):
         self.panel_sizer.Add(self.dir_picker, pos=(3, 1), span=(1, 2), flag=wx.EXPAND)
         self.panel_sizer.Add(wx.StaticText(self.panel, label='Output Template:'), pos=(4, 0), span=(1, 1),
                              flag=wx.ALIGN_CENTER_VERTICAL)
-        self.filename = wx.TextCtrl(self.panel, value="Enter output name")
+        self.filename = wx.TextCtrl(self.panel)
+        self.filename.SetHint("Enter output name")
         self.panel_sizer.Add(self.filename, pos=(4, 1), span=(1, 2), flag=wx.EXPAND)
 
-        # Add start button
+        # Add start and stop buttons
         self.start_button = wx.Button(self.panel, wx.ID_ANY, "Start")
-        self.panel_sizer.Add(self.start_button, pos=(5, 0), span=(1, 3), flag=wx.ALIGN_CENTER)
+        self.stop_button = wx.Button(self.panel, label="Stop after current row")
+        self.stop_button.Disable()
+        btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        btn_sizer.Add(self.start_button, border=5, flag=wx.BOTTOM)
+        btn_sizer.Add(self.stop_button, border=5, flag=wx.BOTTOM|wx.LEFT)
+        self.panel_sizer.Add(btn_sizer, pos=(5, 0), span=(1, 3), flag=wx.ALIGN_CENTER)
 
         self.panel.SetSizer(self.panel_sizer)
 
-        self.main_sizer.Add(self.panel, 2, wx.GROW)
-        self.main_sizer.Add(scaler_sizer, 1, wx.EXPAND)
+        self.main_sizer.Add(self.panel, 2, border=5, flag=wx.GROW|wx.ALL)
+        self.main_sizer.Add(scaler_sizer, 1, border=5, flag=wx.EXPAND|wx.TOP|wx.RIGHT|wx.BOTTOM)
+
+        self.statusbar = self.CreateStatusBar(1)
 
         self.SetSizer(self.main_sizer)
         self.SetAutoLayout(True)
@@ -241,6 +249,7 @@ class scan_gui(wx.Frame):
 
         grid_sizer = wx.GridBagSizer(5, 5)
         self.numscalers = wx.SpinCtrl(parent=self.scrolled_panel, style=wx.SP_ARROW_KEYS|wx.TE_PROCESS_ENTER, min=1, max=100, initial=1)
+        self.numscalers.SetValue(1) #Shouldn't be necessary, but is on my mac?
         self.dwell_time = wx.SpinCtrlDouble(parent=self.scrolled_panel, style=wx.SP_ARROW_KEYS|wx.TE_PROCESS_ENTER, min=0.000000001, max=1000000000, initial=0.5, inc=0.5)
         self.dwell_time.SetDigits(self.double_digits)
         self.scaler_list_sizer = wx.BoxSizer(wx.VERTICAL)
@@ -291,6 +300,8 @@ class scan_gui(wx.Frame):
         self.Bind(wx.EVT_TEXT_ENTER, self.refreshscaler, self.numscalers)
         self.Bind(wx.EVT_COMBOBOX, self.detectorChanged, self.detector)
         self.Bind(wx.EVT_BUTTON, self.startPressed, self.start_button)
+
+        self.stop_button.Bind(wx.EVT_BUTTON, self._on_stop)
 
     def OnClose(self, e):
         self.scanner.stop()
@@ -366,6 +377,8 @@ class scan_gui(wx.Frame):
         else:
             self.formula.SetLabelText('')
 
+        self.statusbar.SetStatusText('Status: Ready to scan')
+
     def refreshscaler(self, e):
         """
         Handle when number of scalar is changed
@@ -416,9 +429,10 @@ class scan_gui(wx.Frame):
         Handle when start button is pressed
         """
         if self.checkSettings():
+            self.statusbar.SetStatusText('Status: Scanning')
             self.start_button.Disable()
+            self.stop_button.Enable()
             scalers = [str(s.GetValue()) for s in self.all_scalers]
-            dwell_time = self.dwell_time.GetValue()
             if self.detector.GetValue() == 'None':
                 detector = None
             else:
@@ -426,9 +440,19 @@ class scan_gui(wx.Frame):
                     'name' : str(self.detector.GetValue())
                 }
 
+            path = str(self.dir_picker.GetPath())
+            file_name = str(self.filename.GetValue())
+            dir_path = os.path.join(path, file_name)
+
+            if not os.path.exists(dir_path):
+                os.mkdir(dir_path)
+
+                while not os.path.exists(dir_path):
+                    time.sleep(.001)
+
             params = {
-                'dir_path' : str(self.dir_picker.GetPath()),
-                'file_name' : str(self.filename.GetValue()),
+                'dir_path' : dir_path,
+                'file_name' : file_name,
                 'x_motor' : str(self.motorx_name.GetValue()),
                 'x_start' : self.motorx_start.GetValue(),
                 'x_step' : self.motorx_step.GetValue(),
@@ -438,7 +462,7 @@ class scan_gui(wx.Frame):
                 'y_step' : self.motory_step.GetValue(),
                 'y_end' : self.motory_end.GetValue(),
                 'scalers' : scalers,
-                'dwell_time' : dwell_time,
+                'dwell_time' : self.dwell_time.GetValue(),
                 'detector' : detector,
                 'timer' : self.timer
             }
@@ -516,11 +540,11 @@ class scan_gui(wx.Frame):
             return False
 
         file_name = self.filename.GetValue()
-        for c in file_name:
-            if not c.isalnum():
-                print("Error : Invalid output file name. Please do not include space, '.' or any special characters")
-                print("Current name : %s"%(file_name))
-                return False
+        test_name = file_name.replace('_', '').replace('-', '')
+        if not test_name.isalnum():
+            print("Error : Invalid output file name. Please do not include space, '.' or any special characters")
+            print("Current name : %s"%(file_name))
+            return False
 
         return True
 
@@ -530,6 +554,7 @@ class scan_gui(wx.Frame):
         :return:
         """
         self.start_button.Enable()
+        self.stop_button.Disable()
 
         #This is a hack
         self.scanner.stop()
@@ -537,6 +562,7 @@ class scan_gui(wx.Frame):
         self.scanner.start()
         picked = str(self.db_picker.GetValue())
         self.mx_cmd_q.put_nowait(['start_mxdb', [picked], {}])
+        self.statusbar.SetStatusText('Status: Ready to scan')
 
     def OnSize(self, event):
         """
@@ -545,6 +571,11 @@ class scan_gui(wx.Frame):
         :return:
         """
         pass
+
+    def _on_stop(self, event):
+        self.statusbar.SetStatusText('Status: Stopping scan')
+        self.mx_abort_event.set()
+        self.stop_button.Disable()
 
 def begin():
     app = wx.App()
