@@ -178,7 +178,7 @@ class scan_gui(wx.Frame):
 
         self.SetSizer(self.main_sizer)
         self.SetAutoLayout(True)
-        # self.main_sizer.Fit(self)
+        self.main_sizer.Fit(self)
         self.Fit()
 
     def initMotorSizer(self, box):
