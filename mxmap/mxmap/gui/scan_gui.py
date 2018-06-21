@@ -162,7 +162,7 @@ class scan_gui(wx.Frame):
 
         # Add start and stop buttons
         self.start_button = wx.Button(self.panel, wx.ID_ANY, "Start")
-        self.stop_button = wx.Button(self.panel, label="Stop after current row")
+        self.stop_button = wx.Button(self.panel, label="Stop")
         self.stop_button.Disable()
         btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
         btn_sizer.Add(self.start_button, border=5, flag=wx.BOTTOM)
@@ -576,7 +576,8 @@ class scan_gui(wx.Frame):
     def _on_stop(self, event):
         self.statusbar.SetStatusText('Status: Stopping scan')
         self.mx_abort_event.set()
-        self.stop_button.Disable()
+        time.sleep(0.5)
+        self.mx_return_q.put_nowait(['stop_live_plotting'])
 
 def begin():
     app = wx.App()
