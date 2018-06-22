@@ -53,6 +53,7 @@ class TransferFrame(wx.Frame):
 
         self._create_layout()
 
+        self.Layout()
         self.Fit()
         self.Raise()
 
@@ -108,10 +109,18 @@ class TransferFrame(wx.Frame):
         ctrl_sizer.Add(auto_sizer, border=5, flag=wx.TOP|wx.ALIGN_CENTER_HORIZONTAL)
         ctrl_sizer.Add(manual_sizer, border=5, flag=wx.TOP|wx.ALIGN_CENTER_HORIZONTAL)
 
+        self.status = wx.StaticText(self, label='Ready', size=(240, -1))
+        font = wx.Font(22, wx.DEFAULT, wx.NORMAL, wx.BOLD)
+        self.status.SetFont(font)
+
+        status_sizer = wx.StaticBoxSizer(wx.StaticBox(self, label='Status'), wx.VERTICAL)
+        status_sizer.Add(self.status, 1, border=5, flag=wx.ALL|wx.EXPAND)
+
 
         top_sizer = wx.BoxSizer(wx.VERTICAL)
         top_sizer.Add(dir_sizer, border=10, flag=wx.ALL)
         top_sizer.Add(ctrl_sizer, border=10, flag=wx.ALL|wx.EXPAND)
+        top_sizer.Add(status_sizer, border=10, flag=wx.ALL|wx.ALIGN_CENTER_HORIZONTAL)
 
         self.SetSizer(top_sizer)
 
@@ -142,12 +151,28 @@ class TransferFrame(wx.Frame):
         return
 
     def _on_start_auto(self, event):
-        self.auto_timer.Start(1000)
-        self.start_time = time.time()
-
         self.source = self.source_dir.GetValue()
         self.dest = self.dest_dir.GetValue()
-        self.interval = float(self.interval_ctrl.GetValue())
+
+        try:
+            self.interval = float(self.interval_ctrl.GetValue())
+        except ValueError:
+            msg = 'You must have a number for the backup interval.'
+            wx.MessageBox(msg, 'Select backup interval')
+            return
+
+        if self.source == '':
+            msg = 'You must pick a source directory.'
+            wx.MessageBox(msg, 'Select source directory')
+            return
+
+        if self.dest == '':
+            msg = 'You must pick a destination directory.'
+            wx.MessageBox(msg, 'Select destination directory')
+            return
+
+        self.auto_timer.Start(1000)
+        self.start_time = time.time()
 
         self.start_manual_btn.Disable()
         self.start_auto_btn.Disable()
@@ -164,11 +189,23 @@ class TransferFrame(wx.Frame):
             self.start_auto_btn.Enable()
             self.stop_manual_btn.Disable()
             self.stop_auto_btn.Disable()
+            self.status.SetLabel('Ready')
 
     def _on_start_manual(self, event):
+
         self.source = self.source_dir.GetValue()
         self.dest = self.dest_dir.GetValue()
         self.interval = float(self.interval_ctrl.GetValue())
+
+        if self.source == '':
+            msg = 'You must pick a source directory.'
+            wx.MessageBox(msg, 'Select source directory')
+            return
+
+        if self.dest == '':
+            msg = 'You must pick a destination directory.'
+            wx.MessageBox(msg, 'Select destination directory')
+            return
 
         self.start_manual_btn.Disable()
         self.start_auto_btn.Disable()
@@ -177,33 +214,59 @@ class TransferFrame(wx.Frame):
 
         self._backup()
 
-    def _on_stop_manual(self, event):
-         self.auto_timer.Stop()
+        return
 
-         self._stop_backup()
+    def _on_stop_manual(self, event):
+        print(self.backup_in_progress)
+
+        if self.backup_in_progress:
+            msg = ('This will stop the active backup immediately. This could lead to '
+                'some files not being transfered, or being corrupted at the desination. '
+                'Proceed?')
+            dlg = wx.MessageDialog(self, msg, 'Are you sure?',
+                style=wx.CANCEL_DEFAULT|wx.OK|wx.CANCEL|wx.ICON_EXCLAMATION)
+
+            if dlg.ShowModal() == wx.ID_CANCEL:
+                return
+
+        self.auto_timer.Stop()
+
+        self._stop_backup()
+
+        if not self.backup_timer.IsRunning():
+            self.backup_timer.Start(1)
+
+        return
 
     def _on_auto_timer(self, event):
+
         if time.time() - self.start_time >= 60*self.interval and not self.backup_in_progress:
             self.start_time = time.time()
             self._backup()
+        elif not self.backup_in_progress:
+            m, sec = divmod(60*self.interval - (time.time() - self.start_time), 60)
+            self.status.SetLabel('Next backup in {0:.0f}:{1:02.0f}'.format(m, sec))
 
     def _backup(self):
         if not os.path.exists(self.source):
             msg = 'The source directory no longer exists.'
             wx.MessageBox(msg, 'Source directory missing')
-            self.backup_timer.Start(1000)
+            self.backup_timer.Start(1)
             self.auto_timer.Stop()
             return
 
         elif not os.path.exists(self.dest):
             msg = 'The destination directory no longer exists.'
             wx.MessageBox(msg, 'Destination directory missing')
-            self.backup_timer.Start(1000)
+            self.backup_timer.Start(1)
             self.auto_timer.Stop()
             return
 
+        self.status.SetLabel('Backing up')
+
+        self.backup_in_progress = True
         self.abort_event.clear()
-        self.backup_thread = threading.Thread(self._run_rsync)
+        self.backup_thread = threading.Thread(target=self._run_rsync)
         self.backup_thread.daemon = True
         self.backup_thread.start()
         self.backup_timer.Start(1000)
@@ -211,11 +274,14 @@ class TransferFrame(wx.Frame):
         return
 
     def _on_backup_timer(self, event):
-        if not self.backup_in_progress:
+        if not self.backup_in_progress and not self.auto_timer.IsRunning():
             self.start_manual_btn.Enable()
             self.start_auto_btn.Enable()
             self.stop_manual_btn.Disable()
             self.stop_auto_btn.Disable()
+            self.backup_timer.Stop()
+            self.status.SetLabel('Ready')
+        elif not self.backup_in_progress and self.auto_timer.IsRunning():
             self.backup_timer.Stop()
 
     def _stop_backup(self):
