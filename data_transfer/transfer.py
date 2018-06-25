@@ -109,7 +109,7 @@ class TransferFrame(wx.Frame):
         ctrl_sizer.Add(auto_sizer, border=5, flag=wx.TOP|wx.ALIGN_CENTER_HORIZONTAL)
         ctrl_sizer.Add(manual_sizer, border=5, flag=wx.TOP|wx.ALIGN_CENTER_HORIZONTAL)
 
-        self.status = wx.StaticText(self, label='Ready', size=(240, -1))
+        self.status = wx.StaticText(self, label='Ready', size=(390, -1))
         font = wx.Font(22, wx.DEFAULT, wx.NORMAL, wx.BOLD)
         self.status.SetFont(font)
 
@@ -130,11 +130,13 @@ class TransferFrame(wx.Frame):
         if name == 'source_browse':
             msg="Select the source directory"
             style = wx.DD_DEFAULT_STYLE | wx.DD_DIR_MUST_EXIST
+            default_path = '/nas_data/Pilatus1M'
         else:
             msg="Select the destination directory"
             style = wx.DD_DEFAULT_STYLE
+            default_path = ''
 
-        dlg = wx.DirDialog(self, msg, defaultPath="", style=style)
+        dlg = wx.DirDialog(self, msg, defaultPath=default_path, style=style)
 
         if dlg.ShowModal() == wx.ID_OK:
             path = dlg.GetPath()
