@@ -51,6 +51,8 @@ class TransferFrame(wx.Frame):
 
         self.abort_event = threading.Event()
 
+        self.Bind(wx.EVT_CLOSE, self._on_closewindow)
+
         self._create_layout()
 
         self.Layout()
@@ -300,6 +302,23 @@ class TransferFrame(wx.Frame):
 
         self.backup_in_progress = False
 
+    def _on_closewindow(self, evt):
+        if evt.CanVeto() and self.backup_in_progress:
+            msg = ('This will stop the active backup immediately. This could lead to '
+                'some files not being transfered, or being corrupted at the desination. '
+                'Proceed?')
+            dlg = wx.MessageDialog(self, msg, 'Are you sure?',
+                style=wx.CANCEL_DEFAULT|wx.OK|wx.CANCEL|wx.ICON_EXCLAMATION)
+
+            if dlg.ShowModal() == wx.ID_CANCEL:
+                return
+            else:
+                self._stop_backup()
+
+        self.auto_timer.Stop()
+        self.Destroy()
+        return
+
 
 if __name__ == '__main__':
     # logger = logging.getLogger(__name__)
@@ -309,33 +328,6 @@ if __name__ == '__main__':
     # formatter = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
     # h1.setFormatter(formatter)
     # logger.addHandler(h1)
-
-    # my_pump = M50Pump('COM6', '2', 626.2, 9.278)
-
-    # pmp_cmd_q = deque()
-    # abort_event = threading.Event()
-    # my_pumpcon = PumpCommThread(pmp_cmd_q, abort_event, 'PumpCon')
-    # my_pumpcon.start()
-    # return_q = queue.Queue()
-
-    # init_cmd = ('connect', ('COM6', 'pump2', 'VICI_M50'),
-    #     {'flow_cal': 626.2, 'backlash_cal': 9.278})
-    # fr_cmd = ('set_flow_rate', ('pump2', 2000), {})
-    # start_cmd = ('start_flow', ('pump2',), {})
-    # stop_cmd = ('stop', ('pump2',), {})
-    # dispense_cmd = ('dispense', ('pump2', 200), {})
-    # aspirate_cmd = ('aspirate', ('pump2', 200), {})
-    # moving_cmd = ('is_moving', ('pump2', return_q), {})
-
-    # pmp_cmd_q.append(init_cmd)
-    # pmp_cmd_q.append(fr_cmd)
-    # pmp_cmd_q.append(start_cmd)
-    # pmp_cmd_q.append(dispense_cmd)
-    # pmp_cmd_q.append(aspirate_cmd)
-    # pmp_cmd_q.append(moving_cmd)
-    # time.sleep(5)
-    # pmp_cmd_q.append(stop_cmd)
-    # my_pumpcon.stop()
 
     app = wx.App()
     # logger.debug('Setting up wx app')
