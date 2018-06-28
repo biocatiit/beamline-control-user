@@ -2,7 +2,7 @@ import matplotlib
 matplotlib.use('WXAgg')
 import wx
 from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg as FigureCanvas
-from matplotlib.backends.backend_wx import NavigationToolbar2Wx
+from matplotlib.backends.backend_wxagg import NavigationToolbar2WxAgg
 from matplotlib.figure import Figure
 from ..utils import Plotter
 import numpy as np
@@ -12,9 +12,10 @@ class plot_gui(wx.Frame):
     GUI for plotting maps. This will display matplotlib figure with Navigation Toolbar
     """
     def __init__(self, motor_x, motor_y, formula, xlim=None, ylim=None):
-        super(plot_gui, self).__init__(None, title=str(formula))
+        super(plot_gui, self).__init__(None, title='MX Map Plot')
         self.motor_x = motor_x
         self.motor_y = motor_y
+        self.formula = formula
         self.initUI()
         self.xlim = xlim
         self.ylim = ylim
@@ -37,61 +38,74 @@ class plot_gui(wx.Frame):
         """
         self.main_sizer = wx.BoxSizer(wx.VERTICAL)
         self.panel = wx.Panel(self)
-        self.panel_sizer = wx.GridBagSizer(10, 10)
+
+        self.panel_sizer = wx.BoxSizer(wx.VERTICAL)
+        self.panel_grid_sizer = wx.GridBagSizer(10, 10)
 
         # Add buttons and colormap options
         # Add Flip X
         self.flip_x = wx.Button(self.panel, wx.ID_ANY, "Flip X")
-        self.panel_sizer.Add(self.flip_x, pos=(0, 0), span=(1, 1), flag=wx.EXPAND)
+        self.panel_grid_sizer.Add(self.flip_x, pos=(0, 0), span=(1, 1), flag=wx.EXPAND)
 
         # Add Flip Y
         self.flip_y = wx.Button(self.panel, wx.ID_ANY, "Flip Y")
-        self.panel_sizer.Add(self.flip_y, pos=(1, 0), span=(1, 1), flag=wx.EXPAND)
+        self.panel_grid_sizer.Add(self.flip_y, pos=(1, 0), span=(1, 1), flag=wx.EXPAND)
 
         # Full Zoom out
         self.full_button = wx.Button(self.panel, wx.ID_ANY, "Full Zoom Out")
-        self.panel_sizer.Add(self.full_button, pos=(2, 0), span=(1, 1), flag=wx.EXPAND)
+        self.panel_grid_sizer.Add(self.full_button, pos=(2, 0), span=(1, 1), flag=wx.EXPAND)
 
         # Add color map options
-        self.panel_sizer.Add(wx.StaticText(self.panel, label='Colormap :'), pos=(0, 1), span=(1, 1), flag=wx.EXPAND|wx.LEFT)
+        self.panel_grid_sizer.Add(wx.StaticText(self.panel, label='Colormap :'), pos=(0, 1), span=(1, 1), flag=wx.EXPAND|wx.LEFT)
         colormaps = sorted([str(m) for m in matplotlib.cm.datad if not m.endswith("_r")], key=str.lower)
         self.colors = wx.ComboBox(self.panel, -1, choices=colormaps, style=wx.CB_READONLY)
         self.colors.SetValue('jet')
-        self.panel_sizer.Add(self.colors, pos=(0, 2), span=(1, 2), flag=wx.EXPAND)
+        self.panel_grid_sizer.Add(self.colors, pos=(0, 2), span=(1, 2), flag=wx.EXPAND)
 
         # Add Min & Max intensities
-        self.panel_sizer.Add(wx.StaticText(self.panel, label='Min Intensity :'), pos=(1, 1), span=(1, 1),
+        self.panel_grid_sizer.Add(wx.StaticText(self.panel, label='Min Intensity :'), pos=(1, 1), span=(1, 1),
                              flag=wx.EXPAND | wx.LEFT)
-        self.panel_sizer.Add(wx.StaticText(self.panel, label='Max Intensity :'), pos=(2, 1), span=(1, 1),
+        self.panel_grid_sizer.Add(wx.StaticText(self.panel, label='Max Intensity :'), pos=(2, 1), span=(1, 1),
                              flag=wx.EXPAND | wx.LEFT)
         self.minInt = wx.SpinCtrlDouble(parent=self.panel, style=wx.SP_ARROW_KEYS | wx.TE_PROCESS_ENTER, min=0, max=100, initial=0)
         self.minInt.SetDigits(3)
-        self.panel_sizer.Add(self.minInt, pos=(1, 2), span=(1, 1), flag=wx.EXPAND)
+        self.panel_grid_sizer.Add(self.minInt, pos=(1, 2), span=(1, 1), flag=wx.EXPAND)
         self.maxInt = wx.SpinCtrlDouble(parent=self.panel, style=wx.SP_ARROW_KEYS | wx.TE_PROCESS_ENTER, min=0, max=100, initial=100)
         self.maxInt.SetDigits(3)
-        self.panel_sizer.Add(self.maxInt, pos=(2, 2), span=(1, 1), flag=wx.EXPAND)
-        self.panel_sizer.Add(wx.StaticText(self.panel, label='%'), pos=(1, 3), span=(1, 1))
-        self.panel_sizer.Add(wx.StaticText(self.panel, label='%'), pos=(2, 3), span=(1, 1))
+        self.panel_grid_sizer.Add(self.maxInt, pos=(2, 2), span=(1, 1), flag=wx.EXPAND)
+        self.panel_grid_sizer.Add(wx.StaticText(self.panel, label='%'), pos=(1, 3), span=(1, 1))
+        self.panel_grid_sizer.Add(wx.StaticText(self.panel, label='%'), pos=(2, 3), span=(1, 1))
+
+        self.click_pos = wx.StaticText(self.panel, label='')
+
+        self.panel_grid_sizer.Add(wx.StaticText(self.panel, label='Selected Position:'), pos=(3,0))
+        self.panel_grid_sizer.Add(self.click_pos, pos=(3,1), span=(1,4))
 
         # Add Figure
         self.figure = Figure()
         self.axes = self.figure.add_subplot(111)
-        self.canvas = FigureCanvas(self, -1, self.figure)
-        # self.panel_sizer.Add(self.canvas, 1, wx.LEFT | wx.TOP | wx.EXPAND)
-        self.panel_sizer.Add(self.canvas, pos=(3, 0), span=(1, 4), flag=wx.EXPAND)
+        self.canvas = FigureCanvas(self.panel, -1, self.figure)
+
+        self.axes.set_xlabel(self.motor_x)
+        self.axes.set_ylabel(self.motor_y)
+        self.axes.set_title(str(self.formula))
+
 
         # Add toolbar
-        self.toolbar = NavigationToolbar2Wx(self.canvas)
+        self.toolbar = CustomPlotToolbar(self.panel, self.canvas)
         self.toolbar.Realize()
-        # By adding toolbar in sizer, we are able to put it at the bottom
-        # of the frame - so appearance is closer to GTK version.
-        # self.panel_sizer.Add(self.toolbar, 0, wx.LEFT | wx.EXPAND)
-        self.panel_sizer.Add(self.toolbar, pos=(4, 0), span=(1, 4), flag=wx.EXPAND)
-        # update the axes menu on the toolbar
         self.toolbar.update()
 
+        plot_sizer = wx.BoxSizer(wx.VERTICAL)
+        plot_sizer.Add(self.canvas, 1, flag=wx.EXPAND)
+        plot_sizer.Add(self.toolbar, 0, flag=wx.EXPAND)
+
+        self.panel_sizer.Add(self.panel_grid_sizer, border=5, flag=wx.EXPAND|wx.ALL)
+        self.panel_sizer.Add(plot_sizer, 1, flag=wx.EXPAND)
+
+
         self.panel.SetSizer(self.panel_sizer)
-        self.main_sizer.Add(self.panel, 1, wx.GROW)
+        self.main_sizer.Add(self.panel, 1, flag=wx.EXPAND)
 
         self.SetSizer(self.main_sizer)
         self.SetAutoLayout(True)
@@ -102,6 +116,7 @@ class plot_gui(wx.Frame):
         Set Event Handlers
         """
         self.canvas.mpl_connect('button_press_event', self.onClicked)
+        self.canvas.mpl_connect('motion_notify_event', self._on_mousemotion)
         self.Bind(wx.EVT_BUTTON, self.flipPlotX, self.flip_x)
         self.Bind(wx.EVT_BUTTON, self.flipPlotY, self.flip_y)
         self.Bind(wx.EVT_BUTTON, self.update_plot, self.full_button)
@@ -176,8 +191,16 @@ class plot_gui(wx.Frame):
                 z[z < minInt] = minInt
                 z -= min_val
 
+            xlabel = self.axes.get_xlabel()
+            ylabel = self.axes.get_ylabel()
+            title = self.axes.get_title()
+
             self.axes.cla()
             self.axes.pcolormesh(self.x, self.y, z, cmap=str(self.colors.GetValue()))
+
+            self.axes.set_xlabel(xlabel)
+            self.axes.set_ylabel(ylabel)
+            self.axes.set_title(title)
 
             # Set x, y limits if they're available
             if self.xlim is not None:
@@ -218,6 +241,43 @@ class plot_gui(wx.Frame):
         # Print x, y coordinates and intensity z
         if ind_y < self.z.shape[0] and ind_x < self.z.shape[1]:
             coord_info = 'x='+str(x)+', y='+str(y)+', z='+str(self.z[ind_y][ind_x])
-            self.axes.set_xlabel(coord_info)
-            self.canvas.draw()
+            self.click_pos.SetLabel(coord_info)
             print(coord_info)
+
+    def _on_mousemotion(self, event):
+        if event.inaxes:
+            x = event.xdata
+            y = event.ydata
+            try:
+                all_xs = np.arange(len(self.x[0, :]))
+                ind_x = min(all_xs, key=lambda i: abs(x-self.x[0][i]))
+
+                all_ys = np.arange(len(self.y[:, 0]))
+                ind_y = min(all_ys, key=lambda i: abs(y-self.y[i][0]))
+
+                if self.x[0,ind_x] > x:
+                    ind_x -= 1
+                if self.y[ind_y, 0] > y:
+                    ind_y -= 1
+
+                if ind_y < self.z.shape[0] and ind_x < self.z.shape[1]:
+                    z = self.z[ind_y][ind_x]
+                else:
+                    z = ''
+            except TypeError:
+                z = ''
+
+            self.toolbar.set_status('x={}, y={}, z={}'.format(x, y, z))
+        else:
+            self.toolbar.set_status('')
+
+class CustomPlotToolbar(NavigationToolbar2WxAgg):
+    def __init__(self, parent, canvas):
+        NavigationToolbar2WxAgg.__init__(self, canvas)
+
+        self.status = wx.StaticText(self, label='')
+
+        self.AddControl(self.status)
+
+    def set_status(self, status):
+        self.status.SetLabel(status)
