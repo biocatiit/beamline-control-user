@@ -22,6 +22,7 @@ class plot_gui(wx.Frame):
         self.setConnections()
         self.flipX = False
         self.flipY = True
+        self.swap_xy = True
         self.x = self.y = self.z = None
         self.manualIntensity = False
         self.plotting = False
@@ -189,7 +190,10 @@ class plot_gui(wx.Frame):
         Get x,y,z from Plotter and plot
         :return:
         """
-        self.x, self.y, self.z = self.plotter.getXYZ()
+        if not self.swap_xy:
+            self.x, self.y, self.z = self.plotter.getXYZ()
+        else:
+            self.y, self.x, self.z = self.plotter.getXYZ()
 
         if self.x is not None:
             z = np.copy(self.z)
