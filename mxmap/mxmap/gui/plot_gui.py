@@ -54,9 +54,7 @@ class plot_gui(wx.Frame):
 
         # Add color map options
         self.panel_sizer.Add(wx.StaticText(self.panel, label='Colormap :'), pos=(0, 1), span=(1, 1), flag=wx.EXPAND|wx.LEFT)
-        colormaps = ['jet', 'inferno', 'gray', 'gnuplot', 'gnuplot2', 'hsv', 'magma', 'ocean',
-                     'rainbow', 'seismic', 'summer', 'spring', 'terrain', 'winter', 'autumn',
-                     'Blues', 'Greens', 'Oranges', 'Reds', 'pink']
+        colormaps = sorted([str(m) for m in matplotlib.cm.datad if not m.endswith("_r")], key=str.lower)
         self.colors = wx.ComboBox(self.panel, -1, choices=colormaps, style=wx.CB_READONLY)
         self.colors.SetValue('jet')
         self.panel_sizer.Add(self.colors, pos=(0, 2), span=(1, 2), flag=wx.EXPAND)

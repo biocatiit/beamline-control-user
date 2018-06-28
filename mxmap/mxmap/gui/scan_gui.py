@@ -581,5 +581,5 @@ class scan_gui(wx.Frame):
 
 def begin():
     app = wx.App()
-    scan_gui('BMScan')
+    scan_gui('MX Map')
     app.MainLoop()
