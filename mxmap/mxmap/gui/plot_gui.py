@@ -12,7 +12,7 @@ class plot_gui(wx.Frame):
     GUI for plotting maps. This will display matplotlib figure with Navigation Toolbar
     """
     def __init__(self, motor_x, motor_y, formula, xlim=None, ylim=None):
-        super(plot_gui, self).__init__(None, title='MX Map Plot')
+        super(plot_gui, self).__init__(None, title='MX Map Plot', name='plot')
         self.motor_x = motor_x
         self.motor_y = motor_y
         self.formula = formula
@@ -59,7 +59,12 @@ class plot_gui(wx.Frame):
         self.panel_grid_sizer.Add(wx.StaticText(self.panel, label='Colormap :'), pos=(0, 1), span=(1, 1), flag=wx.EXPAND|wx.LEFT)
         colormaps = sorted([str(m) for m in matplotlib.cm.datad if not m.endswith("_r")], key=str.lower)
         self.colors = wx.Choice(self.panel, -1, choices=colormaps)
-        self.colors.SetStringSelection('jet')
+
+        try:
+            scan_window = wx.FindWindowByName('scan')
+            self.colors.SetStringSelection(scan_window.default_plt_color)
+        except Exception:
+            self.colors.SetStringSelection('jet')
         self.panel_grid_sizer.Add(self.colors, pos=(0, 2), span=(1, 2), flag=wx.EXPAND)
 
         # Add Min & Max intensities
@@ -120,7 +125,7 @@ class plot_gui(wx.Frame):
         self.Bind(wx.EVT_BUTTON, self.flipPlotX, self.flip_x)
         self.Bind(wx.EVT_BUTTON, self.flipPlotY, self.flip_y)
         self.Bind(wx.EVT_BUTTON, self.update_plot, self.full_button)
-        self.Bind(wx.EVT_CHOICE, self.update_plot, self.colors)
+        self.Bind(wx.EVT_CHOICE, self.update_color, self.colors)
         self.Bind(wx.EVT_TEXT, self.update_plot, self.minInt)
         self.Bind(wx.EVT_TEXT, self.update_plot, self.maxInt)
         self.Bind(wx.EVT_SPINCTRL, self.update_plot, self.minInt)
@@ -145,6 +150,15 @@ class plot_gui(wx.Frame):
         self.flipY = not self.flipY
         self.axes.invert_yaxis()
         self.canvas.draw()
+
+    def update_color(self, event):
+        try:
+            scan_window = wx.FindWindowByName('scan')
+            scan_window.default_plt_color = str(self.colors.GetStringSelection())
+        except Exception:
+            pass
+
+        self.update_plot()
 
     def plot(self, output):
         """

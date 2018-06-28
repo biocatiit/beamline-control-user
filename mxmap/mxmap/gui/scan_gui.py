@@ -26,7 +26,7 @@ class scan_gui(wx.Frame):
     GUI for scanner program. This program allows user to set start, end, and step size for motor x and y. Also, number of scalers and plot formula. (Detectors are not supported now)
     """
     def __init__(self, title):
-        super(scan_gui, self).__init__(None, title=title)
+        super(scan_gui, self).__init__(None, title=title, name='scan')
         self.all_scalers = []
         self.xmotor_list = ['None']
         self.ymotor_list = ['None']
@@ -39,6 +39,8 @@ class scan_gui(wx.Frame):
         self.mx_abort_event = self.manager.Event()
         self.scanner = Scanner(self.mx_cmd_q, self.mx_return_q, self.mx_abort_event)
         self.scanner.start()
+
+        self.default_plt_color = 'jet'
 
         self.double_digits = 4
         self.readConfigs()
@@ -458,10 +460,10 @@ class scan_gui(wx.Frame):
                 'timer' : self.timer
             }
 
-            self.plot_panel = plot_gui(motor_x=params['x_motor'], motor_y=params['y_motor'],
-                formula=self.formula.GetValue(), xlim=(params['x_start'],
-                    params['x_end'], params['x_step']), ylim=(params['y_start'],
-                    params['y_end'], params['y_step']))
+            self.plot_panel = plot_gui(motor_x=params['x_motor'],
+                motor_y=params['y_motor'], formula=self.formula.GetValue(),
+                xlim=(params['x_start'], params['x_end'], params['x_step']),
+                ylim=(params['y_start'], params['y_end'], params['y_step']))
             self.plot_panel.Show(True)
 
             wx.Yield()
