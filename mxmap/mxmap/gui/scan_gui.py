@@ -130,7 +130,7 @@ class scan_gui(wx.Frame):
         self.panel_sizer = wx.GridBagSizer(10, 10)
 
         # Add MX DB Path
-        self.db_picker = wx.ComboBox(self.panel, -1, choices=self.db_list, style=wx.CB_READONLY)
+        self.db_picker = wx.Choice(self.panel, -1, choices=self.db_list)
         self.db_picker.SetSelection(0)
         self.panel_sizer.Add(wx.StaticText(self.panel, label='MX Database:'), pos=(0, 0), span=(1, 1),
                              flag=wx.ALIGN_CENTER_VERTICAL)
@@ -190,7 +190,7 @@ class scan_gui(wx.Frame):
         motor_sizer = wx.StaticBoxSizer(box, wx.VERTICAL)
         grid_sizer = wx.GridBagSizer(5, 5)
 
-        self.motorx_name = wx.ComboBox(self.panel, -1, choices=self.xmotor_list, style=wx.CB_READONLY)
+        self.motorx_name = wx.Choice(self.panel, -1, choices=self.xmotor_list)
         self.motorx_name.SetSelection(0)
         self.motorx_start = wx.SpinCtrlDouble(parent=self.panel, style=wx.SP_ARROW_KEYS, min=-10000000, max=10000000, initial=0)
         self.motorx_start.SetDigits(self.double_digits)
@@ -199,7 +199,7 @@ class scan_gui(wx.Frame):
         self.motorx_step = wx.SpinCtrlDouble(parent=self.panel, style=wx.SP_ARROW_KEYS, min=1, max=10000000, initial=100)
         self.motorx_step.SetDigits(self.double_digits)
 
-        self.motory_name = wx.ComboBox(self.panel, -1, choices=self.ymotor_list, style=wx.CB_READONLY)
+        self.motory_name = wx.Choice(self.panel, -1, choices=self.ymotor_list, style=wx.CB_READONLY)
         self.motory_name.SetSelection(0)
         self.motory_start = wx.SpinCtrlDouble(parent=self.panel, style=wx.SP_ARROW_KEYS, min=-10000000, max=10000000, initial=0)
         self.motory_start.SetDigits(self.double_digits)
@@ -279,7 +279,7 @@ class scan_gui(wx.Frame):
         """
         det_sizer = wx.StaticBoxSizer(box, wx.VERTICAL)
         grid_sizer = wx.GridBagSizer(5, 5)
-        self.detector = wx.ComboBox(self.panel, -1, choices=['None'], style=wx.CB_READONLY)
+        self.detector = wx.Choice(self.panel, -1, choices=['None'])
         self.detector.SetSelection(0)
 
         grid_sizer.Add(wx.StaticText(parent=self.panel, label="Detector:"), pos=(0, 0), span=(1,2))
@@ -294,12 +294,12 @@ class scan_gui(wx.Frame):
         Set Handlers to widget events
         """
         self.Bind(wx.EVT_CLOSE, self.OnClose)
-        self.Bind(wx.EVT_COMBOBOX, self.DBPathSelected, self.db_picker)
+        self.Bind(wx.EVT_CHOICE, self.DBPathSelected, self.db_picker)
         self.Bind(wx.EVT_SIZE, self.OnSize)
         self.Bind(wx.EVT_TEXT, self.refreshscaler, self.numscalers)
         self.Bind(wx.EVT_SPINCTRL, self.refreshscaler, self.numscalers)
         self.Bind(wx.EVT_TEXT_ENTER, self.refreshscaler, self.numscalers)
-        self.Bind(wx.EVT_COMBOBOX, self.detectorChanged, self.detector)
+        self.Bind(wx.EVT_CHOICE, self.detectorChanged, self.detector)
         self.Bind(wx.EVT_BUTTON, self.startPressed, self.start_button)
 
         self.stop_button.Bind(wx.EVT_BUTTON, self._on_stop)
@@ -312,7 +312,7 @@ class scan_gui(wx.Frame):
         """
         Handle when DB Path is changed. MX DB can be set only once so the combobox will be disabled
         """
-        picked = str(self.db_picker.GetValue())
+        picked = str(self.db_picker.GetStringSelection())
         if picked == 'Please select MX Database':
             return
 
@@ -331,45 +331,35 @@ class scan_gui(wx.Frame):
         self.getDevices()
 
         # Refresh Motor X choices
-        self.motorx_name.Clear()
-        for mx in self.xmotor_list:
-            self.motorx_name.Append(mx)
+        self.motorx_name.Set(sorted(self.xmotor_list, key=str.lower))
 
         # set motor x to smx
         if 'smx' in self.xmotor_list:
-            self.motorx_name.SetValue('smx')
+            self.motorx_name.SetStringSelection('smx')
         else:
             self.motorx_name.SetSelection(0)
 
         # Refresh Motor Y choices
-        self.motory_name.Clear()
-        for my in self.ymotor_list:
-            self.motory_name.Append(my)
-        self.motory_name.SetSelection(0)
+        self.motory_name.Set(sorted(self.ymotor_list, key=str.lower))
 
         # set motor y to smy
         if 'smy' in self.ymotor_list:
-            self.motory_name.SetValue('smy')
+            self.motory_name.SetStringSelection('smy')
         else:
             self.motory_name.SetSelection(0)
 
         # Refresh Scaler choices
         for scaler in self.all_scalers:
-            scaler.Clear()
-            for s in self.scaler_list:
-                scaler.Append(s)
+            scaler.Set(sorted(self.scaler_list, key=str.lower))
 
             # Set scaler to Io
             if 'Io' in self.scaler_list:
-                scaler.SetValue('Io')
+                scaler.SetStringSelection('Io')
             else:
                 scaler.SetSelection(0)
 
         # Refresh Detector choices
-        self.detector.Clear()
-        self.detector.Append('None')
-        for d in self.detector_list:
-            self.detector.Append(d)
+        self.detector.Set(['None']+sorted(self.detector_list, key=str.lower))
         self.detector.SetSelection(0)
 
         # Init Formula
@@ -391,18 +381,18 @@ class scan_gui(wx.Frame):
             # Add scaler if expected number of scalers is higher than current number of scalers
             for i in range(expected - current):
                 scaler_items = wx.BoxSizer(wx.HORIZONTAL)
-                scaler = wx.ComboBox(self.scrolled_panel, -1, choices=self.scaler_list, style=wx.CB_READONLY)
+                scaler = wx.Choice(self.scrolled_panel, -1, choices=sorted(self.scaler_list,key=str.lower))
 
                 # initial as Io if it exists
                 if 'Io' in self.scaler_list:
-                    scaler.SetValue('Io')
+                    scaler.SetStringSelection('Io')
                 else:
                     scaler.SetSelection(0)
 
                 scaler_items.Add(wx.StaticText(self.scrolled_panel, label=str(current+i+1)+'. '))
                 scaler_items.Add(scaler, flag = wx.EXPAND)
                 self.all_scalers.append(scaler)
-                self.scaler_list_sizer.Add(scaler_items)
+                self.scaler_list_sizer.Add(scaler_items, border=5, flag=wx.TOP)
                 self.main_sizer.Layout()
                 self.main_sizer.Fit(self)
 
@@ -423,7 +413,7 @@ class scan_gui(wx.Frame):
         """
         Handle when detector is changed
         """
-        print("Current detector is "+str(self.detector.GetValue()))
+        print("Current detector is "+str(self.detector.GetStringSelection()))
 
     def startPressed(self, e):
         """
@@ -433,12 +423,12 @@ class scan_gui(wx.Frame):
             self.statusbar.SetStatusText('Status: Scanning')
             self.start_button.Disable()
             self.stop_button.Enable()
-            scalers = [str(s.GetValue()) for s in self.all_scalers]
-            if self.detector.GetValue() == 'None':
+            scalers = [str(s.GetStringSelection()) for s in self.all_scalers]
+            if self.detector.GetStringSelection() == 'None':
                 detector = None
             else:
                 detector = {
-                    'name' : str(self.detector.GetValue())
+                    'name' : str(self.detector.GetStringSelection())
                 }
 
             path = str(self.dir_picker.GetPath())
@@ -454,11 +444,11 @@ class scan_gui(wx.Frame):
             params = {
                 'dir_path' : dir_path,
                 'file_name' : file_name,
-                'x_motor' : str(self.motorx_name.GetValue()),
+                'x_motor' : str(self.motorx_name.GetStringSelection()),
                 'x_start' : self.motorx_start.GetValue(),
                 'x_step' : self.motorx_step.GetValue(),
                 'x_end' : self.motorx_end.GetValue(),
-                'y_motor' : str(self.motory_name.GetValue()),
+                'y_motor' : str(self.motory_name.GetStringSelection()),
                 'y_start' : self.motory_start.GetValue(),
                 'y_step' : self.motory_step.GetValue(),
                 'y_end' : self.motory_end.GetValue(),
@@ -512,7 +502,7 @@ class scan_gui(wx.Frame):
         :return:
         """
         # Check MX Database
-        if str(self.db_picker.GetValue()) == 'Please select MX Database':
+        if str(self.db_picker.GetStringSelection()) == 'Please select MX Database':
             print("Error : Please select MX Database")
             return False
 
@@ -520,8 +510,8 @@ class scan_gui(wx.Frame):
         scalers = []
         d_scalers = {}
         for scaler in self.all_scalers:
-            scalers.append(str(scaler.GetValue()))
-            d_scalers[str(scaler.GetValue())] = 1.0
+            scalers.append(str(scaler.GetStringSelection()))
+            d_scalers[str(scaler.GetStringSelection())] = 1.0
 
         if len(scalers) != len(set(scalers)):
             print("Error : 2 scalers have the same name")
@@ -561,7 +551,7 @@ class scan_gui(wx.Frame):
         self.scanner.stop()
         self.scanner = Scanner(self.mx_cmd_q, self.mx_return_q, self.mx_abort_event)
         self.scanner.start()
-        picked = str(self.db_picker.GetValue())
+        picked = str(self.db_picker.GetStringSelection())
         self.mx_cmd_q.put_nowait(['start_mxdb', [picked], {}])
         self.statusbar.SetStatusText('Status: Ready to scan')
 
