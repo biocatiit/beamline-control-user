@@ -22,7 +22,7 @@ class plot_gui(wx.Frame):
         self.setConnections()
         self.flipX = False
         self.flipY = True
-        self.swap_xy = True
+        self.swap_xy = False
         self.x = self.y = self.z = None
         self.manualIntensity = False
         self.plotting = False
@@ -53,8 +53,8 @@ class plot_gui(wx.Frame):
         self.panel_grid_sizer.Add(self.flip_y, pos=(1, 0), span=(1, 1), flag=wx.EXPAND)
 
         # Full Zoom out
-        self.full_button = wx.Button(self.panel, wx.ID_ANY, "Full Zoom Out")
-        self.panel_grid_sizer.Add(self.full_button, pos=(2, 0), span=(1, 1), flag=wx.EXPAND)
+        self.swap_xy_btn = wx.Button(self.panel, wx.ID_ANY, "Swap XY")
+        self.panel_grid_sizer.Add(self.swap_xy_btn, pos=(2, 0), span=(1, 1), flag=wx.EXPAND)
 
         # Add color map options
         self.panel_grid_sizer.Add(wx.StaticText(self.panel, label='Colormap :'), pos=(0, 1), span=(1, 1), flag=wx.EXPAND|wx.LEFT)
@@ -125,7 +125,7 @@ class plot_gui(wx.Frame):
         self.canvas.mpl_connect('motion_notify_event', self._on_mousemotion)
         self.Bind(wx.EVT_BUTTON, self.flipPlotX, self.flip_x)
         self.Bind(wx.EVT_BUTTON, self.flipPlotY, self.flip_y)
-        self.Bind(wx.EVT_BUTTON, self.update_plot, self.full_button)
+        self.Bind(wx.EVT_BUTTON, self.on_swap_xy, self.swap_xy_btn)
         self.Bind(wx.EVT_CHOICE, self.update_color, self.colors)
         self.Bind(wx.EVT_TEXT, self.update_plot, self.minInt)
         self.Bind(wx.EVT_TEXT, self.update_plot, self.maxInt)
@@ -158,6 +158,23 @@ class plot_gui(wx.Frame):
             scan_window.default_plt_color = str(self.colors.GetStringSelection())
         except Exception:
             pass
+
+        self.update_plot()
+
+    def on_swap_xy(self, event):
+        self.swap_xy = not self.swap_xy
+
+        xlabel = self.axes.get_ylabel()
+        ylabel = self.axes.get_xlabel()
+
+        self.axes.set_xlabel(xlabel)
+        self.axes.set_ylabel(ylabel)
+
+        ylim = self.xlim
+        xlim = self.ylim
+
+        self.xlim = xlim
+        self.ylim = ylim
 
         self.update_plot()
 
