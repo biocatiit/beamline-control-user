@@ -1,22 +1,35 @@
-from os.path import exists, join
-import threading
-import time
+from os.path import join
 import multiprocessing
 try:
     import queue
 except ImportError:
     import Queue as queue
 
-import wx
 import numpy as np
 
 import Mp
-import MpScan
 
 
 class Scanner(multiprocessing.Process):
-
+    """
+    This is a separate Process (as opposed to Thread) that runs the ``Mp``
+    scan. It has to be a Process because even in a new Thread the scan
+    eats all processing resources and essentially locks the GUI while it's
+    running.
+    """
     def __init__(self, command_queue, return_queue, abort_event):
+        """
+        Initializes the Process.
+
+        :param multiprocessing.Manager.Queue command_queue: This queue is used
+            to pass commands to the scan process.
+
+        :param multiprocessing.Manager.Queue return_queue: This queue is used
+            to return values from the scan process.
+
+        :param multiprocessing.Manager.Event abort_event: This event is set when
+            a scan needs to be aborted.
+        """
         multiprocessing.Process.__init__(self)
         self.daemon = True
 
@@ -35,6 +48,11 @@ class Scanner(multiprocessing.Process):
 
 
     def run(self):
+        """
+        Runs the process. It waits for commands to show up in the command_queue,
+        and then runs them. It is aborted if the abort_event is set. It is stopped
+        when the stop_event is set, and that allows the process to end gracefully.
+        """
         while True:
             try:
                 cmd, args, kwargs = self.command_queue.get_nowait()
@@ -55,7 +73,7 @@ class Scanner(multiprocessing.Process):
                     self.working=True
                     self._commands[cmd](*args, **kwargs)
                     self.working=False
-                except Exception as e:
+                except Exception:
                     self.working=False
 
         if self._stop_event.is_set():
@@ -64,6 +82,11 @@ class Scanner(multiprocessing.Process):
             self._abort()
 
     def _start_mxdb(self, db_path):
+        """
+        Starts the MX database
+
+        :param str db_path: The path to the MX database.
+        """
         self.db_path = db_path
         print("MX Database : %s is being downloaded..."%(self.db_path))
         self.mx_database = Mp.setup_database(self.db_path)
@@ -72,6 +95,24 @@ class Scanner(multiprocessing.Process):
 
     def _set_devices(self, dir_path, x_motor, x_start, x_step, x_end, y_motor, y_start,
         y_step, y_end, scalers, dwell_time, detector, timer=None, file_name='output'):
+        """
+        Sets the parameters for the scan.
+
+        :param str dir_path: The directory path where the scan file will be saved.
+        :param str x_motor: The MX record name of the x motor.
+        :param float x_start: The absolute x start position of the scan.
+        :param float x_step: The step x size of the scan.
+        :param float x_end: The absolute x stop position of the scan.
+        :param str y_motor: The MX record name of the y motor.
+        :param float y_start: The absolute y start position of the scan.
+        :param float y_step: The step y size of the scan.
+        :param float y_end: The absolute y stop position of the scan.
+        :param list scalers: A list of the scalers for the scan.
+        :param float dwell_time: The count time at each point in the scan.
+        :param str timer: The name of the timer to be used for the scan.
+        :param str detector: The name of the detector to be used for the scan.
+        :param str file_name: The scan name (and output name) for the scan.
+        """
         self.dir_path = dir_path
         self.x_motor = x_motor
         self.x_start = x_start
@@ -114,6 +155,15 @@ class Scanner(multiprocessing.Process):
         return
 
     def _get_devices(self, scaler_fields, det_fields):
+        """
+        Gets a list of all of the relevant devices and returns them to populate
+        the scan GUI.
+
+        :param list scaler_fields: A list of the scaler record types to return.
+            Defined in the mxmap_config file.
+        :param list det_fields: A list of the detector record types to return.
+            Defined in the mxmap_config file.
+        """
         xmotor_list = []
         ymotor_list = []
         scaler_list = []
@@ -134,14 +184,14 @@ class Scanner(multiprocessing.Process):
             #     # ignore a record if it's not a device
             if current_record_class == 'motor':
                 # Add a record to x and y motors
-               xmotor_list.append(current_record.name)
-               ymotor_list.append(current_record.name)
+                xmotor_list.append(current_record.name)
+                ymotor_list.append(current_record.name)
             elif current_record_class in scaler_fields:
                 # Add a record to scalers
-               scaler_list.append(current_record.name)
+                scaler_list.append(current_record.name)
             elif current_record_class in det_fields:
                 # Add a record to detectors
-               detector_list.append(current_record.name)
+                detector_list.append(current_record.name)
 
             current_record = current_record.get_next_record()
 
@@ -149,16 +199,16 @@ class Scanner(multiprocessing.Process):
 
     def _scan(self, name, row):
         """
-        scan a record
-        :param row: record scanning row
-        :return:
+        Creae a scan record and carry out the scan.
+
+        :param str name: The base name of the scan.
+        :param str row: The current row of the scan.
         """
 
         scan_name = name + str(row)
         print("Scanning %s" % (scan_name))
 
         # Generate description
-        max_len = len(str(self.y_nsteps))
         y = self.y_start + self.y_step * row
 
         description = ("%s scan linear_scan motor_scan \"\" \"\" " % (scan_name))
@@ -243,4 +293,12 @@ class Scanner(multiprocessing.Process):
         self._stop_event.set()
 
     def _stop_scan(self):
+        """
+        This function is used Mp to abort the scan.
+
+        :returns: Returns 1 if the abort event is set, and that causes Mp to
+            abort the running scan. Returns 0 otherwise, which doesn't abort
+            anything.
+        :rtype: int
+        """
         return int(self._abort_event.is_set())

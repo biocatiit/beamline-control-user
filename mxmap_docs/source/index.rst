@@ -7,7 +7,10 @@ Welcome to MxMap's documentation!
 
    scan_gui
    plot_gui
+   scanner
+   plotter
    read_gui
+   other_utils
 
 
 Indices and tables

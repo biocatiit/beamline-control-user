@@ -1,14 +1,25 @@
+from os.path import exists
+
 import pandas as pd
 import numpy as np
-from os.path import exists, join
-from formula import calculate
-import time
 
-class Plotter:
+from formula import calculate
+
+class Plotter(object):
     """
-    A class to create a plot (image) for scan data which performs by Scanner
+    A class to process scan data from a :mod:`Scanner` scan, and send it to a plot
     """
     def __init__(self, motor_x, motor_y, formula, x_step=None, y_step=None, columns=None):
+        """
+        Initializes the plotter
+
+        :param str motor_x: The x motor name.
+        :param str motor_y: The y motor name.
+        :param str formula: The plot formula.
+        :param float x_step: The step size in x.
+        :param float y_step: The step size in y.
+        :param columns: The column names. Defaults to None.
+        """
         self.motor_x = motor_x
         self.motor_y = motor_y
         self.formula = formula
@@ -20,6 +31,12 @@ class Plotter:
     def read(self, full_path):
         """
         Read scan data file and encapsulate data
+
+        :param str full_path: The path to the scan data file.
+
+        :returns: True if the file exists, False otherwise.
+        :rtype: bool
+
         """
         if not exists(full_path):
             print(str(full_path)+ " does not exist")
@@ -53,8 +70,13 @@ class Plotter:
 
     def getXYZ(self):
         """
-        Create map from scan data, display map, and save map as an image to a file
-        :return:
+        Create map from scan data.
+
+        :returns: Three items, either the x and y coordinates as the result
+            of a np.meshgrid call and the intensity value calculated by
+            the ``formula``, in a grid. If the scan data is not there, it returns
+            None three times.
+        :rtype: np.array, np.array, np.array
         """
 
         if self.scandata is not None:
@@ -103,9 +125,12 @@ class Plotter:
 
 def get_cols(full_path):
     """
-    Get all column names from text file
-    :param full_path: full directory of text file
-    :return: all column names
+    Get all column names from a scan text file
+
+    :param str full_path: full directory of text file
+
+    :returns: all column names
+    :rtype: list
     """
     file = open(full_path, 'r')
     # Get column names
