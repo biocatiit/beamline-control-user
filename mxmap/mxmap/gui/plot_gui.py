@@ -9,9 +9,21 @@ import numpy as np
 
 class plot_gui(wx.Frame):
     """
-    GUI for plotting maps. This will display matplotlib figure with Navigation Toolbar
+    GUI for plotting maps. This will display matplotlib figure with Navigation
+    Toolbar
     """
     def __init__(self, motor_x, motor_y, formula, xlim=None, ylim=None):
+        """
+        Initializes the plot gui.
+
+        :param str motor_x: The name of the 'x' motor.
+        :param str motor_y: The name of the 'y' motor.
+        :param str formula: The plot formula.
+        :param tuple xlim: A tuple consisting of the x start, stop, and step.
+            Default is None.
+        :param tuple ylim: A tuple consisting of the y start, stop, and step.
+            Default is None.
+        """
         super(plot_gui, self).__init__(None, title='MxMap Plot', name='plot')
         self.motor_x = motor_x
         self.motor_y = motor_y
@@ -34,9 +46,7 @@ class plot_gui(wx.Frame):
         self.plotter = Plotter(self.motor_x, self.motor_y, formula, x_step, y_step)
 
     def initUI(self):
-        """
-        Initial all gui
-        """
+        """Initialize all gui"""
         self.main_sizer = wx.BoxSizer(wx.VERTICAL)
         self.panel = wx.Panel(self)
 
@@ -118,9 +128,7 @@ class plot_gui(wx.Frame):
         self.main_sizer.Fit(self)
 
     def setConnections(self):
-        """
-        Set Event Handlers
-        """
+        """Set all event handlers"""
         self.canvas.mpl_connect('button_press_event', self.onClicked)
         self.canvas.mpl_connect('motion_notify_event', self._on_mousemotion)
         self.Bind(wx.EVT_BUTTON, self.flipPlotX, self.flip_x)
@@ -136,8 +144,7 @@ class plot_gui(wx.Frame):
 
     def flipPlotX(self, e):
         """
-        Triggered when "Flip X" is clicked. Flip plot in X direction
-        :return:
+        Called when "Flip X" is clicked. Flip plot limits in x direction
         """
         self.flipX = not self.flipX
         self.axes.invert_xaxis()
@@ -145,14 +152,18 @@ class plot_gui(wx.Frame):
 
     def flipPlotY(self, e):
         """
-        Triggered when "Flip Y" is clicked. Flip plot in Y direction
-        :return:
+        Called when "Flip Y" is clicked. Flip plot limits in y direction
         """
         self.flipY = not self.flipY
         self.axes.invert_yaxis()
         self.canvas.draw()
 
     def update_color(self, event):
+        """
+        Called when the plot colormap is changed. Sets the default_plt_color
+        in the scan GUI, if possible, so the color becomes the default in a
+        new scan window.
+        """
         try:
             scan_window = wx.FindWindowByName('scan')
             scan_window.default_plt_color = str(self.colors.GetStringSelection())
@@ -162,6 +173,10 @@ class plot_gui(wx.Frame):
         self.update_plot()
 
     def on_swap_xy(self, event):
+        """
+        Called when the swap xy button is clicked. Swaps what is plotted on the
+        x and y axes.
+        """
         self.swap_xy = not self.swap_xy
 
         xlabel = self.axes.get_ylabel()
@@ -180,18 +195,18 @@ class plot_gui(wx.Frame):
 
     def plot(self, output):
         """
-        Triggered from other thread to read data from output file and plot
-        :param output: full path of output file
+        Called from other thread to read data from output file and plot
+
+        :param str output: full path of output file
         """
         self.plotting = True
         wx.CallAfter(self.read_and_plot, output)
-        # self.read_and_plot(output)
 
     def read_and_plot(self, output):
         """
         Read output and plot to panel
-        :param output: full path of output file
-        :return:
+
+        :param str output: full path of output file
         """
         print("Plot : %s" % (output))
 
@@ -205,7 +220,6 @@ class plot_gui(wx.Frame):
     def update_plot(self, e=None):
         """
         Get x,y,z from Plotter and plot
-        :return:
         """
         if not self.swap_xy:
             self.x, self.y, self.z = self.plotter.getXYZ()
@@ -254,7 +268,8 @@ class plot_gui(wx.Frame):
 
     def onClicked(self, e):
         """
-        Handle when the plot is clicked
+        Handle when the plot is clicked. Display the coordinates of click
+        in the GUI.
         """
         if self.x is None or e.xdata is None or e.ydata is None:
             return
@@ -280,6 +295,10 @@ class plot_gui(wx.Frame):
             print(coord_info)
 
     def _on_mousemotion(self, event):
+        """
+        Called on mouse motion in the plot. If it is within the axes, it displays
+        the current position of the mouse in the plot toolbar.
+        """
         if event.inaxes:
             x = event.xdata
             y = event.ydata
@@ -307,7 +326,17 @@ class plot_gui(wx.Frame):
             self.toolbar.set_status('')
 
 class CustomPlotToolbar(NavigationToolbar2WxAgg):
+    """
+    A custom plot toolbar that displays the cursor position on the plot
+    in addition to the usual controls.
+    """
     def __init__(self, parent, canvas):
+        """
+        Initializes the toolbar.
+
+        :param wx.Window parent: The parent window
+        :param matplotlib.Canvas: The canvas associated with the toolbar.
+        """
         NavigationToolbar2WxAgg.__init__(self, canvas)
 
         self.status = wx.StaticText(self, label='')
@@ -315,4 +344,8 @@ class CustomPlotToolbar(NavigationToolbar2WxAgg):
         self.AddControl(self.status)
 
     def set_status(self, status):
+        """
+        Called to set the status text in the toolbar, i.e. the cursor position
+        on the plot.
+        """
         self.status.SetLabel(status)

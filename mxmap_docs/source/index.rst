@@ -6,6 +6,8 @@ Welcome to MxMap's documentation!
    :caption: Contents:
 
    scan_gui
+   plot_gui
+   read_gui
 
 
 Indices and tables

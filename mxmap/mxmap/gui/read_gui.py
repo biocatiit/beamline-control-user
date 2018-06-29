@@ -1,19 +1,21 @@
-# import matplotlib
-# matplotlib.use('WXAgg')
-
-import wx
 from os import listdir
 from os.path import join
-from ..utils.formula import calculate
-from plot_gui import plot_gui
 from threading import Thread
+
+import wx
+
+from plot_gui import plot_gui
+from ..utils.formula import calculate
 from ..utils.Plotter import get_cols
 
 class read_gui(wx.Frame):
-    """
-    GUI for scan output file reader
-    """
+    """GUI for scan output file reader"""
     def __init__(self, title):
+        """
+        Initializes the GUI.
+
+        :param str title: The frame title.
+        """
         super(read_gui, self).__init__(None, title=title)
         self.file_name = None
         self.files = None
@@ -23,9 +25,7 @@ class read_gui(wx.Frame):
         self.Show()
 
     def initUI(self):
-        """
-        Initial all ui
-        """
+        """Initial all ui"""
         self.main_sizer = wx.BoxSizer(wx.VERTICAL)
         self.panel = wx.Panel(self)
         self.panel_sizer = wx.GridBagSizer(10, 10)
@@ -63,12 +63,15 @@ class read_gui(wx.Frame):
         self.main_sizer.Fit(self)
 
     def setConnections(self):
+        """Binds events to GUI widgets and functions."""
         self.Bind(wx.EVT_DIRPICKER_CHANGED, self.onDirChanged, self.dir_picker)
         self.Bind(wx.EVT_BUTTON, self.plotPressed, self.plot_button)
 
     def onDirChanged(self, e):
         """
         Handle when a directory is selected
+
+        :returns: Nothing. Just used to exit the function at points.
         """
         path = self.dir_picker.GetPath()
         print(str(path+ " is selected."))
@@ -98,10 +101,11 @@ class read_gui(wx.Frame):
                 self.files.append(f)
         self.files = sorted(self.files)
 
+        return
+
     def plotPressed(self, e):
-        """
-        Handle when "Plot" is clicked
-        """
+        """Handle when 'Plot' is clicked"""
+
         if self.checkSettings():
             self.plot_panel = plot_gui(motor_x=self.columns[0], motor_y=self.columns[1], formula=self.formula.GetValue())
             self.plot_panel.Show()
@@ -112,10 +116,7 @@ class read_gui(wx.Frame):
 
 
     def startPlot(self):
-        """
-        start plotting
-        :return:
-        """
+        """Start plotting. Intended to be run in a thread."""
         for f in self.files:
             self.callPlot(join(self.dir_picker.GetPath(), f))
 
@@ -123,15 +124,17 @@ class read_gui(wx.Frame):
     def callPlot(self, full_path):
         """
         Trigger plot panel to read the file and plot
-        :param full_path: full path of the file
-        :return:
+
+        :param str full_path: full path of the file
         """
         self.plot_panel.plot(full_path)
 
     def checkSettings(self):
         """
-        Check All Settings before generate plot
-        :return:
+        Check all settings before generating plot
+
+        :return: True if settings are good. False otherwise.
+        :rtype: bool
         """
         if len(self.columns) == 0:
             print("Error : No Available Data")
@@ -150,6 +153,7 @@ class read_gui(wx.Frame):
 
 
 def begin():
+    """Starts the wx App"""
     app = wx.App()
-    read_gui('BMScan')
+    read_gui('MxMap Read')
     app.MainLoop()
