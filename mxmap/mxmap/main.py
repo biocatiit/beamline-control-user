@@ -1,9 +1,16 @@
-#!/usr/bin/python
+#! /usr/bin/env python
+
 import sys
 import mxmap.gui.scan_gui as scan_gui
 import mxmap.gui.read_gui as read_gui
 
 def main(args=None):
+    """
+    Starts either the scan GUI or data reader (just plot) GUI.
+
+    :param list args: The sys.argv. The second value (first argument passed
+    at the command line) should be either 'scan' or 'read'.
+    """
     if args is None:
         args = sys.argv
 

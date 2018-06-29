@@ -36,7 +36,6 @@ class Plotter(object):
 
         :returns: True if the file exists, False otherwise.
         :rtype: bool
-
         """
         if not exists(full_path):
             print(str(full_path)+ " does not exist")
