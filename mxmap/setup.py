@@ -4,9 +4,9 @@ from distutils.core import setup
 from setuptools import find_packages
 
 setup(name="mxmap",
-      version='1.0',
+      version='1.1.0',
       description="-",
-      author="Jiranun Jiratrakanvong",
+      author="Jesse Hopkins, Jiranun Jiratrakanvong",
       author_email="jjiratra@hawk.iit.edu",
       url="",
       packages=find_packages(),

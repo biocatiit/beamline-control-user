@@ -12,7 +12,7 @@ class plot_gui(wx.Frame):
     GUI for plotting maps. This will display matplotlib figure with Navigation Toolbar
     """
     def __init__(self, motor_x, motor_y, formula, xlim=None, ylim=None):
-        super(plot_gui, self).__init__(None, title='MX Map Plot', name='plot')
+        super(plot_gui, self).__init__(None, title='MxMap Plot', name='plot')
         self.motor_x = motor_x
         self.motor_y = motor_y
         self.formula = formula

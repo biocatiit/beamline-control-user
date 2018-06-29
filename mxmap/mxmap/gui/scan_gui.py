@@ -4,28 +4,32 @@ import threading
 import multiprocessing
 import time
 import queue
+try:
+    import configparser as CP
+except ImportError:
+    import ConfigParser as CP
 
 import wx
 import wx.lib.scrolledpanel as scrolled
-
-
 
 from ..utils.Scanner import Scanner
 from ..utils.formula import calculate
 from ..utils import mputils
 from plot_gui import plot_gui
 
-try:
-    import configparser as CP
-except ImportError:
-    import ConfigParser as CP
-
 
 class scan_gui(wx.Frame):
     """
-    GUI for scanner program. This program allows user to set start, end, and step size for motor x and y. Also, number of scalers and plot formula. (Detectors are not supported now)
+    GUI for scanner program. This program allows user to set start, end, and
+    step size for motor x and y. Also, number of scalers and plot formula.
+    (Detectors are not supported now - Is this true?)
     """
     def __init__(self, title):
+        """
+        Initializes the scan GUI.
+
+        :param str title: The frame title.
+        """
         super(scan_gui, self).__init__(None, title=title, name='scan')
         self.all_scalers = []
         self.xmotor_list = ['None']
@@ -52,7 +56,8 @@ class scan_gui(wx.Frame):
 
     def readConfigs(self):
         """
-        Read Configuration file and set database list, scaler fields, and detector fields
+        Read configuration file and set database list, scaler fields, and
+        detector fields
         """
         config_path = "/etc/mxmap_config.ini"
         if not exists(config_path):
@@ -108,10 +113,7 @@ class scan_gui(wx.Frame):
             self.db_list.append(database_filename)
 
     def getDevices(self):
-        """
-        Get list of devices from MX Database
-        :return:
-        """
+        """Get list of devices from MX Database"""
         self.mx_cmd_q.put_nowait(['get_devices', [self.scaler_fields, self.det_fields], {}])
         response = None
         while response is None:
@@ -124,9 +126,7 @@ class scan_gui(wx.Frame):
         self.xmotor_list, self.ymotor_list, self.scaler_list, self.detector_list = response
 
     def initUI(self):
-        """
-        Initial all ui
-        """
+        """Initialize the GUI."""
         self.main_sizer = wx.BoxSizer(wx.HORIZONTAL)
         self.panel = wx.Panel(self)
         self.panel_sizer = wx.GridBagSizer(10, 10)
@@ -185,9 +185,12 @@ class scan_gui(wx.Frame):
 
     def initMotorSizer(self, box):
         """
-        Generate Motor Sizer contains motor X and Y settings
-        :param box: Boxsizer
-        :return:
+        Generate motor sizer containing the motor X and Y settings.
+
+        :param wx.StaticBox box: The static box that will contain the controls.
+
+        :returns: The box sizer with the motor controls.
+        :rtype: wx.BoxSizer
         """
         motor_sizer = wx.StaticBoxSizer(box, wx.VERTICAL)
         grid_sizer = wx.GridBagSizer(5, 5)
@@ -238,9 +241,10 @@ class scan_gui(wx.Frame):
 
     def initscalerpanel(self):
         """
-        Generate scaler Sizer contains scaler settings
-        :param box: Boxsizer
-        :return:
+        Generate scaler panel contains scaler settings
+
+        :returns: The panel containing the scaler controls.
+        :rtype: wx.lib.scrolledpanel.ScrolledPanel
         """
         # Scrolled panel stuff
         self.scrolled_panel = scrolled.ScrolledPanel(self, -1,
@@ -275,9 +279,12 @@ class scan_gui(wx.Frame):
 
     def initDetectorSizer(self, box):
         """
-        Generate Detector Sizer contains Detector settings
-        :param box: Boxsizer
-        :return:
+        Generate detector sizer containing detector controls.
+
+        :param wx.StaticBox box: The static box to contain the controls
+
+        :returns: The detector sizer.
+        :rtype: wx.BoxSizer
         """
         det_sizer = wx.StaticBoxSizer(box, wx.VERTICAL)
         grid_sizer = wx.GridBagSizer(5, 5)
@@ -292,12 +299,9 @@ class scan_gui(wx.Frame):
         return det_sizer
 
     def setConnections(self):
-        """
-        Set Handlers to widget events
-        """
+        """Bind events to widgets and functions."""
         self.Bind(wx.EVT_CLOSE, self.OnClose)
         self.Bind(wx.EVT_CHOICE, self.DBPathSelected, self.db_picker)
-        self.Bind(wx.EVT_SIZE, self.OnSize)
         self.Bind(wx.EVT_TEXT, self.refreshscaler, self.numscalers)
         self.Bind(wx.EVT_SPINCTRL, self.refreshscaler, self.numscalers)
         self.Bind(wx.EVT_TEXT_ENTER, self.refreshscaler, self.numscalers)
@@ -307,12 +311,14 @@ class scan_gui(wx.Frame):
         self.stop_button.Bind(wx.EVT_BUTTON, self._on_stop)
 
     def OnClose(self, e):
+        """Called on close to make sure the scan stops before exit."""
         self.scanner.stop()
         self.Destroy()
 
     def DBPathSelected(self, e):
         """
-        Handle when DB Path is changed. MX DB can be set only once so the combobox will be disabled
+        Handle when DB Path is changed. MX DB can be set only once so the
+        combobox is disabled after selection.
         """
         picked = str(self.db_picker.GetStringSelection())
         if picked == 'Please select MX Database':
@@ -373,9 +379,7 @@ class scan_gui(wx.Frame):
         self.statusbar.SetStatusText('Status: Ready to scan')
 
     def refreshscaler(self, e):
-        """
-        Handle when number of scalar is changed
-        """
+        """Handle when number of scalars is changed"""
         current = len(self.all_scalers)
         expected = self.numscalers.GetValue()
 
@@ -412,14 +416,13 @@ class scan_gui(wx.Frame):
         self.scrolled_panel.SetupScrolling()
 
     def detectorChanged(self, e):
-        """
-        Handle when detector is changed
-        """
+        """Handle when detector is changed"""
         print("Current detector is "+str(self.detector.GetStringSelection()))
 
     def startPressed(self, e):
         """
-        Handle when start button is pressed
+        Handle when start button is pressed. Starts the scan and opens the plot
+        window.
         """
         if self.checkSettings():
             self.statusbar.SetStatusText('Status: Scanning')
@@ -482,6 +485,9 @@ class scan_gui(wx.Frame):
             plot_thread.start()
 
     def update_plot(self):
+        """
+        Runs the live plotting. Intended to be run in a separate thread.
+        """
         while True:
             try:
                 datafile_name = self.mx_return_q.get_nowait()[0]
@@ -501,7 +507,9 @@ class scan_gui(wx.Frame):
     def checkSettings(self):
         """
         Check settings before running the scan
-        :return:
+
+        :returns: True if the parameters are set correctly, False otherwise.
+        :rtype: bool
         """
         # Check MX Database
         if str(self.db_picker.GetStringSelection()) == 'Please select MX Database':
@@ -543,8 +551,11 @@ class scan_gui(wx.Frame):
 
     def scan_done(self):
         """
-        Trigger by scanner when all scans are done
-        :return:
+        .. todo:: This uses a hack where the scanner process is stopped and then
+            restarted, to avoid a bug in ``Mp``. When that bug is fixed, this
+            hack should be removed.
+
+        Called by scanner when all scans are done.
         """
         self.start_button.Enable()
         self.stop_button.Disable()
@@ -555,23 +566,18 @@ class scan_gui(wx.Frame):
         self.scanner.start()
         picked = str(self.db_picker.GetStringSelection())
         self.mx_cmd_q.put_nowait(['start_mxdb', [picked], {}])
+
         self.statusbar.SetStatusText('Status: Ready to scan')
 
-    def OnSize(self, event):
-        """
-        Handler for window resizing - Do nothing now
-        :param event:
-        :return:
-        """
-        pass
-
     def _on_stop(self, event):
+        """Called when the stop button is pressed. Aborts the scan."""
         self.statusbar.SetStatusText('Status: Stopping scan')
         self.mx_abort_event.set()
         time.sleep(0.5)
         self.mx_return_q.put_nowait(['stop_live_plotting'])
 
 def begin():
+    """Starts the scan application."""
     app = wx.App()
-    scan_gui('MX Map')
+    scan_gui('MxMap')
     app.MainLoop()
