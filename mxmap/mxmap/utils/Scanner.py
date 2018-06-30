@@ -125,8 +125,8 @@ class Scanner(multiprocessing.Process):
         self.scalers = scalers
         self.dwell_time = dwell_time
         self.detector = detector
-        self.y_nsteps = int(np.floor((self.y_end - self.y_start) / self.y_step)) + 1
-        self.x_nsteps = int(np.floor((self.x_end - self.x_start) / self.x_step)) + 1
+        self.y_nsteps = abs(int(np.floor((self.y_end - self.y_start) / self.y_step))) + 1
+        self.x_nsteps = abs(int(np.floor((self.x_end - self.x_start) / self.x_step))) + 1
         self.timer = timer
         self.output = file_name
 
