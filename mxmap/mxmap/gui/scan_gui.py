@@ -496,13 +496,13 @@ class scan_gui(wx.Frame):
 
             if datafile_name is not None and datafile_name != 'stop_live_plotting':
                 print(datafile_name)
-                self.plot_panel.plot(datafile_name)
+                wx.CallAfter(self.plot_panel.plot(datafile_name))
                 wx.Yield()
             elif datafile_name == 'stop_live_plotting':
                 break
             time.sleep(.01)
 
-        self.scan_done()
+        wx.CallAfter(self.scan_done())
 
     def checkSettings(self):
         """
