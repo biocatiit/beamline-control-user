@@ -127,7 +127,8 @@ class read_gui(wx.Frame):
 
         :param str full_path: full path of the file
         """
-        self.plot_panel.plot(full_path)
+        wx.CallAfter(self.plot_panel.plot, full_path)
+        wx.Yield()
 
     def checkSettings(self):
         """
