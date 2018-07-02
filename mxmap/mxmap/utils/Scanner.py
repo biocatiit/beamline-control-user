@@ -114,14 +114,17 @@ class Scanner(multiprocessing.Process):
         :param str file_name: The scan name (and output name) for the scan.
         """
         self.dir_path = dir_path
+
         self.x_motor = x_motor
         self.x_start = x_start
-        self.x_step = x_step
         self.x_end = x_end
+        self.x_step = x_step
+
         self.y_motor = y_motor
         self.y_start = y_start
-        self.y_step = y_step
         self.y_end = y_end
+        self.y_step = y_step
+
         self.scalers = scalers
         self.dwell_time = dwell_time
         self.detector = detector

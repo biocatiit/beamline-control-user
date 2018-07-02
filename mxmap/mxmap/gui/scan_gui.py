@@ -446,17 +446,33 @@ class scan_gui(wx.Frame):
                 while not os.path.exists(dir_path):
                     time.sleep(.001)
 
+            x_start = float(self.motorx_start.GetValue())
+            x_end = float(self.motorx_end.GetValue())
+            x_step = float(self.motorx_step.GetValue())
+            if x_start < x_end:
+                x_step = abs(x_step)
+            else:
+                x_step = -abs(x_step)
+
+            y_start = float(self.motory_start.GetValue())
+            y_end = float(self.motory_end.GetValue())
+            y_step = float(self.motory_step.GetValue())
+            if y_start < y_end:
+                y_step = abs(y_step)
+            else:
+                y_step = -abs(y_step)
+
             params = {
                 'dir_path' : dir_path,
                 'file_name' : file_name,
                 'x_motor' : str(self.motorx_name.GetStringSelection()),
-                'x_start' : self.motorx_start.GetValue(),
-                'x_step' : self.motorx_step.GetValue(),
-                'x_end' : self.motorx_end.GetValue(),
+                'x_start' : x_start,
+                'x_step' : x_step,
+                'x_end' : x_end,
                 'y_motor' : str(self.motory_name.GetStringSelection()),
-                'y_start' : self.motory_start.GetValue(),
-                'y_step' : self.motory_step.GetValue(),
-                'y_end' : self.motory_end.GetValue(),
+                'y_start' : y_start,
+                'y_step' : y_step,
+                'y_end' : y_end,
                 'scalers' : scalers,
                 'dwell_time' : self.dwell_time.GetValue(),
                 'detector' : detector,
@@ -496,13 +512,13 @@ class scan_gui(wx.Frame):
 
             if datafile_name is not None and datafile_name != 'stop_live_plotting':
                 print(datafile_name)
-                wx.CallAfter(self.plot_panel.plot(datafile_name))
+                wx.CallAfter(self.plot_panel.plot, datafile_name)
                 wx.Yield()
             elif datafile_name == 'stop_live_plotting':
                 break
             time.sleep(.01)
 
-        wx.CallAfter(self.scan_done())
+        wx.CallAfter(self.scan_done)
 
     def checkSettings(self):
         """

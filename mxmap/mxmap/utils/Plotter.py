@@ -113,8 +113,15 @@ class Plotter(object):
             z[np.isinf(z)] = 0.
 
             # Add 1 row and 1 column to support pcolormesh (pcolormesh requires 1 extra row and column to display)
-            x.append(max(x) + xs)
-            y.append(max(y) + ys)
+            if xs > 0:
+                x.append(x[-1] + xs)
+            else:
+                x.insert(0, x[0] + xs)
+
+            if ys > 0:
+                y.append(y[-1] + ys)
+            else:
+                y.insert(0, y[0] + ys)
 
             x_coor, y_coor = np.meshgrid(x, y)
 

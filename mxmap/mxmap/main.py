@@ -1,6 +1,7 @@
 #! /usr/bin/env python
 
 import sys
+
 import mxmap.gui.scan_gui as scan_gui
 import mxmap.gui.read_gui as read_gui
 
