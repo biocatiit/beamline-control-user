@@ -201,7 +201,7 @@ class scan_gui(wx.Frame):
         self.motorx_start.SetDigits(self.double_digits)
         self.motorx_end = wx.SpinCtrlDouble(parent=self.panel, style=wx.SP_ARROW_KEYS, min=-10000000, max=10000000, initial=500)
         self.motorx_end.SetDigits(self.double_digits)
-        self.motorx_step = wx.SpinCtrlDouble(parent=self.panel, style=wx.SP_ARROW_KEYS, min=1, max=10000000, initial=100)
+        self.motorx_step = wx.SpinCtrlDouble(parent=self.panel, style=wx.SP_ARROW_KEYS, min=1e-4, max=10000000, initial=100)
         self.motorx_step.SetDigits(self.double_digits)
 
         self.motory_name = wx.Choice(self.panel, -1, choices=self.ymotor_list, style=wx.CB_READONLY)
@@ -210,7 +210,7 @@ class scan_gui(wx.Frame):
         self.motory_start.SetDigits(self.double_digits)
         self.motory_end = wx.SpinCtrlDouble(parent=self.panel, style=wx.SP_ARROW_KEYS, min=-10000000, max=10000000, initial=400)
         self.motory_end.SetDigits(self.double_digits)
-        self.motory_step = wx.SpinCtrlDouble(parent=self.panel, style=wx.SP_ARROW_KEYS, min=1, max=10000000, initial=100)
+        self.motory_step = wx.SpinCtrlDouble(parent=self.panel, style=wx.SP_ARROW_KEYS, min=1e-4, max=10000000, initial=100)
         self.motory_step.SetDigits(self.double_digits)
 
         # Add X
