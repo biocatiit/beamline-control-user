@@ -137,6 +137,8 @@ class Scanner(multiprocessing.Process):
         """
         Performing scan by create a scan descriptions for each row and perform
         """
+        self.mx_database.wait_for_messages(0.01)
+
         all_records = [r.name for r in self.mx_database.get_all_records()]
         i = 0
 
@@ -149,6 +151,7 @@ class Scanner(multiprocessing.Process):
             return
 
         for i in range(self.y_nsteps):
+            self.mx_database.wait_for_messages(0.001)
             self._scan(name, i)
             if self._abort_event.is_set():
                 self.return_queue.put_nowait(['stop_live_plotting'])
@@ -276,6 +279,8 @@ class Scanner(multiprocessing.Process):
         scan = self.mx_database.get_record(scan_name)
 
         scan.finish_record_initialization()
+
+        self.mx_database.wait_for_messages(0.001)
 
         scan.perform_scan()
 
