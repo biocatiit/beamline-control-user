@@ -151,7 +151,9 @@ class Scanner(multiprocessing.Process):
         for i in range(self.y_nsteps):
             self._scan(name, i)
             if self._abort_event.is_set():
+                self.return_queue.put_nowait(['stop_live_plotting'])
                 return
+
         print("All scans are performed. Output files are at %s" %(self.dir_path))
 
         self.return_queue.put_nowait(['stop_live_plotting'])

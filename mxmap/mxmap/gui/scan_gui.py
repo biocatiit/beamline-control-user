@@ -576,8 +576,24 @@ class scan_gui(wx.Frame):
         self.start_button.Enable()
         self.stop_button.Disable()
 
+        self.mx_abort_event.clear()
+
+        while True:
+            try:
+                self.mx_cmd_q.get_nowait()
+            except queue.Empty:
+                break
+
+        while True:
+            try:
+                self.mx_return_q.get_nowait()
+            except queue.Empty:
+                break
+
         #This is a hack
         self.scanner.stop()
+        while self.scanner.is_alive():
+            time.sleep(0.01)
         self.scanner = Scanner(self.mx_cmd_q, self.mx_return_q, self.mx_abort_event)
         self.scanner.start()
         picked = str(self.db_picker.GetStringSelection())
