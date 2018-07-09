@@ -50,9 +50,12 @@ class scan_gui(wx.Frame):
         self.readConfigs()
         self.initUI()
         self.setConnections()
+
+        ht, vt = self.GetSize()
+        hsb, vsb = self.statusbar.GetSize()
+        self.SetSizeHints(ht, vt+vsb)
+
         self.Show()
-        # self.SetSizeHints((840, 400))
-        # self.SetSize((840, 400))
 
     def readConfigs(self):
         """
@@ -573,7 +576,6 @@ class scan_gui(wx.Frame):
 
         Called by scanner when all scans are done.
         """
-        self.start_button.Enable()
         self.stop_button.Disable()
 
         self.mx_abort_event.clear()
@@ -600,6 +602,8 @@ class scan_gui(wx.Frame):
         self.mx_cmd_q.put_nowait(['start_mxdb', [picked], {}])
 
         self.statusbar.SetStatusText('Status: Ready to scan')
+
+        self.start_button.Enable()
 
     def _on_stop(self, event):
         """Called when the stop button is pressed. Aborts the scan."""
