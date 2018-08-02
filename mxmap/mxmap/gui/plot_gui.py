@@ -97,6 +97,13 @@ class plot_gui(wx.Frame):
         self.panel_grid_sizer.Add(wx.StaticText(self.panel, label='Selected Position:'), pos=(3,0))
         self.panel_grid_sizer.Add(self.click_pos, pos=(3,1), span=(1,4))
 
+        self.formula_ctrl = wx.TextCtrl(self.panel, value=self.formula)
+        self.formula_recalc = wx.Button(self.panel, label='Update')
+
+        self.panel_grid_sizer.Add(wx.StaticText(self.panel, label='Formula:'), pos=(0,4))
+        self.panel_grid_sizer.Add(self.formula_ctrl, pos=(0,5))
+        self.panel_grid_sizer.Add(self.formula_recalc, pos=(0,6))
+
         # Add Figure
         self.figure = Figure()
         self.axes = self.figure.add_subplot(111)
@@ -142,6 +149,8 @@ class plot_gui(wx.Frame):
         self.Bind(wx.EVT_TEXT_ENTER, self.update_plot, self.minInt)
         self.Bind(wx.EVT_TEXT_ENTER, self.update_plot, self.maxInt)
 
+        self.formula_recalc.Bind(wx.EVT_BUTTON, self.update_formula)
+
     def flipPlotX(self, e):
         """
         Called when "Flip X" is clicked. Flip plot limits in x direction
@@ -170,6 +179,15 @@ class plot_gui(wx.Frame):
         except Exception:
             pass
 
+        self.update_plot()
+
+    def update_formula(self, evt):
+        """
+        Updates the plot formula
+        """
+        self.formula = self.formula_ctrl.GetValue()
+        self.axes.set_title(self.formula)
+        self.plotter.formula = self.formula
         self.update_plot()
 
     def on_swap_xy(self, event):
