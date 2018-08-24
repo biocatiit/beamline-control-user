@@ -39,7 +39,7 @@ import wx
 
 print_lock = threading.RLock()
 
-class SerialComm():
+class SerialComm(object):
     """
     This class impliments a generic serial communication setup. The goal is
     to provide a lightweight wrapper around a pyserial Serial device to make sure
@@ -201,7 +201,7 @@ class MForceSerialComm(SerialComm):
 
         return out
 
-class Pump():
+class Pump(object):
     """
     This class contains the settings and communication for a generic pump.
     It is intended to be subclassed by other pump classes, which contain
@@ -801,7 +801,7 @@ class PumpCommThread(threading.Thread):
 
     def _abort(self):
         """Clears the ``command_queue`` and aborts all current pump motions."""
-        logger.info("Aborting pump control thread%s current and future commands", self.name)
+        logger.info("Aborting pump control thread %s current and future commands", self.name)
         self.command_queue.clear()
 
         for name, pump in self._connected_pumps.items():
@@ -1009,7 +1009,7 @@ class PumpPanel(wx.Panel):
         self.fr_button.Hide()
 
         if self.type_ctrl.GetStringSelection() != 'VICI M50':
-            self.control_box_sizer.Show(self.m50_settings_sizer, recursive=True)
+            self.control_box_sizer.Hide(self.m50_settings_sizer, recursive=True)
 
         vol_unit = self.vol_unit_ctrl.GetStringSelection()
         t_unit = self.time_unit_ctrl.GetStringSelection()

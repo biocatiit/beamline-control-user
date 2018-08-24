@@ -11,6 +11,7 @@ Welcome to BioCON's documentation!
    :caption: Contents:
 
    pumps
+   flow_meters
 
 
 Indices and tables
