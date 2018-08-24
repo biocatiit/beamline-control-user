@@ -17,9 +17,13 @@ the MX control system to talk to the devices. It scans two motors, then creates 
 
 ## Requirements:
 
-BioCON: wx, pyserial
+### BioCON
 
-mxmap: numpy, Mp, pandas, wx, matplotlib
+wx, pyserial
+
+### mxmap
+
+numpy, pandas, wx, matplotlib, Mp
 
 ## Installation:
 
