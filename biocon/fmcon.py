@@ -757,12 +757,11 @@ class FlowMeterPanel(wx.Panel):
             if len(self.answer_q) > 0:
                 answer = self.answer_q.popleft()
                 if answer[0] == 'flow_rate':
-                    wx.CallAfter(self.flow_rate.ChangeValue, str(answer[1]))
+                    wx.CallAfter(self.flow_rate.ChangeValue, str(round(answer[1],3)))
                 elif answer[0] == 'density':
-                    wx.CallAfter(self.bfs_density.ChangeValue, str(answer[1]))
+                    wx.CallAfter(self.bfs_density.ChangeValue, str(round(answer[1],3)))
                 elif answer[0] == 'temperature':
-                    wx.CallAfter(self.bfs_temperature.ChangeValue, str(answer[1]))
-                wx.Yield()
+                    wx.CallAfter(self.bfs_temperature.ChangeValue, str(round(answer[1],3)))
             else:
                 time.sleep(0.05)
 
@@ -799,7 +798,7 @@ class FlowMeterFrame(wx.Frame):
         self.Fit()
         self.Raise()
 
-        # self._initfms()
+        self._initfms()
 
     def _create_layout(self):
         """Creates the layout"""
@@ -846,15 +845,14 @@ class FlowMeterFrame(wx.Frame):
         if not self.fms:
             self.fm_sizer.Remove(0)
 
-        setup_fms = [('1', 'VICI M50', 'COM5', ['623.56', '12.222'], {}),
-                    ('2', 'VICI M50', 'COM6', ['626.2', '9.278'], {})
+        setup_fms = [('3', 'BFS', 'COM8', [], {}),
                     ]
 
         logger.info('Initializing %s flow meters on startup', str(len(setup_fms)))
 
         for fm in setup_fms:
             new_fm = FlowMeterPanel(self, wx.ID_ANY, fm[0], self.ports, self.fm_cmd_q,
-                self.fm_con.known_fms, fm[0], fm[1], fm[2], fm[3], fm[4])
+                self.fm_return_q, self.fm_con.known_fms, fm[0], fm[1], fm[2], fm[3], fm[4])
 
             self.fm_sizer.Add(new_fm)
             self.fms.append(new_fm)
