@@ -46,7 +46,7 @@ the MX control system to talk to the devices. It scans two motors, then creates 
 
 ### BioCON
 
-wx, pyserial
+wx, pyserial, Mp
 
 ### mxmap
 

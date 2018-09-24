@@ -22,12 +22,9 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 from builtins import object, range, map
 from io import open
 
-import traceback
 import threading
 import time
-import collections
 from collections import OrderedDict, deque
-import queue
 import logging
 import sys
 import os
@@ -35,6 +32,8 @@ import os
 logger = logging.getLogger(__name__)
 
 import wx
+
+import Mp as mp
 
 import utils
 
@@ -164,15 +163,16 @@ class ExpCommThread(threading.Thread):
 
     def fast_exposure(self, data_dir, fprefix, num_frames, exp_time, exp_period, **kwargs):
         logging.debug('Setting up fast exposure')
-        det = self._mx_data['det']     #Detector
-        struck = self._mx_data['struck']   #Struck SIS3820
+        det = self._mx_data['det']          #Detector
+        struck = self._mx_data['struck']    #Struck SIS3820
 
         ab_burst = self._mx_data['ab_burst']   #Shutter control signal
         cd_burst = self._mx_data['cd_burst']   #Struck LNE/channel advance signal
         ef_burst = self._mx_data['ef_burst']   #Pilatus trigger signal
 
-        dio_out9 = self._mx_data['dio'][9]  #Shutter control signal (alt.)
-        dio_out10 = self._mx_data['dio'][10]   #SRS DG645 trigger
+        dio_out6 = self._mx_data['dio'][6]      #Xia/wharberton shutter N.C.
+        dio_out9 = self._mx_data['dio'][9]      #Shutter control signal (alt.)
+        dio_out10 = self._mx_data['dio'][10]    #SRS DG645 trigger
         dio_out11 = self._mx_data['dio'][11]    #Struck LNE/channel advance signal (alt.)
 
         print(det)
@@ -180,12 +180,15 @@ class ExpCommThread(threading.Thread):
         print(ab_burst)
         print(cd_burst)
         print(ef_burst)
+        print(dio_out6)
         print(dio_out9)
         print(dio_out10)
 
         det.abort()
         struck.stop()
         ab_burst.stop()
+
+        dio_out6.write(0) #Open the slow normally closed xia shutter
 
         det.set_duration_mode(num_frames)
         det.set_trigger_mode( 2 )
@@ -233,15 +236,20 @@ class ExpCommThread(threading.Thread):
                 det.abort()
                 struck.stop()
                 ab_burst.stop()
+                dio_out9.write(0) #Close the fast shutter
+                dio_out6.write(1) #Close the slow normally closed xia shutter
+                det.abort()
                 break
 
-            if ( busy == 0 ):
+            if busy == 0:
                 break
 
-            time.sleep(0.1)
+            time.sleep(0.001)
 
         if continuous_exp:
             dio_out9.write(0)
+
+        dio_out6.write(1) #Close the slow normally closed xia shutter
 
         measurement = struck.read_all()
 
@@ -260,6 +268,7 @@ class ExpCommThread(threading.Thread):
         cd_burst = self._mx_data['cd_burst']   #Struck LNE/channel advance signal
         ef_burst = self._mx_data['ef_burst']   #Pilatus trigger signal
 
+        dio_out6 = self._mx_data['dio'][6]      #Xia/wharberton shutter N.C.
         dio_out10 = self._mx_data['dio'][10]    #SRS DG645 trigger
         dio_out11 = self._mx_data['dio'][11]    #Struck LNE/channel advance signal (alt.)
 
@@ -274,9 +283,11 @@ class ExpCommThread(threading.Thread):
         struck.stop()
         ab_burst.stop()
 
-        det.set_duration_mode(1)
-        # det.set_multiframe_mode( 1, measurement_time, measurement_period )
+        dio_out6.write(0) #Open the slow normally closed xia shutter
+
+        det.set_duration_mode(num_frames)
         det.set_trigger_mode(2)
+        det.arm()
 
         struck.set_num_measurements(1)
 
@@ -289,13 +300,13 @@ class ExpCommThread(threading.Thread):
         #Read out the struck initially, takes ~2-3 seconds the first time
         struck.start()
         dio_out11.write(1)
-        time.sleep(0.01)
+        time.sleep(0.001)
         dio_out11.write(0)
 
-        time.sleep(0.2)
+        time.sleep(0.1)
 
         dio_out11.write(1)
-        time.sleep(0.01)
+        time.sleep(0.001)
         dio_out11.write(0)
 
         while True:
@@ -314,31 +325,23 @@ class ExpCommThread(threading.Thread):
                 det.abort()
                 struck.stop()
                 ab_burst.stop()
+                dio_out6.write(1) #Closes the slow normally closed xia shutter
+                det.abort()
                 self._exp_event.clear()
                 return
 
             logging.debug( "*** i = %d ***" % (i) )
             logging.debug( "Time = %f\n" % (time.time() - start) )
 
-            det_t = threading.Thread(target=det.arm)
-            struck_t = threading.Thread(target=struck.start())
-            det_t.daemon = True
-            struck_t.daemon = True
+            struck.start()
 
-            det_t.start()
-            struck_t.start()
-
-            struck_t.join()
             logging.debug( "After struck.start() = %f\n" % (time.time() - start) )
 
             dio_out11.write(1)
-            time.sleep(0.01)
+            time.sleep(0.001)
             dio_out11.write(0)
 
             logging.debug('After dio_out11 signal = %f\n' %(time.time()-start))
-
-            det_t.join()
-            logging.debug( "After pilatus.arm() = %f\n" % (time.time() - start) )
 
             if i == 0:
                 logging.info('Exposure started')
@@ -351,26 +354,9 @@ class ExpCommThread(threading.Thread):
             logging.debug("Measurement start time = %f\n" %(time.time() - meas_start))
 
             dio_out10.write(1)
-            time.sleep(0.01)
+            time.sleep(0.001)
             dio_out10.write(0)
             logging.debug( "After dio_out10 signal = %f\n" % (time.time() - start) )
-
-            # while True:
-            #     status = det.get_status()
-
-            #     if ( ( status & 0x1 ) == 0 ):
-            #         logging.debug( "Pilatus Done!\n" )
-            #         logging.debug( "After Pilatus Done = %f\n" % \
-            #                 (time.time() - start ) )
-            #         break
-
-            #     time.sleep(0.001)
-
-            # dio_out10.write( 1 )
-            # time.sleep(0.001)
-            # dio_out10.write( 0 )
-            # logging.debug( "After dio_out10.write() 2 = %f\n" % (time.time() - start) )
-
 
             while True:
                 busy = struck.is_busy()
@@ -380,10 +366,12 @@ class ExpCommThread(threading.Thread):
                     det.abort()
                     struck.stop()
                     ab_burst.stop()
+                    dio_out6.write(1) #Close the slow normally closed xia shutter
+                    det.abort()
                     self._exp_event.clear()
                     return
 
-                if ( busy == 0 ):
+                if busy == 0:
                     logging.debug( "Struck Done!\n" )
 
                     logging.debug( "After Struck Done = %f\n" % \
@@ -399,6 +387,8 @@ class ExpCommThread(threading.Thread):
 
                 time.sleep(0.001)
 
+        dio_out6.write(1) #Close the slow normally closed xia shutter
+
         logging.info('Exposure done')
         self._exp_event.clear()
 
@@ -411,6 +401,7 @@ class ExpCommThread(threading.Thread):
         ab_burst = self._mx_data['ab_burst']   #Shutter control signal
         ef_burst = self._mx_data['ef_burst']   #Pilatus trigger signal
 
+        dio_out6 = self._mx_data['dio'][6]      #Xia/wharberton shutter N.C.
         dio_out10 = self._mx_data['dio'][10]    #SRS DG645 trigger
 
         joerger = self._mx_data['joerger']
@@ -434,14 +425,17 @@ class ExpCommThread(threading.Thread):
         joerger.stop()
         ab_burst.stop()
 
+        dio_out6.write(0) #Open the slow normally closed xia shutter
+
         det.set_duration_mode(1)
-        # det.set_multiframe_mode( 1, measurement_time, measurement_period )
         det.set_trigger_mode(2)
 
         ab_burst.setup(1, exp_time+0.02, exp_time+0.01, 1, 0)
         ef_burst.setup(1, exp_time+0.02, exp_time, 1, 0.005)
 
         ab_burst.start()
+
+        time.sleep(0.1)
 
         start = time.time()
 
@@ -451,6 +445,8 @@ class ExpCommThread(threading.Thread):
                 det.abort()
                 joerger.stop()
                 ab_burst.stop()
+                dio_out6.write(1) #Close the slow normally closed xia shutter
+                det.abort()
                 self._exp_event.clear()
                 return
 
@@ -481,7 +477,7 @@ class ExpCommThread(threading.Thread):
             logging.debug("Measurement start time = %f\n" %(time.time() - meas_start))
 
             dio_out10.write( 1 )
-            time.sleep(0.01)
+            time.sleep(0.001)
             dio_out10.write( 0 )
             logging.debug( "After dio_out10 signal = %f\n" % (time.time() - start) )
 
@@ -493,6 +489,8 @@ class ExpCommThread(threading.Thread):
                     det.abort()
                     joerger.stop()
                     ab_burst.stop()
+                    dio_out6.write(1) #Close the slow normally closed xia shutter
+                    det.abort()
                     self._exp_event.clear()
                     return
 
@@ -516,6 +514,8 @@ class ExpCommThread(threading.Thread):
                     det.abort()
                     joerger.stop()
                     ab_burst.stop()
+                    dio_out6.write(1) #Close the slow normally closed xia shutter
+                    det.abort()
                     self._exp_event.clear()
                     return
 
@@ -530,6 +530,8 @@ class ExpCommThread(threading.Thread):
             logging.debug('Joerger Done!\n')
             logging.debug( "After Joerger readout = %f\n" % \
                   (time.time() - start ) )
+
+        dio_out6.write(1) #Close the slow normally closed xia shutter
 
         logging.info('Exposure done')
         self._exp_event.clear()
@@ -734,7 +736,13 @@ class ExpPanel(wx.Panel):
 
             pathname = fd.GetPath()
 
-            self.data_dir.SetValue(pathname)
+            if pathname.startswith(self.settings['base_data_dir']):
+                self.data_dir.SetValue(pathname)
+            else:
+                msg = ('Directory must be the following directory or one of '
+                    'its subdirectories: {}'.format(settings['base_data_dir']))
+                wx.CallAfter(wx.MessageBox, msg, 'Invalid directory',
+                    style=wx.OK|wx.ICON_ERROR)
 
         return
 
@@ -745,6 +753,9 @@ class ExpPanel(wx.Panel):
         self.stop_exp()
 
     def start_exp(self):
+        self.abort_event.clear()
+        self.exp_event.clear()
+
         exp_values, valid = self._get_exp_values()
 
         if not valid:
@@ -759,7 +770,14 @@ class ExpPanel(wx.Panel):
 
         self.exp_cmd_q.append(('start_exp', (), exp_values))
 
-        while not self.exp_event.is_set() or not self.abort_event.is_set():
+        start_thread = threading.Thread(target=self._wait_for_exp_start)
+        start_thread.daemon = True
+        start_thread.start()
+
+        return
+
+    def _wait_for_exp_start(self):
+        while not self.exp_event.is_set() and not self.abort_event.is_set():
             time.sleep(0.001)
 
         if self.abort_event.is_set():
@@ -767,7 +785,7 @@ class ExpPanel(wx.Panel):
         else:
             self.initial_time = time.time()
             self.tr_timer.Start(1000)
-            self.set_status('Exposing')
+            wx.Callafter(self.set_status, 'Exposing')
 
         return
 
@@ -786,26 +804,26 @@ class ExpPanel(wx.Panel):
         self.status.SetLabel(status)
 
     def set_time_remaining(self, tr):
-        if self.exp_event.is_set():
-            if tr < 3600:
-                tr = time.strftime('%M:%S', time.gmtime(tr))
-            elif tr < 86400:
-                tr = time.strftime('%H:%M:%S', time.gmtime(tr))
-            else:
-                tr = time.strftime('%d:%H:%M:%S', time.gmtime(tr))
+        if tr < 3600:
+            tr = time.strftime('%M:%S', time.gmtime(tr))
+        elif tr < 86400:
+            tr = time.strftime('%H:%M:%S', time.gmtime(tr))
+        else:
+            tr = time.strftime('%d:%H:%M:%S', time.gmtime(tr))
 
-            self.time_remaining.SetLabel(tr)
+        self.time_remaining.SetLabel(tr)
+
+    def _on_tr_timer(self, evt):
+        if self.exp_event.is_set():
+            tr = self.total_time - (time.time() - self.initial_time)
+
+            if tr < 0:
+                tr = 0
+
+            self.set_time_remaining(tr)
 
         else:
             self._on_exp_finish()
-
-    def _on_tr_timer(self, evt):
-        tr = self.total_time - (time.time() - self.initial_time)
-
-        if tr < 0:
-            tr = 0
-
-        self.set_time_remaining(tr)
 
     def _get_exp_values(self):
         num_frames = self.num_frames.GetValue()
@@ -821,57 +839,61 @@ class ExpPanel(wx.Panel):
             num_frames = int(num_frames)
         except Exception:
             errors.append('Number of frames (between 1 and {})'.format(
-                settings['nframes_max']))
+                self.settings['nframes_max']))
 
         try:
             exp_time = float(exp_time)
         except Exception:
             errors.append('Exposure time (between {} and {} s)'.format(
-                settings['exp_time_min'], settings['exp_time_max']))
+                self.settings['exp_time_min'], self.settings['exp_time_max']))
 
         try:
             exp_period = float(exp_period)
         except Exception:
             errors.append(('Exposure period (between {} and {} s, and at '
                 'least {} s greater than the exposure time)'.format(
-                settings['exp_period_min'], settings['exp_period_max'],
-                settings['exp_period_delta'])))
+                self.settings['exp_period_min'], self.settings['exp_period_max'],
+                self.settings['exp_period_delta'])))
 
         if isinstance(num_frames, int):
-            if num_frames < 1 or num_frames > settings['nframes_max']:
-                errors.append('Number of frames (between 1 and {}'.format(settings['nframes_max']))
+            if num_frames < 1 or num_frames > self.settings['nframes_max']:
+                errors.append('Number of frames (between 1 and {}'.format(self.settings['nframes_max']))
 
         if isinstance(exp_time, float):
-            if (exp_time < settings['exp_time_min']
-                or exp_time > settings['exp_time_max']):
+            if (exp_time < self.settings['exp_time_min']
+                or exp_time > self.settings['exp_time_max']):
                 errors.append('Exposure time (between {} and {} s)'.format(
-                settings['exp_time_min'], settings['exp_time_max']))
+                self.settings['exp_time_min'], self.settings['exp_time_max']))
 
         if isinstance(exp_period, float):
-            if (exp_period < settings['exp_period_min']
-                or exp_period > settings['exp_period_max']):
+            if (exp_period < self.settings['exp_period_min']
+                or exp_period > self.settings['exp_period_max']):
 
                 errors.append(('Exposure period (between {} and {} s, and at '
                     'least {} s greater than the exposure time)'.format(
-                    settings['exp_period_min'], settings['exp_period_max'],
-                    settings['exp_period_delta'])))
+                    self.settings['exp_period_min'], self.settings['exp_period_max'],
+                    self.settings['exp_period_delta'])))
 
             elif (isinstance(exp_time, float) and exp_period < exp_time
-                + settings['exp_period_delta']):
+                + self.settings['exp_period_delta']):
 
                 errors.append(('Exposure period (between {} and {} s, and at '
                     'least {} s greater than the exposure time)'.format(
-                    settings['exp_period_min'], settings['exp_period_max'],
-                    settings['exp_period_delta'])))
+                    self.settings['exp_period_min'], self.settings['exp_period_max'],
+                    self.settings['exp_period_delta'])))
+
+        if isinstance(exp_period, float) and isinstance(exp_time, float):
+            if exp_time > 2000 and exp_period < exp_time + 0.7:
+                errors.append(('Exposure times greater than {} s must have '
+                    'an exposure period at least {} s longer than the '
+                    'exposure time.'.format(self.settings['fast_mode_max_exp_time'],
+                    self.settings['slow_mode_thres'])))
 
         if filename == '':
             errors.append('Filename (must not be blank)')
 
-        if data_dir == '':
+        if data_dir == '' or not os.path.exists(data_dir):
             errors.append('Data directory (must exist, and not be blank)')
-        elif not os.path.exists(data_dir):
-            errors.append('Data directory (must exist, and not be blank)')
-
 
         if len(errors) > 0:
             msg = 'The following field(s) have invalid values:'
@@ -917,6 +939,8 @@ class ExpFrame(wx.Frame):
         self.exp_con = ExpCommThread(self.exp_cmd_q, self.abort_event, self.exp_event,
             self.mx_data, 'ExpCon')
         self.exp_con.start()
+
+        # self.exp_con = None #For testing purposes
 
         # self.Bind(wx.EVT_CLOSE, self._on_exit)
 
@@ -981,8 +1005,23 @@ if __name__ == '__main__':
     settings = {'data_dir': '/Users/jessehopkins/Documents', 'filename':'test', 'run_num': 1,
         'exp_time': '0.5', 'exp_period': '2.0', 'exp_num': '5', 'exp_time_min': 0.00105,
         'exp_time_max': 5184000, 'exp_period_min': 0.002, 'exp_period_max': 5184000,
-        'nframes_max': 999999, 'exp_period_delta': 0.00095,
+        'nframes_max': 999999, 'exp_period_delta': 0.00095, 'slow_mode_thres': 0.7,
+        'fast_mode_max_exp_time' : 2000, 'base_data_dir': '/Users/jessehopkins/Documents',
         }
+
+    # #MX stuff
+    # try:
+    #     # First try to get the name from an environment variable.
+    #     database_filename = os.environ["MXDATABASE"]
+    # except:
+    #     # If the environment variable does not exist, construct
+    #     # the filename for the default MX database.
+    #     mxdir = utils.get_mxdir()
+    #     database_filename = os.path.join(mxdir, "etc", "mxmotor.dat")
+    #     database_filename = os.path.normpath(database_filename)
+
+    # mx_database = mp.setup_database(database_filename)
+    # mx_database.set_plot_enable(2)
 
     # mx_data = {'det': mx_database.get_record('pilatus'),
     #     'struck': mx_database.get_record('sis3820'),

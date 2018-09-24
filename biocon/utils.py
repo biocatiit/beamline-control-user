@@ -24,6 +24,7 @@ from io import open
 
 import logging
 import string
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -65,3 +66,30 @@ class CharValidator(wx.Validator):
             elif self.flag == 'fname' and key not in self.fname_chars:
                 return
         event.Skip()
+
+def get_mxdir():
+    """Gets the top level install directory for MX."""
+    try:
+        mxdir = os.environ["MXDIR"]
+    except:
+        mxdir = "/opt/mx"   # This is the default location.
+
+    return mxdir
+
+def get_mpdir():
+    """Construct the name of the Mp modules directory."""
+    mxdir = get_mxdir()
+
+    mp_modules_dir = os.path.join(mxdir, "lib", "mp")
+    mp_modules_dir = os.path.normpath(mp_modules_dir)
+
+    return mp_modules_dir
+
+def set_mppath():
+    """Puts the mp directory in the system path, if it isn't already."""
+    path = os.environ['PATH']
+
+    mp_dir = get_mpdir()
+
+    if mp_dir not in path:
+        os.environ["PATH"] = mp_dir+os.pathsep+os.environ["PATH"]
