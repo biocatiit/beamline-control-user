@@ -85,9 +85,11 @@ class ExpCommThread(threading.Thread):
         :param threading.Event abort_event: An event that is set when the thread
             needs to abort, and otherwise is not set.
         """
-        threading.Thread.__init__(self, name=name, daemon=True)
+        threading.Thread.__init__(self, name=name)
 
-        logger.info("Starting flow meter control thread: %s", self.name)
+        logger.info("Starting exposure control thread: %s", self.name)
+
+        self.daemon = True
 
         self.command_queue = command_queue
         self.return_queue = return_queue
@@ -175,6 +177,9 @@ class ExpCommThread(threading.Thread):
         dio_out10 = self._mx_data['dio'][10]    #SRS DG645 trigger
         dio_out11 = self._mx_data['dio'][11]    #Struck LNE/channel advance signal (alt.)
 
+        det_datadir = self._mx_data['det_datadir']
+        det_filename = self._mx_data['det_filename']
+
         print(det)
         print(struck)
         print(ab_burst)
@@ -187,6 +192,9 @@ class ExpCommThread(threading.Thread):
         det.abort()
         struck.stop()
         ab_burst.stop()
+
+        det_datadir.put(data_dir)
+        det_filename.put('{}_0001.tif'.format(fprefix))
 
         dio_out6.write(0) #Open the slow normally closed xia shutter
 
@@ -272,6 +280,9 @@ class ExpCommThread(threading.Thread):
         dio_out10 = self._mx_data['dio'][10]    #SRS DG645 trigger
         dio_out11 = self._mx_data['dio'][11]    #Struck LNE/channel advance signal (alt.)
 
+        det_datadir = self._mx_data['det_datadir']
+        det_filename = self._mx_data['det_filename']
+
         logging.debug(det)
         logging.debug(struck)
         logging.debug(ab_burst)
@@ -282,6 +293,9 @@ class ExpCommThread(threading.Thread):
         det.abort()
         struck.stop()
         ab_burst.stop()
+
+        det_datadir.put(data_dir)
+        det_filename.put('{}_0001.tif'.format(fprefix))
 
         dio_out6.write(0) #Open the slow normally closed xia shutter
 
@@ -415,6 +429,9 @@ class ExpCommThread(threading.Thread):
 
         scl_list = [j2, j3, j4, j5, j6, j7]
 
+        det_datadir = self._mx_data['det_datadir']
+        det_filename = self._mx_data['det_filename']
+
         logging.debug(det)
         logging.debug(joerger)
         logging.debug(ab_burst)
@@ -424,6 +441,8 @@ class ExpCommThread(threading.Thread):
         det.abort()
         joerger.stop()
         ab_burst.stop()
+
+        det_datadir.put(data_dir)
 
         dio_out6.write(0) #Open the slow normally closed xia shutter
 
@@ -452,6 +471,8 @@ class ExpCommThread(threading.Thread):
 
             logging.debug( "*** i = %d ***" % (i) )
             logging.debug( "Time = %f\n" % (time.time() - start) )
+
+            det_filename.put('{}_{:04d}.tif'.format(fprefix, i+1))
 
             det_t = threading.Thread(target=det.arm)
             joerger_t = threading.Thread(joerger.start, args=(exp_time+2,))
@@ -934,15 +955,16 @@ class ExpFrame(wx.Frame):
         self.mx_data = mx_data
 
         self.exp_cmd_q = deque()
+        self.exp_ret_q = deque()
         self.abort_event = threading.Event()
         self.exp_event = threading.Event()
-        self.exp_con = ExpCommThread(self.exp_cmd_q, self.abort_event, self.exp_event,
-            self.mx_data, 'ExpCon')
+        self.exp_con = ExpCommThread(self.exp_cmd_q, self.exp_ret_q, self.abort_event,
+            self.exp_event, self.mx_data, 'ExpCon')
         self.exp_con.start()
 
         # self.exp_con = None #For testing purposes
 
-        # self.Bind(wx.EVT_CLOSE, self._on_exit)
+        self.Bind(wx.EVT_CLOSE, self._on_exit)
 
         top_sizer = self._create_layout(settings)
 
@@ -963,6 +985,14 @@ class ExpFrame(wx.Frame):
         top_sizer.Add(self.exp_sizer, flag=wx.EXPAND|wx.ALL, border=5)
 
         return top_sizer
+
+    def _on_exit(self, evt):
+        """Stops all current pump motions and then closes the frame."""
+        logger.debug('Closing the ExpFrame')
+        self.exp_con.stop()
+        while self.exp_con.is_alive():
+            time.sleep(0.001)
+        self.Destroy()
 
 
 if __name__ == '__main__':
@@ -1023,7 +1053,20 @@ if __name__ == '__main__':
     # mx_database = mp.setup_database(database_filename)
     # mx_database.set_plot_enable(2)
 
-    # mx_data = {'det': mx_database.get_record('pilatus'),
+    # det = mx_database.get_record('pilatus')
+
+    # server_record_name = det.get_field('server_record')
+    # remote_det_name = det.get_field('remote_record_name')
+    # server_record = mx_database.get_record(server_record_name)
+    # det_datadir_name = '{}.datafile_directory'.format(remote_det_name)
+    # det_datafile_name = '{}.datafile_pattern'
+
+    # det_datadir = mp.Net(server_record, det_datadir_name)
+    # det_filename = mp.Net(server_record, det_datafile_name)
+
+    # mx_data = {'det': det,
+    #     'det_datadir': det_datadir,
+    #     'det_filename': det_filename,
     #     'struck': mx_database.get_record('sis3820'),
     #     'ab_burst': mx_database.get_record('ab_burst'),
     #     'cd_burst': mx_database.get_record('cd_burst'),
