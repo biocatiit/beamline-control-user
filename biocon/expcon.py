@@ -801,6 +801,12 @@ class ExpPanel(wx.Panel):
         """Creates the layout for the panel."""
         self.data_dir = wx.TextCtrl(self, value=self.settings['data_dir'],
             style=wx.TE_READONLY)
+        
+        file_open = wx.ArtProvider.GetBitmap(wx.ART_FOLDER_OPEN, wx.ART_BUTTON)
+        self.change_dir_btn = wx.BitmapButton(self, bitmap=file_open,
+            size=(file_open.GetWidth()+15, -1))
+        self.change_dir_btn.Bind(wx.EVT_BUTTON, self._on_change_dir)
+
         self.filename = wx.TextCtrl(self, value=self.settings['filename'],
             validator=utils.CharValidator('fname'))
         self.num_frames = wx.TextCtrl(self, value=self.settings['exp_num'],
@@ -811,10 +817,7 @@ class ExpPanel(wx.Panel):
             size=(60,-1), validator=utils.CharValidator('float'))
         self.run_num = wx.StaticText(self, label='_{:03d}'.format(self.settings['run_num']))
 
-        file_open = wx.ArtProvider.GetBitmap(wx.ART_FOLDER_OPEN, wx.ART_BUTTON)
-        self.change_dir_btn = wx.BitmapButton(self, bitmap=file_open,
-            size=(file_open.GetWidth()+15, -1))
-        self.change_dir_btn.Bind(wx.EVT_BUTTON, self._on_change_dir)
+        
 
         file_prefix_sizer = wx.BoxSizer(wx.HORIZONTAL)
         file_prefix_sizer.Add(self.filename, proportion=1)
@@ -865,10 +868,12 @@ class ExpPanel(wx.Panel):
         exp_ctrl_box_sizer = wx.StaticBoxSizer(wx.StaticBox(self,
             label='Exposure Controls'), wx.VERTICAL)
 
-        exp_ctrl_box_sizer.Add(self.exp_name_sizer, flag=wx.EXPAND)
-        exp_ctrl_box_sizer.Add(self.exp_time_sizer, border=5, flag=wx.TOP)
+        exp_ctrl_box_sizer.Add(self.exp_name_sizer, border=5, 
+            flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT)
+        exp_ctrl_box_sizer.Add(self.exp_time_sizer, border=5, 
+            flag=wx.TOP|wx.LEFT|wx.RIGHT)
         exp_ctrl_box_sizer.Add(self.exp_btn_sizer, border=5,
-            flag=wx.EXPAND|wx.ALIGN_CENTER_HORIZONTAL|wx.TOP)
+            flag=wx.EXPAND|wx.ALIGN_CENTER_HORIZONTAL|wx.ALL)
 
 
         self.status = wx.StaticText(self, label='Ready', style=wx.ST_NO_AUTORESIZE,
@@ -886,18 +891,20 @@ class ExpPanel(wx.Panel):
             label='Exposure Status'), wx.HORIZONTAL)
 
         exp_status_sizer.Add(wx.StaticText(self, label='Status:'), border=5,
-            flag=wx.ALIGN_CENTER_VERTICAL)
-        exp_status_sizer.Add(self.status, border=5, flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT)
+            flag=wx.ALIGN_CENTER_VERTICAL|wx.TOP|wx.LEFT|wx.BOTTOM)
+        exp_status_sizer.Add(self.status, border=5, 
+            flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT|wx.TOP|wx.BOTTOM)
         exp_status_sizer.Add(wx.StaticText(self, label='Time remaining:'), border=5,
-            flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT)
-        exp_status_sizer.Add(self.time_remaining, border=5, flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT)
+            flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT|wx.TOP|wx.BOTTOM)
+        exp_status_sizer.Add(self.time_remaining, border=5, 
+            flag=wx.ALIGN_CENTER_VERTICAL|wx.ALL)
         exp_status_sizer.AddStretchSpacer(1)
 
 
 
         top_sizer = wx.BoxSizer(wx.VERTICAL)
         top_sizer.Add(exp_ctrl_box_sizer, flag=wx.EXPAND)
-        top_sizer.Add(exp_status_sizer,flag=wx.EXPAND)
+        top_sizer.Add(exp_status_sizer,border=10, flag=wx.EXPAND|wx.TOP)
 
         return top_sizer
 
