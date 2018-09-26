@@ -32,7 +32,6 @@ import os
 logger = logging.getLogger(__name__)
 
 import wx
-import epics
 
 import utils
 utils.set_mppath() #This must be done before importing any Mp Modules.
@@ -875,11 +874,13 @@ class ExpPanel(wx.Panel):
         self.status = wx.StaticText(self, label='Ready', style=wx.ST_NO_AUTORESIZE,
             size=(150, -1))
         self.status.SetForegroundColour(wx.RED)
-        self.status.SetFont(wx.Font(wx.FontInfo().Bold(True)))
+        fsize = self.GetFont().GetPointSize()
+        font = wx.Font(fsize, wx.DEFAULT, wx.NORMAL, wx.BOLD)
+        self.status.SetFont(font)
 
         self.time_remaining = wx.StaticText(self, label='0', style=wx.ST_NO_AUTORESIZE,
             size=(150, -1))
-        self.time_remaining.SetFont(wx.Font(wx.FontInfo().Bold(True)))
+        self.time_remaining.SetFont(font)
 
         exp_status_sizer = wx.StaticBoxSizer(wx.StaticBox(self,
             label='Exposure Status'), wx.HORIZONTAL)
@@ -1122,15 +1123,9 @@ class ExpFrame(wx.Frame):
             self.exp_event, self.mx_data, settings, 'ExpCon')
         self.exp_con.start()
 
-        # self.mx_db = mx_data['mx_db']
-
         # self.exp_con = None #For testing purposes
 
         self.Bind(wx.EVT_CLOSE, self._on_exit)
-
-        # self.mx_timer = wx.Timer()
-        # self.mx_timer.Bind(wx.EVT_TIMER, self._on_mxtimer)
-        # self.mx_timer.Start(10)
 
         top_sizer = self._create_layout(settings)
 
@@ -1151,13 +1146,6 @@ class ExpFrame(wx.Frame):
         top_sizer.Add(self.exp_sizer, flag=wx.EXPAND|wx.ALL, border=5)
 
         return top_sizer
-
-    def _on_mxtimer(self, evt):
-        """
-        Called on the mx_timer, refreshes mx values in the GUI by calling
-        wait_for_messages on the database.
-        """
-        self.mx_db.wait_for_messages(0.001)
 
     def _on_exit(self, evt):
         """Stops all current pump motions and then closes the frame."""
