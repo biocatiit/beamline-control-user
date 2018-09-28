@@ -119,7 +119,7 @@ class ExpCommThread(threading.Thread):
         # #
 
         # mx_database = mp.RecordList( None )
-        
+
         # # mx_database.set_network_debug(255)
 
         # #
@@ -155,10 +155,8 @@ class ExpCommThread(threading.Thread):
         det_filename = mp.Net(server_record, det_datafile_name)
 
         ab_burst = mx_database.get_record('ab_burst')
-
         ab_burst_server_record_name = ab_burst.get_field('server_record')
         ab_burst_server_record = mx_database.get_record(ab_burst_server_record_name)
-
         dg645_trigger_source = mp.Net(ab_burst_server_record, 'dg645.trigger_source')
 
         mx_data = {'det': det,
@@ -254,6 +252,7 @@ class ExpCommThread(threading.Thread):
         cd_burst = self._mx_data['cd_burst']   #Struck LNE/channel advance signal
         ef_burst = self._mx_data['ef_burst']   #Pilatus trigger signal
         gh_burst = self._mx_data['gh_burst']
+        dg645_trigger_source = self._mx_data['dg645_trigger_source']
 
         dio_out6 = self._mx_data['dio'][6]      #Xia/wharberton shutter N.C.
         dio_out9 = self._mx_data['dio'][9]      #Shutter control signal (alt.)
@@ -290,21 +289,21 @@ class ExpCommThread(threading.Thread):
 
         if exp_period > exp_time+0.01 and exp_period >= 0.02:
             #Shutter opens and closes, Takes 4 ms for open and close
-            ab_burst.setup(exp_period, exp_time+0.01, num_frames, 0, 1, 2)
-            cd_burst.setup(exp_period, 0.0001, num_frames, exp_time+0.006, 1, 2)
-            ef_burst.setup(exp_period, exp_time, num_frames, 0.005, 1, 2)
-            gh_burst.setup(exp_period, exp_time, num_frames, 0, 1, 2)
+            ab_burst.setup(exp_period, exp_time+0.01, num_frames, 0, 1, -1)
+            cd_burst.setup(exp_period, 0.0001, num_frames, exp_time+0.006, 1, -1)
+            ef_burst.setup(exp_period, exp_time, num_frames, 0.005, 1, -1)
+            gh_burst.setup(exp_period, exp_time, num_frames, 0, 1, -1)
             continuous_exp = False
         else:
             #Shutter will be open continuously, via dio_out9
-            ab_burst.setup(exp_period, exp_time, num_frames, 0, 1, 2) #Irrelevant
-            cd_burst.setup(exp_period, 0.0001, num_frames, exp_time+0.00015, 1, 2)
-            ef_burst.setup(exp_period, exp_time, num_frames, 0, 1, 2)
-            gh_burst.setup(exp_period, exp_time, num_frames, 0, 1, 2)
+            ab_burst.setup(exp_period, exp_time, num_frames, 0, 1, -1) #Irrelevant
+            cd_burst.setup(exp_period, 0.0001, num_frames, exp_time+0.00015, 1, -1)
+            ef_burst.setup(exp_period, exp_time, num_frames, 0, 1, -1)
+            gh_burst.setup(exp_period, exp_time, num_frames, 0, 1, -1)
             continuous_exp = True
-        # continuous_exp = False
 
-        print('after burst setup')
+        dg645_trigger_source.put(1)
+
         ab_burst.arm()
 
         if continuous_exp:
@@ -361,7 +360,7 @@ class ExpCommThread(threading.Thread):
         self.write_counters_struck(measurement, num_frames, 4, data_dir, fprefix, exp_period)
         logger.info('Exposure done')
         self._exp_event.clear()
-        
+
         # print(type(measurement))
 
 
@@ -513,6 +512,7 @@ class ExpCommThread(threading.Thread):
         ab_burst = self._mx_data['ab_burst']   #Shutter control signal
         cd_burst = self._mx_data['cd_burst']
         ef_burst = self._mx_data['ef_burst']   #Pilatus trigger signal
+        gh_burst = self._mx_data['gh_burst']
         dg645_trigger_source = self._mx_data['dg645_trigger_source']
 
         dio_out6 = self._mx_data['dio'][6]      #Xia/wharberton shutter N.C.
@@ -554,15 +554,12 @@ class ExpCommThread(threading.Thread):
         for scaler in scl_list:
             scaler.read()
 
-        # mp.c_breakpoint()
-
         ab_burst.setup(exp_time+0.02, exp_time+0.01, 1, 0, 1, -1)
         cd_burst.setup(exp_time+0.02, exp_time+0.01, 1, 0, 1, -1)
         ef_burst.setup(exp_time+0.02, exp_time, 1, 0.005, 1, -1)
+        gh_burst.setup(exp_time+0.02, exp_time, 1, 0, 1, -1)
 
         dg645_trigger_source.put(1)
-
-        logger.debug('Trigger mode: {}, Trigger Source: {}'.format(ab_burst.get_field('trigger_mode'), dg645_trigger_source.get()))
 
         time.sleep(0.1)
 
@@ -570,19 +567,8 @@ class ExpCommThread(threading.Thread):
 
         for i in range(num_frames):
             if self._abort_event.is_set():
-                logger.info("Aborting slow exposure")
-                try:
-                    det.abort()
-                except mp.Device_Action_Failed_Error:
-                    pass
-                joerger.stop()
-                ab_burst.stop()
-                dio_out6.write(1) #Close the slow normally closed xia shutter
-                try:
-                    det.abort()
-                except mp.Device_Action_Failed_Error:
-                    pass
-                self._exp_event.clear()
+                self.slow_mode2_abort_cleanup(det, joerger, ab_burst, dio_out6,
+                        measurement, num_frames, data_dir, fprefix, exp_start)
                 return
 
             logger.debug( "*** i = %d ***" % (i) )
@@ -601,15 +587,6 @@ class ExpCommThread(threading.Thread):
 
             ab_burst.arm()
 
-            # while True:
-            #     status = ab_burst.get_status()
-            #     print(status)
-            #     if (status & 0x1000000):
-            #         logger.debug('DG is armed.')
-            #         break
-
-            #     time.sleep(0.001)
-
             if i == 0:
                 logger.info('Exposure started')
                 self._exp_event.set()
@@ -617,7 +594,10 @@ class ExpCommThread(threading.Thread):
                 i_meas = time.time()
 
             while time.time() - meas_start < i*exp_period:
-                pass
+                if self._abort_event.is_set():
+                    self.slow_mode2_abort_cleanup(det, joerger, ab_burst, dio_out6,
+                        measurement, num_frames, data_dir, fprefix, exp_start)
+                    return
 
             joerger.start(exp_time+2)
             logger.debug("Measurement start time = %f" %(time.time() - meas_start))
@@ -635,26 +615,35 @@ class ExpCommThread(threading.Thread):
                 status = det.get_status()
 
                 if self._abort_event.is_set():
-                    logger.info("Aborting slow exposure")
-                    try:
-                        det.abort()
-                    except mp.Device_Action_Failed_Error:
-                        pass
-                    joerger.stop()
-                    ab_burst.stop()
-                    dio_out6.write(1) #Close the slow normally closed xia shutter
-                    try:
-                        det.abort()
-                    except mp.Device_Action_Failed_Error:
-                        pass
-                    self._exp_event.clear()
+                    self.slow_mode2_abort_cleanup(det, joerger, ab_burst, dio_out6,
+                        measurement, num_frames, data_dir, fprefix, exp_start,
+                        True, i)
                     return
 
                 if ( ( status & 0x1 ) == 0 ):
-                    # logger.debug( "Pilatus Done!\n" )
-                    # logger.debug( "After Pilatus Done = %f" % \
-                    #       (time.time() - start ) )
                     break
+
+                if time.time()-i_meas > exp_period:
+                    #Sometimes maybe the dg misses a trigger? So send another.
+                    logger.error('DG645 did not receive trigger! Sending another!')
+                    dio_out10.write( 1 )
+                    time.sleep(0.01)
+                    dio_out10.write( 0 )
+
+                elif time.time()-i_meas > exp_period*3:
+                    logger.error('DG645 did not receive trigger! Aborting!')
+
+                    self.slow_mode2_abort_cleanup(det, joerger, ab_burst, dio_out6,
+                        measurement, num_frames, data_dir, fprefix, exp_start)
+
+                    msg = ('Exposure {} failed to start properly. Exposure sequence '
+                        'has been aborted. Please contact your beamline scientist '
+                        'and restart the exposure sequence.'.format(i+1))
+
+                    wx.CallAfter(wx.MessageBox, msg, 'Exposure failed!',
+                        style=wx.OK|wx.ICON_ERROR)
+
+                    return
 
                 time.sleep(0.001)
 
@@ -664,22 +653,6 @@ class ExpCommThread(threading.Thread):
 
             while True:
                 busy = joerger.is_busy()
-
-                if self._abort_event.is_set():
-                    logger.info("Aborting slow exposure")
-                    try:
-                        det.abort()
-                    except mp.Device_Action_Failed_Error:
-                        pass
-                    joerger.stop()
-                    ab_burst.stop()
-                    dio_out6.write(1) #Close the slow normally closed xia shutter
-                    try:
-                        det.abort()
-                    except mp.Device_Action_Failed_Error:
-                        pass
-                    self._exp_event.clear()
-                    return
 
                 if busy == 0:
                     for j, scaler in enumerate(scl_list):
@@ -738,6 +711,38 @@ class ExpCommThread(threading.Thread):
 
                 val = val + '\n'
                 f.write(val)
+
+    def slow_mode2_abort_cleanup(self, det, joerger, ab_burst, dio_out6,
+        measurement, num_frames, data_dir, fprefix, exp_start, read_joerger=False,
+        i=0):
+        logger.info("Aborting slow exposure")
+        try:
+            det.abort()
+        except mp.Device_Action_Failed_Error:
+            pass
+        joerger.stop()
+        ab_burst.stop()
+        dio_out6.write(1) #Close the slow normally closed xia shutter
+        try:
+            det.abort()
+        except mp.Device_Action_Failed_Error:
+            pass
+
+        if read_joerger:
+            while True:
+                busy = joerger.is_busy()
+
+                if busy == 0:
+                    for j, scaler in enumerate(scl_list):
+                        sval = scaler.read()
+                        measurement[j][i] = sval
+                        logger.info(measurement)
+                    break
+
+        self.write_counters_joerger(measurement, num_frames, data_dir, fprefix, exp_start)
+
+        self._exp_event.clear()
+        return
 
     def _abort(self):
         """
@@ -831,7 +836,7 @@ class ExpPanel(wx.Panel):
         """Creates the layout for the panel."""
         self.data_dir = wx.TextCtrl(self, value=self.settings['data_dir'],
             style=wx.TE_READONLY)
-        
+
         file_open = wx.ArtProvider.GetBitmap(wx.ART_FOLDER_OPEN, wx.ART_BUTTON)
         self.change_dir_btn = wx.BitmapButton(self, bitmap=file_open,
             size=(file_open.GetWidth()+15, -1))
@@ -847,7 +852,7 @@ class ExpPanel(wx.Panel):
             size=(60,-1), validator=utils.CharValidator('float'))
         self.run_num = wx.StaticText(self, label='_{:03d}'.format(self.settings['run_num']))
 
-        
+
 
         file_prefix_sizer = wx.BoxSizer(wx.HORIZONTAL)
         file_prefix_sizer.Add(self.filename, proportion=1)
@@ -898,9 +903,9 @@ class ExpPanel(wx.Panel):
         exp_ctrl_box_sizer = wx.StaticBoxSizer(wx.StaticBox(self,
             label='Exposure Controls'), wx.VERTICAL)
 
-        exp_ctrl_box_sizer.Add(self.exp_name_sizer, border=5, 
+        exp_ctrl_box_sizer.Add(self.exp_name_sizer, border=5,
             flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT)
-        exp_ctrl_box_sizer.Add(self.exp_time_sizer, border=5, 
+        exp_ctrl_box_sizer.Add(self.exp_time_sizer, border=5,
             flag=wx.TOP|wx.LEFT|wx.RIGHT)
         exp_ctrl_box_sizer.Add(self.exp_btn_sizer, border=5,
             flag=wx.EXPAND|wx.ALIGN_CENTER_HORIZONTAL|wx.ALL)
@@ -922,11 +927,11 @@ class ExpPanel(wx.Panel):
 
         exp_status_sizer.Add(wx.StaticText(self, label='Status:'), border=5,
             flag=wx.ALIGN_CENTER_VERTICAL|wx.TOP|wx.LEFT|wx.BOTTOM)
-        exp_status_sizer.Add(self.status, border=5, 
+        exp_status_sizer.Add(self.status, border=5,
             flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT|wx.TOP|wx.BOTTOM)
         exp_status_sizer.Add(wx.StaticText(self, label='Time remaining:'), border=5,
             flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT|wx.TOP|wx.BOTTOM)
-        exp_status_sizer.Add(self.time_remaining, border=5, 
+        exp_status_sizer.Add(self.time_remaining, border=5,
             flag=wx.ALIGN_CENTER_VERTICAL|wx.ALL)
         exp_status_sizer.AddStretchSpacer(1)
 
@@ -1187,6 +1192,10 @@ class ExpFrame(wx.Frame):
     def _on_exit(self, evt):
         """Stops all current pump motions and then closes the frame."""
         logger.debug('Closing the ExpFrame')
+        if self.exp_event.is_set() and not self.abort_event.is_set():
+            self.abort_event.set()
+            time.sleep(2)
+
         self.exp_con.stop()
         while self.exp_con.is_alive():
             time.sleep(0.001)
@@ -1202,40 +1211,24 @@ if __name__ == '__main__':
     h1.setFormatter(formatter)
     logger.addHandler(h1)
 
-    # my_pump = M50Pump('COM6', '2', 626.2, 9.278)
-
-    # pmp_cmd_q = deque()
-    # abort_event = threading.Event()
-    # my_pumpcon = PumpCommThread(pmp_cmd_q, abort_event, 'PumpCon')
-    # my_pumpcon.start()
-    # return_q = queue.Queue()
-
-    # init_cmd = ('connect', ('COM6', 'pump2', 'VICI_M50'),
-    #     {'flow_cal': 626.2, 'backlash_cal': 9.278})
-    # fr_cmd = ('set_flow_rate', ('pump2', 2000), {})
-    # start_cmd = ('start_flow', ('pump2',), {})
-    # stop_cmd = ('stop', ('pump2',), {})
-    # dispense_cmd = ('dispense', ('pump2', 200), {})
-    # aspirate_cmd = ('aspirate', ('pump2', 200), {})
-    # moving_cmd = ('is_moving', ('pump2', return_q), {})
-
-    # pmp_cmd_q.append(init_cmd)
-    # pmp_cmd_q.append(fr_cmd)
-    # pmp_cmd_q.append(start_cmd)
-    # pmp_cmd_q.append(dispense_cmd)
-    # pmp_cmd_q.append(aspirate_cmd)
-    # pmp_cmd_q.append(moving_cmd)
-    # time.sleep(5)
-    # pmp_cmd_q.append(stop_cmd)
-    # my_pumpcon.stop()
-
     #Settings for Pilatus 3X 1M
-    settings = {'data_dir': '/nas_data/Pilatus1M/20180917Lavender', 'filename':'test', 'run_num': 1,
-        'exp_time': '0.5', 'exp_period': '1.5', 'exp_num': '5', 'exp_time_min': 0.00105,
-        'exp_time_max': 5184000, 'exp_period_min': 0.002, 'exp_period_max': 5184000,
-        'nframes_max': 999999, 'exp_period_delta': 0.00095, 'slow_mode_thres': 0.1,
-        'fast_mode_max_exp_time' : 2000, 'base_data_dir': '/nas_data/Pilatus1M/20180917Lavender',
-        'local_dir_root': '/nas_data/Pilatus1M', 'remote_dir_root': '/nas_data',
+    settings = {'data_dir': '/nas_data/Pilatus1M/20180917Lavender',
+        'filename':'test',
+        'run_num': 1,
+        'exp_time': '0.5',
+        'exp_period': '1.5',
+        'exp_num': '5',
+        'exp_time_min': 0.00105,
+        'exp_time_max': 5184000,
+        'exp_period_min': 0.002,
+        'exp_period_max': 5184000,
+        'nframes_max': 999999,
+        'exp_period_delta': 0.00095,
+        'slow_mode_thres': 0.1,
+        'fast_mode_max_exp_time' : 2000,
+        'local_dir_root': '/nas_data/Pilatus1M',
+        'remote_dir_root': '/nas_data',
+        'base_data_dir': '/nas_data/Pilatus1M/20180917Lavender', #CHANGE ME
         }
 
     # #MX stuff
