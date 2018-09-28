@@ -154,6 +154,13 @@ class ExpCommThread(threading.Thread):
         det_datadir = mp.Net(server_record, det_datadir_name)
         det_filename = mp.Net(server_record, det_datafile_name)
 
+        ab_burst = mx_database.get_record('ab_burst')
+
+        ab_burst_server_record_name = ab_burst.get_field('server_record')
+        ab_burst_server_record = mx_database.get_record(ab_burst_server_record_name)
+
+        dg645_trigger_source = mp.Net(ab_burst_server_record, 'dg645.trigger_source')
+
         mx_data = {'det': det,
             'det_datadir': det_datadir,
             'det_filename': det_filename,
@@ -162,6 +169,7 @@ class ExpCommThread(threading.Thread):
             'cd_burst': mx_database.get_record('cd_burst'),
             'ef_burst': mx_database.get_record('ef_burst'),
             'gh_burst': mx_database.get_record('gh_burst'),
+            'dg645_trigger_source': dg645_trigger_source,
             'dio': [mx_database.get_record('avme944x_out{}'.format(i)) for i in range(16)],
             'joerger': mx_database.get_record('joerger_timer'),
             'joerger_ctrs':[mx_database.get_record('j{}'.format(i)) for i in range(2,7)],
@@ -505,6 +513,7 @@ class ExpCommThread(threading.Thread):
         ab_burst = self._mx_data['ab_burst']   #Shutter control signal
         cd_burst = self._mx_data['cd_burst']
         ef_burst = self._mx_data['ef_burst']   #Pilatus trigger signal
+        dg645_trigger_source = self._mx_data['dg645_trigger_source']
 
         dio_out6 = self._mx_data['dio'][6]      #Xia/wharberton shutter N.C.
         dio_out10 = self._mx_data['dio'][10]    #SRS DG645 trigger
@@ -545,9 +554,15 @@ class ExpCommThread(threading.Thread):
         for scaler in scl_list:
             scaler.read()
 
-        ab_burst.setup(exp_time+0.02, exp_time+0.01, 1, 0, 1, 2)
-        cd_burst.setup(exp_time+0.02, exp_time+0.01, 1, 0, 1, 2)
-        ef_burst.setup(exp_time+0.02, exp_time, 1, 0.005, 1, 2)
+        # mp.c_breakpoint()
+
+        ab_burst.setup(exp_time+0.02, exp_time+0.01, 1, 0, 1, -1)
+        cd_burst.setup(exp_time+0.02, exp_time+0.01, 1, 0, 1, -1)
+        ef_burst.setup(exp_time+0.02, exp_time, 1, 0.005, 1, -1)
+
+        dg645_trigger_source.put(1)
+
+        logger.debug('Trigger mode: {}, Trigger Source: {}'.format(ab_burst.get_field('trigger_mode'), dg645_trigger_source.get()))
 
         time.sleep(0.1)
 
@@ -573,11 +588,27 @@ class ExpCommThread(threading.Thread):
             logger.debug( "*** i = %d ***" % (i) )
             logger.debug( "Time = %f" % (time.time() - start) )
 
+            try:
+                det.abort()
+            except mp.Device_Action_Failed_Error:
+                pass
+            joerger.stop()
+            ab_burst.stop()
+
             det_filename.put('{}_{:04d}.tif'.format(fprefix, i+1))
             det.arm()
             logger.debug( "After det.arm() = %f" % (time.time() - start) )
 
             ab_burst.arm()
+
+            # while True:
+            #     status = ab_burst.get_status()
+            #     print(status)
+            #     if (status & 0x1000000):
+            #         logger.debug('DG is armed.')
+            #         break
+
+            #     time.sleep(0.001)
 
             if i == 0:
                 logger.info('Exposure started')
@@ -596,7 +627,7 @@ class ExpCommThread(threading.Thread):
             i_meas = time.time()
 
             dio_out10.write( 1 )
-            time.sleep(0.001)
+            time.sleep(0.01)
             dio_out10.write( 0 )
             # logger.debug( "After dio_out10 signal = %f" % (time.time() - start) )
 
