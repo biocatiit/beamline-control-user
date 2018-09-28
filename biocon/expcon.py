@@ -162,6 +162,7 @@ class ExpCommThread(threading.Thread):
             'ab_burst': mx_database.get_record('ab_burst'),
             'cd_burst': mx_database.get_record('cd_burst'),
             'ef_burst': mx_database.get_record('ef_burst'),
+            'gh_burst': mx_database.get_record('gh_burst'),
             'dio': [mx_database.get_record('avme944x_out{}'.format(i)) for i in range(16)],
             'joerger': mx_database.get_record('joerger_timer'),
             'joerger_ctrs':[mx_database.get_record('j{}'.format(i)) for i in range(2,7)],
@@ -245,6 +246,7 @@ class ExpCommThread(threading.Thread):
         ab_burst = self._mx_data['ab_burst']   #Shutter control signal
         cd_burst = self._mx_data['cd_burst']   #Struck LNE/channel advance signal
         ef_burst = self._mx_data['ef_burst']   #Pilatus trigger signal
+        gh_burst = self._mx_data['gh_burst']
 
         dio_out6 = self._mx_data['dio'][6]      #Xia/wharberton shutter N.C.
         dio_out9 = self._mx_data['dio'][9]      #Shutter control signal (alt.)
@@ -263,7 +265,7 @@ class ExpCommThread(threading.Thread):
         except mp.Device_Action_Failed_Error:
             pass
         struck.stop()
-        # ab_burst.stop()
+        ab_burst.stop()
 
         # print('after aborts/stops')
         det_datadir.put(data_dir)
@@ -284,19 +286,19 @@ class ExpCommThread(threading.Thread):
             ab_burst.setup(exp_period, exp_time+0.01, num_frames, 0, 1, 2)
             cd_burst.setup(exp_period, 0.0001, num_frames, exp_time+0.006, 1, 2)
             ef_burst.setup(exp_period, exp_time, num_frames, 0.005, 1, 2)
+            gh_burst.setup(exp_period, exp_time, num_frames, 0, 1, 2)
             continuous_exp = False
         else:
             #Shutter will be open continuously, via dio_out9
             ab_burst.setup(exp_period, exp_time, num_frames, 0, 1, 2) #Irrelevant
             cd_burst.setup(exp_period, 0.0001, num_frames, exp_time+0.00015, 1, 2)
             ef_burst.setup(exp_period, exp_time, num_frames, 0, 1, 2)
+            gh_burst.setup(exp_period, exp_time, num_frames, 0, 1, 2)
             continuous_exp = True
         # continuous_exp = False
 
         print('after burst setup')
-        ab_burst.start()
-        cd_burst.start()
-        ef_burst.start()
+        ab_burst.arm()
 
         if continuous_exp:
             dio_out9.write(1)
@@ -576,9 +578,7 @@ class ExpCommThread(threading.Thread):
             det.arm()
             logger.debug( "After det.arm() = %f" % (time.time() - start) )
 
-            ab_burst.start()
-            cd_burst.start()
-            ef_burst.start()
+            ab_burst.arm()
 
             if i == 0:
                 logger.info('Exposure started')
@@ -589,7 +589,6 @@ class ExpCommThread(threading.Thread):
             while time.time() - meas_start < i*exp_period:
                 pass
 
-            
             joerger.start(exp_time+2)
             logger.debug("Measurement start time = %f" %(time.time() - meas_start))
             logger.debug("Delta Measurement start time = %f" %(time.time() - i_meas))
