@@ -40,6 +40,9 @@ class CharValidator(wx.Validator):
 
         self.fname_chars = string.letters+string.digits+'_-'
 
+        self.special_keys = [wx.WXK_BACK, wx.WXK_DELETE, 
+            wx.WXK_TAB, wx.WXK_NUMPAD_TAB, wx.WXK_NUMPAD_ENTER]
+
     def Clone(self):
         '''Required Validator method'''
         return CharValidator(self.flag)
@@ -55,7 +58,7 @@ class CharValidator(wx.Validator):
 
     def OnChar(self, event):
         keycode = int(event.GetKeyCode())
-        if keycode < 256:
+        if keycode < 256 and keycode not in self.special_keys:
             #print keycode
             key = chr(keycode)
             #print key
