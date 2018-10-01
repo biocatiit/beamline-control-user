@@ -544,6 +544,14 @@ class ExpCommThread(threading.Thread):
 
         det_datadir.put(data_dir)
 
+        #Start writing counter file
+        local_data_dir = data_dir.replace(settings['remote_dir_root'], settings['local_dir_root'], 1)
+        header = '#Filename\tstart_time\texposure_time\tI0\tI1\tI2\tI3\n'
+        log_file = os.path.join(local_data_dir, '{}.log'.format(fprefix))
+
+        with open(log_file, 'w') as f:
+            f.write(header)
+
         dio_out6.write(0) #Open the slow normally closed xia shutter
 
         det.set_duration_mode(1)
@@ -567,12 +575,13 @@ class ExpCommThread(threading.Thread):
 
         for i in range(num_frames):
             if self._abort_event.is_set():
+                logger.debug('abort 1')
                 self.slow_mode2_abort_cleanup(det, joerger, ab_burst, dio_out6,
                         measurement, num_frames, data_dir, fprefix, exp_start)
                 return
 
-            logger.debug( "*** i = %d ***" % (i) )
-            logger.debug( "Time = %f" % (time.time() - start) )
+            logger.info( "*** Starting exposure %d ***" % (i+1) )
+            # logger.debug( "Time = %f" % (time.time() - start) )
 
             try:
                 det.abort()
@@ -583,7 +592,7 @@ class ExpCommThread(threading.Thread):
 
             det_filename.put('{}_{:04d}.tif'.format(fprefix, i+1))
             det.arm()
-            logger.debug( "After det.arm() = %f" % (time.time() - start) )
+            # logger.debug( "After det.arm() = %f" % (time.time() - start) )
 
             ab_burst.arm()
 
@@ -595,6 +604,7 @@ class ExpCommThread(threading.Thread):
 
             while time.time() - meas_start < i*exp_period:
                 if self._abort_event.is_set():
+                    # logger.debug('abort 2')
                     self.slow_mode2_abort_cleanup(det, joerger, ab_burst, dio_out6,
                         measurement, num_frames, data_dir, fprefix, exp_start)
                     return
@@ -611,30 +621,35 @@ class ExpCommThread(threading.Thread):
             dio_out10.write( 0 )
             # logger.debug( "After dio_out10 signal = %f" % (time.time() - start) )
 
+            additional_trig = False
             while True:
                 status = det.get_status()
 
                 if self._abort_event.is_set():
+                    # logger.debug('abort 3')
                     self.slow_mode2_abort_cleanup(det, joerger, ab_burst, dio_out6,
                         measurement, num_frames, data_dir, fprefix, exp_start,
-                        True, i)
+                        True, i, scl_list)
                     return
 
                 if ( ( status & 0x1 ) == 0 ):
                     break
 
-                if time.time()-i_meas > exp_period:
+                if time.time()-i_meas > exp_period*1.5 and not additional_trig:
                     #Sometimes maybe the dg misses a trigger? So send another.
                     logger.error('DG645 did not receive trigger! Sending another!')
                     dio_out10.write( 1 )
                     time.sleep(0.01)
                     dio_out10.write( 0 )
 
+                    additional_trig = True
+
                 elif time.time()-i_meas > exp_period*3:
                     logger.error('DG645 did not receive trigger! Aborting!')
-
+                    # logger.debug('abort 4')
                     self.slow_mode2_abort_cleanup(det, joerger, ab_burst, dio_out6,
-                        measurement, num_frames, data_dir, fprefix, exp_start)
+                        measurement, num_frames, data_dir, fprefix, exp_start,
+                        True, i, scl_list)
 
                     msg = ('Exposure {} failed to start properly. Exposure sequence '
                         'has been aborted. Please contact your beamline scientist '
@@ -648,27 +663,42 @@ class ExpCommThread(threading.Thread):
                 time.sleep(0.001)
 
             joerger.stop()
-            logger.debug( "After joerger.stop = %f" % \
-                  (time.time() - start ) )
+            # logger.debug( "After joerger.stop = %f" % \
+            #       (time.time() - start ) )
 
             while True:
                 busy = joerger.is_busy()
 
                 if busy == 0:
+                    ctr_log = ''
                     for j, scaler in enumerate(scl_list):
                         sval = scaler.read()
                         measurement[j][i] = sval
-                        logger.info(measurement)
+                        ctr_log = ctr_log + '{} '.format(sval)
+
+
+                    logger.info('Counter values: ' + ctr_log)
+
+                    with open(log_file, 'a') as f:
+                        val = "{}_{:04d}.tif\t{}".format(fprefix, i+1, exp_start[i])
+                        val = val + "\t{}".format(measurement[0][i]/10.e6)
+
+                        for j in range(1, len(measurement)):
+                                val = val + "\t{}".format(measurement[j][i])
+
+                        val = val + '\n'
+                        f.write(val)
+
                     break
 
                 time.sleep(0.001)
 
             # logger.debug('Joerger Done!\n')
-            logger.debug( "After Joerger readout = %f" % \
-                  (time.time() - start ) )
+            # logger.debug( "After Joerger readout = %f" % \
+            #       (time.time() - start ) )
 
         dio_out6.write(1) #Close the slow normally closed xia shutter
-        self.write_counters_joerger(measurement, num_frames, data_dir, fprefix, exp_start)
+        # self.write_counters_joerger(measurement, num_frames, data_dir, fprefix, exp_start)
         logger.info('Exposure done')
         self._exp_event.clear()
 
@@ -693,9 +723,7 @@ class ExpCommThread(threading.Thread):
                 f.write(val)
 
     def write_counters_joerger(self, cvals, num_frames, data_dir, fprefix, exp_start):
-        print(data_dir)
         data_dir = data_dir.replace(settings['remote_dir_root'], settings['local_dir_root'], 1)
-        print(data_dir)
 
         header = '#Filename\tstart_time\texposure_time\tI0\tI1\tI2\tI3\n'
 
@@ -714,7 +742,7 @@ class ExpCommThread(threading.Thread):
 
     def slow_mode2_abort_cleanup(self, det, joerger, ab_burst, dio_out6,
         measurement, num_frames, data_dir, fprefix, exp_start, read_joerger=False,
-        i=0):
+        i=0, scl_list=[]):
         logger.info("Aborting slow exposure")
         try:
             det.abort()
@@ -736,7 +764,6 @@ class ExpCommThread(threading.Thread):
                     for j, scaler in enumerate(scl_list):
                         sval = scaler.read()
                         measurement[j][i] = sval
-                        logger.info(measurement)
                     break
 
         self.write_counters_joerger(measurement, num_frames, data_dir, fprefix, exp_start)
@@ -1224,7 +1251,7 @@ if __name__ == '__main__':
         'exp_period_max': 5184000,
         'nframes_max': 999999,
         'exp_period_delta': 0.00095,
-        'slow_mode_thres': 0.1,
+        'slow_mode_thres': 0.4,
         'fast_mode_max_exp_time' : 2000,
         'local_dir_root': '/nas_data/Pilatus1M',
         'remote_dir_root': '/nas_data',
