@@ -163,6 +163,7 @@ class ExpCommThread(threading.Thread):
             'det_datadir': det_datadir,
             'det_filename': det_filename,
             'struck': mx_database.get_record('sis3820'),
+            'struck_ctrs': [mx_database.get_record('i{}'.format(i)) for i in range(4)],
             'ab_burst': mx_database.get_record('ab_burst'),
             'cd_burst': mx_database.get_record('cd_burst'),
             'ef_burst': mx_database.get_record('ef_burst'),
@@ -246,7 +247,12 @@ class ExpCommThread(threading.Thread):
     def fast_exposure(self, data_dir, fprefix, num_frames, exp_time, exp_period, **kwargs):
         logger.debug('Setting up fast exposure')
         det = self._mx_data['det']          #Detector
+
         struck = self._mx_data['struck']    #Struck SIS3820
+        s0 = self._mx_data['struck_ctrs'][0]
+        s1 = self._mx_data['struck_ctrs'][1]
+        s2 = self._mx_data['struck_ctrs'][2]
+        s3 = self._mx_data['struck_ctrs'][3]
 
         ab_burst = self._mx_data['ab_burst']   #Shutter control signal
         cd_burst = self._mx_data['cd_burst']   #Struck LNE/channel advance signal
@@ -357,7 +363,11 @@ class ExpCommThread(threading.Thread):
         dio_out6.write(1) #Close the slow normally closed xia shutter
         measurement = struck.read_all()
 
-        self.write_counters_struck(measurement, num_frames, 4, data_dir, fprefix, exp_period)
+        dark_counts = [s0.get_dark_current(), s1.get_dark_current(),
+            s2.get_dark_current(), s3.get_dark_current()]
+
+        self.write_counters_struck(measurement, num_frames, 4, data_dir, fprefix,
+            exp_period, dark_counts)
         logger.info('Exposure done')
         self._exp_event.clear()
 
@@ -704,7 +714,8 @@ class ExpCommThread(threading.Thread):
 
         return
 
-    def write_counters_struck(self, cvals, num_frames, num_counters, data_dir, fprefix, exp_period):
+    def write_counters_struck(self, cvals, num_frames, num_counters, data_dir,
+            fprefix, exp_period, dark_counts):
         data_dir = data_dir.replace(settings['remote_dir_root'], settings['local_dir_root'], 1)
 
         header = '#Filename\tstart_time\texposure_time\tI0\tI1\tI2\tI3\n'
@@ -717,7 +728,7 @@ class ExpCommThread(threading.Thread):
                 val = val + "\t{}".format(cvals[0][i]/50.e6)
 
                 for j in range(3, num_counters+3):
-                        val = val + "\t{}".format(cvals[j][i])
+                        val = val + "\t{}".format(cvals[j][i]-dark_counts[j-3])
 
                 val = val + '\n'
                 f.write(val)
