@@ -284,11 +284,17 @@ class ExpCommThread(threading.Thread):
         det_filename.put('{}_0001.tif'.format(fprefix))
 
         dio_out6.write(0) #Open the slow normally closed xia shutter
+        dio_out9.write(0) # Make sure the shutter is closed
+        dio_out10.write(0) # Make sure the trigger is off
+        dio_out11.write(0) # Make sure the LNE is off
 
         det.set_duration_mode(num_frames)
         det.set_trigger_mode( 2 )
         det.arm()
 
+        # logger.debug('Field value: ' + struck.get_field('trigger_mode'))
+        # struck.set_field('trigger_mode', '2') #Sets for external trigger
+        # logger.debug('Field value: ' + struck.get_field('trigger_mode'))
         struck.set_measurement_time(exp_time)   #Ignored for external LNE of Struck
         struck.set_num_measurements(num_frames)
         struck.start()
@@ -563,6 +569,7 @@ class ExpCommThread(threading.Thread):
             f.write(header)
 
         dio_out6.write(0) #Open the slow normally closed xia shutter
+        dio_out10.write(0) # Make sure the trigger is off
 
         det.set_duration_mode(1)
         det.set_trigger_mode(2)
@@ -721,14 +728,17 @@ class ExpCommThread(threading.Thread):
         header = '#Filename\tstart_time\texposure_time\tI0\tI1\tI2\tI3\n'
 
         log_file = os.path.join(data_dir, '{}.log'.format(fprefix))
+
         with open(log_file, 'w') as f:
             f.write(header)
             for i in range(num_frames):
                 val = "{}_{:04d}.tif\t{}".format(fprefix, i+1, exp_period*i)
-                val = val + "\t{}".format(cvals[0][i]/50.e6)
 
-                for j in range(3, num_counters+3):
-                        val = val + "\t{}".format(cvals[j][i]-dark_counts[j-3])
+                exp_time = cvals[0][i]/50.e6
+                val = val + "\t{}".format(exp_time)
+
+                for j in range(2, num_counters+2):
+                    val = val + "\t{}".format(cvals[j][i]-dark_counts[j-2]*exp_time)
 
                 val = val + '\n'
                 f.write(val)
