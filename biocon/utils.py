@@ -25,6 +25,7 @@ from io import open
 import logging
 import string
 import os
+import sys
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +94,12 @@ def set_mppath():
     path = os.environ['PATH']
 
     mp_dir = get_mpdir()
+    mx_dir = get_mxdir()
 
     if mp_dir not in path:
         os.environ["PATH"] = mp_dir+os.pathsep+os.environ["PATH"]
+        sys.path.append(mp_dir)
+
+    if mx_dir not in path:
+        os.environ["PATH"] = mx_dir+os.pathsep+os.environ["PATH"]
+        sys.path.append(mx_dir)

@@ -26,6 +26,7 @@ import threading
 import time
 from collections import OrderedDict, deque
 import logging
+import logging.handlers as handlers
 import sys
 import os
 
@@ -35,9 +36,7 @@ import wx
 
 import utils
 utils.set_mppath() #This must be done before importing any Mp Modules.
-
 import Mp as mp
-print(mp.__file__)
 
 print_lock = threading.RLock()
 
@@ -1251,12 +1250,16 @@ class ExpFrame(wx.Frame):
 
 
 if __name__ == '__main__':
+    
+
     logger = logging.getLogger(__name__)
     logger.setLevel(logging.DEBUG)
+
     h1 = logging.StreamHandler(sys.stdout)
-    h1.setLevel(logging.DEBUG)
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
+    h1.setLevel(logging.INFO)
+    formatter = logging.Formatter('%(asctime)s - %(message)s')
     h1.setFormatter(formatter)
+
     logger.addHandler(h1)
 
     #Settings for Pilatus 3X 1M
@@ -1319,6 +1322,21 @@ if __name__ == '__main__':
 
     mx_data = {} #Testing only
     app = wx.App()
+
+    standard_paths = wx.StandardPaths.Get() #Can't do this until you start the wx app
+    info_dir = standard_paths.GetUserLocalDataDir()
+
+    if not os.path.exists(info_dir):
+        os.mkdir(info_dir)
+    # if not os.path.exists(os.path.join(info_dir, 'expcon.log')):
+    #     open(os.path.join(info_dir, 'expcon.log'), 'w')
+    h2 = handlers.RotatingFileHandler(os.path.join(info_dir, 'expcon.log'), maxBytes=10e6, backupCount=5, delay=True)
+    h2.setLevel(logging.DEBUG)
+    formatter2 = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
+    h2.setFormatter(formatter2)
+
+    logger.addHandler(h2)
+
     logger.debug('Setting up wx app')
     frame = ExpFrame(mx_data, settings, None, title='Exposure Control')
     frame.Show()
