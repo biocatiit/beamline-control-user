@@ -1250,7 +1250,7 @@ class ExpFrame(wx.Frame):
 
 
 if __name__ == '__main__':
-    
+
 
     logger = logging.getLogger(__name__)
     logger.setLevel(logging.DEBUG)
@@ -1261,26 +1261,6 @@ if __name__ == '__main__':
     h1.setFormatter(formatter)
 
     logger.addHandler(h1)
-
-    #Settings for Pilatus 3X 1M
-    settings = {'data_dir': '/nas_data/Pilatus1M/20180917Lavender',
-        'filename':'test',
-        'run_num': 1,
-        'exp_time': '0.5',
-        'exp_period': '1.5',
-        'exp_num': '5',
-        'exp_time_min': 0.00105,
-        'exp_time_max': 5184000,
-        'exp_period_min': 0.002,
-        'exp_period_max': 5184000,
-        'nframes_max': 999999,
-        'exp_period_delta': 0.00095,
-        'slow_mode_thres': 0.4,
-        'fast_mode_max_exp_time' : 2000,
-        'local_dir_root': '/nas_data/Pilatus1M',
-        'remote_dir_root': '/nas_data',
-        'base_data_dir': '/nas_data/Pilatus1M/20180917Lavender', #CHANGE ME
-        }
 
     # #MX stuff
     # try:
@@ -1319,6 +1299,26 @@ if __name__ == '__main__':
     #     'joerger_ctrs':[mx_database.get_record('j{}'.format(i)) for i in range(2,8)],
     #     'mx_db': mx_database,
     #     }
+
+    #Settings for Pilatus 3X 1M
+    settings = {'data_dir': '/nas_data/Pilatus1M/20180917Lavender',
+        'filename':'test',
+        'run_num': 1,
+        'exp_time': '0.5',
+        'exp_period': '1.5',
+        'exp_num': '5',
+        'exp_time_min': 0.00105,
+        'exp_time_max': 5184000,
+        'exp_period_min': 0.002,
+        'exp_period_max': 5184000,
+        'nframes_max': 999999,
+        'exp_period_delta': 0.00095,
+        'slow_mode_thres': 0.4,
+        'fast_mode_max_exp_time' : 2000,
+        'local_dir_root': '/nas_data/Pilatus1M',
+        'remote_dir_root': '/nas_data',
+        'base_data_dir': '/nas_data/Pilatus1M/20180917Lavender', #CHANGE ME
+        }
 
     mx_data = {} #Testing only
     app = wx.App()
