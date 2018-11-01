@@ -28,6 +28,7 @@ import logging
 import sys
 import os
 import argparse
+import threading
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,8 @@ formatter = logging.Formatter('%(asctime)s - %(message)s')
 h1.setFormatter(formatter)
 
 logger.addHandler(h1)
+
+abort_event = threading.Event()
 
 parser = argparse.ArgumentParser(description='2D scan and measurement. The scan moves to the motor2 start, then scans motor1. Then it steps motor2 to the next position, and scans motor1, etc.')
 parser.add_argument('fprefix', help='The file prefix for the scan data.')
@@ -127,11 +130,12 @@ def fast_exposure(mx_data, data_dir, fprefix, num_frames, exp_time, exp_period,
         # print(busy)
 
         #Struck is_busy doesn't work in thread! So have to go elsewhere
-        status = det.get_status()
-        if ( ( status & 0x1 ) == 0 ):
-            break
+        try:
+            status = det.get_status()
+            if ( ( status & 0x1 ) == 0 ):
+                break
 
-        if self._abort_event.is_set():
+        except KeyboardInterrupt:
             logger.info("Aborting fast exposure")
             try:
                 det.abort()
@@ -145,6 +149,7 @@ def fast_exposure(mx_data, data_dir, fprefix, num_frames, exp_time, exp_period,
                 det.abort()
             except mp.Device_Action_Failed_Error:
                 pass
+            abort_event.set()
             break
 
         # if busy == 0:
@@ -200,6 +205,10 @@ def slow_exposure2(mx_data, data_dir, fprefix, num_frames, exp_time, exp_period,
         det.abort()
     except mp.Device_Action_Failed_Error:
         pass
+    try:
+        det.abort()
+    except mp.Device_Action_Failed_Error:
+        pass
     joerger.stop()
     ab_burst.stop()
 
@@ -236,127 +245,116 @@ def slow_exposure2(mx_data, data_dir, fprefix, num_frames, exp_time, exp_period,
     start = time.time()
 
     for i in range(num_frames):
-        if self._abort_event.is_set():
-            logger.debug('abort 1')
-            slow_mode2_abort_cleanup(det, joerger, ab_burst, dio_out6,
-                    measurement, num_frames, data_dir, fprefix, exp_start)
-            return
-
-        logger.info( "*** Starting exposure %d ***" % (i+1) )
-        # logger.debug( "Time = %f" % (time.time() - start) )
-
         try:
-            det.abort()
-        except mp.Device_Action_Failed_Error:
-            pass
-        joerger.stop()
-        ab_burst.stop()
 
-        det_filename.put('{}_{:04d}.tif'.format(fprefix, i+1))
-        det.arm()
-        # logger.debug( "After det.arm() = %f" % (time.time() - start) )
+            logger.info( "*** Starting exposure %d ***" % (i+1) )
+            # logger.debug( "Time = %f" % (time.time() - start) )
 
-        ab_burst.arm()
+            try:
+                det.abort()
+            except mp.Device_Action_Failed_Error:
+                pass
+            try:
+                det.abort()
+            except mp.Device_Action_Failed_Error:
+                pass
+            joerger.stop()
+            ab_burst.stop()
 
-        if i == 0:
-            logger.info('Exposure started')
-            meas_start = time.time()
+            det_filename.put('{}_{:04d}.tif'.format(fprefix, i+1))
+            det.arm()
+            # logger.debug( "After det.arm() = %f" % (time.time() - start) )
+
+            ab_burst.arm()
+
+            if i == 0:
+                logger.info('Exposure started')
+                meas_start = time.time()
+                i_meas = time.time()
+
+            while time.time() - meas_start < i*exp_period:
+                pass
+
+            joerger.start(exp_time+2)
+            logger.debug("Measurement start time = %f" %(time.time() - meas_start))
+            logger.debug("Delta Measurement start time = %f" %(time.time() - i_meas))
+            exp_start[i] = time.time() - meas_start
+            # logger.debug("M start time = %f" %(time.time() - start))
             i_meas = time.time()
 
-        while time.time() - meas_start < i*exp_period:
-            if self._abort_event.is_set():
-                # logger.debug('abort 2')
-                slow_mode2_abort_cleanup(det, joerger, ab_burst, dio_out6,
-                    measurement, num_frames, data_dir, fprefix, exp_start)
-                return
+            dio_out10.write( 1 )
+            time.sleep(0.01)
+            dio_out10.write( 0 )
+            # logger.debug( "After dio_out10 signal = %f" % (time.time() - start) )
 
-        joerger.start(exp_time+2)
-        logger.debug("Measurement start time = %f" %(time.time() - meas_start))
-        logger.debug("Delta Measurement start time = %f" %(time.time() - i_meas))
-        exp_start[i] = time.time() - meas_start
-        # logger.debug("M start time = %f" %(time.time() - start))
-        i_meas = time.time()
+            additional_trig = False
+            while True:
+                status = det.get_status()
 
-        dio_out10.write( 1 )
-        time.sleep(0.01)
-        dio_out10.write( 0 )
-        # logger.debug( "After dio_out10 signal = %f" % (time.time() - start) )
+                if ( ( status & 0x1 ) == 0 ):
+                    break
 
-        additional_trig = False
-        while True:
-            status = det.get_status()
+                if time.time()-i_meas > exp_period*1.5 and not additional_trig:
+                    #Sometimes maybe the dg misses a trigger? So send another.
+                    logger.error('DG645 did not receive trigger! Sending another!')
+                    dio_out10.write( 1 )
+                    time.sleep(0.01)
+                    dio_out10.write( 0 )
 
-            if self._abort_event.is_set():
-                # logger.debug('abort 3')
-                slow_mode2_abort_cleanup(det, joerger, ab_burst, dio_out6,
-                    measurement, num_frames, data_dir, fprefix, exp_start,
-                    True, i, scl_list)
-                return
+                    additional_trig = True
 
-            if ( ( status & 0x1 ) == 0 ):
-                break
+                elif time.time()-i_meas > exp_period*3:
+                    logger.error('Pilatus did not receive trigger! Aborting!')
+                    # logger.debug('abort 4')
+                    slow_mode2_abort_cleanup(det, joerger, ab_burst, dio_out6,
+                        measurement, num_frames, data_dir, fprefix, exp_start,
+                        True, i, scl_list)
 
-            if time.time()-i_meas > exp_period*1.5 and not additional_trig:
-                #Sometimes maybe the dg misses a trigger? So send another.
-                logger.error('DG645 did not receive trigger! Sending another!')
-                dio_out10.write( 1 )
-                time.sleep(0.01)
-                dio_out10.write( 0 )
+                    return
 
-                additional_trig = True
+                time.sleep(0.001)
 
-            elif time.time()-i_meas > exp_period*3:
-                logger.error('DG645 did not receive trigger! Aborting!')
-                # logger.debug('abort 4')
-                slow_mode2_abort_cleanup(det, joerger, ab_burst, dio_out6,
-                    measurement, num_frames, data_dir, fprefix, exp_start,
-                    True, i, scl_list)
+            joerger.stop()
+            # logger.debug( "After joerger.stop = %f" % \
+            #       (time.time() - start ) )
 
-                msg = ('Exposure {} failed to start properly. Exposure sequence '
-                    'has been aborted. Please contact your beamline scientist '
-                    'and restart the exposure sequence.'.format(i+1))
+            while True:
+                busy = joerger.is_busy()
 
-                wx.CallAfter(wx.MessageBox, msg, 'Exposure failed!',
-                    style=wx.OK|wx.ICON_ERROR)
-
-                return
-
-            time.sleep(0.001)
-
-        joerger.stop()
-        # logger.debug( "After joerger.stop = %f" % \
-        #       (time.time() - start ) )
-
-        while True:
-            busy = joerger.is_busy()
-
-            if busy == 0:
-                ctr_log = ''
-                for j, scaler in enumerate(scl_list):
-                    sval = scaler.read()
-                    measurement[j][i] = sval
-                    ctr_log = ctr_log + '{} '.format(sval)
+                if busy == 0:
+                    ctr_log = ''
+                    for j, scaler in enumerate(scl_list):
+                        sval = scaler.read()
+                        measurement[j][i] = sval
+                        ctr_log = ctr_log + '{} '.format(sval)
 
 
-                logger.info('Counter values: ' + ctr_log)
+                    logger.info('Counter values: ' + ctr_log)
 
-                with open(log_file, 'a') as f:
-                    val = "{}_{:04d}.tif\t{}".format(fprefix, i+1, exp_start[i])
-                    val = val + "\t{}".format(measurement[0][i]/10.e6)
+                    with open(log_file, 'a') as f:
+                        val = "{}_{:04d}.tif\t{}".format(fprefix, i+1, exp_start[i])
+                        val = val + "\t{}".format(measurement[0][i]/10.e6)
 
-                    for j in range(1, len(measurement)):
-                            val = val + "\t{}".format(measurement[j][i])
+                        for j in range(1, len(measurement)):
+                                val = val + "\t{}".format(measurement[j][i])
 
-                    val = val + '\n'
-                    f.write(val)
+                        val = val + '\n'
+                        f.write(val)
 
-                break
+                    break
 
-            time.sleep(0.001)
+                time.sleep(0.001)
 
-        # logger.debug('Joerger Done!\n')
-        # logger.debug( "After Joerger readout = %f" % \
-        #       (time.time() - start ) )
+            # logger.debug('Joerger Done!\n')
+            # logger.debug( "After Joerger readout = %f" % \
+            #       (time.time() - start ) )
+        except KeyboardInterrupt:
+            # logger.debug('abort 3')
+            slow_mode2_abort_cleanup(det, joerger, ab_burst, dio_out6,
+                measurement, num_frames, data_dir, fprefix, exp_start,
+                True, i, scl_list)
+            abort_event.set()
+            return
 
     dio_out6.write(1) #Close the slow normally closed xia shutter
     # self.write_counters_joerger(measurement, num_frames, data_dir, fprefix, exp_start)
@@ -449,6 +447,11 @@ mtr2_start = args.start2
 mtr2_end = args.end2
 mtr2_step = args.step2
 
+logger.info('Starting scan %s' %(fprefix))
+logger.info('Motor 1 will go from %f to %f with steps of %f' %(mtr1_start, mtr1_end, mtr1_step))
+logger.info('Motor 2 will go from %f to %f with steps of %f' %(mtr2_start, mtr2_end, mtr2_step))
+logger.info('At each point, %i exposures will be taken with %f exposure time and %f exposure period' %(num_frames, exp_time, exp_period))
+
 
 settings = {'data_dir': '/nas_data/Pilatus1M/20180917Lavender',
     'filename':'test',
@@ -463,7 +466,7 @@ settings = {'data_dir': '/nas_data/Pilatus1M/20180917Lavender',
     'fast_mode_max_exp_time' : 2000,
     'local_dir_root': '/nas_data/Pilatus1M',
     'remote_dir_root': '/nas_data',
-    'base_data_dir': '/nas_data/Pilatus1M/20180917Lavender', #CHANGE ME
+    'base_data_dir': '/nas_data/20181018Arleth', #CHANGE ME
     }
 
 
@@ -517,8 +520,8 @@ mx_data = {'det': det,
     'joerger': mx_database.get_record('joerger_timer'),
     'joerger_ctrs':[mx_database.get_record('j{}'.format(i)) for i in range(2,7)],
     'mx_db': mx_database,
-    'mtr1': mx_database.get_record('np7'),
-    'mtr2': mx_database.get_record('np8'),
+    'mtr1': mx_database.get_record('np8'),
+    'mtr2': mx_database.get_record('np7'),
     }
 
 if exp_period < exp_time + settings['slow_mode_thres']:
@@ -530,8 +533,23 @@ else:
     exp_type = 'slow'
     # slow_exposure2(data_dir, fprefix, num_frames, exp_time, exp_period, **kwargs)
 
-mtr1_positions = np.arange(mtr1_start, mtr1_end, mtr1_step)
-mtr2_positions = np.arange(mtr2_start, mtr2_end, mtr2_step)
+if mtr1_start < mtr1_end:
+    mtr1_positions = np.arange(mtr1_start, mtr1_end+mtr1_step, mtr1_step)
+else:
+    mtr1_positions = np.arange(mtr1_end, mtr1_start+mtr1_step, mtr1_step)
+    mtr1_positions = mtr1_positions[::-1]
+
+if mtr2_start < mtr2_end:
+    mtr2_positions = np.arange(mtr2_start, mtr2_end+mtr2_step, mtr2_step)
+else:
+    mtr2_positions = np.arange(mtr2_end, mtr2_start+mtr2_step, mtr2_step)
+    mtr2_positions = mtr2_positions[::-1]
+
+local_dir = data_dir.replace(settings['remote_dir_root'], settings['local_dir_root'], 1)
+try:
+    os.makedirs(local_dir)
+except Exception:
+    pass
 
 logger.info('Moving motors to start position')
 
@@ -637,22 +655,35 @@ else:
     gh_burst.setup(exp_time+0.02, exp_time, 1, 0, 1, -1)
 
 for mtr2_pos in mtr2_positions:
+    if abort_event.is_set():
+        break
+
     if mtr2_pos != mtr2_positions[0]:
         logger.info('Moving motor 2 position to {}'.format(mtr2_pos))
         mtr2.move_absolute(mtr2_pos)
-    mtr2.wait_for_motor_stop()
+    # mtr2.wait_for_motor_stop()
+    while mtr2.is_busy():
+        time.sleep(0.1)
 
     for mtr1_pos in mtr1_positions:
+        if abort_event.is_set():
+            break
+
         if mtr1_pos != mtr1_positions[0]:
             logger.info('Moving motor 1 position to {}'.format(mtr1_pos))
             mtr1.move_absolute(mtr1_pos)
-        mtr1.wait_for_motor_stop()
+        # mtr1.wait_for_motor_stop()
+        while mtr1.is_busy():
+            time.sleep(0.1)
 
-        step_prefix = '{}_m2={}_m1={}'.format(fprefix, mtr2_pos, mtr1_pos)
-
+        mtr2_pos_str = '%.3f' %(mtr2_pos)
+        mtr1_pos_str = '%.3f' %(mtr1_pos)
+        mtr2_pos_str.replace('.', 'p')
+        mtr1_pos_str.replace('.', 'p')
+        step_prefix = '{}_m2_{}_m1_{}'.format(fprefix, mtr2_pos_str, mtr1_pos_str)
         if exp_type == 'fast':
-            fast_exposure(mx_data, data_dir, fprefix, num_frames, exp_time,
+            fast_exposure(mx_data, data_dir, step_prefix, num_frames, exp_time,
                 exp_period, continuous_exp)
         else:
-            slow_exposure2(mx_data, data_dir, fprefix, num_frames, exp_time,
+            slow_exposure2(mx_data, data_dir, step_prefix, num_frames, exp_time,
                 exp_period)
