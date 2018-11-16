@@ -69,6 +69,11 @@ class ExpCommThread(threading.Thread):
         pump_cmd_q.append(stop_cmd)
 
         my_pumpcon.stop()
+
+
+    TODOS:
+    1. Read out struck whenever possible during fast exposure
+    2. Make slow exposure mode with Struck work, see how speed compares to with Joerger
     """
 
     def __init__(self, command_queue, return_queue, abort_event, exp_event, mx_data,
