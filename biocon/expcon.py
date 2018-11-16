@@ -37,6 +37,7 @@ import wx
 import utils
 utils.set_mppath() #This must be done before importing any Mp Modules.
 import Mp as mp
+import MpCa as mpca
 
 print_lock = threading.RLock()
 
@@ -168,6 +169,7 @@ class ExpCommThread(threading.Thread):
             'det_filename': det_filename,
             'struck': mx_database.get_record('sis3820'),
             'struck_ctrs': [mx_database.get_record('mcs{}'.format(i)) for i in range(3,7)]+[mx_database.get_record('mcs11')],
+            'struck_pv': '18ID:mcs',
             'ab_burst': mx_database.get_record('ab_burst'),
             'cd_burst': mx_database.get_record('cd_burst'),
             'ef_burst': mx_database.get_record('ef_burst'),
@@ -258,6 +260,8 @@ class ExpCommThread(threading.Thread):
         s2 = self._mx_data['struck_ctrs'][2]
         s3 = self._mx_data['struck_ctrs'][3]
         s11 = self._mx_data['struck_ctrs'][4]
+        struck_mode_pv = mpca.PV(self._mx_data['struck_pv']+':ChannelAdvance')
+        struck_current_channel_pv = mpca.PV(self._mx_data['struck_pv']+':CurrentChannel')
 
         ab_burst = self._mx_data['ab_burst']   #Shutter control signal
         cd_burst = self._mx_data['cd_burst']   #Struck LNE/channel advance signal
@@ -293,10 +297,30 @@ class ExpCommThread(threading.Thread):
         det.set_trigger_mode( 2 )
         det.arm()
 
-        # logger.debug('Field value: ' + struck.get_field('trigger_mode'))
-        # struck.set_field('trigger_mode', '2') #Sets for external trigger
-        # logger.debug('Field value: ' + struck.get_field('trigger_mode'))
+        struck_mode_pv.caput(1)
         struck.set_measurement_time(exp_time)   #Ignored for external LNE of Struck
+
+        # #Read out the struck initially, takes ~2-3 seconds the first time
+        # struck.set_num_measurements(1)
+        # struck.start()
+        # dio_out11.write(1)
+        # time.sleep(0.001)
+        # dio_out11.write(0)
+
+        # time.sleep(0.1)
+
+        # dio_out11.write(1)
+        # time.sleep(0.001)
+        # dio_out11.write(0)
+
+        # while True:
+        #     busy = struck.is_busy()
+
+        #     if (busy == 0):
+        #         measurement = struck.read_all()
+        #         logger.debug( "Initial Struck Readout Done!\n" )
+        #         break
+
         struck.set_num_measurements(num_frames)
         struck.start()
 
@@ -336,12 +360,13 @@ class ExpCommThread(threading.Thread):
         time.sleep(0.01)
         dio_out10.write(0)
 
-        while True:
-            # busy = struck.is_busy()
-            # print(busy)
+        current_channel = 0
 
+        while True:
             #Struck is_busy doesn't work in thread! So have to go elsewhere
-            status = det.get_status()
+
+            status = ab_burst.get_status()
+
             if ( ( status & 0x1 ) == 0 ):
                 break
 
@@ -357,8 +382,10 @@ class ExpCommThread(threading.Thread):
                 dio_out6.write(1) #Close the slow normally closed xia shutter
                 break
 
-            # if busy == 0:
-            #     break
+            # current_meas = struck_current_channel_pv.caget()
+            # if current_meas != current_channel:
+            #     current_channel = current_meas
+                # print(struck.read_all()) #This should work but it doesn't, gives a timeout error
 
             time.sleep(0.01)
 
@@ -366,6 +393,7 @@ class ExpCommThread(threading.Thread):
             dio_out9.write(0)
 
         dio_out6.write(1) #Close the slow normally closed xia shutter
+
         measurement = struck.read_all()
 
         dark_counts = [s0.get_dark_current(), s1.get_dark_current(),
@@ -1308,7 +1336,7 @@ if __name__ == '__main__':
     #     }
 
     #Settings for Pilatus 3X 1M
-    settings = {'data_dir': '/nas_data/Pilatus1M/20180917Lavender',
+    settings = {'data_dir': '',
         'filename':'test',
         'run_num': 1,
         'exp_time': '0.5',
@@ -1318,7 +1346,7 @@ if __name__ == '__main__':
         'exp_time_max': 5184000,
         'exp_period_min': 0.002,
         'exp_period_max': 5184000,
-        'nframes_max': 999999,
+        'nframes_max': 4000, # For Pilatus: 999999, for Struck: 4000 (set by maxChannels in the driver configuration)
         'exp_period_delta': 0.00095,
         'slow_mode_thres': 0.1,
         'fast_mode_max_exp_time' : 2000,
