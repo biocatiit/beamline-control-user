@@ -209,14 +209,14 @@ class ExpCommThread(threading.Thread):
                 break
 
             if command is not None:
-                logger.debug("Processing cmd '%s' with args: %s and kwargs: %s ", command, ', '.join(['{}'.format(a) for a in args]), ', '.join(['{}:{}'.format(kw, item) for kw, item in kwargs.items()]))
+                logger.debug("Processing cmd '%s' with args: %s and kwargs: %s ", command, ', '.join(['{}'.format(a) for a in args]), ', '.join(['{}: {}'.format(kw, item) for kw, item in kwargs.items()]))
                 try:
                     self._commands[command](*args, **kwargs)
                 except Exception:
                     msg = ("Exposure control thread failed to run command '%s' "
                         "with args: %s and kwargs: %s " %(command,
                         ', '.join(['{}'.format(a) for a in args]),
-                        ', '.join(['{}:{}'.format(kw, item) for kw, item in kwargs.items()])))
+                        ', '.join(['{}: {}'.format(kw, item) for kw, item in kwargs.items()])))
                     logger.exception(msg)
 
         if self._stop_event.is_set():
@@ -226,7 +226,8 @@ class ExpCommThread(threading.Thread):
 
         logger.info("Quitting exposure control thread: %s", self.name)
 
-    def _start_exp(self, data_dir, fprefix, num_frames, exp_time, exp_period, **kwargs):
+    def _start_exp(self, data_dir, fprefix, num_frames, exp_time, exp_period,
+        wait_for_trig, **kwargs):
         """
         This method connects to a flow meter by creating a new :py:class:`FlowMeter`
         subclass object (e.g. a new :py:class:`BFS` object). This pump is saved
@@ -243,7 +244,7 @@ class ExpCommThread(threading.Thread):
             are passed directly to the :py:class:`FlowMeter` subclass that is
             called. For example, for a :py:class:`BFS` you could pass ``bfs_filter``.
         """
-        if exp_period < exp_time + self._settings['slow_mode_thres']:
+        if exp_period < exp_time + self._settings['slow_mode_thres'] or wait_for_trig:
             logger.debug('Choosing fast exposure')
             self.fast_exposure(data_dir, fprefix, num_frames, exp_time, exp_period, **kwargs)
         else:
@@ -261,7 +262,7 @@ class ExpCommThread(threading.Thread):
         s3 = self._mx_data['struck_ctrs'][3]
         s11 = self._mx_data['struck_ctrs'][4]
         struck_mode_pv = mpca.PV(self._mx_data['struck_pv']+':ChannelAdvance')
-        struck_current_channel_pv = mpca.PV(self._mx_data['struck_pv']+':CurrentChannel')
+        # struck_current_channel_pv = mpca.PV(self._mx_data['struck_pv']+':CurrentChannel')
 
         ab_burst = self._mx_data['ab_burst']   #Shutter control signal
         cd_burst = self._mx_data['cd_burst']   #Struck LNE/channel advance signal
@@ -354,13 +355,18 @@ class ExpCommThread(threading.Thread):
 
         time.sleep(.1)
 
-        dio_out10.write(1)
-        logger.info('Exposures started')
-        self._exp_event.set()
-        time.sleep(0.01)
-        dio_out10.write(0)
-
-        current_channel = 0
+        if not self._settings['wait_for_trig']:
+            dio_out10.write(1)
+            logger.info('Exposures started')
+            self._exp_event.set()
+            time.sleep(0.01)
+            dio_out10.write(0)
+        else:
+            while (ab_burst.get_status() & 0x1) !=0:
+                time.sleep(0.01)
+            logger.info('Exposures started')
+            self._exp_event.set()
+        # current_channel = 0
 
         while True:
             #Struck is_busy doesn't work in thread! So have to go elsewhere
@@ -932,6 +938,8 @@ class ExpPanel(wx.Panel):
         self.exp_period = wx.TextCtrl(self, value=self.settings['exp_period'],
             size=(60,-1), validator=utils.CharValidator('float'))
         self.run_num = wx.StaticText(self, label='_{:03d}'.format(self.settings['run_num']))
+        self.wait_for_trig = wx.CheckBox(self, label='Wait for external trigger')
+        self.wait_for_trig.SetValue(self.settings['wait_for_trig'])
 
 
 
@@ -966,6 +974,10 @@ class ExpPanel(wx.Panel):
         self.exp_time_sizer.Add(self.exp_period, border=5, flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT)
 
 
+        self.advanced_options = wx.BoxSizer(wx.VERTICAL)
+        self.advanced_options.Add(self.wait_for_trig)
+
+
         self.start_exp_btn = wx.Button(self, label='Start Exposure')
         self.start_exp_btn.Bind(wx.EVT_BUTTON, self._on_start_exp)
 
@@ -987,6 +999,8 @@ class ExpPanel(wx.Panel):
         exp_ctrl_box_sizer.Add(self.exp_name_sizer, border=5,
             flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT)
         exp_ctrl_box_sizer.Add(self.exp_time_sizer, border=5,
+            flag=wx.TOP|wx.LEFT|wx.RIGHT)
+        exp_ctrl_box_sizer.Add(self.advanced_options, border=5,
             flag=wx.TOP|wx.LEFT|wx.RIGHT)
         exp_ctrl_box_sizer.Add(self.exp_btn_sizer, border=5,
             flag=wx.EXPAND|wx.ALIGN_CENTER_HORIZONTAL|wx.ALL)
@@ -1135,6 +1149,7 @@ class ExpPanel(wx.Panel):
         data_dir = self.data_dir.GetValue()
         filename = self.filename.GetValue()
         run_num = self.run_num.GetLabel()
+        wait_for_trig = self.wait_for_trig.GetValue()
 
         errors = []
 
@@ -1218,6 +1233,7 @@ class ExpPanel(wx.Panel):
                 'exp_period': exp_period,
                 'data_dir': data_dir,
                 'fprefix': filename+run_num,
+                'wait_for_trig': wait_for_trig,
                 }
             valid = True
 
@@ -1337,7 +1353,7 @@ if __name__ == '__main__':
 
     #Settings for Pilatus 3X 1M
     settings = {'data_dir': '',
-        'filename':'test',
+        'filename':'',
         'run_num': 1,
         'exp_time': '0.5',
         'exp_period': '1.5',
@@ -1350,6 +1366,8 @@ if __name__ == '__main__':
         'exp_period_delta': 0.00095,
         'slow_mode_thres': 0.1,
         'fast_mode_max_exp_time' : 2000,
+        'wait_for_trig' : False,
+        'show_advanced_options' : False,
         'local_dir_root': '/nas_data/Pilatus1M',
         'remote_dir_root': '/nas_data',
         'base_data_dir': '/nas_data/Pilatus1M/20181026Hopkins', #CHANGE ME
