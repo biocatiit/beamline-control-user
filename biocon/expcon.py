@@ -282,6 +282,10 @@ class ExpCommThread(threading.Thread):
             det.abort()
         except mp.Device_Action_Failed_Error:
             pass
+        try:
+            det.abort()
+        except mp.Device_Action_Failed_Error:
+            pass
         struck.stop()
         ab_burst.stop()
 
@@ -362,7 +366,8 @@ class ExpCommThread(threading.Thread):
             time.sleep(0.01)
             dio_out10.write(0)
         else:
-            while (ab_burst.get_status() & 0x1) !=0:
+            logger.info("Waiting for trigger")
+            while ab_burst.get_status() == 16777216:
                 time.sleep(0.01)
             logger.info('Exposures started')
             self._exp_event.set()
@@ -378,6 +383,10 @@ class ExpCommThread(threading.Thread):
 
             if self._abort_event.is_set():
                 logger.info("Aborting fast exposure")
+                try:
+                    det.abort()
+                except mp.Device_Action_Failed_Error:
+                    pass
                 try:
                     det.abort()
                 except mp.Device_Action_Failed_Error:
@@ -942,7 +951,6 @@ class ExpPanel(wx.Panel):
         self.wait_for_trig.SetValue(self.settings['wait_for_trig'])
 
 
-
         file_prefix_sizer = wx.BoxSizer(wx.HORIZONTAL)
         file_prefix_sizer.Add(self.filename, proportion=1)
         file_prefix_sizer.Add(self.run_num, flag=wx.ALIGN_BOTTOM)
@@ -1004,6 +1012,9 @@ class ExpPanel(wx.Panel):
             flag=wx.TOP|wx.LEFT|wx.RIGHT)
         exp_ctrl_box_sizer.Add(self.exp_btn_sizer, border=5,
             flag=wx.EXPAND|wx.ALIGN_CENTER_HORIZONTAL|wx.ALL)
+
+        exp_ctrl_box_sizer.Show(self.advanced_options, 
+            self.settings['show_advanced_options'], recursive=True)
 
 
         self.status = wx.StaticText(self, label='Ready', style=wx.ST_NO_AUTORESIZE,
@@ -1366,8 +1377,8 @@ if __name__ == '__main__':
         'exp_period_delta': 0.00095,
         'slow_mode_thres': 0.1,
         'fast_mode_max_exp_time' : 2000,
-        'wait_for_trig' : False,
-        'show_advanced_options' : False,
+        'wait_for_trig' : True,
+        'show_advanced_options' : True,
         'local_dir_root': '/nas_data/Pilatus1M',
         'remote_dir_root': '/nas_data',
         'base_data_dir': '/nas_data/Pilatus1M/20181210Hopkins', #CHANGE ME
