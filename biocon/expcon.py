@@ -1352,7 +1352,7 @@ if __name__ == '__main__':
         'fast_mode_max_exp_time' : 2000,
         'local_dir_root': '/nas_data/Pilatus1M',
         'remote_dir_root': '/nas_data',
-        'base_data_dir': '/nas_data/Pilatus1M/20181026Hopkins', #CHANGE ME
+        'base_data_dir': '/nas_data/Pilatus1M/20181210Hopkins', #CHANGE ME
         }
 
     settings['data_dir'] = settings['base_data_dir']
