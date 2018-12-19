@@ -33,6 +33,7 @@ import os
 logger = logging.getLogger(__name__)
 
 import wx
+import numpy as np
 
 import utils
 utils.set_mppath() #This must be done before importing any Mp Modules.
@@ -146,7 +147,7 @@ class ExpCommThread(threading.Thread):
         # mx_database.unsaved_scans = 0
 
 
-
+        logger.debug("Initialized mx database")
 
         det = mx_database.get_record('pilatus')
 
@@ -159,10 +160,14 @@ class ExpCommThread(threading.Thread):
         det_datadir = mp.Net(server_record, det_datadir_name)
         det_filename = mp.Net(server_record, det_datafile_name)
 
+        logger.debug("Got detector records")
+
         ab_burst = mx_database.get_record('ab_burst')
         ab_burst_server_record_name = ab_burst.get_field('server_record')
         ab_burst_server_record = mx_database.get_record(ab_burst_server_record_name)
         dg645_trigger_source = mp.Net(ab_burst_server_record, 'dg645.trigger_source')
+
+        logger.debug("Got dg645 records")
 
         mx_data = {'det': det,
             'det_datadir': det_datadir,
@@ -181,6 +186,8 @@ class ExpCommThread(threading.Thread):
             'joerger_ctrs':[mx_database.get_record('j{}'.format(i)) for i in range(2,7)]+[mx_database.get_record('j11')],
             'mx_db': mx_database,
             }
+
+        logger.debug("Generated mx_data")
 
         self._mx_data = mx_data
 
@@ -219,6 +226,8 @@ class ExpCommThread(threading.Thread):
                         ', '.join(['{}: {}'.format(kw, item) for kw, item in kwargs.items()])))
                     logger.exception(msg)
 
+                    self.abort_all()
+
         if self._stop_event.is_set():
             self._stop_event.clear()
         else:
@@ -227,7 +236,7 @@ class ExpCommThread(threading.Thread):
         logger.info("Quitting exposure control thread: %s", self.name)
 
     def _start_exp(self, data_dir, fprefix, num_frames, exp_time, exp_period,
-        wait_for_trig, **kwargs):
+        **kwargs):
         """
         This method connects to a flow meter by creating a new :py:class:`FlowMeter`
         subclass object (e.g. a new :py:class:`BFS` object). This pump is saved
@@ -244,7 +253,7 @@ class ExpCommThread(threading.Thread):
             are passed directly to the :py:class:`FlowMeter` subclass that is
             called. For example, for a :py:class:`BFS` you could pass ``bfs_filter``.
         """
-        if exp_period < exp_time + self._settings['slow_mode_thres'] or wait_for_trig:
+        if exp_period < exp_time + self._settings['slow_mode_thres'] or kwargs['wait_for_trig']:
             logger.debug('Choosing fast exposure')
             self.fast_exposure(data_dir, fprefix, num_frames, exp_time, exp_period, **kwargs)
         else:
@@ -278,32 +287,18 @@ class ExpCommThread(threading.Thread):
         det_datadir = self._mx_data['det_datadir']
         det_filename = self._mx_data['det_filename']
 
-        try:
-            det.abort()
-        except mp.Device_Action_Failed_Error:
-            pass
-        try:
-            det.abort()
-        except mp.Device_Action_Failed_Error:
-            pass
-        struck.stop()
-        ab_burst.stop()
+        wait_for_trig = kwargs['wait_for_trig']
+        if wait_for_trig:
+            num_trig = kwargs['num_trig']
+        else:
+            num_trig = 1
 
-        # print('after aborts/stops')
-        det_datadir.put(data_dir)
-        det_filename.put('{}_0001.tif'.format(fprefix))
-
-        dio_out6.write(0) #Open the slow normally closed xia shutter
-        dio_out9.write(0) # Make sure the NM shutter is closed
-        dio_out10.write(0) # Make sure the trigger is off
-        dio_out11.write(0) # Make sure the LNE is off
-
-        det.set_duration_mode(num_frames)
-        det.set_trigger_mode( 2 )
-        det.arm()
-
-        struck_mode_pv.caput(1)
-        struck.set_measurement_time(exp_time)   #Ignored for external LNE of Struck
+        if exp_period > exp_time+0.01 and exp_period >= 0.02:
+            logger.info('Shuttered mode')
+            continuous_exp = False
+        else:
+            logger.info('Continuous mode')
+            continuous_exp = True
 
         # #Read out the struck initially, takes ~2-3 seconds the first time
         # struck.set_num_measurements(1)
@@ -326,100 +321,136 @@ class ExpCommThread(threading.Thread):
         #         logger.debug( "Initial Struck Readout Done!\n" )
         #         break
 
-        struck.set_num_measurements(num_frames)
-        struck.start()
+        for cur_trig in range(1,num_trig+1):
+            try:
+                det.abort()
+            except mp.Device_Action_Failed_Error:
+                pass
+            try:
+                det.abort()
+            except mp.Device_Action_Failed_Error:
+                pass
+            struck.stop()
+            ab_burst.stop()
 
-        if exp_period > exp_time+0.01 and exp_period >= 0.02:
-            #Shutter opens and closes, Takes 4 ms for open and close
-            logger.debug('Shuttered mode')
-            ab_burst.setup(exp_period, exp_time+0.01, num_frames, 0, 1, -1)
-            cd_burst.setup(exp_period, 0.0001, num_frames, exp_time+0.006, 1, -1)
-            ef_burst.setup(exp_period, exp_time, num_frames, 0.005, 1, -1)
-            gh_burst.setup(exp_period, exp_time, num_frames, 0, 1, -1)
-            continuous_exp = False
-        else:
-            #Shutter will be open continuously, via dio_out9
-            logger.debug('Continuous mode')
-            ab_burst.setup(exp_period, exp_time, num_frames, 0, 1, -1) #Irrelevant
-            cd_burst.setup(exp_period, 0.0001, num_frames, exp_time+0.00015, 1, -1)
-            ef_burst.setup(exp_period, exp_time, num_frames, 0, 1, -1)
-            gh_burst.setup(exp_period, exp_time, num_frames, 0, 1, -1)
-            continuous_exp = True
+            dio_out9.write(0) # Make sure the NM shutter is closed
+            dio_out10.write(0) # Make sure the trigger is off
+            dio_out11.write(0) # Make sure the LNE is off
 
-        dg645_trigger_source.put(1)
+            det_datadir.put(data_dir)
 
-        ab_burst.arm()
+            if wait_for_trig:
+                cur_fprefix = '{}_{:02}'.format(fprefix, cur_trig)
+                det_filename.put('{}_0001.tif'.format(cur_fprefix))
+            else:
+                cur_fprefix = fprefix
+                det_filename.put('{}_0001.tif'.format(cur_fprefix))
 
-        if continuous_exp:
-            dio_out9.write(1)
+            det.set_duration_mode(num_frames)
+            det.set_trigger_mode(2)
 
-        dio_out11.write(1)
-        time.sleep(0.01)
-        dio_out11.write(0)
+            struck_mode_pv.caput(1)
+            struck.set_measurement_time(exp_time)   #Ignored for external LNE of Struck
+            struck.set_num_measurements(num_frames)
 
-        time.sleep(.1)
+            if exp_period > exp_time+0.01 and exp_period >= 0.02:
+                #Shutter opens and closes, Takes 4 ms for open and close
+                ab_burst.setup(exp_period, exp_time+0.01, num_frames, 0, 1, -1)
+                cd_burst.setup(exp_period, 0.0001, num_frames, exp_time+0.006, 1, -1)
+                ef_burst.setup(exp_period, exp_time, num_frames, 0.005, 1, -1)
+                gh_burst.setup(exp_period, exp_time, num_frames, 0, 1, -1)
+            else:
+                #Shutter will be open continuously, via dio_out9
+                ab_burst.setup(exp_period, exp_time, num_frames, 0, 1, -1) #Irrelevant
+                cd_burst.setup(exp_period, 0.0001, num_frames, exp_time+0.00015, 1, -1)
+                ef_burst.setup(exp_period, exp_time, num_frames, 0, 1, -1)
+                gh_burst.setup(exp_period, exp_time, num_frames, 0, 1, -1)
 
-        if not self._settings['wait_for_trig']:
-            dio_out10.write(1)
-            logger.info('Exposures started')
-            self._exp_event.set()
+            dg645_trigger_source.put(1)
+
+            dio_out6.write(0) #Open the slow normally closed xia shutter
+
+            ab_burst.get_status() #Maybe need to clear this status?
+
+            det.arm()
+            struck.start()
+            ab_burst.arm()
+
+            if continuous_exp:
+                dio_out9.write(1)
+
+            dio_out11.write(1)
             time.sleep(0.01)
-            dio_out10.write(0)
-        else:
-            logger.info("Waiting for trigger")
-            while ab_burst.get_status() == 16777216:
-                time.sleep(0.01)
-            logger.info('Exposures started')
-            self._exp_event.set()
-        # current_channel = 0
+            dio_out11.write(0)
 
-        while True:
-            #Struck is_busy doesn't work in thread! So have to go elsewhere
+            time.sleep(1)
 
-            status = ab_burst.get_status()
+            if not wait_for_trig:
+                dio_out10.write(1)
+                time.sleep(0.1)
+                dio_out10.write(0)
+            else:
+                logger.info("Waiting for trigger {}".format(cur_trig))
+                ab_burst.get_status() #Maybe need to clear this status?
+                waiting = True
+                while waiting:
+                    waiting = np.any([ab_burst.get_status() == 16777216 for i in range(10)])
+                    time.sleep(0.1)
 
-            if ( ( status & 0x1 ) == 0 ):
-                break
+                    if self._abort_event.is_set():
+                        self.fast_mode_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6)
+                        break
 
             if self._abort_event.is_set():
-                logger.info("Aborting fast exposure")
-                try:
-                    det.abort()
-                except mp.Device_Action_Failed_Error:
-                    pass
-                try:
-                    det.abort()
-                except mp.Device_Action_Failed_Error:
-                    pass
-                struck.stop()
-                ab_burst.stop()
-                dio_out9.write(0) #Close the fast shutter
-                dio_out6.write(1) #Close the slow normally closed xia shutter
+                self.fast_mode_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6)
                 break
 
-            # current_meas = struck_current_channel_pv.caget()
-            # if current_meas != current_channel:
-            #     current_channel = current_meas
-                # print(struck.read_all()) #This should work but it doesn't, gives a timeout error
 
-            time.sleep(0.01)
+            logger.info('Exposures started')
+            self._exp_event.set()
 
-        if continuous_exp:
-            dio_out9.write(0)
+            while True:
+                #Struck is_busy doesn't work in thread! So have to go elsewhere
 
-        dio_out6.write(1) #Close the slow normally closed xia shutter
+                status = ab_burst.get_status()
 
-        measurement = struck.read_all()
+                if ( ( status & 0x1 ) == 0 ):
+                    break
 
-        dark_counts = [s0.get_dark_current(), s1.get_dark_current(),
-            s2.get_dark_current(), s3.get_dark_current(), s11.get_dark_current]
+                if self._abort_event.is_set():
+                    self.fast_mode_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6)
+                    break
 
-        self.write_counters_struck(measurement, num_frames, 4, data_dir, fprefix,
-            exp_period, dark_counts)
-        logger.info('Exposures done')
+                # current_meas = struck_current_channel_pv.caget()
+                # if current_meas != current_channel:
+                #     current_channel = current_meas
+                    # print(struck.read_all()) #This should work but it doesn't, gives a timeout error
+
+                time.sleep(0.01)
+
+            if self._abort_event.is_set():
+                self.fast_mode_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6)
+                break
+
+            if continuous_exp:
+                dio_out9.write(0)
+
+            dio_out6.write(1) #Close the slow normally closed xia shutter
+
+            measurement = struck.read_all()
+
+            dark_counts = [s0.get_dark_current(), s1.get_dark_current(),
+                s2.get_dark_current(), s3.get_dark_current(), s11.get_dark_current()]
+
+            logger.info('Writing counters')
+            self.write_counters_struck(measurement, num_frames, 5, data_dir, cur_fprefix,
+                exp_period, dark_counts)
+
+            ab_burst.get_status() #Maybe need to clear this status?
+
+            logger.info('Exposures done')
+
         self._exp_event.clear()
-
-        # print(type(measurement))
 
 
     def slow_exposure(self, data_dir, fprefix, num_frames, exp_time, exp_period, **kwargs):
@@ -821,6 +852,10 @@ class ExpCommThread(threading.Thread):
             det.abort()
         except mp.Device_Action_Failed_Error:
             pass
+        try:
+            det.abort()
+        except mp.Device_Action_Failed_Error:
+            pass
         joerger.stop()
         ab_burst.stop()
         dio_out6.write(1) #Close the slow normally closed xia shutter
@@ -839,6 +874,55 @@ class ExpCommThread(threading.Thread):
 
         self._exp_event.clear()
         return
+
+    def fast_mode_abort_cleanup(self, det, struck, ab_burst, dio_out9, dio_out6):
+        logger.info("Aborting fast exposure")
+        try:
+            det.abort()
+        except mp.Device_Action_Failed_Error:
+            pass
+        try:
+            det.abort()
+        except mp.Device_Action_Failed_Error:
+            pass
+        struck.stop()
+        ab_burst.stop()
+        dio_out9.write(0) #Close the fast shutter
+        dio_out6.write(1) #Close the slow normally closed xia shutter
+
+    def abort_all(self):
+        logger.info("Aborting exposure due to unexpected error")
+
+        det = self._mx_data['det']          #Detector
+
+        struck = self._mx_data['struck']    #Struck SIS3820
+        joerger = self._mx_data['joerger']
+
+        ab_burst = self._mx_data['ab_burst']   #Shutter control signal
+
+        dio_out6 = self._mx_data['dio'][6]      #Xia/wharberton shutter N.C.
+        dio_out9 = self._mx_data['dio'][9]      #Shutter control signal (alt.)
+        dio_out10 = self._mx_data['dio'][10]    #SRS DG645 trigger
+        dio_out11 = self._mx_data['dio'][11]    #Struck LNE/channel advance signal (alt.)
+
+        try:
+            det.abort()
+        except mp.Device_Action_Failed_Error:
+            pass
+        try:
+            det.abort()
+        except mp.Device_Action_Failed_Error:
+            pass
+        struck.stop()
+        joerger.stop()
+        ab_burst.stop()
+        dio_out6.write(1) #Close the slow normally closed xia shutter]
+        dio_out9.write(0) #Close the fast shutter
+        dio_out10.write(0)
+        dio_out11.write(0)
+
+        self._exp_event.clear()
+        self._abort()
 
     def _abort(self):
         """
@@ -949,7 +1033,8 @@ class ExpPanel(wx.Panel):
         self.run_num = wx.StaticText(self, label='_{:03d}'.format(self.settings['run_num']))
         self.wait_for_trig = wx.CheckBox(self, label='Wait for external trigger')
         self.wait_for_trig.SetValue(self.settings['wait_for_trig'])
-
+        self.num_trig = wx.TextCtrl(self, value=self.settings['num_trig'],
+            size=(60,-1), validator=utils.CharValidator('int'))
 
         file_prefix_sizer = wx.BoxSizer(wx.HORIZONTAL)
         file_prefix_sizer.Add(self.filename, proportion=1)
@@ -982,8 +1067,16 @@ class ExpPanel(wx.Panel):
         self.exp_time_sizer.Add(self.exp_period, border=5, flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT)
 
 
-        self.advanced_options = wx.BoxSizer(wx.VERTICAL)
-        self.advanced_options.Add(self.wait_for_trig)
+        trig_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        trig_sizer.Add(self.wait_for_trig, flag=wx.ALIGN_CENTER_VERTICAL)
+        trig_sizer.Add(wx.StaticText(self, label='Number of triggers:'),
+            border=15, flag=wx.LEFT|wx.ALIGN_CENTER_VERTICAL)
+        trig_sizer.Add(self.num_trig, border=2, flag=wx.LEFT|wx.ALIGN_CENTER_VERTICAL)
+        trig_sizer.AddStretchSpacer(1)
+
+        self.advanced_options = wx.StaticBoxSizer(wx.StaticBox(self,
+            label='Advanced Options'), wx.VERTICAL)
+        self.advanced_options.Add(trig_sizer, border=5, flag=wx.ALL|wx.EXPAND)
 
 
         self.start_exp_btn = wx.Button(self, label='Start Exposure')
@@ -1009,11 +1102,11 @@ class ExpPanel(wx.Panel):
         exp_ctrl_box_sizer.Add(self.exp_time_sizer, border=5,
             flag=wx.TOP|wx.LEFT|wx.RIGHT)
         exp_ctrl_box_sizer.Add(self.advanced_options, border=5,
-            flag=wx.TOP|wx.LEFT|wx.RIGHT)
+            flag=wx.TOP|wx.LEFT|wx.RIGHT|wx.EXPAND)
         exp_ctrl_box_sizer.Add(self.exp_btn_sizer, border=5,
             flag=wx.EXPAND|wx.ALIGN_CENTER_HORIZONTAL|wx.ALL)
 
-        exp_ctrl_box_sizer.Show(self.advanced_options, 
+        exp_ctrl_box_sizer.Show(self.advanced_options,
             self.settings['show_advanced_options'], recursive=True)
 
 
@@ -1076,6 +1169,12 @@ class ExpPanel(wx.Panel):
         self.abort_event.clear()
         self.exp_event.clear()
 
+        cont = self._check_shutters()
+
+        if not cont:
+            return
+
+
         exp_values, valid = self._get_exp_values()
 
         if not valid:
@@ -1127,7 +1226,6 @@ class ExpPanel(wx.Panel):
         run_num = int(old_rn[1:])+1
         self.run_num.SetLabel('_{:03d}'.format(run_num))
 
-
     def set_status(self, status):
         self.status.SetLabel(status)
 
@@ -1153,6 +1251,56 @@ class ExpPanel(wx.Panel):
         else:
             self._on_exp_finish()
 
+    def _check_shutters(self):
+        cont = True
+        msg = ''
+
+        fe_shutter_pv = mpca.PV(self.settings['fe_shutter_pv'])
+        d_shutter_pv = mpca.PV(self.settings['d_shutter_pv'])
+
+        if fe_shutter_pv.caget() == 0:
+            fes = False
+        else:
+            fes = True
+
+        if d_shutter_pv.caget() == 0:
+            ds = False
+        else:
+            ds = True
+
+        if not fes and not ds:
+            msg = ('Both the Front End shutter and the D Hutch '
+                'shutter are closed. Are you sure you want to '
+                'continue?')
+
+        elif not fes:
+            msg = ('The Front End shutter is closed. Are you sure '
+                'you want to continue?')
+
+        elif not ds:
+            msg = ('The D Hutch shutter is closed. Are you sure you '
+                'want to continue?')
+
+        if msg != '':
+            dlg = wx.MessageDialog(None, msg, "Shutter Closed", wx.YES_NO|wx.ICON_EXCLAMATION|wx.NO_DEFAULT)
+            result = dlg.ShowModal()
+
+            if result == wx.ID_NO:
+                cont = False
+            else:
+                if not fes and not ds:
+                    logger.info('Front End shutter and D Hutch shutter are closed.')
+
+                elif not fes:
+                    logger.info('Front End shtuter is closed.')
+
+                elif not ds:
+                    logger.info('D Hutch shutter is closed.')
+
+
+
+        return cont
+
     def _get_exp_values(self):
         num_frames = self.num_frames.GetValue()
         exp_time = self.exp_time.GetValue()
@@ -1161,6 +1309,7 @@ class ExpPanel(wx.Panel):
         filename = self.filename.GetValue()
         run_num = self.run_num.GetLabel()
         wait_for_trig = self.wait_for_trig.GetValue()
+        num_trig = self.num_trig.GetValue()
 
         errors = []
 
@@ -1183,6 +1332,12 @@ class ExpPanel(wx.Panel):
                 'least {} s greater than the exposure time)'.format(
                 self.settings['exp_period_min'], self.settings['exp_period_max'],
                 self.settings['exp_period_delta'])))
+
+        if wait_for_trig:
+            try:
+                num_trig = int(num_trig)
+            except Exception:
+                errors.append(('Number of triggers (greater than 0)'))
 
         if isinstance(num_frames, int):
             if num_frames < 1 or num_frames > self.settings['nframes_max']:
@@ -1224,6 +1379,11 @@ class ExpPanel(wx.Panel):
         if data_dir == '' or not os.path.exists(data_dir):
             errors.append('Data directory (must exist, and not be blank)')
 
+        if wait_for_trig:
+            if isinstance(num_trig, int):
+                if num_trig < 1:
+                    errors.append(('Number of triggers (greater than 0)'))
+
         if len(errors) > 0:
             msg = 'The following field(s) have invalid values:'
             for err in errors:
@@ -1245,6 +1405,7 @@ class ExpPanel(wx.Panel):
                 'data_dir': data_dir,
                 'fprefix': filename+run_num,
                 'wait_for_trig': wait_for_trig,
+                'num_trig': num_trig,
                 }
             valid = True
 
@@ -1378,10 +1539,13 @@ if __name__ == '__main__':
         'slow_mode_thres': 0.1,
         'fast_mode_max_exp_time' : 2000,
         'wait_for_trig' : True,
+        'num_trig': '4',
         'show_advanced_options' : True,
+        'fe_shutter_pv' : 'FE:18:ID:FEshutter',
+        'd_shutter_pv': 'PA:18ID:STA_D_SDS_OPEN_PL.VAL',
         'local_dir_root': '/nas_data/Pilatus1M',
         'remote_dir_root': '/nas_data',
-        'base_data_dir': '/nas_data/Pilatus1M/20181210Hopkins', #CHANGE ME
+        'base_data_dir': '/nas_data/Pilatus1M/20181212Pollack', #CHANGE ME
         }
 
     settings['data_dir'] = settings['base_data_dir']
