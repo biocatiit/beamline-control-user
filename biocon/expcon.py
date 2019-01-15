@@ -1540,7 +1540,7 @@ if __name__ == '__main__':
         'fast_mode_max_exp_time' : 2000,
         'wait_for_trig' : True,
         'num_trig': '4',
-        'show_advanced_options' : True,
+        'show_advanced_options' : False,
         'fe_shutter_pv' : 'FE:18:ID:FEshutter',
         'd_shutter_pv': 'PA:18ID:STA_D_SDS_OPEN_PL.VAL',
         'local_dir_root': '/nas_data/Pilatus1M',

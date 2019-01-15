@@ -577,7 +577,7 @@ class PumpCommThread(threading.Thread):
         my_pumpcon.stop()
     """
 
-    def __init__(self, command_queue, abort_event, name=None):
+    def __init__(self, command_queue, answer_queue, abort_event, name=None):
         """
         Initializes the custom thread. Important parameters here are the
         list of known commands ``_commands`` and known pumps ``known_pumps``.
@@ -593,6 +593,7 @@ class PumpCommThread(threading.Thread):
         logger.info("Starting pump control thread: %s", self.name)
 
         self.command_queue = command_queue
+        self.answer_queue = answer_queue
         self._abort_event = abort_event
         self._stop_event = threading.Event()
 
@@ -762,7 +763,7 @@ class PumpCommThread(threading.Thread):
 
         logger.debug("Pump %s dispensing started", name)
 
-    def _is_moving(self, name, return_queue):
+    def _is_moving(self, name):
         """
         This method returns where or not the pump is moving.
 
@@ -777,7 +778,7 @@ class PumpCommThread(threading.Thread):
         logger.info("Checking if pump %s is moving", name)
         pump = self._connected_pumps[name]
         is_moving = pump.is_moving()
-        return_queue.put_nowait(is_moving)
+        self.answer_queue.append(is_moving)
         logger.debug("Pump %s is moving: %s", name, str(is_moving))
 
     def _send_cmd(self, name, cmd, get_response=True):
@@ -828,8 +829,8 @@ class PumpPanel(wx.Panel):
     :py:func:`_on_type` function.
     """
     def __init__(self, parent, panel_id, panel_name, all_comports, pump_cmd_q,
-        known_pumps, pump_name, pump_type=None, comport=None, pump_args=[],
-        pump_kwargs={}):
+        pump_answer_q, known_pumps, pump_name, pump_type=None, comport=None,
+        pump_args=[], pump_kwargs={}):
         """
         Initializes the custom thread. Important parameters here are the
         list of known commands ``_commands`` and known pumps ``known_pumps``.
@@ -877,7 +878,7 @@ class PumpPanel(wx.Panel):
         self.pump_cmd_q = pump_cmd_q
         self.all_comports = all_comports
         self.known_pumps = known_pumps
-        self.answer_q = queue.Queue()
+        self.answer_q = pump_answer_q
         self.connected = False
 
         self.top_sizer = self._create_layout()
@@ -1226,7 +1227,14 @@ class PumpPanel(wx.Panel):
         status.
         """
         self._send_cmd('is_moving')
-        is_moving = self.answer_q.get(timeout=0.5)
+        start_time = time.time()
+        while len(self.answer_q) == 0 and time.time()-start_time < 0.5:
+            time.sleep(0.01)
+
+        if len(self.answer_q) > 0:
+            is_moving = self.answer_q.popleft()
+        else:
+            is_moving = True
 
         if not is_moving:
             self.run_button.SetLabel('Start')
@@ -1244,7 +1252,7 @@ class PumpPanel(wx.Panel):
         """
         logger.debug('Sending pump %s command %s', self.name, cmd)
         if cmd == 'is_moving':
-            self.pump_cmd_q.append(('is_moving', (self.name, self.answer_q), {}))
+            self.pump_cmd_q.append(('is_moving', (self.name), {}))
         elif cmd == 'start_flow':
             self.pump_cmd_q.append(('start_flow', (self.name,), {}))
         elif cmd == 'stop':
@@ -1295,6 +1303,7 @@ class PumpFrame(wx.Frame):
         super(PumpFrame, self).__init__(*args, **kwargs)
         logger.debug('Setting up the PumpFrame')
         self.pump_cmd_q = deque()
+        self.pump_answer_q = deque()
         self.abort_event = threading.Event()
         self.pump_con = PumpCommThread(self.pump_cmd_q, self.abort_event, 'PumpCon')
         self.pump_con.start()
@@ -1317,7 +1326,8 @@ class PumpFrame(wx.Frame):
     def _create_layout(self):
         """Creates the layout"""
         pump_panel = PumpPanel(self, wx.ID_ANY, 'stand_in', self.ports,
-            self.pump_cmd_q, self.pump_con.known_pumps, 'stand_in')
+            self.pump_cmd_q, self.pump_answer_q, self.pump_con.known_pumps,
+            'stand_in')
 
         self.pump_sizer = wx.BoxSizer(wx.HORIZONTAL)
         self.pump_sizer.Add(pump_panel, flag=wx.RESERVE_SPACE_EVEN_IF_HIDDEN)
@@ -1367,7 +1377,8 @@ class PumpFrame(wx.Frame):
 
         for pump in setup_pumps:
             new_pump = PumpPanel(self, wx.ID_ANY, pump[0], self.ports, self.pump_cmd_q,
-                self.pump_con.known_pumps, pump[0], pump[1], pump[2], pump[3], pump[4])
+                self.pump_answer_q, self.pump_con.known_pumps, pump[0], pump[1],
+                pump[2], pump[3], pump[4])
 
             self.pump_sizer.Add(new_pump)
             self.pumps.append(new_pump)
@@ -1438,10 +1449,10 @@ if __name__ == '__main__':
     # my_pump = M50Pump('COM6', '2', 626.2, 9.278)
 
     # pmp_cmd_q = deque()
-    # abort_event = threading.Event()
-    # my_pumpcon = PumpCommThread(pmp_cmd_q, abort_event, 'PumpCon')
-    # my_pumpcon.start()
     # return_q = queue.Queue()
+    # abort_event = threading.Event()
+    # my_pumpcon = PumpCommThread(pmp_cmd_q, return_q, abort_event, 'PumpCon')
+    # my_pumpcon.start()
 
     # init_cmd = ('connect', ('COM6', 'pump2', 'VICI_M50'),
     #     {'flow_cal': 626.2, 'backlash_cal': 9.278})
