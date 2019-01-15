@@ -24,7 +24,7 @@ from io import open
 
 import threading
 import logging
-from collections import OrderedDict, deque
+from collections import deque
 import traceback
 import time
 import sys
@@ -35,6 +35,7 @@ if __name__ != '__main__':
 import zmq
 
 import pumpcon
+import fmcon
 
 
 class ControlServer(threading.Thread):
@@ -63,7 +64,7 @@ class ControlServer(threading.Thread):
 
         self._device_control = {
             }
-        
+
         self._stop_event = threading.Event()
 
         self.context = zmq.Context()
@@ -83,6 +84,20 @@ class ControlServer(threading.Thread):
             }
 
         self._device_control['pump'] = pump_ctrl
+
+        fm_cmd_q = deque()
+        fm_return_q = deque()
+        fm_abort_event = threading.Event()
+        fm_con = fmcon.FlowMeterCommThread(fm_cmd_q, fm_return_q, fm_abort_event, 'FMCon')
+        fm_con.start()
+
+        fm_ctrl = {'queue': fm_cmd_q,
+            'abort': fm_abort_event,
+            'thread': fm_con,
+            'answer_q': fm_return_q
+            }
+
+        self._device_control['fm'] = fm_ctrl
 
     def run(self):
         """
@@ -182,13 +197,18 @@ if __name__ == '__main__':
     port2 = '5557'
     ip = '164.54.204.104'
 
+    control_server1 = ControlServer(ip, port1, name='PumpControlServer')
+    control_server1.start()
 
-    control_server = ControlServer(ip, port1)
-    control_server.start()
+    control_server2 = ControlServer(ip, port2, name='FMControlServer')
+    control_server2.start()
 
     try:
         while True:
-            time.sleep(.01)
+            time.sleep(1)
     except KeyboardInterrupt:
-        control_server.stop()
-        control_server.join()
+        control_server1.stop()
+        control_server1.join()
+
+        control_server2.stop()
+        control_server2.join()

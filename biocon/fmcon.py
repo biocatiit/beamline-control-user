@@ -46,8 +46,6 @@ import Elveflow32 as Elveflow
 print_lock = threading.RLock()
 
 
-
-
 class FlowMeter(object):
     """
     This class contains the settings and communication for a generic flow meter.
@@ -279,6 +277,7 @@ class FlowMeterCommThread(threading.Thread):
                         'set_units'         : self._set_units,
                         'get_density'       : self._get_density,
                         'get_temperature'   : self._get_temperature,
+                        'disconnect'        : self._disconnect,
                         }
 
         self._connected_fms = OrderedDict()
@@ -349,7 +348,12 @@ class FlowMeterCommThread(threading.Thread):
         new_fm = self.known_fms[fm_type](device, name, **kwargs)
         self._connected_fms[name] = new_fm
         logger.debug("Flow meter %s connected", name)
-        pass
+
+    def _disconnect(self, name):
+        logger.info("Disconnecting flow meter %s", name)
+        fm = self._connected_fms[name]
+        fm.stop()
+        logger.debug("Flow meter %s disconnected", name)
 
     def _get_flow_rate(self, name):
         """
@@ -663,7 +667,7 @@ class FlowMeterPanel(wx.Panel):
         self._send_cmd('set_units')
 
         logger.debug('Changed the flow meter units to %s and %s for flow meter %s', vol_unit, t_unit, self.name)
-    
+
     def _on_filter(self, evt):
         pass #Needs to be done!
 

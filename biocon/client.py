@@ -76,7 +76,7 @@ class ControlClient(threading.Thread):
         start_time = time.time()
         while self.socket.poll(10) == 0 and time.time()-start_time < 2:
             pass
-        
+
         if self.socket.poll(10) > 0:
             answer = self.socket.recv_json()
         else:
@@ -127,7 +127,7 @@ class ControlClient(threading.Thread):
 
                     if answer == '':
                         raise zmq.ZMQError(msg="Could not get a response from the server")
-                    
+
                     if get_response:
                         self.answer_queue.append(answer)
                         logger.info('Command response: %s' %(answer))
@@ -164,7 +164,7 @@ class ControlClient(threading.Thread):
     def stop(self):
         """Stops the thread cleanly."""
         logger.info("Starting to clean up and shut down pump control thread: %s", self.name)
-        
+
 
         self._stop_event.set()
 
@@ -182,47 +182,90 @@ if __name__ == '__main__':
 
     ip = '164.54.204.104'
 
-    ctrl_cmd_q = deque()
-    ctrl_return_q = deque()
-    ctrl_abort_event = threading.Event()
+    # pump_ctrl_cmd_q = deque()
+    # pump_ctrl_return_q = deque()
+    # pump_ctrl_abort_event = threading.Event()
 
-    control_client = ControlClient(ip, port1, ctrl_cmd_q, ctrl_return_q, ctrl_abort_event)
-    control_client.start()
+    # pump_control_client = ControlClient(ip, port1, pump_ctrl_cmd_q,
+    #     pump_ctrl_return_q, pump_ctrl_abort_event, name='PumpControlClient')
+    # pump_control_client.start()
 
-    init_cmd = ('connect', ('COM6', 'pump2', 'VICI_M50'),
-        {'flow_cal': 626.2, 'backlash_cal': 9.278})
-    fr_cmd = ('set_flow_rate', ('pump2', 1000), {})
-    start_cmd = ('start_flow', ('pump2',), {})
-    stop_cmd = ('stop', ('pump2',), {})
-    dispense_cmd = ('dispense', ('pump2', 200), {})
-    aspirate_cmd = ('aspirate', ('pump2', 200), {})
-    moving_cmd = ('is_moving', ('pump2',), {})
-    units_cmd = ('set_units', ('pump2', 'uL/min'), {})
-    disconnect_cmd = ('disconnect', ('pump2', ), {})
+    # init_cmd = ('connect', ('COM6', 'pump2', 'VICI_M50'),
+    #     {'flow_cal': 626.2, 'backlash_cal': 9.278})
+    # fr_cmd = ('set_flow_rate', ('pump2', 1000), {})
+    # start_cmd = ('start_flow', ('pump2',), {})
+    # stop_cmd = ('stop', ('pump2',), {})
+    # dispense_cmd = ('dispense', ('pump2', 200), {})
+    # aspirate_cmd = ('aspirate', ('pump2', 200), {})
+    # moving_cmd = ('is_moving', ('pump2',), {})
+    # units_cmd = ('set_units', ('pump2', 'uL/min'), {})
+    # disconnect_cmd = ('disconnect', ('pump2', ), {})
 
-    init_client_cmd = {'device': 'pump', 'command': init_cmd, 'response': False}
-    fr_client_cmd = {'device': 'pump', 'command': fr_cmd, 'response': False}
-    start_client_cmd = {'device': 'pump', 'command': start_cmd, 'response': False}
-    stop_client_cmd = {'device': 'pump', 'command': stop_cmd, 'response': False}
-    dispense_client_cmd = {'device': 'pump', 'command': dispense_cmd, 'response': False}
-    aspirate_client_cmd = {'device': 'pump', 'command': aspirate_cmd, 'response': False}
-    moving_client_cmd = {'device': 'pump', 'command': moving_cmd, 'response': True}
-    units_client_cmd = {'device': 'pump', 'command': units_cmd, 'response': False}
-    disconnect_client_cmd = {'device': 'pump', 'command': disconnect_cmd, 'response': False}
+    # init_client_cmd = {'device': 'pump', 'command': init_cmd, 'response': False}
+    # fr_client_cmd = {'device': 'pump', 'command': fr_cmd, 'response': False}
+    # start_client_cmd = {'device': 'pump', 'command': start_cmd, 'response': False}
+    # stop_client_cmd = {'device': 'pump', 'command': stop_cmd, 'response': False}
+    # dispense_client_cmd = {'device': 'pump', 'command': dispense_cmd, 'response': False}
+    # aspirate_client_cmd = {'device': 'pump', 'command': aspirate_cmd, 'response': False}
+    # moving_client_cmd = {'device': 'pump', 'command': moving_cmd, 'response': True}
+    # units_client_cmd = {'device': 'pump', 'command': units_cmd, 'response': False}
+    # disconnect_client_cmd = {'device': 'pump', 'command': disconnect_cmd, 'response': False}
 
-    ctrl_cmd_q.append(init_client_cmd)
-    ctrl_cmd_q.append(units_client_cmd)
-    ctrl_cmd_q.append(fr_client_cmd)
-    ctrl_cmd_q.append(start_client_cmd)
-    time.sleep(5)
-    # ctrl_cmd_q.append(dispense_client_cmd)
-    # ctrl_cmd_q.append(aspirate_client_cmd)
-    ctrl_cmd_q.append(moving_client_cmd)
-    while len(ctrl_return_q) == 0:
+    # pump_ctrl_cmd_q.append(init_client_cmd)
+    # pump_ctrl_cmd_q.append(units_client_cmd)
+    # pump_ctrl_cmd_q.append(fr_client_cmd)
+    # pump_ctrl_cmd_q.append(start_client_cmd)
+    # time.sleep(5)
+    # # pump_ctrl_cmd_q.append(dispense_client_cmd)
+    # # pump_ctrl_cmd_q.append(aspirate_client_cmd)
+    # pump_ctrl_cmd_q.append(moving_client_cmd)
+    # while len(pump_ctrl_return_q) == 0:
+    #     time.sleep(0.01)
+    # print(pump_ctrl_return_q.popleft())
+    # pump_ctrl_cmd_q.append(stop_client_cmd)
+    # time.sleep(2)
+    # pump_ctrl_cmd_q.append(disconnect_client_cmd)
+    # time.sleep(2)
+    # pump_control_client.stop()
+
+
+    fm_ctrl_cmd_q = deque()
+    fm_ctrl_return_q = deque()
+    fm_ctrl_abort_event = threading.Event()
+
+    fm_control_client = ControlClient(ip, port1, fm_ctrl_cmd_q,
+        fm_ctrl_return_q, fm_ctrl_abort_event, name='FMControlClient')
+    fm_control_client.start()
+
+    init_cmd = ('connect', ('COM8', 'bfs1', 'BFS'), {})
+    fr_cmd = ('get_flow_rate', ('bfs1',), {})
+    d_cmd = ('get_density', ('bfs1',), {})
+    t_cmd = ('get_temperature', ('bfs1',), {})
+    units_cmd = ('set_units', ('bfs1', 'mL/min'), {})
+    disconnect_cmd = ('disconnect', ('bfs1', ), {})
+
+    init_client_cmd = {'device': 'fm', 'command': init_cmd, 'response': False}
+    fr_client_cmd = {'device': 'fm', 'command': fr_cmd, 'response': True}
+    d_client_cmd = {'device': 'fm', 'command': d_cmd, 'response': True}
+    t_client_cmd = {'device': 'fm', 'command': t_cmd, 'response': True}
+    units_client_cmd = {'device': 'fm', 'command': units_cmd, 'response': False}
+    disconnect_client_cmd = {'device': 'fm', 'command': disconnect_cmd, 'response': False}
+
+    fm_ctrl_cmd_q.append(init_client_cmd)
+    fm_ctrl_cmd_q.append(fr_client_cmd)
+    while len(fm_ctrl_return_q) == 0:
         time.sleep(0.01)
-    print(ctrl_return_q.popleft())
-    ctrl_cmd_q.append(stop_client_cmd)
+    print(fm_ctrl_return_q.popleft())
+    fm_ctrl_cmd_q.append(d_client_cmd)
+    while len(fm_ctrl_return_q) == 0:
+        time.sleep(0.01)
+    print(fm_ctrl_return_q.popleft())
+    fm_ctrl_cmd_q.append(t_client_cmd)
+    while len(fm_ctrl_return_q) == 0:
+        time.sleep(0.01)
+    print(fm_ctrl_return_q.popleft())
+    fm_ctrl_cmd_q.append(units_client_cmd)
+    fm_ctrl_cmd_q.append(disconnect_client_cmd)
     time.sleep(2)
-    ctrl_cmd_q.append(disconnect_client_cmd)
-    time.sleep(2)
-    control_client.stop()
+    fm_control_client.stop()
+
