@@ -54,7 +54,7 @@ class ControlClient(threading.Thread):
         threading.Thread.__init__(self, name=name)
         self.daemon = True
 
-        logger.info("Starting pump control thread: %s", self.name)
+        logger.info("Starting control client: %s", self.name)
 
         self.ip = ip
         self.port = port
@@ -63,9 +63,30 @@ class ControlClient(threading.Thread):
         self._abort_event = abort_event
         self._stop_event = threading.Event()
 
+        logger.info("Connecting to %s on port %s", self.ip, self.port)
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.PAIR)
         self.socket.connect("tcp://{}:{}".format(self.ip, self.port))
+
+        logger.debug("Checking if server is active")
+        cmd = {'device': 'server', 'command': ('ping', (), {}), 'response': False}
+
+        self.socket.send_json(cmd)
+
+        start_time = time.time()
+        while self.socket.poll(10) == 0 and time.time()-start_time < 2:
+            pass
+        
+        if self.socket.poll(10) > 0:
+            answer = self.socket.recv_json()
+        else:
+            answer = ''
+
+        if answer == 'ping received':
+            logger.info("Connection to server verified")
+        else:
+            logger.error("Could not get a response from the server")
+            raise zmq.ZMQError(msg="Could not get a response from the server")
 
     def run(self):
         """
@@ -94,7 +115,18 @@ class ControlClient(threading.Thread):
                 logger.debug("For device %s, processing cmd '%s' with args: %s and kwargs: %s ", device, device_cmd[0], ', '.join(['{}'.format(a) for a in device_cmd[1]]), ', '.join(['{}:{}'.format(kw, item) for kw, item in device_cmd[2].items()]))
                 try:
                     self.socket.send_json(command)
-                    answer = self.socket.recv_json()
+
+                    start_time = time.time()
+                    while self.socket.poll(10) == 0 and time.time()-start_time < 2:
+                        pass
+
+                    if self.socket.poll(1) > 0:
+                        answer = self.socket.recv_json()
+                    else:
+                        answer = ''
+
+                    if answer == '':
+                        raise zmq.ZMQError(msg="Could not get a response from the server")
                     
                     if get_response:
                         self.answer_queue.append(answer)
@@ -103,12 +135,14 @@ class ControlClient(threading.Thread):
                         logger.debug('Command response: %s' %(answer))
 
                 except Exception:
+                    device = command['device']
+                    device_cmd = command['command']
+                    msg = ("Device %s failed to run command '%s' "
+                        "with args: %s and kwargs: %s. Exception follows:" %(device, device_cmd[0],
+                        ', '.join(['{}'.format(a) for a in device_cmd[1]]),
+                        ', '.join(['{}:{}'.format(kw, item) for kw, item in device_cmd[2].items()])))
+                    logger.exception(msg)
                     logger.exception(traceback.print_exc())
-                    # msg = ("Pump control thread failed to run command '%s' "
-                    #     "with args: %s and kwargs: %s " %(command,
-                    #     ', '.join(['{}'.format(a) for a in args]),
-                    #     ', '.join(['{}:{}'.format(kw, item) for kw, item in kwargs.items()])))
-                    # logger.exception(msg)
         if self._stop_event.is_set():
             self._stop_event.clear()
         else:

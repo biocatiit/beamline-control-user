@@ -113,27 +113,44 @@ class ControlServer(threading.Thread):
                 get_response = command['response']
                 logger.debug("For device %s, processing cmd '%s' with args: %s and kwargs: %s ", device, device_cmd[0], ', '.join(['{}'.format(a) for a in device_cmd[1]]), ', '.join(['{}:{}'.format(kw, item) for kw, item in device_cmd[2].items()]))
                 try:
-                    device_q = self._device_control[device]['queue']
-                    device_q.append(device_cmd)
 
-                    if get_response:
-                        answer_q = self._device_control[device]['answer_q']
-                        while len(answer_q) == 0:
-                            time.sleep(0.01)
-
-                        answer = answer_q.popleft()
+                    if device == 'server':
+                        if device_cmd[0] == 'ping':
+                            answer = 'ping received'
+                        else:
+                            answer = ''
                     else:
-                        answer = 'cmd sent'
+                        device_q = self._device_control[device]['queue']
+                        device_q.append(device_cmd)
 
-                    self.socket.send_json(answer)
+                        if get_response:
+                            answer_q = self._device_control[device]['answer_q']
+
+                            start_time = time.time()
+                            while len(answer_q) == 0 and time.time()-start_time < 2:
+                                time.sleep(0.01)
+
+                            if len(answer_q) == 0:
+                                answer = ''
+                            else:
+                                answer = answer_q.popleft()
+                        else:
+                            answer = 'cmd sent'
+
+                    if answer == '':
+                        logger.exception('No response received from device')
+                    else:
+                        self.socket.send_json(answer)
 
                 except Exception:
+                    device = command['device']
+                    device_cmd = command['command']
+                    msg = ("Device %s failed to run command '%s' "
+                        "with args: %s and kwargs: %s. Exception follows:" %(device, device_cmd[0],
+                        ', '.join(['{}'.format(a) for a in device_cmd[1]]),
+                        ', '.join(['{}:{}'.format(kw, item) for kw, item in device_cmd[2].items()])))
+                    logger.exception(msg)
                     logger.exception(traceback.print_exc())
-                    # msg = ("Pump control thread failed to run command '%s' "
-                    #     "with args: %s and kwargs: %s " %(command,
-                    #     ', '.join(['{}'.format(a) for a in args]),
-                    #     ', '.join(['{}:{}'.format(kw, item) for kw, item in kwargs.items()])))
-                    # logger.exception(msg)
         if self._stop_event.is_set():
             self._stop_event.clear()
         # else:
@@ -154,7 +171,7 @@ class ControlServer(threading.Thread):
 
 if __name__ == '__main__':
     logger = logging.getLogger('biocon')
-    logger.setLevel(logging.INFO)
+    logger.setLevel(logging.DEBUG)
     h1 = logging.StreamHandler(sys.stdout)
     h1.setLevel(logging.INFO)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
