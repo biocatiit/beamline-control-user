@@ -30,7 +30,8 @@ import logging.handlers as handlers
 import sys
 import os
 
-logger = logging.getLogger(__name__)
+if __name__ != '__main__':
+    logger = logging.getLogger('biocon.client')
 
 import wx
 import numpy as np
@@ -1472,9 +1473,7 @@ class ExpFrame(wx.Frame):
 
 
 if __name__ == '__main__':
-
-
-    logger = logging.getLogger(__name__)
+    logger = logging.getLogger('biocon')
     logger.setLevel(logging.DEBUG)
 
     h1 = logging.StreamHandler(sys.stdout)

@@ -31,7 +31,8 @@ import queue
 import logging
 import sys
 
-logger = logging.getLogger(__name__)
+if __name__ != '__main__':
+    logger = logging.getLogger('biocon.pumpcon')
 
 import serial
 import serial.tools.list_ports as list_ports
@@ -341,6 +342,10 @@ class Pump(object):
         """Stops all pump flow."""
         pass #Should be implimented in each subclass
 
+    def disconnect(self):
+        """Close any communication connections"""
+        pass #Should be implimented in each subclass
+
 class M50Pump(Pump):
     """
     .. todo:: This class doesn't know when the pump is done dispensing. This leads
@@ -545,6 +550,10 @@ class M50Pump(Pump):
         self._is_flowing = False
         self._is_dispensing = False
 
+    def disconnect(self):
+        logger.debug("Closing pump %s serial connection", self.name)
+        self.pump_comm.ser.close()
+
 class PumpCommThread(threading.Thread):
     """
     This class creates a control thread for pumps attached to the system.
@@ -606,6 +615,7 @@ class PumpCommThread(threading.Thread):
                         'dispense'      : self._dispense,
                         'is_moving'     : self._is_moving,
                         'send_cmd'      : self._send_cmd,
+                        'disconnect'    : self._disconnect_pump,
                         }
 
         self._connected_pumps = OrderedDict()
@@ -674,6 +684,20 @@ class PumpCommThread(threading.Thread):
         new_pump = self.known_pumps[pump_type](device, name, **kwargs)
         self._connected_pumps[name] = new_pump
         logger.debug("Pump %s connected", name)
+
+    def _disconnect_pump(self, name):
+        """
+        This method sets the flow rate for a pump.
+
+        :param str name: The unique identifier for a pump that was used in the
+            :py:func:`_connect_pump` method.
+
+        :param float flow_rate: The flow rate for the pump.
+        """
+        logger.info("Disconnecting pump %s", name)
+        pump = self._connected_pumps[name]
+        pump.disconnect()
+        logger.debug("Pump %s disconnected", name)
 
     def _set_flow_rate(self, name, flow_rate):
         """
@@ -1438,7 +1462,7 @@ class PumpFrame(wx.Frame):
         self.Destroy()
 
 if __name__ == '__main__':
-    logger = logging.getLogger(__name__)
+    logger = logging.getLogger('biocon')
     logger.setLevel(logging.DEBUG)
     h1 = logging.StreamHandler(sys.stdout)
     h1.setLevel(logging.DEBUG)

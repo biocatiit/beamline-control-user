@@ -22,7 +22,6 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 from builtins import object, range, map
 from io import open
 
-import multiprocessing
 import threading
 import logging
 from collections import OrderedDict, deque
@@ -30,19 +29,20 @@ import traceback
 import time
 import sys
 
-logger = logging.getLogger(__name__)
+if __name__ != '__main__':
+    logger = logging.getLogger('biocon.server')
 
 import zmq
 
 import pumpcon
 
 
-class ControlServer(multiprocessing.Process):
+class ControlServer(threading.Thread):
     """
 
     """
 
-    def __init__(self, port):
+    def __init__(self, ip, port, name='ControlServer'):
         """
         Initializes the custom thread. Important parameters here are the
         list of known commands ``_commands`` and known pumps ``known_pumps``.
@@ -53,30 +53,33 @@ class ControlServer(multiprocessing.Process):
         :param threading.Event stop_event: An event that is set when the thread
             needs to abort, and otherwise is not set.
         """
-        multiprocessing.Process.__init__(self)
+        threading.Thread.__init__(self, name=name)
+        self.daemon = True
 
-        logger.info("Starting pump control thread: %s", self.name)
+        logger.info("Initializing control server: %s", self.name)
 
+        self.ip = ip
         self.port = port
+
+        self._device_control = {
+            }
+        
         self._stop_event = threading.Event()
 
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.PAIR)
-        self.socket.bind("tcp://*:{}".format(self.port))
-
-        self._device_control = {
-            }
-
-        self._connected_devices = OrderedDict()
+        self.socket.bind("tcp://{}:{}".format(self.ip, self.port))
 
         pump_cmd_q = deque()
+        pump_return_q = deque()
         pump_abort_event = threading.Event()
-        pump_con = pumpcon.PumpCommThread(pump_cmd_q, pump_abort_event, 'PumpCon')
+        pump_con = pumpcon.PumpCommThread(pump_cmd_q, pump_return_q, pump_abort_event, 'PumpCon')
         pump_con.start()
 
         pump_ctrl = {'queue': pump_cmd_q,
-            'abort': 'pump_abort_event',
-            'thread': pump_con
+            'abort': pump_abort_event,
+            'thread': pump_con,
+            'answer_q': pump_return_q
             }
 
         self._device_control['pump'] = pump_ctrl
@@ -86,10 +89,13 @@ class ControlServer(multiprocessing.Process):
         Custom run method for the thread.
         """
         while True:
-            if self.socket.poll(10) > 0:
-                logger.debug("Getting new command")
-                command = self.socket.recv_json()
-            else:
+            try:
+                if self.socket.poll(10) > 0:
+                    logger.debug("Getting new command")
+                    command = self.socket.recv_json()
+                else:
+                    command = None
+            except Exception:
                 command = None
 
             # if self._abort_event.is_set():
@@ -105,7 +111,7 @@ class ControlServer(multiprocessing.Process):
                 device = command['device']
                 device_cmd = command['command']
                 get_response = command['response']
-                # logger.debug("Processing cmd '%s' with args: %s and kwargs: %s ", device, ', '.join(['{}'.format(a) for a in args]), ', '.join(['{}:{}'.format(kw, item) for kw, item in kwargs.items()]))
+                logger.debug("For device %s, processing cmd '%s' with args: %s and kwargs: %s ", device, device_cmd[0], ', '.join(['{}'.format(a) for a in device_cmd[1]]), ', '.join(['{}:{}'.format(kw, item) for kw, item in device_cmd[2].items()]))
                 try:
                     device_q = self._device_control[device]['queue']
                     device_q.append(device_cmd)
@@ -137,7 +143,7 @@ class ControlServer(multiprocessing.Process):
     def stop(self):
         """Stops the thread cleanly."""
         # logger.info("Starting to clean up and shut down pump control thread: %s", self.name)
-        self.socket.unbind("tcp://*:{}".format(self.port))
+        self.socket.unbind("tcp://{}:{}".format(self.ip, self.port))
         self.socket.close()
         self.context.destroy()
 
@@ -147,7 +153,7 @@ class ControlServer(multiprocessing.Process):
         self._stop_event.set()
 
 if __name__ == '__main__':
-    logger = logging.getLogger(__name__)
+    logger = logging.getLogger('biocon')
     logger.setLevel(logging.INFO)
     h1 = logging.StreamHandler(sys.stdout)
     h1.setLevel(logging.INFO)
@@ -157,9 +163,10 @@ if __name__ == '__main__':
 
     port1 = '5556'
     port2 = '5557'
+    ip = '164.54.204.104'
 
 
-    control_server = ControlServer(port1)
+    control_server = ControlServer(ip, port1)
     control_server.start()
 
     try:

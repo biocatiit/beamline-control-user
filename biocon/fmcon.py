@@ -30,6 +30,9 @@ import sys
 import ctypes
 import copy
 
+if __name__ != '__main__':
+    logger = logging.getLogger('biocon.client')
+
 import wx
 import serial.tools.list_ports as list_ports
 
@@ -40,7 +43,6 @@ sys.path.append('C:\\Users\\biocat\\Desktop\\Elveflow_SDK_V3_01_13\\Elveflow_SDK
 # import Elveflow64 as Elveflow
 import Elveflow32 as Elveflow
 
-logger = logging.getLogger(__name__)
 print_lock = threading.RLock()
 
 
@@ -912,7 +914,7 @@ class FlowMeterFrame(wx.Frame):
         self.Destroy()
 
 if __name__ == '__main__':
-    logger = logging.getLogger(__name__)
+    logger = logging.getLogger('biocon')
     logger.setLevel(logging.INFO)
     h1 = logging.StreamHandler(sys.stdout)
     h1.setLevel(logging.INFO)
