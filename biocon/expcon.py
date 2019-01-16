@@ -31,7 +31,7 @@ import sys
 import os
 
 if __name__ != '__main__':
-    logger = logging.getLogger('biocon.client')
+    logger = logging.getLogger('biocon.exposure')
 
 import wx
 import numpy as np
@@ -1139,7 +1139,7 @@ class ExpPanel(wx.Panel):
 
         top_sizer = wx.BoxSizer(wx.VERTICAL)
         top_sizer.Add(exp_ctrl_box_sizer, flag=wx.EXPAND)
-        top_sizer.Add(exp_status_sizer,border=10, flag=wx.EXPAND|wx.TOP)
+        top_sizer.Add(exp_status_sizer, border=10, flag=wx.EXPAND|wx.TOP)
 
         return top_sizer
 

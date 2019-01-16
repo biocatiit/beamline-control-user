@@ -30,6 +30,8 @@ import sys
 logger = logging.getLogger(__name__)
 
 import wx
+from wx.lib.wordwrap import wordwrap
+from wx.lib.stattext import GenStaticText as StaticText
 
 class CharValidator(wx.Validator):
     ''' Validates data as it is entered into the text controls. '''
@@ -41,7 +43,7 @@ class CharValidator(wx.Validator):
 
         self.fname_chars = string.letters+string.digits+'_-'
 
-        self.special_keys = [wx.WXK_BACK, wx.WXK_DELETE, 
+        self.special_keys = [wx.WXK_BACK, wx.WXK_DELETE,
             wx.WXK_TAB, wx.WXK_NUMPAD_TAB, wx.WXK_NUMPAD_ENTER]
 
     def Clone(self):
@@ -103,3 +105,75 @@ def set_mppath():
     if mx_dir not in path:
         os.environ["PATH"] = mx_dir+os.pathsep+os.environ["PATH"]
         sys.path.append(mx_dir)
+
+
+class AutoWrapStaticText(StaticText):
+    """
+    A simple class derived from :mod:`lib.stattext` that implements auto-wrapping
+    behaviour depending on the parent size.
+    .. versionadded:: 0.9.5
+    Code from: https://github.com/wxWidgets/Phoenix/blob/master/wx/lib/agw/infobar.py
+    Original author: Andrea Gavana
+    """
+    def __init__(self, parent, label):
+        """
+        Defsult class constructor.
+        :param Window parent: a subclass of :class:`Window`, must not be ``None``;
+        :param string `label`: the :class:`AutoWrapStaticText` text label.
+        """
+        StaticText.__init__(self, parent, wx.ID_ANY, label, style=wx.ST_NO_AUTORESIZE)
+        self.label = label
+        # colBg = wx.SystemSettings.GetColour(wx.SYS_COLOUR_INFOBK)
+        # self.SetBackgroundColour(colBg)
+        # self.SetOwnForegroundColour(wx.SystemSettings.GetColour(wx.SYS_COLOUR_INFOTEXT))
+
+        self.Bind(wx.EVT_SIZE, self.OnSize)
+        self.Bind(wx.EVT_SPLITTER_SASH_POS_CHANGED, self.OnSize)
+        self.Bind(wx.EVT_SPLITTER_SASH_POS_CHANGING, self.OnSize)
+
+    def OnSize(self, event):
+        """
+        Handles the ``wx.EVT_SIZE`` event for :class:`AutoWrapStaticText`.
+        :param `event`: a :class:`SizeEvent` event to be processed.
+        """
+        event.Skip()
+        self.Wrap(event.GetSize().width)
+
+    def Wrap(self, width):
+        """
+        This functions wraps the controls label so that each of its lines becomes at
+        most `width` pixels wide if possible (the lines are broken at words boundaries
+        so it might not be the case if words are too long).
+        If `width` is negative, no wrapping is done.
+        :param integer `width`: the maximum available width for the text, in pixels.
+        :note: Note that this `width` is not necessarily the total width of the control,
+        since a few pixels for the border (depending on the controls border style) may be added.
+        """
+        if width < 0:
+           return
+        self.Freeze()
+
+        dc = wx.ClientDC(self)
+        dc.SetFont(self.GetFont())
+        text = wordwrap(self.label, width, dc)
+        self.SetLabel(text, wrapped=True)
+
+        self.Thaw()
+
+    def SetLabel(self, label, wrapped=False):
+        """
+        Sets the :class:`AutoWrapStaticText` label.
+        All "&" characters in the label are special and indicate that the following character is
+        a mnemonic for this control and can be used to activate it from the keyboard (typically
+        by using ``Alt`` key in combination with it). To insert a literal ampersand character, you
+        need to double it, i.e. use "&&". If this behaviour is undesirable, use `SetLabelText` instead.
+        :param string `label`: the new :class:`AutoWrapStaticText` text label;
+        :param bool `wrapped`: ``True`` if this method was called by the developer using :meth:`~AutoWrapStaticText.SetLabel`,
+        ``False`` if it comes from the :meth:`~AutoWrapStaticText.OnSize` event handler.
+        :note: Reimplemented from :class:`PyControl`.
+        """
+
+        if not wrapped:
+            self.label = label
+
+        StaticText.SetLabel(self, label)

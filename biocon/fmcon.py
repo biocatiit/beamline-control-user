@@ -31,7 +31,7 @@ import ctypes
 import copy
 
 if __name__ != '__main__':
-    logger = logging.getLogger('biocon.client')
+    logger = logging.getLogger('biocon.flowmeter')
 
 import wx
 import serial.tools.list_ports as list_ports
@@ -114,8 +114,6 @@ class FlowMeter(object):
             self._units = units
             base_vu, base_tu = self._base_units.split('/')
             new_vu, new_tu = self._units.split('/')
-            print(self._base_units.split('/'))
-            print(self._units.split('/'))
             if base_vu != new_vu:
                 if (base_vu == 'nL' and new_vu == 'uL') or (base_vu == 'uL' and new_vu == 'mL'):
                     self._flow_mult = 1./1000.

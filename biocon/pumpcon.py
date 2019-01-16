@@ -1329,7 +1329,7 @@ class PumpFrame(wx.Frame):
         self.pump_cmd_q = deque()
         self.pump_answer_q = deque()
         self.abort_event = threading.Event()
-        self.pump_con = PumpCommThread(self.pump_cmd_q, self.abort_event, 'PumpCon')
+        self.pump_con = PumpCommThread(self.pump_cmd_q, self.pump_answer_q, self.abort_event, 'PumpCon')
         self.pump_con.start()
 
         self.Bind(wx.EVT_CLOSE, self._on_exit)
