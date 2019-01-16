@@ -31,7 +31,7 @@ import sys
 import os
 
 if __name__ != '__main__':
-    logger = logging.getLogger('biocon.exposure')
+    logger = logging.getLogger(__name__)
 
 import wx
 import numpy as np
@@ -1473,7 +1473,7 @@ class ExpFrame(wx.Frame):
 
 
 if __name__ == '__main__':
-    logger = logging.getLogger('biocon')
+    logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
 
     h1 = logging.StreamHandler(sys.stdout)

@@ -31,7 +31,7 @@ import ctypes
 import copy
 
 if __name__ != '__main__':
-    logger = logging.getLogger('biocon.flowmeter')
+    logger = logging.getLogger(__name__)
 
 import wx
 import serial.tools.list_ports as list_ports
@@ -351,6 +351,7 @@ class FlowMeterCommThread(threading.Thread):
         logger.info("Disconnecting flow meter %s", name)
         fm = self._connected_fms[name]
         fm.stop()
+        del self._connected_fms[name]
         logger.debug("Flow meter %s disconnected", name)
 
     def _get_flow_rate(self, name):
@@ -916,7 +917,7 @@ class FlowMeterFrame(wx.Frame):
         self.Destroy()
 
 if __name__ == '__main__':
-    logger = logging.getLogger('biocon')
+    logger = logging.getLogger()
     logger.setLevel(logging.INFO)
     h1 = logging.StreamHandler(sys.stdout)
     h1.setLevel(logging.INFO)

@@ -32,7 +32,7 @@ import logging
 import sys
 
 if __name__ != '__main__':
-    logger = logging.getLogger('biocon.pumpcon')
+    logger = logging.getLogger(__name__)
 
 import serial
 import serial.tools.list_ports as list_ports
@@ -697,6 +697,7 @@ class PumpCommThread(threading.Thread):
         logger.info("Disconnecting pump %s", name)
         pump = self._connected_pumps[name]
         pump.disconnect()
+        del self._connected_pumps[name]
         logger.debug("Pump %s disconnected", name)
 
     def _set_flow_rate(self, name, flow_rate):
@@ -1462,7 +1463,7 @@ class PumpFrame(wx.Frame):
         self.Destroy()
 
 if __name__ == '__main__':
-    logger = logging.getLogger('biocon')
+    logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
     h1 = logging.StreamHandler(sys.stdout)
     h1.setLevel(logging.DEBUG)

@@ -41,7 +41,7 @@ class CharValidator(wx.Validator):
         self.flag = flag
         self.Bind(wx.EVT_CHAR, self.OnChar)
 
-        self.fname_chars = string.letters+string.digits+'_-'
+        self.fname_chars = string.ascii_letters+string.digits+'_-'
 
         self.special_keys = [wx.WXK_BACK, wx.WXK_DELETE,
             wx.WXK_TAB, wx.WXK_NUMPAD_TAB, wx.WXK_NUMPAD_ENTER]

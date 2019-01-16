@@ -30,7 +30,7 @@ import time
 import sys
 
 if __name__ != '__main__':
-    logger = logging.getLogger('biocon.server')
+    logger = logging.getLogger(__name__)
 
 import zmq
 
@@ -185,7 +185,7 @@ class ControlServer(threading.Thread):
         self._stop_event.set()
 
 if __name__ == '__main__':
-    logger = logging.getLogger('biocon')
+    logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
     h1 = logging.StreamHandler(sys.stdout)
     h1.setLevel(logging.INFO)

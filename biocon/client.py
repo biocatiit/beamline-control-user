@@ -30,7 +30,7 @@ import time
 import sys
 
 if __name__ != '__main__':
-    logger = logging.getLogger('biocon.client')
+    logger = logging.getLogger(__name__)
 
 import zmq
 
@@ -128,11 +128,10 @@ class ControlClient(threading.Thread):
                     if answer == '':
                         raise zmq.ZMQError(msg="Could not get a response from the server")
 
+                    logger.debug('Command response: %s' %(answer))
+
                     if get_response:
                         self.answer_queue.append(answer)
-                        logger.info('Command response: %s' %(answer))
-                    else:
-                        logger.debug('Command response: %s' %(answer))
 
                 except Exception:
                     device = command['device']
@@ -141,8 +140,8 @@ class ControlClient(threading.Thread):
                         "with args: %s and kwargs: %s. Exception follows:" %(device, device_cmd[0],
                         ', '.join(['{}'.format(a) for a in device_cmd[1]]),
                         ', '.join(['{}:{}'.format(kw, item) for kw, item in device_cmd[2].items()])))
-                    logger.exception(msg)
-                    logger.exception(traceback.print_exc())
+                    logger.error(msg)
+                    logger.error(traceback.print_exc())
         if self._stop_event.is_set():
             self._stop_event.clear()
         else:
@@ -169,7 +168,7 @@ class ControlClient(threading.Thread):
         self._stop_event.set()
 
 if __name__ == '__main__':
-    logger = logging.getLogger('biocon')
+    logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
     h1 = logging.StreamHandler(sys.stdout)
     h1.setLevel(logging.DEBUG)
