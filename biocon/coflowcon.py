@@ -181,6 +181,7 @@ class CoflowPanel(wx.Panel):
         self.stop_flow_button.Bind(wx.EVT_BUTTON, self._on_stopbutton)
         self.change_flow_button.Bind(wx.EVT_BUTTON, self._on_changebutton)
 
+        self.start_flow_button.Disable()
         self.stop_flow_button.Disable()
         self.change_flow_button.Disable()
 
@@ -260,8 +261,8 @@ class CoflowPanel(wx.Panel):
 
         #Need some way to make threads wait until pumps initialize
 
-        self._send_pumpcmd(sheath_init_cmd)
-        self._send_pumpcmd(outlet_init_cmd)
+        self._send_pumpcmd(sheath_init_cmd, response=True)
+        self._send_pumpcmd(outlet_init_cmd, response=True)
 
         self._send_pumpcmd(('set_units', ('sheath_pump', self.settings['flow_units']), {}))
         self._send_pumpcmd(('set_units', ('outlet_pump', self.settings['flow_units']), {}))
@@ -272,8 +273,11 @@ class CoflowPanel(wx.Panel):
         if sheath_is_moving or outlet_is_moving:
             self.stop_flow.Enable()
             self.change_flow_rate.Enable()
+
         if sheath_is_moving and outlet_is_moving:
             self.start_flow.Disable()
+        else:
+            self.start_flow.Enable()
 
     def _init_fms(self):
         """
@@ -482,19 +486,17 @@ class CoflowPanel(wx.Panel):
         cycle_time = time.time()
         start_time = copy.copy(cycle_time)
 
-        sheath_fr_list = []
-        outlet_fr_list = []
+        sheath_fr_list = deque(maxlen=10000)
+        outlet_fr_list = deque(maxlen=10000)
 
-        sheath_density_list = []
-        outlet_density_list = []
+        sheath_density_list = deque(maxlen=4800)
+        outlet_density_list = deque(maxlen=4800)
 
-        sheath_t_list = []
-        outlet_t_list = []
+        sheath_t_list = deque(maxlen=4800)
+        outlet_t_list = deque(maxlen=4800)
 
-        fr_time_list = []
-        aux_time_list = []
-
-        # Need to make these lists have a finite length at all times.
+        fr_time_list = deque(maxlen=10000)
+        aux_time_list = deque(maxlen=4800)
 
         while not self.stop_get_fr_event.is_set():
             sheath_fr = self._send_fmcmd(sheath_fr_cmd, True)[1]

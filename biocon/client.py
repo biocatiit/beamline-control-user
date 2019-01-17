@@ -120,7 +120,7 @@ class ControlClient(threading.Thread):
                     while self.socket.poll(10) == 0 and time.time()-start_time < 2:
                         pass
 
-                    if self.socket.poll(1) > 0:
+                    if self.socket.poll(10) > 0:
                         answer = self.socket.recv_json()
                     else:
                         answer = ''

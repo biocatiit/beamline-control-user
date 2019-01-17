@@ -654,6 +654,8 @@ class PumpCommThread(threading.Thread):
                         ', '.join(['{}'.format(a) for a in args]),
                         ', '.join(['{}:{}'.format(kw, item) for kw, item in kwargs.items()])))
                     logger.exception(msg)
+                    if command == 'connect':
+                        self.answer_queue.append(False)
         if self._stop_event.is_set():
             self._stop_event.clear()
         else:
@@ -683,6 +685,7 @@ class PumpCommThread(threading.Thread):
         logger.info("Connecting pump %s", name)
         new_pump = self.known_pumps[pump_type](device, name, **kwargs)
         self._connected_pumps[name] = new_pump
+        self.answer_queue.append(True)
         logger.debug("Pump %s connected", name)
 
     def _disconnect_pump(self, name):
