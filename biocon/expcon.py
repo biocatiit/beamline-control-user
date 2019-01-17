@@ -35,6 +35,7 @@ if __name__ != '__main__':
 
 import wx
 import numpy as np
+from pubsub import pub
 
 import utils
 utils.set_mppath() #This must be done before importing any Mp Modules.
@@ -79,7 +80,7 @@ class ExpCommThread(threading.Thread):
     2. Make slow exposure mode with Struck work, see how speed compares to with Joerger
     """
 
-    def __init__(self, command_queue, return_queue, abort_event, exp_event, mx_data,
+    def __init__(self, command_queue, return_queue, abort_event, exp_event,
         settings, name=None):
         """
         Initializes the custom thread. Important parameters here are the
@@ -953,8 +954,7 @@ class ExpPanel(wx.Panel):
     :py:func:`_create_layout` function, and then add in type switching in the
     :py:func:`_on_type` function.
     """
-    def __init__(self, mx_data, settings, exp_cmd_q, abort_event, exp_event, exp_con,
-        *args, **kwargs):
+    def __init__(self, settings, *args, **kwargs):
         """
         Initializes the custom thread. Important parameters here are the
         list of known commands ``_commands`` and known pumps ``known_pumps``.
@@ -998,12 +998,17 @@ class ExpPanel(wx.Panel):
         wx.Panel.__init__(self, *args, **kwargs)
         logger.debug('Initializing ExpPanel')
 
-        self.mx_data = mx_data
         self.settings = settings
-        self.exp_cmd_q = exp_cmd_q
-        self.abort_event = abort_event
-        self.exp_event = exp_event
-        self.exp_con = exp_con
+
+        # self.exp_cmd_q = deque()
+        # self.exp_ret_q = deque()
+        # self.abort_event = threading.Event()
+        # self.exp_event = threading.Event()
+        # self.exp_con = ExpCommThread(self.exp_cmd_q, self.exp_ret_q, self.abort_event,
+        #     self.exp_event, self.settings, 'ExpCon')
+        # self.exp_con.start()
+
+        self.exp_con = None #For testing purposes
 
         self.tr_timer = wx.Timer(self)
         self.Bind(wx.EVT_TIMER, self._on_tr_timer, self.tr_timer)
@@ -1181,6 +1186,8 @@ class ExpPanel(wx.Panel):
         if not valid:
             return
 
+        pub.sendMessage('exposure.start')
+
         self.set_status('Preparing exposure')
         self.start_exp_btn.Disable()
         self.stop_exp_btn.Enable()
@@ -1226,6 +1233,8 @@ class ExpPanel(wx.Panel):
         old_rn = self.run_num.GetLabel()
         run_num = int(old_rn[1:])+1
         self.run_num.SetLabel('_{:03d}'.format(run_num))
+
+        pub.sendMessage('exposure.end')
 
     def set_status(self, status):
         self.status.SetLabel(status)
@@ -1412,47 +1421,46 @@ class ExpPanel(wx.Panel):
 
         return exp_values, valid
 
+    def on_exit(self):
+        if self.exp_event.is_set() and not self.abort_event.is_set():
+            self.abort_event.set()
+            time.sleep(2)
+
+        self.exp_con.stop()
+        self.exp_con.join()
+        while self.exp_con.is_alive():
+            time.sleep(0.001)
+
 class ExpFrame(wx.Frame):
     """
     A lightweight frame allowing one to work with arbitrary number of pumps.
     Only meant to be used when the pumpcon module is run directly,
     rather than when it is imported into another program.
     """
-    def __init__(self, mx_data, settings, *args, **kwargs):
+    def __init__(self, settings, *args, **kwargs):
         """
         Initializes the pump frame. Takes args and kwargs for the wx.Frame class.
         """
         super(ExpFrame, self).__init__(*args, **kwargs)
         logger.debug('Setting up the ExpFrame')
 
-        self.mx_data = mx_data
-
-        self.exp_cmd_q = deque()
-        self.exp_ret_q = deque()
-        self.abort_event = threading.Event()
-        self.exp_event = threading.Event()
-        self.exp_con = ExpCommThread(self.exp_cmd_q, self.exp_ret_q, self.abort_event,
-            self.exp_event, self.mx_data, settings, 'ExpCon')
-        self.exp_con.start()
-
-        # self.exp_con = None #For testing purposes
+        self.settings = settings
 
         self.Bind(wx.EVT_CLOSE, self._on_exit)
 
-        top_sizer = self._create_layout(settings)
+        top_sizer = self._create_layout()
 
         self.SetSizer(top_sizer)
 
         self.Fit()
         self.Raise()
 
-    def _create_layout(self, settings):
+    def _create_layout(self):
         """Creates the layout"""
-        exp_panel = ExpPanel(self.mx_data, settings, self.exp_cmd_q, self.abort_event,
-            self.exp_event, self.exp_con, self)
+        self.exp_panel = ExpPanel(self.settings, self)
 
         self.exp_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        self.exp_sizer.Add(exp_panel, proportion=1, flag=wx.EXPAND)
+        self.exp_sizer.Add(self.exp_panel, proportion=1, flag=wx.EXPAND)
 
         top_sizer = wx.BoxSizer(wx.VERTICAL)
         top_sizer.Add(self.exp_sizer, flag=wx.EXPAND|wx.ALL, border=5)
@@ -1462,13 +1470,7 @@ class ExpFrame(wx.Frame):
     def _on_exit(self, evt):
         """Stops all current pump motions and then closes the frame."""
         logger.debug('Closing the ExpFrame')
-        if self.exp_event.is_set() and not self.abort_event.is_set():
-            self.abort_event.set()
-            time.sleep(2)
-
-        self.exp_con.stop()
-        while self.exp_con.is_alive():
-            time.sleep(0.001)
+        self.exp_panel.on_exit()
         self.Destroy()
 
 
@@ -1523,33 +1525,33 @@ if __name__ == '__main__':
     #     }
 
     #Settings for Pilatus 3X 1M
-    settings = {'data_dir': '',
-        'filename':'',
-        'run_num': 1,
-        'exp_time': '0.5',
-        'exp_period': '1.5',
-        'exp_num': '5',
-        'exp_time_min': 0.00105,
-        'exp_time_max': 5184000,
-        'exp_period_min': 0.002,
-        'exp_period_max': 5184000,
-        'nframes_max': 4000, # For Pilatus: 999999, for Struck: 4000 (set by maxChannels in the driver configuration)
-        'exp_period_delta': 0.00095,
-        'slow_mode_thres': 0.1,
-        'fast_mode_max_exp_time' : 2000,
-        'wait_for_trig' : True,
-        'num_trig': '4',
+    settings = {'data_dir'      : '',
+        'filename'              :'',
+        'run_num'               : 1,
+        'exp_time'              : '0.5',
+        'exp_period'            : '1.5',
+        'exp_num'               : '5',
+        'exp_time_min'          : 0.00105,
+        'exp_time_max'          : 5184000,
+        'exp_period_min'        : 0.002,
+        'exp_period_max'        : 5184000,
+        'nframes_max'           : 4000, # For Pilatus: 999999, for Struck: 4000 (set by maxChannels in the driver configuration)
+        'exp_period_delta'      : 0.00095,
+        'slow_mode_thres'       : 0.1,
+        'fast_mode_max_exp_time': 2000,
+        'wait_for_trig'         : True,
+        'num_trig'              : '4',
         'show_advanced_options' : False,
-        'fe_shutter_pv' : 'FE:18:ID:FEshutter',
-        'd_shutter_pv': 'PA:18ID:STA_D_SDS_OPEN_PL.VAL',
-        'local_dir_root': '/nas_data/Pilatus1M',
-        'remote_dir_root': '/nas_data',
-        'base_data_dir': '/nas_data/Pilatus1M/20181212Pollack', #CHANGE ME
+        'fe_shutter_pv'         : 'FE:18:ID:FEshutter',
+        'd_shutter_pv'          : 'PA:18ID:STA_D_SDS_OPEN_PL.VAL',
+        'local_dir_root'        : '/nas_data/Pilatus1M',
+        'remote_dir_root'       : '/nas_data',
+        'components'            : ['exposure'],
+        'base_data_dir'         : '/nas_data/Pilatus1M/20181212Pollack', #CHANGE ME
         }
 
     settings['data_dir'] = settings['base_data_dir']
 
-    mx_data = {} #Testing only
     app = wx.App()
 
     standard_paths = wx.StandardPaths.Get() #Can't do this until you start the wx app

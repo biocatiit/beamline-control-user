@@ -24,17 +24,16 @@ from io import open
 
 import threading
 import time
-from collections import OrderedDict, deque
+from collections import deque
 import logging
 import sys
-import ctypes
 import copy
 
 if __name__ != '__main__':
     logger = logging.getLogger(__name__)
 
 import wx
-import zmq
+from pubsub import pub
 
 # import fmcon
 import client
@@ -53,7 +52,7 @@ class CoflowPanel(wx.Panel):
     ``bfs_pump_sizer`` is constructed in the :py:func:`_create_layout` function,
     and then add in type switching in the :py:func:`_on_type` function.
     """
-    def __init__(self, parent, settings, mx_data, *args, **kwargs):
+    def __init__(self, settings, *args, **kwargs):
         """
         Initializes the custom thread. Important parameters here are the
         list of known commands ``_commands`` and known pumps ``known_fms``.
@@ -98,11 +97,10 @@ class CoflowPanel(wx.Panel):
 
         """
 
-        super(CoflowPanel, self).__init__(parent, *args, **kwargs)
+        super(CoflowPanel, self).__init__(*args, **kwargs)
         logger.debug('Initializing CoflowPanel')
 
         self.settings = settings
-        self.mx_data = mx_data
 
         self._create_layout()
 
@@ -137,7 +135,7 @@ class CoflowPanel(wx.Panel):
             self.coflow_fm_con = client.ControlClient(fm_ip, fm_port,
                 self.coflow_fm_cmd_q, self.coflow_fm_return_q,
                 self.coflow_fm_abort_event, self.timeout_event, name='PumpControlClient')
-        
+
         self.coflow_pump_con.start()
         self.coflow_fm_con.start()
 
@@ -167,6 +165,8 @@ class CoflowPanel(wx.Panel):
             dialog = wx.MessageDialog(self, msg, 'Connection error',
                 style=wx.OK|wx.ICON_ERROR)
             dialog.ShowModal()
+
+        pub.subscribe(self.auto_control, 'exposure')
 
 
     def _create_layout(self):
@@ -391,6 +391,16 @@ class CoflowPanel(wx.Panel):
 
     def _on_changebutton(self, evt):
         self.change_flow(start_monitor=True)
+
+    def auto_control(self, topic=pub.AUTO_TOPIC):
+        topic_name = topic.getName()
+
+        auto = self.auto_flow.GetValue()
+
+        if topic_name == 'exposure.start' and auto:
+            self.start_flow()
+        elif topic_name == 'exposure.stop' and auto:
+            self.stop_flow()
 
     def start_flow(self, validate=True):
         logger.debug('Starting flow')
@@ -725,8 +735,9 @@ class CoflowPanel(wx.Panel):
         self.coflow_pump_con.stop()
         self.coflow_fm_con.stop()
 
-        self.coflow_pump_con.join()
-        self.coflow_fm_con.join()
+        if not self.timeout_event.is_set():
+            self.coflow_pump_con.join()
+            self.coflow_fm_con.join()
 
 class CoflowWarningMessage(wx.Frame):
     def __init__(self, parent, msg, title, *args, **kwargs):
@@ -782,7 +793,7 @@ class CoflowFrame(wx.Frame):
     Only meant to be used when the pumpcon module is run directly,
     rather than when it is imported into another program.
     """
-    def __init__(self, mx_data, settings, *args, **kwargs):
+    def __init__(self, settings, *args, **kwargs):
         """
         Initializes the pump frame. Takes args and kwargs for the wx.Frame class.
         """
@@ -791,16 +802,16 @@ class CoflowFrame(wx.Frame):
 
         self.Bind(wx.EVT_CLOSE, self._on_exit)
 
-        self._create_layout(settings, mx_data)
+        self._create_layout(settings)
 
         self.Layout()
         self.SendSizeEvent()
         self.Fit()
         self.Raise()
 
-    def _create_layout(self, settings, mx_data):
+    def _create_layout(self, settings):
         """Creates the layout"""
-        self.coflow_panel = CoflowPanel(self, settings, mx_data)
+        self.coflow_panel = CoflowPanel(settings, self)
 
         self.coflow_sizer = wx.BoxSizer(wx.HORIZONTAL)
         self.coflow_sizer.Add(self.coflow_panel, proportion=1, flag=wx.EXPAND)
@@ -859,7 +870,6 @@ if __name__ == '__main__':
         'lc_flow_rate'          : '0.8',
         }
 
-    mx_data = {} #Testing only
     app = wx.App()
 
     # standard_paths = wx.StandardPaths.Get() #Can't do this until you start the wx app
@@ -877,7 +887,7 @@ if __name__ == '__main__':
     # logger.addHandler(h2)
 
     logger.debug('Setting up wx app')
-    frame = CoflowFrame(mx_data, settings, None, title='Coflow Control')
+    frame = CoflowFrame(settings, None, title='Coflow Control')
     frame.Show()
     app.MainLoop()
 
