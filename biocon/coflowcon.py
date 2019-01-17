@@ -34,6 +34,7 @@ if __name__ != '__main__':
     logger = logging.getLogger(__name__)
 
 import wx
+import zmq
 
 # import fmcon
 import client
@@ -123,23 +124,28 @@ class CoflowPanel(wx.Panel):
                 self.coflow_fm_return_q, self.coflow_fm_abort_event, 'FMCon')
 
         else:
+            self.timeout_event = threading.Event()
+
             pump_ip = self.settings['remote_pump_ip']
             pump_port = self.settings['remote_pump_port']
             self.coflow_pump_con = client.ControlClient(pump_ip, pump_port,
                 self.coflow_pump_cmd_q, self.coflow_pump_return_q,
-                self.coflow_pump_abort_event, name='PumpControlClient')
+                self.coflow_pump_abort_event, self.timeout_event, name='PumpControlClient')
+
+            logger.debug('Got to here')
 
             fm_ip = self.settings['remote_fm_ip']
             fm_port = self.settings['remote_fm_port']
             self.coflow_fm_con = client.ControlClient(fm_ip, fm_port,
                 self.coflow_fm_cmd_q, self.coflow_fm_return_q,
-                self.coflow_fm_abort_event, name='PumpControlClient')
+                self.coflow_fm_abort_event, self.timeout_event, name='PumpControlClient')
 
+            logger.debug('Got to here')
+            logger.debug(self.timeout_event.is_set())
+            # if self.timeout_event.is_set():
+        
         self.coflow_pump_con.start()
         self.coflow_fm_con.start()
-
-        self._init_pumps()
-        self._init_fms()
 
         self.monitor = False
         self.sheath_setpoint = None
@@ -149,13 +155,22 @@ class CoflowPanel(wx.Panel):
         self.Bind(wx.EVT_TIMER, self._on_monitor_timer, self.monitor_timer)
 
         self.stop_get_fr_event = threading.Event()
-        self.get_fr_thread = threading.Thread(target=self._get_flow_rates)
-        self.get_fr_thread.daemon = True
-        self.get_fr_thread.start()
 
-        # # Testing only
-        # self.coflow_pump_con = None
-        # self.coflow_fm_con = None
+        if not self.timeout_event.is_set():
+            self._init_pumps()
+            self._init_fms()
+
+            self.get_fr_thread = threading.Thread(target=self._get_flow_rates)
+            self.get_fr_thread.daemon = True
+            self.get_fr_thread.start()
+
+        else:
+            msg = ('Could not connect to the coflow control server. '
+                'Contact your beamline scientist.')
+
+            dialog = wx.MessageDialog(self, msg, 'Connection error',
+                style=wx.OK|wx.ICON_ERROR)
+            dialog.ShowModal()
 
 
     def _create_layout(self):
@@ -271,13 +286,13 @@ class CoflowPanel(wx.Panel):
         outlet_is_moving = self._send_pumpcmd(('is_moving', ('outlet_pump',), {}), response=True)
 
         if sheath_is_moving or outlet_is_moving:
-            self.stop_flow.Enable()
-            self.change_flow_rate.Enable()
+            self.stop_flow_button.Enable()
+            self.change_flow_button.Enable()
 
         if sheath_is_moving and outlet_is_moving:
-            self.start_flow.Disable()
+            self.start_flow_button.Disable()
         else:
-            self.start_flow.Enable()
+            self.start_flow_button.Enable()
 
     def _init_fms(self):
         """
@@ -569,16 +584,34 @@ class CoflowPanel(wx.Panel):
             self.warning_dialog.Show()
 
     def _send_pumpcmd(self, cmd, response=False):
-        full_cmd = {'device': 'pump', 'command': cmd, 'response': response}
-        self.coflow_pump_cmd_q.append(full_cmd)
+        ret_val = None
 
-        if response:
-            while len(self.coflow_pump_return_q) == 0:
-                time.sleep(0.01)
+        if not self.timeout_event.is_set():
+            full_cmd = {'device': 'pump', 'command': cmd, 'response': response}
+            self.coflow_pump_cmd_q.append(full_cmd)
 
-            ret_val = self.coflow_pump_return_q.popleft()
+            if response:
+                while len(self.coflow_pump_return_q) == 0 and not self.timeout_event.is_set():
+                    time.sleep(0.01)
+
+                if not self.timeout_event.is_set():
+                    ret_val = self.coflow_pump_return_q.popleft()
+                else:
+                    msg = ('Lost connection to the coflow control server. '
+                        'Contact your beamline scientist.')
+
+                    dialog = wx.MessageDialog(self, msg, 'Connection error',
+                        style=wx.OK|wx.ICON_ERROR)
+                    dialog.ShowModal()
+
         else:
-            ret_val = None
+            msg = ('No connection to the coflow control server. '
+                'Contact your beamline scientist.')
+
+            dialog = wx.MessageDialog(self, msg, 'Connection error',
+                style=wx.OK|wx.ICON_ERROR)
+            dialog.ShowModal()
+
 
         return ret_val
 
@@ -590,16 +623,33 @@ class CoflowPanel(wx.Panel):
         :param str cmd: The command to send, matching the command in the
             :py:class:`FlowMeterCommThread` ``_commands`` dictionary.
         """
-        full_cmd = {'device': 'fm', 'command': cmd, 'response': response}
-        self.coflow_fm_cmd_q.append(full_cmd)
+        ret_val = None
 
-        if response:
-            while len(self.coflow_fm_return_q) == 0:
-                time.sleep(0.01)
+        if not self.timeout_event.is_set():
+            full_cmd = {'device': 'fm', 'command': cmd, 'response': response}
+            self.coflow_fm_cmd_q.append(full_cmd)
 
-            ret_val = self.coflow_fm_return_q.popleft()
+            if response:
+                while len(self.coflow_fm_return_q) == 0 and not self.timeout_event.is_set():
+                    time.sleep(0.01)
+
+                if not self.timeout_event.is_set():
+                    ret_val = self.coflow_fm_return_q.popleft()
+                else:
+                    msg = ('Lost connection to the coflow control server. '
+                        'Contact your beamline scientist.')
+
+                    dialog = wx.MessageDialog(self, msg, 'Connection error',
+                        style=wx.OK|wx.ICON_ERROR)
+                    dialog.ShowModal()
+
         else:
-            ret_val = None
+            msg = ('No connection to the coflow control server. '
+                'Contact your beamline scientist.')
+
+            dialog = wx.MessageDialog(self, msg, 'Connection error',
+                style=wx.OK|wx.ICON_ERROR)
+            dialog.ShowModal()
 
         return ret_val
 
@@ -607,7 +657,10 @@ class CoflowPanel(wx.Panel):
         logger.debug('Closing all coflow devices')
 
         self.stop_get_fr_event.set()
-        self.stop_flow()
+
+        if not self.timeout_event.is_set():
+            self.get_fr_thread.join()
+            self.stop_flow()
 
         time.sleep(0.5)
 
@@ -617,16 +670,20 @@ class CoflowPanel(wx.Panel):
         sheath_pump = ('disconnect', ('sheath_pump', ), {})
         outlet_pump = ('disconnect', ('outlet_pump', ), {})
 
-        self._send_fmcmd(sheath_fm)
-        self._send_fmcmd(outlet_fm)
+        if not self.timeout_event.is_set():
+            self._send_fmcmd(sheath_fm)
+            self._send_fmcmd(outlet_fm)
 
-        self._send_pumpcmd(sheath_pump)
-        self._send_pumpcmd(outlet_pump)
+            self._send_pumpcmd(sheath_pump)
+            self._send_pumpcmd(outlet_pump)
 
         time.sleep(0.5)
 
-        self.coflow_fm_con.stop()
         self.coflow_pump_con.stop()
+        self.coflow_fm_con.stop()
+        
+        self.coflow_pump_con.join()
+        self.coflow_fm_con.join()
 
 class CoflowWarningMessage(wx.Frame):
     def __init__(self, parent, msg, title, *args, **kwargs):
@@ -752,9 +809,9 @@ if __name__ == '__main__':
         'outlet_fm'             : ('BFS', 'COM7', [], {}),
         'components'            : ['coflow'],
         'sheath_ratio'          : 0.5,
-        'sheath_excess'         : 2,
-        'warning_threshold_low' : 0.95,
-        'warning_threshold_high': 1.05,
+        'sheath_excess'         : 2.1,
+        'warning_threshold_low' : 0.8,
+        'warning_threshold_high': 1.2,
         'settling_time'         : 5000, #in ms
         'lc_flow_rate'          : '0.8',
         }

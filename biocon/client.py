@@ -40,7 +40,8 @@ class ControlClient(threading.Thread):
 
     """
 
-    def __init__(self, ip, port, command_queue, answer_queue, abort_event, name='ControlClient'):
+    def __init__(self, ip, port, command_queue, answer_queue, abort_event, 
+        timeout_event, name='ControlClient'):
         """
         Initializes the custom thread. Important parameters here are the
         list of known commands ``_commands`` and known pumps ``known_pumps``.
@@ -62,6 +63,7 @@ class ControlClient(threading.Thread):
         self.answer_queue = answer_queue
         self._abort_event = abort_event
         self._stop_event = threading.Event()
+        self.timeout_event = timeout_event
 
         logger.info("Connecting to %s on port %s", self.ip, self.port)
         self.context = zmq.Context()
@@ -86,7 +88,7 @@ class ControlClient(threading.Thread):
             logger.info("Connection to server verified")
         else:
             logger.error("Could not get a response from the server")
-            raise zmq.ZMQError(msg="Could not get a response from the server")
+            self.timeout_event.set()
 
     def run(self):
         """
@@ -117,7 +119,7 @@ class ControlClient(threading.Thread):
                     self.socket.send_json(command)
 
                     start_time = time.time()
-                    while self.socket.poll(10) == 0 and time.time()-start_time < 2:
+                    while self.socket.poll(10) == 0 and time.time()-start_time < 5:
                         pass
 
                     if self.socket.poll(10) > 0:
@@ -132,6 +134,17 @@ class ControlClient(threading.Thread):
 
                     if get_response:
                         self.answer_queue.append(answer)
+
+                except zmq.ZMQError:
+                    device = command['device']
+                    device_cmd = command['command']
+                    msg = ("Device %s failed to run command '%s' "
+                        "with args: %s and kwargs: %s." %(device, device_cmd[0],
+                        ', '.join(['{}'.format(a) for a in device_cmd[1]]),
+                        ', '.join(['{}:{}'.format(kw, item) for kw, item in device_cmd[2].items()])))
+                    logger.error(msg)
+                    logger.error('Connection to server timed out.')
+                    self.timeout_event.set()
 
                 except Exception:
                     device = command['device']

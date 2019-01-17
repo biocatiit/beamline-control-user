@@ -142,7 +142,7 @@ class ControlServer(threading.Thread):
                             answer_q = self._device_control[device]['answer_q']
 
                             start_time = time.time()
-                            while len(answer_q) == 0 and time.time()-start_time < 2:
+                            while len(answer_q) == 0 and time.time()-start_time < 5:
                                 time.sleep(0.01)
 
                             if len(answer_q) == 0:
