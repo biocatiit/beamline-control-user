@@ -315,6 +315,9 @@ class FlowMeterCommThread(threading.Thread):
                         ', '.join(['{}:{}'.format(kw, item) for kw, item in kwargs.items()])))
                     logger.exception(msg)
 
+                    if command == 'connect' or command == 'disconnect':
+                        self.answer_queue.append((command, False))
+
         if self._stop_event.is_set():
             self._stop_event.clear()
         else:
@@ -347,12 +350,16 @@ class FlowMeterCommThread(threading.Thread):
         self._connected_fms[name] = new_fm
         logger.debug("Flow meter %s connected", name)
 
+        self.return_queue.append(('connected', True))
+
     def _disconnect(self, name):
         logger.info("Disconnecting flow meter %s", name)
         fm = self._connected_fms[name]
         fm.stop()
         del self._connected_fms[name]
         logger.debug("Flow meter %s disconnected", name)
+
+        self.return_queue.append(('disconnected', True))
 
     def _get_flow_rate(self, name):
         """

@@ -132,17 +132,11 @@ class CoflowPanel(wx.Panel):
                 self.coflow_pump_cmd_q, self.coflow_pump_return_q,
                 self.coflow_pump_abort_event, self.timeout_event, name='PumpControlClient')
 
-            logger.debug('Got to here')
-
             fm_ip = self.settings['remote_fm_ip']
             fm_port = self.settings['remote_fm_port']
             self.coflow_fm_con = client.ControlClient(fm_ip, fm_port,
                 self.coflow_fm_cmd_q, self.coflow_fm_return_q,
                 self.coflow_fm_abort_event, self.timeout_event, name='PumpControlClient')
-
-            logger.debug('Got to here')
-            logger.debug(self.timeout_event.is_set())
-            # if self.timeout_event.is_set():
         
         self.coflow_pump_con.start()
         self.coflow_fm_con.start()
@@ -165,6 +159,8 @@ class CoflowPanel(wx.Panel):
             self.get_fr_thread.start()
 
         else:
+            logger.error('Timeout connecting to the coflow control server.')
+
             msg = ('Could not connect to the coflow control server. '
                 'Contact your beamline scientist.')
 
@@ -276,23 +272,46 @@ class CoflowPanel(wx.Panel):
 
         #Need some way to make threads wait until pumps initialize
 
-        self._send_pumpcmd(sheath_init_cmd, response=True)
-        self._send_pumpcmd(outlet_init_cmd, response=True)
+        sheath_init = self._send_pumpcmd(sheath_init_cmd, response=True)
+        outlet_init = self._send_pumpcmd(outlet_init_cmd, response=True)
 
-        self._send_pumpcmd(('set_units', ('sheath_pump', self.settings['flow_units']), {}))
-        self._send_pumpcmd(('set_units', ('outlet_pump', self.settings['flow_units']), {}))
+        if not sheath_init:
+            logger.error('Failed to connect to the sheath pump.')
 
-        sheath_is_moving = self._send_pumpcmd(('is_moving', ('sheath_pump',), {}), response=True)
-        outlet_is_moving = self._send_pumpcmd(('is_moving', ('outlet_pump',), {}), response=True)
+            msg = ('Could not connect to the coflow sheath pump. '
+                'Contact your beamline scientist.')
 
-        if sheath_is_moving or outlet_is_moving:
-            self.stop_flow_button.Enable()
-            self.change_flow_button.Enable()
+            dialog = wx.MessageDialog(self, msg, 'Connection error',
+                style=wx.OK|wx.ICON_ERROR)
+            dialog.ShowModal()
 
-        if sheath_is_moving and outlet_is_moving:
-            self.start_flow_button.Disable()
-        else:
-            self.start_flow_button.Enable()
+        if not outlet_init:
+            logger.error('Failed to connect to the outlet pump.')
+
+            msg = ('Could not connect to the coflow outlet pump. '
+                'Contact your beamline scientist.')
+
+            dialog = wx.MessageDialog(self, msg, 'Connection error',
+                style=wx.OK|wx.ICON_ERROR)
+            dialog.ShowModal()
+
+        if outlet_init and sheath_init:
+            self._send_pumpcmd(('set_units', ('sheath_pump', self.settings['flow_units']), {}))
+            self._send_pumpcmd(('set_units', ('outlet_pump', self.settings['flow_units']), {}))
+
+            sheath_is_moving = self._send_pumpcmd(('is_moving', ('sheath_pump',), {}), response=True)
+            outlet_is_moving = self._send_pumpcmd(('is_moving', ('outlet_pump',), {}), response=True)
+
+            if sheath_is_moving or outlet_is_moving:
+                self.stop_flow_button.Enable()
+                self.change_flow_button.Enable()
+
+            if sheath_is_moving and outlet_is_moving:
+                self.start_flow_button.Disable()
+            else:
+                self.start_flow_button.Enable()
+
+            logger.info('Coflow pumps initialization successful')
 
     def _init_fms(self):
         """
@@ -312,22 +331,46 @@ class CoflowPanel(wx.Panel):
 
         outlet_init_cmd = ('connect', outlet_args, {})
 
-        self._send_fmcmd(sheath_init_cmd)
-        self._send_fmcmd(outlet_init_cmd)
+        _, sheath_init = self._send_fmcmd(sheath_init_cmd, response=True)
+        _, outlet_init = self._send_fmcmd(outlet_init_cmd, response=True)
 
-        time.sleep(0.25)
+        if not sheath_init:
+            logger.error('Failed to connect to the sheath flow meter.')
 
-        self._send_fmcmd(('set_units', ('sheath_fm', self.settings['flow_units']), {}))
-        self._send_fmcmd(('set_units', ('outlet_fm', self.settings['flow_units']), {}))
+            msg = ('Could not connect to the coflow sheath flow meter. '
+                'Contact your beamline scientist.')
 
-        self._send_fmcmd(('get_density', ('sheath_fm',), {}), True)
-        self._send_fmcmd(('get_density', ('outlet_fm',), {}), True)
+            dialog = wx.MessageDialog(self, msg, 'Connection error',
+                style=wx.OK|wx.ICON_ERROR)
+            dialog.ShowModal()
 
-        self._send_fmcmd(('get_temperature', ('sheath_fm',), {}), True)
-        self._send_fmcmd(('get_temperature', ('outlet_fm',), {}), True)
+        if not outlet_init:
+            logger.error('Failed to connect to the outlet flow meter.')
 
-        self._send_fmcmd(('get_flow_rate', ('sheath_fm',), {}), True)
-        self._send_fmcmd(('get_flow_rate', ('outlet_fm',), {}), True)
+            msg = ('Could not connect to the coflow outlet flow meter. '
+                'Contact your beamline scientist.')
+
+            dialog = wx.MessageDialog(self, msg, 'Connection error',
+                style=wx.OK|wx.ICON_ERROR)
+            dialog.ShowModal()
+
+        if outlet_init and sheath_init:
+            self._send_fmcmd(('set_units', ('sheath_fm', self.settings['flow_units']), {}))
+            self._send_fmcmd(('set_units', ('outlet_fm', self.settings['flow_units']), {}))
+
+            self._send_fmcmd(('get_density', ('sheath_fm',), {}), True)
+            self._send_fmcmd(('get_density', ('outlet_fm',), {}), True)
+
+            self._send_fmcmd(('get_temperature', ('sheath_fm',), {}), True)
+            self._send_fmcmd(('get_temperature', ('outlet_fm',), {}), True)
+
+            self._send_fmcmd(('get_flow_rate', ('sheath_fm',), {}), True)
+            self._send_fmcmd(('get_flow_rate', ('outlet_fm',), {}), True)
+
+            logger.info('Coflow flow meters initialization successful')
+
+        else:
+            self.stop_get_fr_event.set()
 
     def _on_startbutton(self, evt):
         valid, flow_rate = self._validate_flow_rate()
@@ -514,44 +557,47 @@ class CoflowPanel(wx.Panel):
         aux_time_list = deque(maxlen=4800)
 
         while not self.stop_get_fr_event.is_set():
-            sheath_fr = self._send_fmcmd(sheath_fr_cmd, True)[1]
-            outlet_fr = self._send_fmcmd(outlet_fr_cmd, True)[1]
+            s_type, sheath_fr = self._send_fmcmd(sheath_fr_cmd, True)
+            o_type, outlet_fr = self._send_fmcmd(outlet_fr_cmd, True)
 
-            sheath_fr_list.append(sheath_fr)
-            outlet_fr_list.append(outlet_fr)
+            if s_type == 'flow_rate' and o_type == 'flow_rate':
+                sheath_fr_list.append(sheath_fr)
+                outlet_fr_list.append(outlet_fr)
 
-            fr_time_list.append(time.time()-start_time)
+                fr_time_list.append(time.time()-start_time)
 
-            if self.monitor:
-                if (sheath_fr < low_warning*self.sheath_setpoint or
-                    sheath_fr > high_warning*self.sheath_setpoint):
-                    wx.CallAfter(self._show_warning_dialog, 'sheath', sheath_fr)
-                    logger.error('Sheath flow out of bounds (%f to %f): %f', low_warning*self.sheath_setpoint, high_warning*self.sheath_setpoint, sheath_fr)
+                if self.monitor:
+                    if (sheath_fr < low_warning*self.sheath_setpoint or
+                        sheath_fr > high_warning*self.sheath_setpoint):
+                        wx.CallAfter(self._show_warning_dialog, 'sheath', sheath_fr)
+                        logger.error('Sheath flow out of bounds (%f to %f): %f', low_warning*self.sheath_setpoint, high_warning*self.sheath_setpoint, sheath_fr)
 
-                if (outlet_fr < low_warning*self.outlet_setpoint or
-                    outlet_fr > high_warning*self.outlet_setpoint):
-                    wx.CallAfter(self._show_warning_dialog, 'outlet', outlet_fr)
-                    logger.error('Outlet flow out of bounds (%f to %f): %f', low_warning*self.outlet_setpoint, high_warning*self.outlet_setpoint, outlet_fr)
+                    if (outlet_fr < low_warning*self.outlet_setpoint or
+                        outlet_fr > high_warning*self.outlet_setpoint):
+                        wx.CallAfter(self._show_warning_dialog, 'outlet', outlet_fr)
+                        logger.error('Outlet flow out of bounds (%f to %f): %f', low_warning*self.outlet_setpoint, high_warning*self.outlet_setpoint, outlet_fr)
 
             if time.time() - cycle_time > 0.25:
-                sheath_density = self._send_fmcmd(sheath_density_cmd, True)[1]
-                outlet_density = self._send_fmcmd(outlet_density_cmd, True)[1]
+                s1_type, sheath_density = self._send_fmcmd(sheath_density_cmd, True)
+                o1_type, outlet_density = self._send_fmcmd(outlet_density_cmd, True)
 
-                sheath_t = self._send_fmcmd(sheath_t_cmd, True)[1]
-                outlet_t = self._send_fmcmd(outlet_t_cmd, True)[1]
+                s2_type, sheath_t = self._send_fmcmd(sheath_t_cmd, True)
+                o2_type, outlet_t = self._send_fmcmd(outlet_t_cmd, True)
 
-                sheath_density_list.append(sheath_density)
-                outlet_density_list.append(outlet_density)
+                if s1_type == o1_type and s1_type == 'density' and s2_type == o2_type and s2_type == 'temperature':
+                    sheath_density_list.append(sheath_density)
+                    outlet_density_list.append(outlet_density)
 
-                sheath_t_list.append(sheath_t)
-                outlet_t_list.append(outlet_t)
+                    sheath_t_list.append(sheath_t)
+                    outlet_t_list.append(outlet_t)
 
-                cycle_time = time.time()
+                    cycle_time = time.time()
 
-                aux_time_list.append(cycle_time-start_time)
+                    aux_time_list.append(cycle_time-start_time)
 
-                wx.CallAfter(self.sheath_flow.SetLabel, str(round(sheath_fr, 3)))
-                wx.CallAfter(self.outlet_flow.SetLabel, str(round(outlet_fr,3 )))
+                if s_type == 'flow_rate' and o_type == 'flow_rate':
+                    wx.CallAfter(self.sheath_flow.SetLabel, str(round(sheath_fr, 3)))
+                    wx.CallAfter(self.outlet_flow.SetLabel, str(round(outlet_fr,3 )))
 
                 logger.debug('Sheath flow rate: %f', sheath_fr)
                 logger.debug('Outlet flow rate: %f', outlet_fr)
@@ -624,7 +670,6 @@ class CoflowPanel(wx.Panel):
             :py:class:`FlowMeterCommThread` ``_commands`` dictionary.
         """
         ret_val = None
-
         if not self.timeout_event.is_set():
             full_cmd = {'device': 'fm', 'command': cmd, 'response': response}
             self.coflow_fm_cmd_q.append(full_cmd)
@@ -671,17 +716,15 @@ class CoflowPanel(wx.Panel):
         outlet_pump = ('disconnect', ('outlet_pump', ), {})
 
         if not self.timeout_event.is_set():
-            self._send_fmcmd(sheath_fm)
-            self._send_fmcmd(outlet_fm)
+            self._send_fmcmd(sheath_fm, response=True)
+            self._send_fmcmd(outlet_fm, response=True)
 
-            self._send_pumpcmd(sheath_pump)
-            self._send_pumpcmd(outlet_pump)
-
-        time.sleep(0.5)
+            self._send_pumpcmd(sheath_pump, response=True)
+            self._send_pumpcmd(outlet_pump, response=True)
 
         self.coflow_pump_con.stop()
         self.coflow_fm_con.stop()
-        
+
         self.coflow_pump_con.join()
         self.coflow_fm_con.join()
 

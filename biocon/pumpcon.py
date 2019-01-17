@@ -654,8 +654,10 @@ class PumpCommThread(threading.Thread):
                         ', '.join(['{}'.format(a) for a in args]),
                         ', '.join(['{}:{}'.format(kw, item) for kw, item in kwargs.items()])))
                     logger.exception(msg)
-                    if command == 'connect':
+
+                    if command == 'connect' or command == 'disconnect':
                         self.answer_queue.append(False)
+
         if self._stop_event.is_set():
             self._stop_event.clear()
         else:
@@ -701,6 +703,7 @@ class PumpCommThread(threading.Thread):
         pump = self._connected_pumps[name]
         pump.disconnect()
         del self._connected_pumps[name]
+        self.answer_queue.append(True)
         logger.debug("Pump %s disconnected", name)
 
     def _set_flow_rate(self, name, flow_rate):
@@ -1103,7 +1106,10 @@ class PumpPanel(wx.Panel):
         self.flow_units_lbl.SetLabel('{}/{}'.format(vol_unit, t_unit))
         self.vol_units_lbl.SetLabel(vol_unit)
 
-        flow_rate = float(self.flow_rate_ctrl.GetValue())
+        try:
+            flow_rate = float(self.flow_rate_ctrl.GetValue())
+        except ValueError:
+            flow_rate = 0
 
         old_vol, old_t = old_units.split('/')
 
@@ -1122,7 +1128,8 @@ class PumpPanel(wx.Panel):
             else:
                 flow_rate = flow_rate*60
 
-        self.flow_rate_ctrl.ChangeValue('{0:.3f}'.format(flow_rate))
+        if flow_rate != 0:
+            self.flow_rate_ctrl.ChangeValue('{0:.3f}'.format(flow_rate))
 
         logger.debug('Changed the pump units to %s and %s for pump %s', vol_unit, t_unit, self.name)
 
@@ -1214,7 +1221,20 @@ class PumpPanel(wx.Panel):
         self.connected = True
         self.connect_button.SetLabel('Reconnect')
         self._send_cmd('connect')
-        self._set_status('Connected')
+
+        start_time = time.time()
+        while len(self.answer_q) == 0 and time.time()-start_time < 5:
+            time.sleep(0.01)
+
+        if len(self.answer_q) > 0:
+            connected = self.answer_q.popleft()
+        else:
+            connected = False
+
+        if connected:
+            self._set_status('Connected')
+        else:
+            self._set_status('Connection Failed')
 
         return
 
@@ -1461,6 +1481,7 @@ class PumpFrame(wx.Frame):
         """Stops all current pump motions and then closes the frame."""
         logger.debug('Closing the PumpFrame')
         self.pump_con.stop()
+        self.pump_con.join()
         while self.pump_con.is_alive():
             time.sleep(0.001)
         self.Destroy()
