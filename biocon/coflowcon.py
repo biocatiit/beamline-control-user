@@ -961,21 +961,21 @@ class CoflowPlotFrame(wx.Frame):
         self.plot_type_choice.SetStringSelection('Both Flows')
         self.plot_type_choice.Bind(wx.EVT_CHOICE, self._on_change_type)
 
-        update_button = wx.Button(self, label='Update')
+        update_button = wx.Button(top_panel, label='Update')
         update_button.Bind(wx.EVT_BUTTON, self._on_update)
 
         self.auto_update_timer = wx.Timer(self)
         self.Bind(wx.EVT_TIMER, self._on_update, self.auto_update_timer)
 
-        auto_update = wx.CheckBox(self, label='Auto Update')
+        auto_update = wx.CheckBox(top_panel, label='Auto Update')
         auto_update.Bind(wx.EVT_CHECKBOX, self._on_autoupdate_button)
 
         ctrl_sizer = wx.FlexGridSizer(cols=4, rows=1, vgap=2, hgap=5)
         ctrl_sizer.Add(wx.StaticText(top_panel, label='Plot:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
         ctrl_sizer.Add(self.plot_type_choice, flag=wx.ALIGN_CENTER_VERTICAL)
-        ctrl_sizer.Add(update_button)
-        ctrl_sizer.Add(auto_update)
+        ctrl_sizer.Add(update_button, flag=wx.ALIGN_CENTER_VERTICAL)
+        ctrl_sizer.Add(auto_update, flag=wx.ALIGN_CENTER_VERTICAL)
 
         self.fig = Figure((5,4), 75)
 
