@@ -28,11 +28,18 @@ from collections import deque, OrderedDict
 import logging
 import sys
 import copy
+import platform
 
 if __name__ != '__main__':
     logger = logging.getLogger(__name__)
 
 import wx
+import matplotlib
+from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg
+from matplotlib.figure import Figure
+
+matplotlib.rcParams['backend'] = 'WxAgg'
+
 
 # import fmcon
 import client
@@ -140,6 +147,15 @@ class CoflowPanel(wx.Panel):
         self.coflow_pump_con.start()
         self.coflow_fm_con.start()
 
+        self.sheath_fr_list = deque(maxlen=10000)
+        self.outlet_fr_list = deque(maxlen=10000)
+        self.sheath_density_list = deque(maxlen=4800)
+        self.outlet_density_list = deque(maxlen=4800)
+        self.sheath_t_list = deque(maxlen=4800)
+        self.outlet_t_list = deque(maxlen=4800)
+        self.fr_time_list = deque(maxlen=10000)
+        self.aux_time_list = deque(maxlen=4800)
+
         self.monitor = False
         self.sheath_setpoint = None
         self.outlet_setpoint = None
@@ -149,6 +165,7 @@ class CoflowPanel(wx.Panel):
         self.Bind(wx.EVT_TIMER, self._on_monitor_timer, self.monitor_timer)
 
         self.stop_get_fr_event = threading.Event()
+        self.get_plot_data_lock = threading.Lock()
 
         if not self.timeout_event.is_set():
             self._init_pumps()
@@ -219,39 +236,54 @@ class CoflowPanel(wx.Panel):
             flag=wx.ALL|wx.ALIGN_CENTER_HORIZONTAL|wx.EXPAND)
 
 
-        self.sheath_flow = wx.StaticText(self, label='0', style=wx.ST_NO_AUTORESIZE,
+        status_panel = wx.Panel(self)
+
+        self.sheath_flow = wx.StaticText(status_panel, label='0', style=wx.ST_NO_AUTORESIZE,
             size=(50,-1))
-        self.outlet_flow = wx.StaticText(self, label='0', style=wx.ST_NO_AUTORESIZE,
+        self.outlet_flow = wx.StaticText(status_panel, label='0', style=wx.ST_NO_AUTORESIZE,
             size=(50,-1))
 
-        self.status = wx.StaticText(self, label='Coflow off', style=wx.ST_NO_AUTORESIZE,
+        self.status = wx.StaticText(status_panel, label='Coflow off', style=wx.ST_NO_AUTORESIZE,
             size=(75, -1))
         self.status.SetForegroundColour(wx.RED)
         fsize = self.GetFont().GetPointSize()
         font = wx.Font(fsize, wx.DEFAULT, wx.NORMAL, wx.BOLD)
         self.status.SetFont(font)
 
+        status_label = wx.StaticText(status_panel, label='Status:')
+        sheath_label = wx.StaticText(status_panel, label='Sheath flow [{}]:'.format(units))
+        outlet_label = wx.StaticText(status_panel, label='Outlet flow [{}]:'.format(units))
+
         status_grid_sizer = wx.FlexGridSizer(cols=2, rows=3, vgap=5, hgap=2)
-        status_grid_sizer.Add(wx.StaticText(self, label='Status:'),
-            flag=wx.ALIGN_CENTER_VERTICAL)
+        status_grid_sizer.Add(status_label, flag=wx.ALIGN_CENTER_VERTICAL)
         status_grid_sizer.Add(self.status, flag=wx.ALIGN_CENTER_VERTICAL)
-        status_grid_sizer.Add(wx.StaticText(self, label='Sheath flow [{}]:'.format(units)),
-            flag=wx.ALIGN_CENTER_VERTICAL)
+        status_grid_sizer.Add(sheath_label, flag=wx.ALIGN_CENTER_VERTICAL)
         status_grid_sizer.Add(self.sheath_flow, flag=wx.ALIGN_CENTER_VERTICAL)
-        status_grid_sizer.Add(wx.StaticText(self, label='Outlet flow [{}]:'.format(units)),
-            flag=wx.ALIGN_CENTER_VERTICAL)
+        status_grid_sizer.Add(outlet_label, flag=wx.ALIGN_CENTER_VERTICAL)
         status_grid_sizer.Add(self.outlet_flow, flag=wx.ALIGN_CENTER_VERTICAL)
 
-        coflow_status_sizer = wx.StaticBoxSizer(wx.StaticBox(self,
+        coflow_status_sizer = wx.StaticBoxSizer(wx.StaticBox(status_panel,
             label='Coflow Status'), wx.HORIZONTAL)
         coflow_status_sizer.Add(status_grid_sizer, border=5, flag=wx.ALL)
 
         coflow_status_sizer.AddStretchSpacer(1)
 
+        status_panel.SetSizer(coflow_status_sizer)
+
+        status_panel.Bind(wx.EVT_RIGHT_DOWN, self._onRightMouseButton)
+
+        if platform.system() != 'Darwin':
+            self.sheath_flow.Bind(wx.EVT_RIGHT_DOWN, self._onRightMouseButton)
+            self.outlet_flow.Bind(wx.EVT_RIGHT_DOWN, self._onRightMouseButton)
+            self.status.Bind(wx.EVT_RIGHT_DOWN, self._onRightMouseButton)
+            status_label.Bind(wx.EVT_RIGHT_DOWN, self._onRightMouseButton)
+            sheath_label.Bind(wx.EVT_RIGHT_DOWN, self._onRightMouseButton)
+            outlet_label.Bind(wx.EVT_RIGHT_DOWN, self._onRightMouseButton)
+
 
         top_sizer = wx.BoxSizer(wx.VERTICAL)
         top_sizer.Add(coflow_ctrl_sizer, flag=wx.EXPAND)
-        top_sizer.Add(coflow_status_sizer, border=10, flag=wx.EXPAND|wx.TOP)
+        top_sizer.Add(status_panel, border=10, flag=wx.EXPAND|wx.TOP)
 
         self.SetSizer(top_sizer)
 
@@ -408,6 +440,33 @@ class CoflowPanel(wx.Panel):
 
     def _on_changebutton(self, evt):
         self.change_flow(start_monitor=True)
+
+    def _onRightMouseButton(self, event):
+
+        if int(wx.__version__.split('.')[0]) >= 3 and platform.system() == 'Darwin':
+            wx.CallAfter(self._showPopupMenu)
+        else:
+            self._showPopupMenu()
+
+    def _showPopupMenu(self):
+
+        menu = wx.Menu()
+        menu.Append(1, 'Show Plot')
+
+        self.Bind(wx.EVT_MENU, self._onPopupMenuChoice)
+        self.PopupMenu(menu)
+
+        menu.Destroy()
+
+    def _onPopupMenuChoice(self, event):
+        choice_id = event.GetId()
+
+        if choice_id == 1:
+            CoflowPlotFrame(self.sheath_fr_list, self.outlet_fr_list,
+                self.fr_time_list, self.sheath_density_list,
+                self.outlet_density_list, self.sheath_t_list, self.outlet_t_list,
+                self.aux_time_list,self.get_plot_data, self, title='Coflow Plot',
+                name='CoflowPlot', size=(600,500))
 
     def auto_start(self):
         auto = self.auto_flow.GetValue()
@@ -594,27 +653,17 @@ class CoflowPanel(wx.Panel):
         cycle_time = time.time()
         start_time = copy.copy(cycle_time)
 
-        sheath_fr_list = deque(maxlen=10000)
-        outlet_fr_list = deque(maxlen=10000)
-
-        sheath_density_list = deque(maxlen=4800)
-        outlet_density_list = deque(maxlen=4800)
-
-        sheath_t_list = deque(maxlen=4800)
-        outlet_t_list = deque(maxlen=4800)
-
-        fr_time_list = deque(maxlen=10000)
-        aux_time_list = deque(maxlen=4800)
-
         while not self.stop_get_fr_event.is_set():
             s_type, sheath_fr = self._send_fmcmd(sheath_fr_cmd, True)
             o_type, outlet_fr = self._send_fmcmd(outlet_fr_cmd, True)
 
             if s_type == 'flow_rate' and o_type == 'flow_rate':
-                sheath_fr_list.append(sheath_fr)
-                outlet_fr_list.append(outlet_fr)
+                self.get_plot_data_lock.acquire()
+                self.sheath_fr_list.append(sheath_fr)
+                self.outlet_fr_list.append(outlet_fr)
 
-                fr_time_list.append(time.time()-start_time)
+                self.fr_time_list.append(time.time()-start_time)
+                self.get_plot_data_lock.release()
 
                 if self.monitor:
                     if (sheath_fr < low_warning*self.sheath_setpoint or
@@ -635,15 +684,17 @@ class CoflowPanel(wx.Panel):
                 o2_type, outlet_t = self._send_fmcmd(outlet_t_cmd, True)
 
                 if s1_type == o1_type and s1_type == 'density' and s2_type == o2_type and s2_type == 'temperature':
-                    sheath_density_list.append(sheath_density)
-                    outlet_density_list.append(outlet_density)
+                    self.get_plot_data_lock.acquire()
+                    self.sheath_density_list.append(sheath_density)
+                    self.outlet_density_list.append(outlet_density)
 
-                    sheath_t_list.append(sheath_t)
-                    outlet_t_list.append(outlet_t)
+                    self.sheath_t_list.append(sheath_t)
+                    self.outlet_t_list.append(outlet_t)
 
                     cycle_time = time.time()
 
-                    aux_time_list.append(cycle_time-start_time)
+                    self.aux_time_list.append(cycle_time-start_time)
+                    self.get_plot_data_lock.release()
 
                 if s_type == 'flow_rate' and o_type == 'flow_rate':
                     wx.CallAfter(self.sheath_flow.SetLabel, str(round(sheath_fr, 3)))
@@ -670,6 +721,18 @@ class CoflowPanel(wx.Panel):
         logging.info('Outlet flow bounds: %f to %f %s', low_warning*self.outlet_setpoint, high_warning*self.outlet_setpoint, self.settings['flow_units'])
 
         self.monitor = True
+
+    def get_plot_data(self):
+        self.get_plot_data_lock.acquire()
+
+        data = [copy.copy(self.sheath_fr_list), copy.copy(self.outlet_fr_list),
+            copy.copy(self.fr_time_list), copy.copy(self.sheath_density_list),
+            copy.copy(self.outlet_density_list), copy.copy(self.sheath_t_list),
+            copy.copy(self.outlet_t_list), copy.copy(self.aux_time_list)]
+
+        self.get_plot_data_lock.release()
+
+        return data
 
     def _show_warning_dialog(self, flow, flow_rate):
         if self.warning_dialog is None:
@@ -774,6 +837,12 @@ class CoflowPanel(wx.Panel):
             self.get_fr_thread.join()
             self.stop_flow()
 
+        try:
+            plot_window = wx.FindWindowByName('CoflowPlot')
+            plot_window._on_exit(None)
+        except Exception:
+            pass
+
         time.sleep(0.5)
 
         sheath_fm = ('disconnect', ('sheath_fm', ), {})
@@ -802,7 +871,7 @@ class CoflowWarningMessage(wx.Frame):
         Initializes the pump frame. Takes args and kwargs for the wx.Frame class.
         """
         super(CoflowWarningMessage, self).__init__(parent, *args, title=title, **kwargs)
-        logger.debug('Setting up the CoflowFrame')
+        logger.debug('Setting up the CoflowWarningMessage')
 
         self.Bind(wx.EVT_CLOSE, self._on_exit)
 
@@ -844,6 +913,269 @@ class CoflowWarningMessage(wx.Frame):
         parent.warning_dialog = None
 
         self.Destroy()
+
+class CoflowPlotFrame(wx.Frame):
+    def __init__(self, sheath_flow_rate, outlet_flow_rate, t_flow_rate, sheath_density,
+        outlet_density, sheath_temperature, outlet_temperature, t_other,
+        data_update_callback, *args, **kwargs):
+
+        logger.debug('Setting up CoflowPlotFrame')
+
+        super(CoflowPlotFrame, self).__init__(*args, **kwargs)
+
+        self.sheath_flow_rate = sheath_flow_rate
+        self.outlet_flow_rate = outlet_flow_rate
+        self.t_flow_rate = t_flow_rate
+        self.sheath_density = sheath_density
+        self.outlet_density = outlet_density
+        self.sheath_temperature = sheath_temperature
+        self.outlet_temperature = outlet_temperature
+        self.t_other = t_other
+
+        self.data_update_callback = data_update_callback
+
+        self.plot_type = 'Both Flows'
+
+        self.line1 = None
+        self.line2 = None
+
+        self._create_layout()
+
+        self.Bind(wx.EVT_CLOSE, self._on_exit)
+
+        # Connect the callback for the draw_event so that window resizing works:
+        self.cid = self.canvas.mpl_connect('draw_event', self.ax_redraw)
+        self.canvas.mpl_connect('motion_notify_event', self._onMouseMotionEvent)
+
+        self.plot_data()
+
+        self.Raise()
+        self.Show()
+
+    def _create_layout(self):
+
+        top_panel = wx.Panel(self)
+
+        plt_choices = ['Both Flows', 'Sheath Flow', 'Outlet Flow', 'Both Densities', 'Both Temperatures']
+        self.plot_type_choice = wx.Choice(top_panel, choices=plt_choices)
+        self.plot_type_choice.SetStringSelection('Both Flows')
+        self.plot_type_choice.Bind(wx.EVT_CHOICE, self._on_change_type)
+
+        update_button = wx.Button(self, label='Update')
+        update_button.Bind(wx.EVT_BUTTON, self._on_update)
+
+        self.auto_update_timer = wx.Timer(self)
+        self.Bind(wx.EVT_TIMER, self._on_update, self.auto_update_timer)
+
+        auto_update = wx.CheckBox(self, label='Auto Update')
+        auto_update.Bind(wx.EVT_CHECKBOX, self._on_autoupdate_button)
+
+        ctrl_sizer = wx.FlexGridSizer(cols=4, rows=1, vgap=2, hgap=5)
+        ctrl_sizer.Add(wx.StaticText(top_panel, label='Plot:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        ctrl_sizer.Add(self.plot_type_choice, flag=wx.ALIGN_CENTER_VERTICAL)
+        ctrl_sizer.Add(update_button)
+        ctrl_sizer.Add(auto_update)
+
+        self.fig = Figure((5,4), 75)
+
+        self.subplot = self.fig.add_subplot(1,1,1,
+            title='Flow Rate')
+        self.subplot.set_xlabel('Time since start [s]')
+        self.subplot.set_ylabel('Flow rate [mL/min]')
+
+        self.fig.subplots_adjust(left = 0.13, bottom = 0.1, right = 0.93, top = 0.93, hspace = 0.26)
+        self.fig.set_facecolor('white')
+
+        self.canvas = FigureCanvasWxAgg(top_panel, wx.ID_ANY, self.fig)
+        self.canvas.SetBackgroundColour('white')
+
+        self.toolbar = utils.CustomPlotToolbar(self.canvas)
+        self.toolbar.Realize()
+
+        plot_sizer = wx.BoxSizer(wx.VERTICAL)
+        plot_sizer.Add(self.canvas, 1, wx.EXPAND)
+        plot_sizer.Add(self.toolbar, 0, wx.EXPAND)
+
+
+        top_sizer = wx.BoxSizer(wx.VERTICAL)
+        top_sizer.Add(ctrl_sizer, border=5, flag=wx.TOP|wx.LEFT|wx.RIGHT)
+        top_sizer.Add(plot_sizer, proportion=1, border=5, flag=wx.EXPAND|wx.TOP)
+        top_panel.SetSizer(top_sizer)
+
+
+        frame_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        frame_sizer.Add(top_panel, flag=wx.EXPAND, proportion=1)
+        self.SetSizer(frame_sizer)
+
+    def _on_change_type(self, evt):
+        self.plot_type = self.plot_type_choice.GetStringSelection()
+        self.plot_data()
+
+    def _on_update(self, evt):
+
+        (self.sheath_flow_rate,
+        self.outlet_flow_rate,
+        self.t_flow_rate,
+        self.sheath_density,
+        self.outlet_density,
+        self.sheath_temperature,
+        self.outlet_temperature,
+        self.t_other) = self.data_update_callback()
+
+        self.plot_data()
+
+    def _on_autoupdate_button(self, evt):
+        if evt.IsChecked():
+            self.auto_update_timer.Start(2000)
+        else:
+            self.auto_update_timer.Stop()
+
+
+    def ax_redraw(self, widget=None):
+        ''' Redraw plots on window resize event '''
+        self.background = self.canvas.copy_from_bbox(self.subplot.bbox)
+
+        self.canvas.mpl_disconnect(self.cid)
+        self.updatePlot()
+        self.cid = self.canvas.mpl_connect('draw_event', self.ax_redraw)
+
+    def plot_data(self):
+        self.canvas.mpl_disconnect(self.cid)
+
+        if self.plot_type == 'Both Flows':
+            xdata = self.t_flow_rate
+            ydata1 = self.sheath_flow_rate
+            ydata2 = self.outlet_flow_rate
+
+            if self.line1 is not None:
+                self.line1.set_visible(True)
+
+            if self.line2 is not None:
+                self.line2.set_visible(True)
+
+        elif self.plot_type == 'Sheath Flow':
+            xdata = self.t_flow_rate
+            ydata1 = self.sheath_flow_rate
+            ydata2 = None
+
+            if self.line1 is not None:
+                self.line1.set_visible(True)
+
+            if self.line2 is not None:
+                self.line2.set_visible(False)
+
+        elif self.plot_type == 'Outlet Flow':
+            xdata = self.t_flow_rate
+            ydata1 = None
+            ydata2 = self.outlet_flow_rate
+
+            if self.line1 is not None:
+                self.line1.set_visible(False)
+
+            if self.line2 is not None:
+                self.line2.set_visible(True)
+
+        elif self.plot_type == 'Both Densities':
+            xdata = self.t_other
+            ydata1 = self.sheath_density
+            ydata2 = self.outlet_density
+
+            if self.line1 is not None:
+                self.line1.set_visible(True)
+
+            if self.line2 is not None:
+                self.line2.set_visible(True)
+
+        elif self.plot_type == 'Both Temperatures':
+            xdata = self.t_other
+            ydata1 = self.sheath_temperature
+            ydata2 = self.outlet_temperature
+
+            if self.line1 is not None:
+                self.line1.set_visible(True)
+
+            if self.line2 is not None:
+                self.line2.set_visible(True)
+
+        redraw = False
+
+        if ydata1 is not None:
+            if self.line1 is None:
+                self.line1, = self.subplot.plot(xdata, ydata1, animated=True,
+                    label='Sheath')
+                redraw = True
+            else:
+                self.line1.set_xdata(xdata)
+                self.line1.set_ydata(ydata1)
+
+        if ydata2 is not None:
+            if self.line2 is None:
+                self.line2, = self.subplot.plot(xdata, ydata2, animated=True,
+                    label='Outlet')
+                redraw = True
+            else:
+                self.line2.set_xdata(xdata)
+                self.line2.set_ydata(ydata2)
+
+        if redraw:
+            self.canvas.draw()
+            self.background = self.canvas.copy_from_bbox(self.subplot.bbox)
+            self.subplot.legend()
+
+        self.updatePlot()
+
+        self.cid = self.canvas.mpl_connect('draw_event', self.ax_redraw)
+
+    def updatePlot(self):
+        redraw = False
+
+        oldx = self.subplot.get_xlim()
+        oldy = self.subplot.get_ylim()
+
+        self.subplot.relim()
+        self.subplot.autoscale_view()
+
+        newx = self.subplot.get_xlim()
+        newy = self.subplot.get_ylim()
+
+        if newx != oldx or newy != oldy:
+            redraw = True
+
+        if redraw:
+            self.canvas.draw()
+
+        self.canvas.restore_region(self.background)
+
+        if self.line1 is not None:
+            self.subplot.draw_artist(self.line1)
+        if self.line2 is not None:
+            self.subplot.draw_artist(self.line2)
+
+        self.canvas.blit(self.subplot.bbox)
+
+    def _onMouseMotionEvent(self, event):
+
+        if event.inaxes:
+            x, y = event.xdata, event.ydata
+            xlabel = self.subplot.xaxis.get_label().get_text()
+            ylabel = self.subplot.yaxis.get_label().get_text()
+
+            if abs(y) > 0.001 and abs(y) < 1000:
+                y_val = '{:.3f}'.format(round(y, 3))
+            else:
+                y_val = '{:.3E}'.format(y)
+
+            self.toolbar.set_status('{} = {}, {} = {}'.format(xlabel, x, ylabel, y_val))
+
+        else:
+            self.toolbar.set_status('')
+
+    def _on_exit(self, event):
+        self.auto_update_timer.Stop()
+
+        self.Destroy()
+
 
 
 class CoflowFrame(wx.Frame):

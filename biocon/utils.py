@@ -32,6 +32,7 @@ logger = logging.getLogger(__name__)
 import wx
 from wx.lib.wordwrap import wordwrap
 from wx.lib.stattext import GenStaticText as StaticText
+from matplotlib.backends.backend_wxagg import NavigationToolbar2WxAgg
 
 class CharValidator(wx.Validator):
     ''' Validates data as it is entered into the text controls. '''
@@ -177,3 +178,28 @@ class AutoWrapStaticText(StaticText):
             self.label = label
 
         StaticText.SetLabel(self, label)
+
+class CustomPlotToolbar(NavigationToolbar2WxAgg):
+    """
+    A custom plot toolbar that displays the cursor position (or other text)
+    in addition to the usual controls.
+    """
+    def __init__(self, canvas):
+        """
+        Initializes the toolbar.
+
+        :param wx.Window parent: The parent window
+        :param matplotlib.Canvas: The canvas associated with the toolbar.
+        """
+        NavigationToolbar2WxAgg.__init__(self, canvas)
+
+        self.status = wx.StaticText(self, label='')
+
+        self.AddControl(self.status)
+
+    def set_status(self, status):
+        """
+        Called to set the status text in the toolbar, i.e. the cursor position
+        on the plot.
+        """
+        self.status.SetLabel(status)
