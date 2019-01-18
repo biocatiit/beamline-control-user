@@ -224,7 +224,17 @@ class CoflowPanel(wx.Panel):
         self.outlet_flow = wx.StaticText(self, label='0', style=wx.ST_NO_AUTORESIZE,
             size=(50,-1))
 
-        status_grid_sizer = wx.FlexGridSizer(cols=2, rows=2, vgap=5, hgap=2)
+        self.status = wx.StaticText(self, label='Coflow off', style=wx.ST_NO_AUTORESIZE,
+            size=(75, -1))
+        self.status.SetForegroundColour(wx.RED)
+        fsize = self.GetFont().GetPointSize()
+        font = wx.Font(fsize, wx.DEFAULT, wx.NORMAL, wx.BOLD)
+        self.status.SetFont(font)
+
+        status_grid_sizer = wx.FlexGridSizer(cols=2, rows=3, vgap=5, hgap=2)
+        status_grid_sizer.Add(wx.StaticText(self, label='Status:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        status_grid_sizer.Add(self.status, flag=wx.ALIGN_CENTER_VERTICAL)
         status_grid_sizer.Add(wx.StaticText(self, label='Sheath flow [{}]:'.format(units)),
             flag=wx.ALIGN_CENTER_VERTICAL)
         status_grid_sizer.Add(self.sheath_flow, flag=wx.ALIGN_CENTER_VERTICAL)
@@ -431,6 +441,7 @@ class CoflowPanel(wx.Panel):
             self._send_pumpcmd(outlet_start_cmd)
 
             self.coflow_on = True
+            self.status.SetLabel('Coflow on')
 
             logger.info('Starting coflow pumps')
 
@@ -447,6 +458,7 @@ class CoflowPanel(wx.Panel):
         self._send_pumpcmd(outlet_stop_cmd)
 
         self.coflow_on = False
+        self.status.SetLabel('Coflow off')
 
         logger.info('Stopped coflow pumps')
 

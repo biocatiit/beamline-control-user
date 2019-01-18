@@ -49,7 +49,8 @@ class BioFrame(wx.Frame):
 
         self.settings = settings
 
-        self.components = {}
+        self.component_sizers = {}
+        self.component_panels = {}
 
         self.Bind(wx.EVT_CLOSE, self._on_exit)
 
@@ -72,17 +73,19 @@ class BioFrame(wx.Frame):
 
             component_sizer = wx.StaticBoxSizer(box, wx.VERTICAL)
             component_sizer.Add(component_panel, proportion=1, flag=wx.EXPAND)
-            self.components[key] =component_sizer
 
-        if 'exposure' in self.components or 'coflow' in self.components:
+            self.component_sizers[key] = component_sizer
+            self.component_panels[key] = component_panel
+
+        if 'exposure' in self.component_sizers or 'coflow' in self.component_sizers:
             exp_sizer = wx.BoxSizer(wx.HORIZONTAL)
 
-            if 'exposure' in self.components:
-                exp_sizer.Add(self.components['exposure'], proportion=1, border=10,
+            if 'exposure' in self.component_sizers:
+                exp_sizer.Add(self.component_sizers['exposure'], proportion=1, border=10,
                     flag=wx.EXPAND|wx.ALL)
 
-            if 'coflow' in self.components:
-                exp_sizer.Add(self.components['coflow'], border=10,
+            if 'coflow' in self.component_sizers:
+                exp_sizer.Add(self.component_sizers['coflow'], border=10,
                     flag=wx.EXPAND|wx.ALL)
 
             panel_sizer.Add(exp_sizer, flag=wx.EXPAND)
@@ -98,7 +101,7 @@ class BioFrame(wx.Frame):
         """Stops all current pump motions and then closes the frame."""
         logger.debug('Closing the BioFrame')
 
-        for panel in self.components:
+        for panel in self.component_panels.values():
             panel.on_exit()
 
         self.Destroy()

@@ -1012,10 +1012,10 @@ class ExpPanel(wx.Panel):
 
         self.settings = settings
 
-        # self.exp_cmd_q = deque()
-        # self.exp_ret_q = deque()
-        # self.abort_event = threading.Event()
-        # self.exp_event = threading.Event()
+        self.exp_cmd_q = deque()
+        self.exp_ret_q = deque()
+        self.abort_event = threading.Event()
+        self.exp_event = threading.Event()
         # self.exp_con = ExpCommThread(self.exp_cmd_q, self.exp_ret_q, self.abort_event,
         #     self.exp_event, self.settings, 'ExpCon')
         # self.exp_con.start()
@@ -1649,7 +1649,7 @@ if __name__ == '__main__':
     logger.addHandler(h2)
 
     logger.debug('Setting up wx app')
-    frame = ExpFrame(mx_data, settings, None, title='Exposure Control')
+    frame = ExpFrame(settings, None, title='Exposure Control')
     frame.Show()
     app.MainLoop()
 
