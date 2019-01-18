@@ -331,8 +331,15 @@ class CoflowPanel(wx.Panel):
 
         outlet_init_cmd = ('connect', outlet_args, {})
 
-        _, sheath_init = self._send_fmcmd(sheath_init_cmd, response=True)
-        _, outlet_init = self._send_fmcmd(outlet_init_cmd, response=True)
+        try:
+            _, sheath_init = self._send_fmcmd(sheath_init_cmd, response=True)
+        except Exception:
+            sheath_init = False
+
+        try:
+            _, outlet_init = self._send_fmcmd(outlet_init_cmd, response=True)
+        except Exception:
+            outlet_init = False
 
         if not sheath_init:
             logger.error('Failed to connect to the sheath flow meter.')
@@ -533,7 +540,7 @@ class CoflowPanel(wx.Panel):
 
         if not is_number:
             msg = ('The flow rate must be a valid number. Please correct this, '
-                'then start the coflow.')
+                'then redo your command.')
 
             wx.CallAfter(wx.MessageBox, msg, 'Error in coflow flow rate',
                 style=wx.OK|wx.ICON_ERROR)
