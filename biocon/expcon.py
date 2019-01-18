@@ -35,7 +35,6 @@ if __name__ != '__main__':
 
 import wx
 import numpy as np
-from pubsub import pub
 
 import utils
 utils.set_mppath() #This must be done before importing any Mp Modules.
@@ -446,7 +445,7 @@ class ExpCommThread(threading.Thread):
 
             logger.info('Writing counters')
             self.write_counters_struck(measurement, num_frames, 5, data_dir, cur_fprefix,
-                exp_period, dark_counts)
+                exp_period, dark_counts, metadata=kwargs['metadata'])
 
             ab_burst.get_status() #Maybe need to clear this status?
 
@@ -641,8 +640,8 @@ class ExpCommThread(threading.Thread):
         det.arm()
 
         #Start writing counter file
-        local_data_dir = data_dir.replace(settings['remote_dir_root'], settings['local_dir_root'], 1)
-        header = '#Filename\tstart_time\texposure_time\tI0\tI1\tI2\tI3\tBeam_current\n'
+        local_data_dir = data_dir.replace(self._settings['remote_dir_root'], self._settings['local_dir_root'], 1)
+        header = self._get_header(kwargs['metadata'])
         log_file = os.path.join(local_data_dir, '{}.log'.format(fprefix))
 
         with open(log_file, 'w') as f:
@@ -671,7 +670,8 @@ class ExpCommThread(threading.Thread):
             if self._abort_event.is_set():
                 logger.debug('abort 1')
                 self.slow_mode2_abort_cleanup(det, joerger, ab_burst, dio_out6,
-                        measurement, num_frames, data_dir, fprefix, exp_start)
+                        measurement, num_frames, data_dir, fprefix, exp_start,
+                        metadata=kwargs['metadata'])
                 return
 
             logger.info( "*** Starting exposure %d ***" % (i+1) )
@@ -693,7 +693,8 @@ class ExpCommThread(threading.Thread):
             while time.time() - meas_start < i*exp_period:
                 if self._abort_event.is_set():
                     self.slow_mode2_abort_cleanup(det, joerger, ab_burst, dio_out6,
-                        measurement, num_frames, data_dir, fprefix, exp_start)
+                        measurement, num_frames, data_dir, fprefix, exp_start,
+                        metadata=kwargs['metadata'])
                     return
 
             joerger.start(exp_time+2)
@@ -716,7 +717,7 @@ class ExpCommThread(threading.Thread):
                     # logger.debug('abort 3')
                     self.slow_mode2_abort_cleanup(det, joerger, ab_burst, dio_out6,
                         measurement, num_frames, data_dir, fprefix, exp_start,
-                        True, i, scl_list)
+                        True, i, scl_list, metadata=kwargs['metadata'])
                     return
 
                 if ( ( status & 0x1 ) == 0 ):
@@ -736,7 +737,7 @@ class ExpCommThread(threading.Thread):
                     # logger.debug('abort 4')
                     self.slow_mode2_abort_cleanup(det, joerger, ab_burst, dio_out6,
                         measurement, num_frames, data_dir, fprefix, exp_start,
-                        True, i, scl_list)
+                        True, i, scl_list, metadata=kwargs['metadata'])
 
                     msg = ('Exposure {} failed to start properly. Exposure sequence '
                         'has been aborted. Please contact your beamline scientist '
@@ -788,17 +789,18 @@ class ExpCommThread(threading.Thread):
             #       (time.time() - start ) )
 
         dio_out6.write(1) #Close the slow normally closed xia shutter
-        # self.write_counters_joerger(measurement, num_frames, data_dir, fprefix, exp_start)
+        # self.write_counters_joerger(measurement, num_frames, data_dir, fprefix,
+            # exp_start, kwargs['metadata'])
         logger.info('Exposure done')
         self._exp_event.clear()
 
         return
 
     def write_counters_struck(self, cvals, num_frames, num_counters, data_dir,
-            fprefix, exp_period, dark_counts):
-        data_dir = data_dir.replace(settings['remote_dir_root'], settings['local_dir_root'], 1)
+            fprefix, exp_period, dark_counts, metadata):
+        data_dir = data_dir.replace(self._settings['remote_dir_root'], self._settings['local_dir_root'], 1)
 
-        header = '#Filename\tstart_time\texposure_time\tI0\tI1\tI2\tI3\tBeam_current\n'
+        header = self._get_header(metadata)
 
         log_file = os.path.join(data_dir, '{}.log'.format(fprefix))
         # print (cvals)
@@ -822,10 +824,11 @@ class ExpCommThread(threading.Thread):
                 val = val + '\n'
                 f.write(val)
 
-    def write_counters_joerger(self, cvals, num_frames, data_dir, fprefix, exp_start):
-        data_dir = data_dir.replace(settings['remote_dir_root'], settings['local_dir_root'], 1)
+    def write_counters_joerger(self, cvals, num_frames, data_dir, fprefix, exp_start,
+            metadata):
+        data_dir = data_dir.replace(self._settings['remote_dir_root'], self._settings['local_dir_root'], 1)
 
-        header = '#Filename\tstart_time\texposure_time\tI0\tI1\tI2\tI3\tBeam_current\n'
+        header = self._get_header(metadata)
 
         log_file = os.path.join(data_dir, '{}.log'.format(fprefix))
         with open(log_file, 'w') as f:
@@ -846,9 +849,17 @@ class ExpCommThread(threading.Thread):
                 val = val + '\n'
                 f.write(val)
 
+    def _get_header(self, metadata):
+        header = ''
+        for key, value in metadata.items():
+            header = header + '#{}\t{}\n'.format(key, value)
+        header = header+'#Filename\tstart_time\texposure_time\tI0\tI1\tI2\tI3\tBeam_current\n'
+
+        return header
+
     def slow_mode2_abort_cleanup(self, det, joerger, ab_burst, dio_out6,
         measurement, num_frames, data_dir, fprefix, exp_start, read_joerger=False,
-        i=0, scl_list=[]):
+        i=0, scl_list=[], metadata={}):
         logger.info("Aborting slow exposure")
         try:
             det.abort()
@@ -872,7 +883,8 @@ class ExpCommThread(threading.Thread):
                         measurement[j][i] = sval
                     break
 
-        self.write_counters_joerger(measurement, num_frames, data_dir, fprefix, exp_start)
+        self.write_counters_joerger(measurement, num_frames, data_dir, fprefix,
+            exp_start, metadata)
 
         self._exp_event.clear()
         return
@@ -1009,6 +1021,8 @@ class ExpPanel(wx.Panel):
         # self.exp_con.start()
 
         self.exp_con = None #For testing purposes
+
+        self.current_exposure_values = {}
 
         self.tr_timer = wx.Timer(self)
         self.Bind(wx.EVT_TIMER, self._on_tr_timer, self.tr_timer)
@@ -1175,18 +1189,22 @@ class ExpPanel(wx.Panel):
         self.abort_event.clear()
         self.exp_event.clear()
 
-        cont = self._check_shutters()
+        shutter_valid = self._check_shutters()
 
-        if not cont:
+        if not shutter_valid:
             return
 
+        exp_values, exp_valid = self._get_exp_values()
 
-        exp_values, valid = self._get_exp_values()
-
-        if not valid:
+        if not exp_valid:
             return
 
-        pub.sendMessage('exposure.start')
+        comp_valid = self._check_components()
+
+        if not comp_valid:
+            return
+
+        exp_values['metadata'] = self._get_metadata()
 
         self.set_status('Preparing exposure')
         self.start_exp_btn.Disable()
@@ -1234,7 +1252,9 @@ class ExpPanel(wx.Panel):
         run_num = int(old_rn[1:])+1
         self.run_num.SetLabel('_{:03d}'.format(run_num))
 
-        pub.sendMessage('exposure.end')
+        if 'coflow' in self.settings['components']:
+            coflow_panel = wx.FindWindowByName('coflow')
+            coflow_panel.auto_stop()
 
     def set_status(self, status):
         self.status.SetLabel(status)
@@ -1306,8 +1326,6 @@ class ExpPanel(wx.Panel):
 
                 elif not ds:
                     logger.info('D Hutch shutter is closed.')
-
-
 
         return cont
 
@@ -1419,7 +1437,69 @@ class ExpPanel(wx.Panel):
                 }
             valid = True
 
+        self.current_exposure_values = exp_values
+
         return exp_values, valid
+
+    def _check_components(self):
+        if 'coflow' in self.settings['components']:
+            coflow_panel = wx.FindWindowByName('coflow')
+            coflow_started = coflow_panel.auto_start()
+
+        if not coflow_started:
+            msg = ('Coflow failed to start, so exposure has been canceled. '
+                'Please correct the errors then start the exposure again.')
+
+            wx.CallAfter(wx.MessageBox, msg, 'Error starting coflow',
+                style=wx.OK|wx.ICON_ERROR)
+
+        valid = coflow_started
+
+        return valid
+
+    def _get_metadata(self):
+
+        metadata = self.metadata()
+
+        if 'coflow' in self.settings['components']:
+            coflow_panel = wx.FindWindowByName('coflow')
+            coflow_metadata = coflow_panel.metadata()
+
+            for key, value in coflow_metadata.items():
+                metadata[key] = value
+
+        return metadata
+
+    def metadata(self):
+        metadata = OrderedDict()
+
+        if len(self.current_exposure_values)>0:
+            metadata['File prefix:'] = self.current_exposure_values['fprefix']
+            metadata['Save directory:'] = self.current_exposure_values['data_dir']
+            metadata['Number of frames:'] = self.current_exposure_values['num_frames']
+            metadata['Exposure time [s]:'] = self.current_exposure_values['exp_time']
+            metadata['Exposure period [s]:'] = self.current_exposure_values['exp_period']
+            metadata['Wait for trigger:'] = self.current_exposure_values['wait_for_trig']
+            if self.current_exposure_values['wait_for_trig']:
+                metadata['Number of triggers:'] = self.current_exposure_values['num_trig']
+
+            fe_shutter_pv = mpca.PV(self.settings['fe_shutter_pv'])
+            d_shutter_pv = mpca.PV(self.settings['d_shutter_pv'])
+
+            if fe_shutter_pv.caget() == 0:
+                fes = False
+            else:
+                fes = True
+
+            if d_shutter_pv.caget() == 0:
+                ds = False
+            else:
+                ds = True
+
+            metadata['Front end shutter open:'] = fes
+            metadata['D hutch shutter open:'] = ds
+
+        return metadata
 
     def on_exit(self):
         if self.exp_event.is_set() and not self.abort_event.is_set():

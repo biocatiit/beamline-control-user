@@ -68,7 +68,7 @@ class BioFrame(wx.Frame):
             logger.info('Setting up %s panel', key)
             box = wx.StaticBox(top_panel, label=key.capitalize())
             box.SetOwnForegroundColour(wx.Colour('firebrick'))
-            component_panel = self.settings['components'][key](self.settings[key], box)
+            component_panel = self.settings['components'][key](self.settings[key], box, name=key)
 
             component_sizer = wx.StaticBoxSizer(box, wx.VERTICAL)
             component_sizer.Add(component_panel, proportion=1, flag=wx.EXPAND)

@@ -24,7 +24,7 @@ from io import open
 
 import threading
 import time
-from collections import deque
+from collections import deque, OrderedDict
 import logging
 import sys
 import copy
@@ -33,7 +33,6 @@ if __name__ != '__main__':
     logger = logging.getLogger(__name__)
 
 import wx
-from pubsub import pub
 
 # import fmcon
 import client
@@ -102,6 +101,8 @@ class CoflowPanel(wx.Panel):
 
         self.settings = settings
 
+        self.coflow_on = False
+
         self._create_layout()
 
         self.coflow_pump_cmd_q = deque()
@@ -142,6 +143,7 @@ class CoflowPanel(wx.Panel):
         self.monitor = False
         self.sheath_setpoint = None
         self.outlet_setpoint = None
+        self.lc_flow_rate = None
         self.warning_dialog = None
         self.monitor_timer = wx.Timer(self)
         self.Bind(wx.EVT_TIMER, self._on_monitor_timer, self.monitor_timer)
@@ -165,8 +167,6 @@ class CoflowPanel(wx.Panel):
             dialog = wx.MessageDialog(self, msg, 'Connection error',
                 style=wx.OK|wx.ICON_ERROR)
             dialog.ShowModal()
-
-        pub.subscribe(self.auto_control, 'exposure')
 
 
     def _create_layout(self):
@@ -392,29 +392,42 @@ class CoflowPanel(wx.Panel):
     def _on_changebutton(self, evt):
         self.change_flow(start_monitor=True)
 
-    def auto_control(self, topic=pub.AUTO_TOPIC):
-        topic_name = topic.getName()
-
+    def auto_start(self):
         auto = self.auto_flow.GetValue()
 
-        if topic_name == 'exposure.start' and auto:
-            self.start_flow()
-        elif topic_name == 'exposure.stop' and auto:
+        if auto:
+            valid, flow_rate = self._validate_flow_rate()
+
+            if valid:
+                self.start_flow(validate=False)
+        else:
+            valid = True
+
+        return valid
+
+    def auto_stop(self):
+        auto = self.auto_flow.GetValue()
+
+        if auto:
             self.stop_flow()
 
     def start_flow(self, validate=True):
         logger.debug('Starting flow')
-        self.change_flow(validate)
 
-        sheath_start_cmd = ('start_flow', ('sheath_pump', ), {})
-        outlet_start_cmd = ('start_flow', ('outlet_pump', ), {})
+        valid = self.change_flow(validate)
 
-        self._send_pumpcmd(sheath_start_cmd)
-        self._send_pumpcmd(outlet_start_cmd)
+        if valid:
+            sheath_start_cmd = ('start_flow', ('sheath_pump', ), {})
+            outlet_start_cmd = ('start_flow', ('outlet_pump', ), {})
 
-        logger.info('Starting coflow pumps')
+            self._send_pumpcmd(sheath_start_cmd)
+            self._send_pumpcmd(outlet_start_cmd)
 
-        self.monitor_timer.Start(self.settings['settling_time'])
+            self.coflow_on = True
+
+            logger.info('Starting coflow pumps')
+
+            self.monitor_timer.Start(self.settings['settling_time'])
 
     def stop_flow(self):
         logger.debug('Stopping flow')
@@ -426,6 +439,8 @@ class CoflowPanel(wx.Panel):
         self._send_pumpcmd(sheath_stop_cmd)
         self._send_pumpcmd(outlet_stop_cmd)
 
+        self.coflow_on = False
+
         logger.info('Stopped coflow pumps')
 
     def change_flow(self, validate=True, start_monitor=False):
@@ -434,32 +449,38 @@ class CoflowPanel(wx.Panel):
             valid, flow_rate = self._validate_flow_rate()
         else:
             flow_rate = float(self.flow_rate.GetValue())
+            valid = True
 
-        ratio = self.settings['sheath_ratio']
-        excess = self.settings['sheath_excess']
+        if valid:
+            self.lc_flow_rate = flow_rate
 
-        sheath_flow = flow_rate*excess
-        outlet_flow = flow_rate/(1-ratio)
+            ratio = self.settings['sheath_ratio']
+            excess = self.settings['sheath_excess']
 
-        self.sheath_setpoint = sheath_flow
-        self.outlet_setpoint = outlet_flow
+            sheath_flow = flow_rate*excess
+            outlet_flow = flow_rate/(1-ratio)
 
-        if start_monitor:
-            self.monitor_timer.Stop()
-            self.monitor = False
+            self.sheath_setpoint = sheath_flow
+            self.outlet_setpoint = outlet_flow
 
-        sheath_fr_cmd = ('set_flow_rate', ('sheath_pump', sheath_flow), {})
-        outlet_fr_cmd = ('set_flow_rate', ('outlet_pump', outlet_flow), {})
+            if start_monitor:
+                self.monitor_timer.Stop()
+                self.monitor = False
 
-        logger.info('LC flow input to %f %s', flow_rate, self.settings['flow_units'])
-        logger.info('Setting sheath flow to %f %s', sheath_flow, self.settings['flow_units'])
-        logger.info('Setting outlet flow to %f %s', outlet_flow, self.settings['flow_units'])
+            sheath_fr_cmd = ('set_flow_rate', ('sheath_pump', sheath_flow), {})
+            outlet_fr_cmd = ('set_flow_rate', ('outlet_pump', outlet_flow), {})
 
-        self._send_pumpcmd(sheath_fr_cmd)
-        self._send_pumpcmd(outlet_fr_cmd)
+            logger.info('LC flow input to %f %s', flow_rate, self.settings['flow_units'])
+            logger.info('Setting sheath flow to %f %s', sheath_flow, self.settings['flow_units'])
+            logger.info('Setting outlet flow to %f %s', outlet_flow, self.settings['flow_units'])
 
-        if start_monitor:
-            self.monitor_timer.Start(self.settings['settling_time'])
+            self._send_pumpcmd(sheath_fr_cmd)
+            self._send_pumpcmd(outlet_fr_cmd)
+
+            if start_monitor:
+                self.monitor_timer.Start(self.settings['settling_time'])
+
+        return valid
 
     def _validate_flow_rate(self):
         logger.debug('Validating flow rate')
@@ -639,6 +660,23 @@ class CoflowPanel(wx.Panel):
             self.warning_dialog = CoflowWarningMessage(self, msg, 'Coflow flow is unstable')
             self.warning_dialog.Show()
 
+    def metadata(self):
+
+        metadata = OrderedDict()
+
+        if self.coflow_on:
+            metadata['Coflow on:'] = True
+            metadata['LC flow rate [{}]:'.format(self.settings['flow_units'])] = self.lc_flow_rate
+            metadata['Outlet flow rate [{}]:'.format(self.settings['flow_units'])] = self.outlet_setpoint
+            metadata['Sheath ratio:'] = self.settings['sheath_ratio']
+            metadata['Sheath excess ratio:'] = self.settings['sheath_excess']
+            metadata['Sheath inlet flow rate (including excess) [{}]:'.format(self.settings['flow_units'])] = self.sheath_setpoint
+
+        else:
+            metadata['Coflow on:'] = False
+
+        return metadata
+
     def _send_pumpcmd(self, cmd, response=False):
         ret_val = None
 
@@ -751,6 +789,8 @@ class CoflowWarningMessage(wx.Frame):
 
         self._create_layout(msg)
 
+        self.Layout()
+        self.SendSizeEvent()
         self.Fit()
         self.Raise()
 
