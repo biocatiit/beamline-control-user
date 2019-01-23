@@ -429,9 +429,6 @@ class ExpCommThread(threading.Thread):
 
                 time.sleep(0.01)
 
-            if self._abort_event.is_set():
-                self.fast_mode_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6)
-                break
 
             if continuous_exp:
                 dio_out9.write(0)
@@ -450,6 +447,10 @@ class ExpCommThread(threading.Thread):
             ab_burst.get_status() #Maybe need to clear this status?
 
             logger.info('Exposures done')
+
+            if self._abort_event.is_set():
+                self.fast_mode_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6)
+                break
 
         self._exp_event.clear()
 
@@ -629,8 +630,15 @@ class ExpCommThread(threading.Thread):
             det.abort()
         except mp.Device_Action_Failed_Error:
             pass
+        try:
+            det.abort()
+        except mp.Device_Action_Failed_Error:
+            pass
         joerger.stop()
         ab_burst.stop()
+
+        dio_out6.write(0) #Open the slow normally closed xia shutter
+        dio_out10.write(0) # Make sure the trigger is off
 
         det_datadir.put(data_dir)
         det_filename.put('{}_0001.tif'.format(fprefix))
@@ -647,9 +655,6 @@ class ExpCommThread(threading.Thread):
         with open(log_file, 'w') as f:
             f.write(header)
 
-        dio_out6.write(0) #Open the slow normally closed xia shutter
-        dio_out10.write(0) # Make sure the trigger is off
-
         joerger.start(1)
         joerger.stop()
         for scaler in scl_list:
@@ -664,7 +669,7 @@ class ExpCommThread(threading.Thread):
 
         time.sleep(0.1)
 
-        start = time.time()
+        # start = time.time()
 
         for i in range(num_frames):
             if self._abort_event.is_set():
@@ -775,7 +780,10 @@ class ExpCommThread(threading.Thread):
                         for j in range(1, len(measurement)-1):
                                 val = val + "\t{}".format(measurement[j][i])
 
-                        val = val + "\t{}".format((measurement[-1][i]-0.5*m_exp_t)/5000/(m_exp_t)) #Convert beam current from counts to numbers, 5kHz/ma + 0.5 kHz
+                        if m_exp_t > 0:
+                            val = val + "\t{}".format((measurement[-1][i]-0.5*m_exp_t)/5000/(m_exp_t)) #Convert beam current from counts to numbers, 5kHz/ma + 0.5 kHz
+                        else:
+                            val = val + "\t{}".format(measurement[-1][i])
 
                         val = val + '\n'
                         f.write(val)
@@ -1016,11 +1024,11 @@ class ExpPanel(wx.Panel):
         self.exp_ret_q = deque()
         self.abort_event = threading.Event()
         self.exp_event = threading.Event()
-        # self.exp_con = ExpCommThread(self.exp_cmd_q, self.exp_ret_q, self.abort_event,
-        #     self.exp_event, self.settings, 'ExpCon')
-        # self.exp_con.start()
+        self.exp_con = ExpCommThread(self.exp_cmd_q, self.exp_ret_q, self.abort_event,
+            self.exp_event, self.settings, 'ExpCon')
+        self.exp_con.start()
 
-        self.exp_con = None #For testing purposes
+        # self.exp_con = None #For testing purposes
 
         self.current_exposure_values = {}
 
@@ -1173,7 +1181,7 @@ class ExpPanel(wx.Panel):
                 self.data_dir.SetValue(pathname)
             else:
                 msg = ('Directory must be the following directory or one of '
-                    'its subdirectories: {}'.format(settings['base_data_dir']))
+                    'its subdirectories: {}'.format(self.settings['base_data_dir']))
                 wx.CallAfter(wx.MessageBox, msg, 'Invalid directory',
                     style=wx.OK|wx.ICON_ERROR)
 
@@ -1425,7 +1433,7 @@ class ExpPanel(wx.Panel):
             valid = False
 
         else:
-            data_dir = data_dir.replace(settings['local_dir_root'], settings['remote_dir_root'], 1)
+            data_dir = data_dir.replace(self.settings['local_dir_root'], self.settings['remote_dir_root'], 1)
 
             exp_values = {'num_frames': num_frames,
                 'exp_time': exp_time,
@@ -1445,6 +1453,8 @@ class ExpPanel(wx.Panel):
         if 'coflow' in self.settings['components']:
             coflow_panel = wx.FindWindowByName('coflow')
             coflow_started = coflow_panel.auto_start()
+        else:
+            coflow_started = True
 
         if not coflow_started:
             msg = ('Coflow failed to start, so exposure has been canceled. '
@@ -1619,7 +1629,7 @@ if __name__ == '__main__':
         'exp_period_delta'      : 0.00095,
         'slow_mode_thres'       : 0.1,
         'fast_mode_max_exp_time': 2000,
-        'wait_for_trig'         : True,
+        'wait_for_trig'         : False,
         'num_trig'              : '4',
         'show_advanced_options' : False,
         'fe_shutter_pv'         : 'FE:18:ID:FEshutter',
@@ -1627,7 +1637,7 @@ if __name__ == '__main__':
         'local_dir_root'        : '/nas_data/Pilatus1M',
         'remote_dir_root'       : '/nas_data',
         'components'            : ['exposure'],
-        'base_data_dir'         : '/nas_data/Pilatus1M/20181212Pollack', #CHANGE ME
+        'base_data_dir'         : '/nas_data/Pilatus1M/20190122Hopkins', #CHANGE ME
         }
 
     settings['data_dir'] = settings['base_data_dir']

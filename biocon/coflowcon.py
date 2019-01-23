@@ -204,6 +204,7 @@ class CoflowPanel(wx.Panel):
         self.stop_flow_button = wx.Button(self, label='Stop Coflow')
         self.change_flow_button = wx.Button(self, label='Change Flow Rate')
         self.auto_flow = wx.CheckBox(self, label='Start/stop coflow automatically with exposure')
+        self.auto_flow.SetValue(True)
 
         self.start_flow_button.Bind(wx.EVT_BUTTON, self._on_startbutton)
         self.stop_flow_button.Bind(wx.EVT_BUTTON, self._on_stopbutton)
@@ -317,7 +318,7 @@ class CoflowPanel(wx.Panel):
         sheath_init = self._send_pumpcmd(sheath_init_cmd, response=True)
         outlet_init = self._send_pumpcmd(outlet_init_cmd, response=True)
 
-        if not sheath_init:
+        if not sheath_init and not self.timeout_event.is_set():
             logger.error('Failed to connect to the sheath pump.')
 
             msg = ('Could not connect to the coflow sheath pump. '
@@ -327,7 +328,7 @@ class CoflowPanel(wx.Panel):
                 style=wx.OK|wx.ICON_ERROR)
             dialog.ShowModal()
 
-        if not outlet_init:
+        if not outlet_init and not self.timeout_event.is_set():
             logger.error('Failed to connect to the outlet pump.')
 
             msg = ('Could not connect to the coflow outlet pump. '
@@ -383,7 +384,7 @@ class CoflowPanel(wx.Panel):
         except Exception:
             outlet_init = False
 
-        if not sheath_init:
+        if not sheath_init and not self.timeout_event.is_set():
             logger.error('Failed to connect to the sheath flow meter.')
 
             msg = ('Could not connect to the coflow sheath flow meter. '
@@ -393,7 +394,7 @@ class CoflowPanel(wx.Panel):
                 style=wx.OK|wx.ICON_ERROR)
             dialog.ShowModal()
 
-        if not outlet_init:
+        if not outlet_init and not self.timeout_event.is_set():
             logger.error('Failed to connect to the outlet flow meter.')
 
             msg = ('Could not connect to the coflow outlet flow meter. '
@@ -475,6 +476,10 @@ class CoflowPanel(wx.Panel):
             valid, flow_rate = self._validate_flow_rate()
 
             if valid:
+                self.start_flow_button.Disable()
+                self.stop_flow_button.Enable()
+                self.change_flow_button.Enable()
+
                 self.start_flow(validate=False)
         else:
             valid = True
@@ -485,41 +490,49 @@ class CoflowPanel(wx.Panel):
         auto = self.auto_flow.GetValue()
 
         if auto:
+            self.start_flow_button.Enable()
+            self.stop_flow_button.Disable()
+            self.change_flow_button.Disable()
+
             self.stop_flow()
 
     def start_flow(self, validate=True):
         logger.debug('Starting flow')
 
-        valid = self.change_flow(validate)
+        if not self.coflow_on:
+            valid = self.change_flow(validate)
 
-        if valid:
-            sheath_start_cmd = ('start_flow', ('sheath_pump', ), {})
-            outlet_start_cmd = ('start_flow', ('outlet_pump', ), {})
+            if valid:
+                sheath_start_cmd = ('start_flow', ('sheath_pump', ), {})
+                outlet_start_cmd = ('start_flow', ('outlet_pump', ), {})
 
-            self._send_pumpcmd(sheath_start_cmd)
-            self._send_pumpcmd(outlet_start_cmd)
+                self._send_pumpcmd(sheath_start_cmd)
+                self._send_pumpcmd(outlet_start_cmd)
 
-            self.coflow_on = True
-            self.status.SetLabel('Coflow on')
+                self.coflow_on = True
+                self.status.SetLabel('Coflow on')
 
-            logger.info('Starting coflow pumps')
+                logger.info('Starting coflow pumps')
 
-            self.monitor_timer.Start(self.settings['settling_time'])
+                self.monitor_timer.Start(self.settings['settling_time'])
 
     def stop_flow(self):
         logger.debug('Stopping flow')
-        self.monitor = False
 
-        sheath_stop_cmd = ('stop', ('sheath_pump', ), {})
-        outlet_stop_cmd = ('stop', ('outlet_pump', ), {})
+        if self.coflow_on:
+            self.monitor_timer.Stop()
+            self.monitor = False
 
-        self._send_pumpcmd(sheath_stop_cmd)
-        self._send_pumpcmd(outlet_stop_cmd)
+            sheath_stop_cmd = ('stop', ('sheath_pump', ), {})
+            outlet_stop_cmd = ('stop', ('outlet_pump', ), {})
 
-        self.coflow_on = False
-        self.status.SetLabel('Coflow off')
+            self._send_pumpcmd(sheath_stop_cmd)
+            self._send_pumpcmd(outlet_stop_cmd)
 
-        logger.info('Stopped coflow pumps')
+            self.coflow_on = False
+            self.status.SetLabel('Coflow off')
+
+            logger.info('Stopped coflow pumps')
 
     def change_flow(self, validate=True, start_monitor=False):
         logger.debug('Changing flow rate')

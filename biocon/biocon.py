@@ -72,7 +72,8 @@ class BioFrame(wx.Frame):
             component_panel = self.settings['components'][key](self.settings[key], box, name=key)
 
             component_sizer = wx.StaticBoxSizer(box, wx.VERTICAL)
-            component_sizer.Add(component_panel, proportion=1, flag=wx.EXPAND)
+            component_sizer.Add(component_panel, proportion=1, border=2,
+                flag=wx.EXPAND|wx.ALL)
 
             self.component_sizers[key] = component_sizer
             self.component_panels[key] = component_panel
@@ -112,8 +113,8 @@ if __name__ == '__main__':
     logger.setLevel(logging.DEBUG)
 
     h1 = logging.StreamHandler(sys.stdout)
-    # h1.setLevel(logging.INFO)
-    h1.setLevel(logging.DEBUG)
+    h1.setLevel(logging.INFO)
+    # h1.setLevel(logging.DEBUG)
     formatter = logging.Formatter('%(asctime)s - %(message)s')
     h1.setFormatter(formatter)
 
@@ -135,14 +136,14 @@ if __name__ == '__main__':
         'exp_period_delta'      : 0.00095,
         'slow_mode_thres'       : 0.1,
         'fast_mode_max_exp_time': 2000,
-        'wait_for_trig'         : True,
+        'wait_for_trig'         : False,
         'num_trig'              : '4',
         'show_advanced_options' : False,
         'fe_shutter_pv'         : 'FE:18:ID:FEshutter',
         'd_shutter_pv'          : 'PA:18ID:STA_D_SDS_OPEN_PL.VAL',
         'local_dir_root'        : '/nas_data/Pilatus1M',
         'remote_dir_root'       : '/nas_data',
-        'base_data_dir'         : '/nas_data/Pilatus1M/20181212Pollack', #CHANGE ME
+        'base_data_dir'         : '/nas_data/Pilatus1M/20190122Hopkins', #CHANGE ME
         }
 
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']

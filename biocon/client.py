@@ -40,7 +40,7 @@ class ControlClient(threading.Thread):
 
     """
 
-    def __init__(self, ip, port, command_queue, answer_queue, abort_event, 
+    def __init__(self, ip, port, command_queue, answer_queue, abort_event,
         timeout_event, name='ControlClient'):
         """
         Initializes the custom thread. Important parameters here are the
@@ -155,6 +155,8 @@ class ControlClient(threading.Thread):
                         ', '.join(['{}:{}'.format(kw, item) for kw, item in device_cmd[2].items()])))
                     logger.error(msg)
                     logger.error(traceback.print_exc())
+            else:
+                time.sleep(0.1)
         if self._stop_event.is_set():
             self._stop_event.clear()
         else:
