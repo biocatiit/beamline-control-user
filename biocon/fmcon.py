@@ -37,8 +37,8 @@ import wx
 import serial.tools.list_ports as list_ports
 
 #NOTE: RIGHT NOW, ONLY WORKS WITH 32bit elveflow stuff. The 64bit stuff seems to be broken.
-sys.path.append('C:\\Users\\biocat\\Desktop\\Elveflow_SDK_V3_01_13\\Elveflow_SDK_V3_01_13\\DLL32\\DLL32') #add the path of the library here
-sys.path.append('C:\\Users\\biocat\\Desktop\\Elveflow_SDK_V3_01_13\\Elveflow_SDK_V3_01_13\\python_32')#add the path of the LoadElveflow.py
+sys.path.append('C:\\Users\\biocat\\Elveflow_SDK\\DLL32\\DLL32') #add the path of the library here
+sys.path.append('C:\\Users\\biocat\\Elveflow_SDK\\python_32')#add the path of the LoadElveflow.py
 
 # import Elveflow64 as Elveflow
 import Elveflow32 as Elveflow
@@ -857,7 +857,7 @@ class FlowMeterFrame(wx.Frame):
         if not self.fms:
             self.fm_sizer.Remove(0)
 
-        setup_fms = [('3', 'BFS', 'COM8', [], {}),
+        setup_fms = [('3', 'BFS', 'COM3', [], {}),
                     ]
 
         logger.info('Initializing %s flow meters on startup', str(len(setup_fms)))

@@ -1417,8 +1417,8 @@ class PumpFrame(wx.Frame):
         if not self.pumps:
             self.pump_sizer.Remove(0)
 
-        setup_pumps = [('2', 'VICI M50', 'COM6', ['626.2', '9.278'], {}),
-                    ('3', 'VICI M50', 'COM4', ['627.32', '11.826'], {})
+        setup_pumps = [('2', 'VICI M50', 'COM5', ['626.2', '9.278'], {}),
+                    ('3', 'VICI M50', 'COM6', ['627.32', '11.826'], {})
                     ]
 
         logger.info('Initializing %s pumps on startup', str(len(setup_pumps)))
