@@ -194,14 +194,15 @@ if __name__ == '__main__':
     port1 = '5556'
     port2 = '5557'
 
-    ip = '164.54.204.104'
+    ip = '164.54.204.37'
 
     # pump_ctrl_cmd_q = deque()
     # pump_ctrl_return_q = deque()
     # pump_ctrl_abort_event = threading.Event()
+    # pump_timeout_event = threading.Event()
 
     # pump_control_client = ControlClient(ip, port1, pump_ctrl_cmd_q,
-    #     pump_ctrl_return_q, pump_ctrl_abort_event, name='PumpControlClient')
+    #     pump_ctrl_return_q, pump_ctrl_abort_event, pump_timeout_event, name='PumpControlClient')
     # pump_control_client.start()
 
     # init_cmd = ('connect', ('COM6', 'pump2', 'VICI_M50'),
@@ -246,9 +247,10 @@ if __name__ == '__main__':
     fm_ctrl_cmd_q = deque()
     fm_ctrl_return_q = deque()
     fm_ctrl_abort_event = threading.Event()
+    fm_ctrl_timeout_event = threading.Event()
 
     fm_control_client = ControlClient(ip, port1, fm_ctrl_cmd_q,
-        fm_ctrl_return_q, fm_ctrl_abort_event, name='FMControlClient')
+        fm_ctrl_return_q, fm_ctrl_abort_event, fm_ctrl_timeout_event, name='FMControlClient')
     fm_control_client.start()
 
     init_cmd = ('connect', ('COM8', 'bfs1', 'BFS'), {})

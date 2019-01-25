@@ -37,8 +37,8 @@ import wx
 import serial.tools.list_ports as list_ports
 
 #NOTE: RIGHT NOW, ONLY WORKS WITH 32bit elveflow stuff. The 64bit stuff seems to be broken.
-sys.path.append('C:\\Users\\biocat\\Elveflow_SDK\\DLL32\\DLL32') #add the path of the library here
-sys.path.append('C:\\Users\\biocat\\Elveflow_SDK\\python_32')#add the path of the LoadElveflow.py
+sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_02_01\\DLL32\\Elveflow32DLL') #add the path of the library here
+sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_02_01\\python_32')#add the path of the LoadElveflow.py
 
 # import Elveflow64 as Elveflow
 import Elveflow32 as Elveflow

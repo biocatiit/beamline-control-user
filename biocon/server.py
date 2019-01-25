@@ -196,7 +196,7 @@ if __name__ == '__main__':
 
     port1 = '5556'
     port2 = '5557'
-    ip = '164.54.204.104'
+    ip = '164.54.204.37'
 
     control_server1 = ControlServer(ip, port1, name='PumpControlServer')
     control_server1.start()
