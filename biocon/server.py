@@ -24,15 +24,18 @@ from io import open
 
 import threading
 import logging
+import logging.handlers as handlers
 from collections import deque
 import traceback
 import time
 import sys
+import os
 
 if __name__ != '__main__':
     logger = logging.getLogger(__name__)
 
 import zmq
+import wx
 
 import pumpcon
 import fmcon
@@ -194,6 +197,20 @@ if __name__ == '__main__':
     h1.setFormatter(formatter)
     logger.addHandler(h1)
 
+    app = wx.App()
+
+    standard_paths = wx.StandardPaths.Get() #Can't do this until you start the wx app
+    info_dir = standard_paths.GetUserLocalDataDir()
+    print (info_dir)
+    if not os.path.exists(info_dir):
+        os.mkdir(info_dir)
+    h2 = handlers.RotatingFileHandler(os.path.join(info_dir, 'expcon.log'), maxBytes=10e6, backupCount=5, delay=True)
+    h2.setLevel(logging.DEBUG)
+    formatter2 = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
+    h2.setFormatter(formatter2)
+
+    logger.addHandler(h2)
+
     port1 = '5556'
     port2 = '5557'
     ip = '164.54.204.37'
@@ -213,3 +230,5 @@ if __name__ == '__main__':
 
         control_server2.stop()
         control_server2.join()
+
+    logger.info("Quitting server")

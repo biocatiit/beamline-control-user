@@ -858,6 +858,7 @@ class FlowMeterFrame(wx.Frame):
             self.fm_sizer.Remove(0)
 
         setup_fms = [('3', 'BFS', 'COM3', [], {}),
+            ('4', 'BFS', 'COM4', [], {}),
                     ]
 
         logger.info('Initializing %s flow meters on startup', str(len(setup_fms)))
