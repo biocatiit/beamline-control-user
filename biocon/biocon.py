@@ -25,6 +25,7 @@ from io import open
 import logging
 import logging.handlers as handlers
 import sys
+import os
 
 if __name__ != '__main__':
     logger = logging.getLogger(__name__)
@@ -143,7 +144,7 @@ if __name__ == '__main__':
         'd_shutter_pv'          : 'PA:18ID:STA_D_SDS_OPEN_PL.VAL',
         'local_dir_root'        : '/nas_data/Pilatus1M',
         'remote_dir_root'       : '/nas_data',
-        'base_data_dir'         : '/nas_data/Pilatus1M/20190122Hopkins', #CHANGE ME
+        'base_data_dir'         : '/nas_data/Pilatus1M/20190205Hopkins', #CHANGE ME
         }
 
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']
@@ -188,19 +189,18 @@ if __name__ == '__main__':
 
     app = wx.App()
 
-    # standard_paths = wx.StandardPaths.Get() #Can't do this until you start the wx app
-    # info_dir = standard_paths.GetUserLocalDataDir()
+    standard_paths = wx.StandardPaths.Get() #Can't do this until you start the wx app
+    info_dir = standard_paths.GetUserLocalDataDir()
 
-    # if not os.path.exists(info_dir):
-    #     os.mkdir(info_dir)
-    # # if not os.path.exists(os.path.join(info_dir, 'expcon.log')):
-    # #     open(os.path.join(info_dir, 'expcon.log'), 'w')
-    # h2 = handlers.RotatingFileHandler(os.path.join(info_dir, 'expcon.log'), maxBytes=10e6, backupCount=5, delay=True)
-    # h2.setLevel(logging.DEBUG)
-    # formatter2 = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
-    # h2.setFormatter(formatter2)
+    if not os.path.exists(info_dir):
+        os.mkdir(info_dir)
 
-    # logger.addHandler(h2)
+    h2 = handlers.RotatingFileHandler(os.path.join(info_dir, 'expcon.log'), maxBytes=10e6, backupCount=5, delay=True)
+    h2.setLevel(logging.DEBUG)
+    formatter2 = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
+    h2.setFormatter(formatter2)
+
+    logger.addHandler(h2)
 
     logger.debug('Setting up wx app')
     frame = BioFrame(settings, None, title='BioCAT Control')

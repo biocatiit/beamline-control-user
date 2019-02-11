@@ -381,7 +381,7 @@ class ExpCommThread(threading.Thread):
                 dio_out9.write(1)
 
             dio_out11.write(1)
-            time.sleep(0.01)
+            time.sleep(0.02)
             dio_out11.write(0)
 
             time.sleep(1)
@@ -1637,7 +1637,7 @@ if __name__ == '__main__':
         'local_dir_root'        : '/nas_data/Pilatus1M',
         'remote_dir_root'       : '/nas_data',
         'components'            : ['exposure'],
-        'base_data_dir'         : '/nas_data/Pilatus1M/20190122Hopkins', #CHANGE ME
+        'base_data_dir'         : '/nas_data/Pilatus1M/20190205Hopkins', #CHANGE ME
         }
 
     settings['data_dir'] = settings['base_data_dir']
