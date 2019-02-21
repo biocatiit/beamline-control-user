@@ -281,7 +281,7 @@ class NewportXPSMotor(Motor):
             if error !=0:
                 self.get_error('status', self.sockets['status'], error, descrip)
             else:
-                logger.info('Group status: %i - %s', group_status, descrip)
+                logger.debug('Group status: %i - %s', group_status, descrip)
 
         return group_status, descrip
 
@@ -1781,22 +1781,22 @@ class MotorPanel(wx.Panel):
         self.high_limit.Bind(wx.EVT_TEXT, self._on_limit_text)
         self.high_limit.Bind(wx.EVT_TEXT_ENTER, self._on_high_limit)
 
-        pos_sizer = wx.FlexGridSizer(rows=2, cols=3, vgap=2, hgap=2)
-        pos_sizer.Add(wx.StaticText(self, label='Low lim.'),
+        self.pos_sizer = wx.FlexGridSizer(rows=2, cols=3, vgap=2, hgap=2)
+        self.pos_sizer.Add(wx.StaticText(self, label='Low lim.'),
             flag=wx.ALIGN_CENTER_HORIZONTAL)
-        pos_sizer.Add(wx.StaticText(self, label='Current Pos.'),
+        self.pos_sizer.Add(wx.StaticText(self, label='Current Pos.'),
             flag=wx.ALIGN_CENTER_HORIZONTAL)
-        pos_sizer.Add(wx.StaticText(self, label='High lim.'),
+        self.pos_sizer.Add(wx.StaticText(self, label='High lim.'),
             flag=wx.ALIGN_CENTER_HORIZONTAL)
-        pos_sizer.Add(self.low_limit,
+        self.pos_sizer.Add(self.low_limit,
             flag=wx.ALIGN_CENTER_HORIZONTAL|wx.ALIGN_CENTER_VERTICAL)
-        pos_sizer.Add(self.pos,
+        self.pos_sizer.Add(self.pos,
             flag=wx.ALIGN_CENTER_HORIZONTAL|wx.ALIGN_CENTER_VERTICAL)
-        pos_sizer.Add(self.high_limit,
+        self.pos_sizer.Add(self.high_limit,
             flag=wx.ALIGN_CENTER_HORIZONTAL|wx.ALIGN_CENTER_VERTICAL)
-        pos_sizer.AddGrowableCol(0)
-        pos_sizer.AddGrowableCol(1)
-        pos_sizer.AddGrowableCol(2)
+        self.pos_sizer.AddGrowableCol(0)
+        self.pos_sizer.AddGrowableCol(1)
+        self.pos_sizer.AddGrowableCol(2)
 
 
         self.pos_ctrl = wx.TextCtrl(self, size=(50,-1),
@@ -1867,7 +1867,7 @@ class MotorPanel(wx.Panel):
 
         self.control_mtr1_sizer = wx.BoxSizer(wx.VERTICAL)
         self.control_mtr1_sizer.Add(self.mname)
-        self.control_mtr1_sizer.Add(pos_sizer, border=5, flag=wx.TOP|wx.EXPAND)
+        self.control_mtr1_sizer.Add(self.pos_sizer, border=5, flag=wx.TOP|wx.EXPAND)
         self.control_mtr1_sizer.Add(mabs_sizer, border=5, flag=wx.TOP|wx.EXPAND)
         self.control_mtr1_sizer.Add(mrel_sizer, border=5, flag=wx.TOP|wx.EXPAND)
         self.control_mtr1_sizer.Add(va_sizer, border=5, flag=wx.TOP|wx.BOTTOM|wx.EXPAND)
@@ -1890,22 +1890,22 @@ class MotorPanel(wx.Panel):
         self.high_limit2.Bind(wx.EVT_TEXT, self._on_limit_text)
         self.high_limit2.Bind(wx.EVT_TEXT_ENTER, self._on_high_limit2)
 
-        pos_sizer2 = wx.FlexGridSizer(rows=2, cols=3, vgap=2, hgap=2)
-        pos_sizer2.Add(wx.StaticText(self, label='Low lim.'),
+        self.pos_sizer2 = wx.FlexGridSizer(rows=2, cols=3, vgap=2, hgap=2)
+        self.pos_sizer2.Add(wx.StaticText(self, label='Low lim.'),
             flag=wx.ALIGN_CENTER_HORIZONTAL)
-        pos_sizer2.Add(wx.StaticText(self, label='Current Pos.'),
+        self.pos_sizer2.Add(wx.StaticText(self, label='Current Pos.'),
             flag=wx.ALIGN_CENTER_HORIZONTAL)
-        pos_sizer2.Add(wx.StaticText(self, label='High lim.'),
+        self.pos_sizer2.Add(wx.StaticText(self, label='High lim.'),
             flag=wx.ALIGN_CENTER_HORIZONTAL)
-        pos_sizer2.Add(self.low_limit2,
+        self.pos_sizer2.Add(self.low_limit2,
             flag=wx.ALIGN_CENTER_HORIZONTAL|wx.ALIGN_CENTER_VERTICAL)
-        pos_sizer2.Add(self.pos2,
+        self.pos_sizer2.Add(self.pos2,
             flag=wx.ALIGN_CENTER_HORIZONTAL|wx.ALIGN_CENTER_VERTICAL)
-        pos_sizer2.Add(self.high_limit2,
+        self.pos_sizer2.Add(self.high_limit2,
             flag=wx.ALIGN_CENTER_HORIZONTAL|wx.ALIGN_CENTER_VERTICAL)
-        pos_sizer2.AddGrowableCol(0)
-        pos_sizer2.AddGrowableCol(1)
-        pos_sizer2.AddGrowableCol(2)
+        self.pos_sizer2.AddGrowableCol(0)
+        self.pos_sizer2.AddGrowableCol(1)
+        self.pos_sizer2.AddGrowableCol(2)
 
 
         self.pos_ctrl2 = wx.TextCtrl(self, size=(50,-1),
@@ -1977,7 +1977,7 @@ class MotorPanel(wx.Panel):
 
         self.control_mtr2_sizer = wx.BoxSizer(wx.VERTICAL)
         self.control_mtr2_sizer.Add(self.mname2)
-        self.control_mtr2_sizer.Add(pos_sizer2, border=5, flag=wx.TOP|wx.EXPAND)
+        self.control_mtr2_sizer.Add(self.pos_sizer2, border=5, flag=wx.TOP|wx.EXPAND)
         self.control_mtr2_sizer.Add(mabs_sizer2, border=5, flag=wx.TOP|wx.EXPAND)
         self.control_mtr2_sizer.Add(mrel_sizer2, border=5, flag=wx.TOP|wx.EXPAND)
         self.control_mtr2_sizer.Add(va_sizer2, border=5, flag=wx.TOP|wx.BOTTOM|wx.EXPAND)
@@ -2501,6 +2501,8 @@ class MotorPanel(wx.Panel):
         logger.debug('Setting pump %s status to %s - %s', self.name, status, descrip)
         self.status.SetLabel(str(status))
         self.status.SetToolTip(descrip)
+        self.pos_sizer.Layout()
+        self.pos_sizer2.Layout()
 
     def _send_cmd(self, cmd, args=()):
         """
@@ -2601,7 +2603,7 @@ class MotorPanel(wx.Panel):
                 time.sleep(0.1)
 
     def _update_status(self):
-        interval = 5
+        interval = 0.1
 
         start_time = time.time()
         while True and not self.monitor_event.is_set():
@@ -2616,6 +2618,11 @@ class MotorPanel(wx.Panel):
 
                     status, descrip = self.motor.get_group_status()
                     wx.CallAfter(self._set_status, status, descrip)
+
+                    if int(status)>=43 and int(status)<=45:
+                        wx.CallAfter(self.moving.SetLabel, 'True')
+                    else:
+                        wx.CallAfter(self.moving.SetLabel, 'False')
 
                 start_time = time.time()
             else:
@@ -2774,7 +2781,7 @@ if __name__ == '__main__':
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
     h1 = logging.StreamHandler(sys.stdout)
-    h1.setLevel(logging.DEBUG)
+    h1.setLevel(logging.INFO)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
     h1.setFormatter(formatter)
     logger.addHandler(h1)
