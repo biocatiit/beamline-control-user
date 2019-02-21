@@ -26,6 +26,8 @@ import logging
 import string
 import os
 import sys
+import six
+from six.moves import StringIO as bytesio
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +73,10 @@ class CharValidator(wx.Validator):
             elif self.flag == 'float' and key not in string.digits+'.':
                 return
             elif self.flag == 'fname' and key not in self.fname_chars:
+                return
+            elif self.flag == 'float_te' and key not in string.digits+'-.\n\r':
+                return
+            elif self.flag == 'float_neg' and key not in string.digits+'.-':
                 return
         event.Skip()
 
@@ -203,3 +209,27 @@ class CustomPlotToolbar(NavigationToolbar2WxAgg):
         on the plot.
         """
         self.status.SetLabel(status)
+
+
+# For XPS driver
+# from: https://github.com/pyepics/newportxps utils.py
+#
+
+# it appears ftp really wants this encoding:
+FTP_ENCODING = 'latin-1'
+
+def bytes2str(s):
+    return str(s)
+
+
+if six.PY3:
+    from io import BytesIO as bytesio
+
+    def bytes2str(s):
+        'byte to string conversion'
+        if isinstance(s, str):
+            return s
+        elif isinstance(s, bytes):
+            return str(s, FTP_ENCODING)
+        else:
+            return str(s)
