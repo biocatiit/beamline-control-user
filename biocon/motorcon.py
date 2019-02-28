@@ -2787,11 +2787,11 @@ if __name__ == '__main__':
     logger.addHandler(h1)
 
     # my_motor = NewportXPSMotor('X', '164.54.204.65', 5001, 20, 'GROUP1', 1)
-    # my_motor = NewportXPSMotor('XY', '164.54.204.65', 5001, 20, 'XY', 2)
+    my_motor = NewportXPSMotor('XY', '164.54.204.65', 5001, 20, 'XY', 2)
 
-    # group_status, descrip = my_motor.get_group_status()
-    # if group_status == 42:
-    #     my_motor.home()
+    group_status, descrip = my_motor.get_group_status()
+    if group_status == 42:
+        my_motor.home()
 
     # 1 axis
     # my_motor.move_absolute([20.0])
@@ -2890,22 +2890,37 @@ if __name__ == '__main__':
     # current_position = my_motor.position
     # print(current_position)
 
-    # my_motor.set_velocity('XY.X', 0, 10)
-    # my_motor.set_velocity('XY.Y', 0, 10)
+    my_motor.set_velocity('XY.X', 0, 0.1)
+    my_motor.set_velocity('XY.Y', 1, 0.1)
 
-    # my_motor.set_position_compare('XY.X', 0, 0., 10., 0.1)
+    my_motor.set_position_compare('XY.X', 0, 0., 10., 0.1)
+    my_motor.set_position_compare_pulse('XY.X', 10, 12)
     # min_pos, max_pos, step, enable = my_motor.get_position_compare('XY.X', 0)
-    # my_motor.start_position_compare('XY.X')
-    # min_pos, max_pos, step, enable = my_motor.get_position_compare('XY.X', 0)
-    # print(enable)
-    # my_motor.move_positioner_absolute('XY.X', 0, 20)
-    # my_motor.stop_position_compare('XY.X')
+    my_motor.start_position_compare('XY.X')
     # min_pos, max_pos, step, enable = my_motor.get_position_compare('XY.X', 0)
     # print(enable)
-    # my_motor.move_positioner_absolute('XY.X', 0, 0)
+    my_motor.move_positioner_absolute('XY.X', 0, 1)
+    my_motor.stop_position_compare('XY.X')
+    # min_pos, max_pos, step, enable = my_motor.get_position_compare('XY.X', 0)
+    # print(enable)
+    my_motor.set_velocity('XY.X', 0, 50)
+    my_motor.move_positioner_absolute('XY.X', 0, 0)
+
+    # my_motor.set_position_compare('XY.Y', 1, 0., 1., .1)
+    # my_motor.set_position_compare_pulse('XY.Y', 0.2, 12)
+    # # min_pos, max_pos, step, enable = my_motor.get_position_compare('XY.Y', 0)
+    # my_motor.start_position_compare('XY.Y')
+    # # min_pos, max_pos, step, enable = my_motor.get_position_compare('XY.Y', 0)
+    # # print(enable)
+    # my_motor.move_positioner_absolute('XY.Y', 1, 1)
+    # my_motor.stop_position_compare('XY.Y')
+    # # min_pos, max_pos, step, enable = my_motor.get_position_compare('XY.Y', 0)
+    # # print(enable)
+    # my_motor.set_velocity('XY.Y', 1, 50)
+    # my_motor.move_positioner_absolute('XY.Y', 1, 0)
 
     # my_motor.get_position_compare_pulse('XY.X')
-    # my_motor.set_position_compare_pulse('XY.X', 1, 1)
+    # my_motor.set_position_compare_pulse('XY.Y', 10, 1)
     # my_motor.get_position_compare_pulse('XY.X')
     # my_motor.set_position_compare_pulse('XY.X', 0.2, 0.075)
 
@@ -2955,10 +2970,10 @@ if __name__ == '__main__':
     # pmp_cmd_q.append(stop_cmd)
     # my_pumpcon.stop()
 
-    app = wx.App()
-    logger.debug('Setting up wx app')
-    frame = MotorFrame(None, title='Motor Control')
-    frame.Show()
-    app.MainLoop()
+    # app = wx.App()
+    # logger.debug('Setting up wx app')
+    # frame = MotorFrame(None, title='Motor Control')
+    # frame.Show()
+    # app.MainLoop()
 
 

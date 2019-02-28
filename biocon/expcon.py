@@ -29,6 +29,8 @@ import logging
 import logging.handlers as handlers
 import sys
 import os
+import decimal
+from decimal import Decimal as D
 
 if __name__ != '__main__':
     logger = logging.getLogger(__name__)
@@ -1024,11 +1026,11 @@ class ExpPanel(wx.Panel):
         self.exp_ret_q = deque()
         self.abort_event = threading.Event()
         self.exp_event = threading.Event()
-        self.exp_con = ExpCommThread(self.exp_cmd_q, self.exp_ret_q, self.abort_event,
-            self.exp_event, self.settings, 'ExpCon')
-        self.exp_con.start()
+        # self.exp_con = ExpCommThread(self.exp_cmd_q, self.exp_ret_q, self.abort_event,
+        #     self.exp_event, self.settings, 'ExpCon')
+        # self.exp_con.start()
 
-        # self.exp_con = None #For testing purposes
+        self.exp_con = None #For testing purposes
 
         self.current_exposure_values = {}
 
@@ -1063,6 +1065,12 @@ class ExpPanel(wx.Panel):
         self.wait_for_trig.SetValue(self.settings['wait_for_trig'])
         self.num_trig = wx.TextCtrl(self, value=self.settings['num_trig'],
             size=(60,-1), validator=utils.CharValidator('int'))
+
+        if 'trsaxs' in self.settings['components']:
+            self.num_frames.SetValue('')
+            self.num_frames.Disable()
+            self.exp_time.Bind(wx.EVT_TEXT, self._on_change_exp_param)
+            self.exp_period.Bind(wx.EVT_TEXT, self._on_change_exp_param)
 
         file_prefix_sizer = wx.BoxSizer(wx.HORIZONTAL)
         file_prefix_sizer.Add(self.filename, proportion=1)
@@ -1187,6 +1195,11 @@ class ExpPanel(wx.Panel):
 
         return
 
+    def _on_change_exp_param(self, evt):
+        if 'trsaxs' in self.settings['components']:
+            trsaxs_panel = wx.FindWindowByName('trsaxs')
+            trsaxs_panel.update_params()
+
     def _on_start_exp(self, evt):
         self.start_exp()
 
@@ -1207,7 +1220,7 @@ class ExpPanel(wx.Panel):
         if not exp_valid:
             return
 
-        comp_valid = self._check_components()
+        comp_valid, comp_settings = self._check_components()
 
         if not comp_valid:
             return
@@ -1450,11 +1463,18 @@ class ExpPanel(wx.Panel):
         return exp_values, valid
 
     def _check_components(self):
+        comp_settings = {}
+
         if 'coflow' in self.settings['components']:
             coflow_panel = wx.FindWindowByName('coflow')
             coflow_started = coflow_panel.auto_start()
         else:
             coflow_started = True
+
+        if 'trsaxs' in self.settings['components']:
+            trsaxs_panel = wx.FindWindowByName('trsaxs')
+            trsaxs_values, trsaxs_valid = trsaxs_panel.get_scan_values()
+            comp_settings['trsaxs'] = trsaxs_values
 
         if not coflow_started:
             msg = ('Coflow failed to start, so exposure has been canceled. '
@@ -1463,9 +1483,9 @@ class ExpPanel(wx.Panel):
             wx.CallAfter(wx.MessageBox, msg, 'Error starting coflow',
                 style=wx.OK|wx.ICON_ERROR)
 
-        valid = coflow_started
+        valid = coflow_started and trsaxs_valid
 
-        return valid
+        return valid, comp_settings
 
     def _get_metadata(self):
 
@@ -1476,6 +1496,13 @@ class ExpPanel(wx.Panel):
             coflow_metadata = coflow_panel.metadata()
 
             for key, value in coflow_metadata.items():
+                metadata[key] = value
+
+        if 'trsaxs' in self.settings['components']:
+            trsaxs_panel = wx.FindWindowByName('trsaxs')
+            trsaxs_metadata = trsaxs_panel.metadata()
+
+            for key, value in trsaxs_metadata.items():
                 metadata[key] = value
 
         return metadata
@@ -1511,15 +1538,66 @@ class ExpPanel(wx.Panel):
 
         return metadata
 
+    def exp_settings_decimal(self):
+        exp_settings = {}
+
+        try:
+            exp_settings['num_frames'] = int(self.num_frames.GetValue())
+        except ValueError:
+            pass
+
+        try:
+            exp_settings['exp_time'] = D(self.exp_time.GetValue())
+        except (ValueError, decimal.InvalidOperation):
+            pass
+
+        try:
+            exp_settings['exp_period'] = D(self.exp_period.GetValue())
+        except (ValueError, decimal.InvalidOperation):
+            pass
+
+        try:
+            exp_settings['num_trig'] = D(self.num_trig.GetValue())
+        except (ValueError, decimal.InvalidOperation):
+            pass
+
+        exp_settings['data_dir'] = self.data_dir.GetValue()
+        exp_settings['filename'] = self.filename.GetValue()
+        exp_settings['run_num'] = self.run_num.GetLabel()
+        exp_settings['wait_for_trig'] = self.wait_for_trig.GetValue()
+
+        return exp_settings
+
+    def set_exp_settings(self, exp_settings):
+        if 'num_frames' in exp_settings:
+            self.num_frames.ChangeValue(str(exp_settings['num_frames']))
+        if 'exp_time' in exp_settings:
+            self.exp_time.ChangeValue(str(exp_settings['exp_time']))
+        if 'exp_period' in exp_settings:
+            self.exp_period.ChangeValue(str(exp_settings['exp_period']))
+        if 'num_trig' in exp_settings:
+            self.num_trig.ChangeValue(str(exp_settings['num_trig']))
+        if 'data_dir' in exp_settings:
+            self.data_dir.ChangeValue(str(exp_settings['data_dir']))
+        if 'filename' in exp_settings:
+            self.filename.ChangeValue(str(exp_settings['filename']))
+        if 'run_num' in exp_settings:
+            self.run_num.ChangeValue(str(exp_settings['run_num']))
+        if 'wait_for_trig' in exp_settings:
+            self.wait_for_trig.ChangeValue(str(exp_settings['wait_for_trig']))
+
     def on_exit(self):
         if self.exp_event.is_set() and not self.abort_event.is_set():
             self.abort_event.set()
             time.sleep(2)
 
-        self.exp_con.stop()
-        self.exp_con.join()
-        while self.exp_con.is_alive():
-            time.sleep(0.001)
+        try:
+            self.exp_con.stop()
+            self.exp_con.join()
+            while self.exp_con.is_alive():
+                time.sleep(0.001)
+        except AttributeError:
+            pass #For testing, when there is no exp_con
 
 class ExpFrame(wx.Frame):
     """
