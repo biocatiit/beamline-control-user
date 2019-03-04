@@ -1637,7 +1637,7 @@ if __name__ == '__main__':
         'local_dir_root'        : '/nas_data/Pilatus1M',
         'remote_dir_root'       : '/nas_data',
         'components'            : ['exposure'],
-        'base_data_dir'         : '/nas_data/Pilatus1M/20190205Hopkins', #CHANGE ME
+        'base_data_dir'         : '/nas_data/Pilatus1M/20190217-Orgel/', #CHANGE ME
         }
 
     settings['data_dir'] = settings['base_data_dir']

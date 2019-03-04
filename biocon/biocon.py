@@ -127,13 +127,13 @@ if __name__ == '__main__':
         'filename'              : '',
         'run_num'               : 1,
         'exp_time'              : '0.5',
-        'exp_period'            : '1.5',
+        'exp_period'            : '2',
         'exp_num'               : '5',
         'exp_time_min'          : 0.00105,
         'exp_time_max'          : 5184000,
         'exp_period_min'        : 0.002,
         'exp_period_max'        : 5184000,
-        'nframes_max'           : 4000, # For Pilatus: 999999, for Struck: 4000 (set by maxChannels in the driver configuration)
+        'nframes_max'           : 9999, # For Pilatus: 999999, for Struck: 4000 (set by maxChannels in the driver configuration)
         'exp_period_delta'      : 0.00095,
         'slow_mode_thres'       : 0.1,
         'fast_mode_max_exp_time': 2000,
@@ -144,7 +144,7 @@ if __name__ == '__main__':
         'd_shutter_pv'          : 'PA:18ID:STA_D_SDS_OPEN_PL.VAL',
         'local_dir_root'        : '/nas_data/Pilatus1M',
         'remote_dir_root'       : '/nas_data',
-        'base_data_dir'         : '/nas_data/Pilatus1M/20190205Hopkins', #CHANGE ME
+        'base_data_dir'         : '/nas_data/Pilatus1M/20190301Srinivas', #CHANGE ME
         }
 
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']
