@@ -852,7 +852,7 @@ class TRPanel(wx.Panel):
                 'num_scans'             : num_scans,
                 'scan_start_offset_dist': scan_start_offset_dist,
                 'scan_end_offset_dist'  : scan_end_offset_dist,
-                'scan_lenght'           : scan_length,
+                'scan_length'           : scan_length,
                 'total_length'          : total_length,
                 'time_per_scan'         : time_per_scan,
                 'return_time'           : return_time,
@@ -870,6 +870,13 @@ class TRPanel(wx.Panel):
                 scan_values['vect_scan_accel'] = return_vals[6]
                 scan_values['vect_return_speed'] = return_vals[7]
                 scan_values['vect_return_accel'] = return_vals[8]
+
+                scan_values['motor_group_name'] = self.settings['motor_group_name'],
+                scan_values['motor_x_name'] = self.settings['motor_x_name'],
+                scan_values['motor_y_name'] = self.settings['motor_y_name'],
+                scan_values['pco_direction'] = self.settings['pco_direction'],
+                scan_values['pco_pulse_width'] = self.settings['pco_pulse_width'],
+                scan_values['pco_encoder_settle_t'] =  self.settings['pco_encoder_settle_t'],
 
 
         return scan_values, valid
