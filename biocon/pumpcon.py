@@ -597,7 +597,8 @@ class PumpCommThread(threading.Thread):
         :param threading.Event abort_event: An event that is set when the thread
             needs to abort, and otherwise is not set.
         """
-        threading.Thread.__init__(self, name=name, daemon=True)
+        threading.Thread.__init__(self, name=name)
+        self.daemon = True
 
         logger.info("Starting pump control thread: %s", self.name)
 
@@ -1369,7 +1370,7 @@ class PumpFrame(wx.Frame):
         self.Fit()
         self.Raise()
 
-        self._initpumps()
+        # self._initpumps()
 
     def _create_layout(self):
         """Creates the layout"""
@@ -1380,7 +1381,7 @@ class PumpFrame(wx.Frame):
         self.pump_sizer = wx.BoxSizer(wx.HORIZONTAL)
         self.pump_sizer.Add(pump_panel, flag=wx.RESERVE_SPACE_EVEN_IF_HIDDEN)
 
-        self.pump_sizer.Hide(pump_panel, recursive=True)
+        # self.pump_sizer.Hide(pump_panel, recursive=True)
 
         button_panel = wx.Panel(self)
 

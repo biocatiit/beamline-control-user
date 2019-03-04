@@ -26,6 +26,8 @@ import logging
 import logging.handlers as handlers
 import sys
 import os
+from collections import OrderedDict
+from decimal import Decimal as D
 
 if __name__ != '__main__':
     logger = logging.getLogger(__name__)
@@ -34,6 +36,7 @@ import wx
 
 import expcon
 import coflowcon
+import trcon
 
 class BioFrame(wx.Frame):
     """
@@ -68,7 +71,11 @@ class BioFrame(wx.Frame):
 
         for key in self.settings['components']:
             logger.info('Setting up %s panel', key)
-            box = wx.StaticBox(top_panel, label=key.capitalize())
+            if key == 'trsaxs':
+                label = 'TRSAXS'
+            else:
+                label = key.capitalize()
+            box = wx.StaticBox(top_panel, label=label)
             box.SetOwnForegroundColour(wx.Colour('firebrick'))
             component_panel = self.settings['components'][key](self.settings[key], box, name=key)
 
@@ -79,15 +86,20 @@ class BioFrame(wx.Frame):
             self.component_sizers[key] = component_sizer
             self.component_panels[key] = component_panel
 
-        if 'exposure' in self.component_sizers or 'coflow' in self.component_sizers:
+        if ('exposure' in self.component_sizers or 'coflow' in self.component_sizers
+            or 'trsaxs' in self.component_sizers):
             exp_sizer = wx.BoxSizer(wx.HORIZONTAL)
 
             if 'exposure' in self.component_sizers:
-                exp_sizer.Add(self.component_sizers['exposure'], proportion=1, border=10,
-                    flag=wx.EXPAND|wx.ALL)
+                exp_sizer.Add(self.component_sizers['exposure'], proportion=1,
+                    border=10, flag=wx.EXPAND|wx.ALL)
 
             if 'coflow' in self.component_sizers:
                 exp_sizer.Add(self.component_sizers['coflow'], border=10,
+                    flag=wx.EXPAND|wx.ALL)
+
+            if 'trsaxs' in self.component_sizers:
+                exp_sizer.Add(self.component_sizers['trsaxs'], border=10,
                     flag=wx.EXPAND|wx.ALL)
 
             panel_sizer.Add(exp_sizer, flag=wx.EXPAND)
@@ -169,17 +181,56 @@ if __name__ == '__main__':
         'lc_flow_rate'          : '0.8',
         }
 
-    biocon_settings = {}
-
-    components = {
-        'exposure'  : expcon.ExpPanel,
-        'coflow'    : coflowcon.CoflowPanel,
+    trsaxs_settings = {
+        'components'            : ['time resolved'],
+        'position_units'        : 'mm',
+        'speed_units'           : 'mm/s',
+        'accel_units'           : 'mm/s^2',
+        'time_units'            : 's',
+        'x_start'               : 0,
+        'x_end'                 : 10,
+        'y_start'               : 0,
+        'y_end'                 : 0,
+        'scan_speed'            : 1,
+        'num_scans'             : 1,
+        'return_speed'          : 1,
+        'scan_acceleration'     : 1,
+        'return_acceleration'   : 1,
+        'constant_scan_speed'   : True,
+        'scan_start_offset_dist': 0,
+        'scan_end_offset_dist'  : 0,
+        'motor_type'            : 'Newport_XPS',
+        'motor_ip'              : '164.54.204.65',
+        'motor_port'            : '5001',
+        'motor_group_name'      : 'XY',
+        'motor_x_name'          : 'XY.X',
+        'motor_y_name'          : 'XY.Y',
+        'pco_direction'         : 'x',
+        'pco_pulse_width'       : D('0.2'), #In microseconds, opt: 0.2, 1, 2.5, 10
+        'pco_encoder_settle_t'  : D('0.075'), #In microseconds, opt: 0.075, 1, 4, 12
+        'encoder_resolution'    : D('0.0005'), #for ILS50PP, in mm
+        'encoder_precision'     : 4, #Number of significant decimals in encoder value
+        'min_off_time'          : D('0.001'),
+        'x_range'               : (-25, 25),
+        'y_range'               : (-25, 25),
+        'speed_lim'             : (0, 50),
+        'acceleration_lim'      : (0, 200),
         }
 
-    settings = {'coflow'    : coflow_settings,
-        'exposure'          : exposure_settings,
-        'components'        : components,
-        'biocon'            : biocon_settings
+    biocon_settings = {}
+
+    components = OrderedDict([
+        ('exposure', expcon.ExpPanel),
+        # ('coflow', coflowcon.CoflowPanel),
+        ('trsaxs', trcon.TRPanel),
+        ])
+
+    settings = {
+        'coflow'        : coflow_settings,
+        'exposure'      : exposure_settings,
+        'trsaxs'        : trsaxs_settings,
+        'components'    : components,
+        'biocon'        : biocon_settings
         }
 
 
@@ -192,15 +243,15 @@ if __name__ == '__main__':
     standard_paths = wx.StandardPaths.Get() #Can't do this until you start the wx app
     info_dir = standard_paths.GetUserLocalDataDir()
 
-    if not os.path.exists(info_dir):
-        os.mkdir(info_dir)
+    # if not os.path.exists(info_dir):
+    #     os.mkdir(info_dir)
 
-    h2 = handlers.RotatingFileHandler(os.path.join(info_dir, 'expcon.log'), maxBytes=10e6, backupCount=5, delay=True)
-    h2.setLevel(logging.DEBUG)
-    formatter2 = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
-    h2.setFormatter(formatter2)
+    # h2 = handlers.RotatingFileHandler(os.path.join(info_dir, 'expcon.log'), maxBytes=10e6, backupCount=5, delay=True)
+    # h2.setLevel(logging.DEBUG)
+    # formatter2 = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
+    # h2.setFormatter(formatter2)
 
-    logger.addHandler(h2)
+    # logger.addHandler(h2)
 
     logger.debug('Setting up wx app')
     frame = BioFrame(settings, None, title='BioCAT Control')

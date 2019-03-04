@@ -29,6 +29,8 @@ import logging
 import logging.handlers as handlers
 import sys
 import os
+import decimal
+from decimal import Decimal as D
 
 if __name__ != '__main__':
     logger = logging.getLogger(__name__)
@@ -36,7 +38,9 @@ if __name__ != '__main__':
 import wx
 import numpy as np
 
+import motorcon
 import utils
+
 utils.set_mppath() #This must be done before importing any Mp Modules.
 import Mp as mp
 import MpCa as mpca
@@ -106,6 +110,7 @@ class ExpCommThread(threading.Thread):
         self._exp_event = exp_event
         self._stop_event = threading.Event()
         self._settings = settings
+
 
         #MX stuff
         try:
@@ -192,8 +197,10 @@ class ExpCommThread(threading.Thread):
 
         self._mx_data = mx_data
 
-        self._commands = {'start_exp'   : self._start_exp,
-                        }
+        self._commands = {
+            'start_exp'     : self._start_exp,
+            'start_tr_exp'  : self._start_tr_exp,
+            }
 
     def run(self):
         """
@@ -261,6 +268,250 @@ class ExpCommThread(threading.Thread):
             logger.debug('Choosing slow exposure')
             self.slow_exposure2(data_dir, fprefix, num_frames, exp_time, exp_period, **kwargs)
 
+    def _start_tr_exp(self, exp_settings, tr_settings):
+        self.tr_exposure(exp_settings, tr_settings)
+
+    def tr_exposure(self, exp_settings, tr_settings):
+        logger.debug('Setting up trsaxs exposure')
+        det = self._mx_data['det']          #Detector
+
+        struck = self._mx_data['struck']    #Struck SIS3820
+        s0 = self._mx_data['struck_ctrs'][0]
+        s1 = self._mx_data['struck_ctrs'][1]
+        s2 = self._mx_data['struck_ctrs'][2]
+        s3 = self._mx_data['struck_ctrs'][3]
+        s11 = self._mx_data['struck_ctrs'][4]
+        struck_mode_pv = mpca.PV(self._mx_data['struck_pv']+':ChannelAdvance')
+        # struck_current_channel_pv = mpca.PV(self._mx_data['struck_pv']+':CurrentChannel')
+
+        ab_burst = self._mx_data['ab_burst']   #Shutter control signal
+        cd_burst = self._mx_data['cd_burst']   #Struck LNE/channel advance signal
+        ef_burst = self._mx_data['ef_burst']   #Pilatus trigger signal
+        gh_burst = self._mx_data['gh_burst']
+        dg645_trigger_source = self._mx_data['dg645_trigger_source']
+
+        dio_out6 = self._mx_data['dio'][6]      #Xia/wharberton shutter N.C.
+        dio_out9 = self._mx_data['dio'][9]      #Shutter control signal (alt.)
+        dio_out10 = self._mx_data['dio'][10]    #SRS DG645 trigger
+        dio_out11 = self._mx_data['dio'][11]    #Struck LNE/channel advance signal (alt.)
+
+        det_datadir = self._mx_data['det_datadir']
+        det_filename = self._mx_data['det_filename']
+
+        wait_for_trig = True
+        num_runs = tr_settings['num_scans']
+        x_start = tr_settings['scan_x_start']
+        x_end = tr_settings['scan_x_end']
+        y_start = tr_settings['scan_y_start']
+        y_end = tr_settings['scan_y_end']
+        motor_type = tr_settings['motor_type']
+        motor = tr_settings['motor']
+        vect_scan_speed = tr_settings['vect_scan_speed']
+        vect_scan_accel = tr_settings['vect_scan_accel']
+        vect_return_speed = tr_settings['vect_return_speed']
+        vect_return_accel = tr_settings['vect_return_accel']
+        return_speed = tr_settings['return_speed']
+        return_accel = tr_settings['return_accel']
+
+        if motor_type == 'Newport_XPS':
+            pco_start = tr_settings['pco_start']
+            pco_end = tr_settings['pco_end']
+            pco_step = tr_settings['pco_step']
+            pco_direction = tr_settings['pco_direction']
+            pco_pulse_width = tr_settings['pco_pulse_width']
+            pco_encoder_settle_t = tr_settings['pco_encoder_settle_t']
+            x_motor = tr_settings['motor_x_name']
+            y_motor = tr_settings['motor_y_name']
+
+        exp_period = exp_settings['exp_period']
+        exp_time = exp_settings['exp_time']
+        data_dir = exp_settings['data_dir']
+        fprefix = exp_settings['fprefix']
+        num_frames = exp_settings['num_frames']
+
+        if exp_period > exp_time+0.01 and exp_period >= 0.02:
+            logger.info('Shuttered mode')
+        else:
+            logger.info('Continuous mode')
+
+        motor_cmd_q = deque()
+        motor_answer_q = deque()
+        abort_event = threading.Event()
+        motor_con = motorcon.MotorCommThread(motor_cmd_q, motor_answer_q, abort_event, name='MotorCon')
+        motor_con.start()
+
+        motor_cmd_q.append(('add_motor', (motor, 'TR_motor'), {}))
+
+        if motor_type == 'Newport_XPS':
+            motor.stop_position_compare()
+            if pco_direction == 'x':
+                motor.set_position_compare(x_motor, 0, pco_start, pco_end, pco_step)
+                motor.set_position_compare_pulse(x_motor, pco_pulse_width, pco_encoder_settle_t)
+            else:
+                motor.set_position_compare(y_motor, 1, pco_start, pco_end, pco_step)
+                motor.set_position_compare_pulse(x_motor, pco_pulse_width, pco_encoder_settle_t)
+
+        # For newports this is fine, because it automatically scales down different axes speeds
+        # so that a group move ends simultaneously. For other controls may need to
+        # recalculate the vector speeds and accelerations
+        motor.set_velocity(x_motor, 0, return_speed)
+        motor.set_velocity(y_motor, 1, return_speed)
+        motor.set_acceleration(x_motor, 0, return_accel)
+        motor.set_acceleration(y_motor, 1, return_accel)
+
+        motor_cmd_q.append('move_absolute', ('TR_motor', (x_start, y_start)), {})
+
+        # #Read out the struck initially, takes ~2-3 seconds the first time
+        # struck.set_num_measurements(1)
+        # struck.start()
+        # dio_out11.write(1)
+        # time.sleep(0.05)
+        # dio_out11.write(0)
+
+        # time.sleep(0.1)
+
+        # dio_out11.write(1)
+        # time.sleep(0.05)
+        # dio_out11.write(0)
+
+        # while True:
+        #     busy = struck.is_busy()
+
+        #     if (busy == 0):
+        #         measurement = struck.read_all()
+        #         logger.debug( "Initial struck readout done" )
+        #         break
+
+        for current_run in range(1,num_runs+1):
+            self.return_queue.append(['scan', current_run])
+
+            try:
+                det.abort()
+            except mp.Device_Action_Failed_Error:
+                pass
+            try:
+                det.abort()
+            except mp.Device_Action_Failed_Error:
+                pass
+            struck.stop()
+            ab_burst.stop()
+
+            dio_out9.write(0) # Make sure the NM shutter is closed
+            dio_out10.write(0) # Make sure the trigger is off
+            dio_out11.write(0) # Make sure the LNE is off
+
+            det_datadir.put(data_dir)
+
+            if wait_for_trig:
+                cur_fprefix = '{}_{:04}'.format(fprefix, current_run)
+                det_filename.put('{}_0001.tif'.format(cur_fprefix))
+            else:
+                cur_fprefix = fprefix
+                det_filename.put('{}_0001.tif'.format(cur_fprefix))
+
+            det.set_duration_mode(num_frames)
+            det.set_trigger_mode(2)
+
+            struck_mode_pv.caput(1)
+            struck.set_measurement_time(exp_time)   #Ignored for external LNE of Struck
+            struck.set_num_measurements(num_frames)
+
+            if exp_period > exp_time+0.01 and exp_period >= 0.02:
+                #Shutter opens and closes, Takes 4 ms for open and close
+                ab_burst.setup(exp_time+0.007, exp_time+0.006, 1, 0, 1, -1)
+                cd_burst.setup(exp_time+0.007, 0.0001, 1, exp_time+0.006, 1, -1)
+                ef_burst.setup(exp_time+0.007, exp_time, 1, 0.005, 1, -1)
+                gh_burst.setup(exp_time+0.007, exp_time, 1, 0, 1, -1)
+            else:
+                #Shutter will be open continuously, via dio_out9
+                ab_burst.setup(exp_time+0.001, exp_time, 1, 0, 1, -1) #Irrelevant
+                cd_burst.setup(exp_time+0.001, 0.0001, 1, exp_time+0.00015, 1, -1)
+                ef_burst.setup(exp_time+0.001, exp_time, 1, 0, 1, -1)
+                gh_burst.setup(exp_time+0.001, exp_time, 1, 0, 1, -1)
+
+            dg645_trigger_source.put(1) #Change this to 2 for external falling edges
+
+            dio_out6.write(0) #Open the slow normally closed xia shutter
+
+            det.arm()
+            struck.start()
+            ab_burst.arm()
+
+            #If the softglue is running, could replace this by a put to a variable that ors with the XPS enable signal?
+            # if continuous_exp:
+            #     dio_out9.write(1)
+
+            dio_out11.write(1)
+            time.sleep(0.02)
+            dio_out11.write(0)
+
+            logger.info("Waiting to start scan %s", current_run)
+
+            while motor.is_moving():
+                if self._abort_event.is_set():
+                    self.fast_mode_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6)
+                    break
+                time.sleep(0.001)
+
+            if self._abort_event.is_set():
+                self.fast_mode_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6)
+                break
+
+            if motor_type == 'Newport_XPS':
+                if pco_direction == 'x':
+                    motor.start_position_compare(x_motor)
+                else:
+                    motor.start_position_compare(y_motor)
+
+            motor.set_velocity(x_motor, 0, vect_scan_speed[0])
+            motor.set_velocity(y_motor, 1, vect_scan_speed[1])
+            motor.set_acceleration(x_motor, 0, vect_scan_accel[0])
+            motor.set_acceleration(y_motor, 1, vect_scan_accel[1])
+
+            motor_cmd_q.append('move_absolute', ('TR_motor', (x_end, y_end)), {})
+
+            logger.info('Scan %s started', current_run)
+            self._exp_event.set()
+
+            while motor.is_moving():
+                if self._abort_event.is_set():
+                    self.fast_mode_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6)
+                    break
+
+                time.sleep(0.001)
+
+            dio_out6.write(1) #Close the slow normally closed xia shutter
+
+            if motor_type == 'Newport_XPS':
+                if pco_direction == 'x':
+                    motor.stop_position_compare(x_motor)
+                else:
+                    motor.stop_position_compare(y_motor)
+
+            motor.set_velocity(x_motor, 0, vect_return_speed[0])
+            motor.set_velocity(y_motor, 1, vect_return_speed[1])
+            motor.set_acceleration(x_motor, 0, vect_return_accel[0])
+            motor.set_acceleration(y_motor, 1, vect_return_accel[1])
+
+            motor_cmd_q.append('move_absolute', ('TR_motor', (x_start, y_start)), {})
+
+            measurement = struck.read_all()
+
+            dark_counts = [s0.get_dark_current(), s1.get_dark_current(),
+                s2.get_dark_current(), s3.get_dark_current(), s11.get_dark_current()]
+
+            logger.info('Writing counters')
+            self.write_counters_struck(measurement, num_frames, 5, data_dir, cur_fprefix,
+                exp_period, dark_counts, metadata=exp_settings['metadata'])
+
+            logger.info('Scan %s done', current_run)
+
+            if self._abort_event.is_set():
+                self.fast_mode_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6)
+                break
+
+        self._exp_event.clear()
+
     def fast_exposure(self, data_dir, fprefix, num_frames, exp_time, exp_period, **kwargs):
         logger.debug('Setting up fast exposure')
         det = self._mx_data['det']          #Detector
@@ -323,6 +574,8 @@ class ExpCommThread(threading.Thread):
         #         break
 
         for cur_trig in range(1,num_trig+1):
+            self.return_queue.append(['scan', cur_trig])
+
             try:
                 det.abort()
             except mp.Device_Action_Failed_Error:
@@ -356,7 +609,7 @@ class ExpCommThread(threading.Thread):
 
             if exp_period > exp_time+0.01 and exp_period >= 0.02:
                 #Shutter opens and closes, Takes 4 ms for open and close
-                ab_burst.setup(exp_period, exp_time+0.01, num_frames, 0, 1, -1)
+                ab_burst.setup(exp_period, exp_time+0.006, num_frames, 0, 1, -1)
                 cd_burst.setup(exp_period, 0.0001, num_frames, exp_time+0.006, 1, -1)
                 ef_burst.setup(exp_period, exp_time, num_frames, 0.005, 1, -1)
                 gh_burst.setup(exp_period, exp_time, num_frames, 0, 1, -1)
@@ -1024,11 +1277,11 @@ class ExpPanel(wx.Panel):
         self.exp_ret_q = deque()
         self.abort_event = threading.Event()
         self.exp_event = threading.Event()
-        self.exp_con = ExpCommThread(self.exp_cmd_q, self.exp_ret_q, self.abort_event,
-            self.exp_event, self.settings, 'ExpCon')
-        self.exp_con.start()
+        # self.exp_con = ExpCommThread(self.exp_cmd_q, self.exp_ret_q, self.abort_event,
+        #     self.exp_event, self.settings, 'ExpCon')
+        # self.exp_con.start()
 
-        # self.exp_con = None #For testing purposes
+        self.exp_con = None #For testing purposes
 
         self.current_exposure_values = {}
 
@@ -1063,6 +1316,12 @@ class ExpPanel(wx.Panel):
         self.wait_for_trig.SetValue(self.settings['wait_for_trig'])
         self.num_trig = wx.TextCtrl(self, value=self.settings['num_trig'],
             size=(60,-1), validator=utils.CharValidator('int'))
+
+        if 'trsaxs' in self.settings['components']:
+            self.num_frames.SetValue('')
+            self.num_frames.Disable()
+            self.exp_time.Bind(wx.EVT_TEXT, self._on_change_exp_param)
+            self.exp_period.Bind(wx.EVT_TEXT, self._on_change_exp_param)
 
         file_prefix_sizer = wx.BoxSizer(wx.HORIZONTAL)
         file_prefix_sizer.Add(self.filename, proportion=1)
@@ -1149,24 +1408,36 @@ class ExpPanel(wx.Panel):
             size=(150, -1))
         self.time_remaining.SetFont(font)
 
-        exp_status_sizer = wx.StaticBoxSizer(wx.StaticBox(self,
+        self.scan_number = wx.StaticText(self, label='1', style=wx.ST_NO_AUTORESIZE,
+            size=(150, -1))
+        self.scan_number.SetFont(font)
+
+        self.scan_num_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        self.scan_num_sizer.Add(wx.StaticText(self, label='Current scan:'),
+            flag=wx.ALIGN_CENTER_VERTICAL|wx.RESERVE_SPACE_EVEN_IF_HIDDEN)
+        self.scan_num_sizer.Add(self.scan_number, border=5,
+            flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT|wx.RESERVE_SPACE_EVEN_IF_HIDDEN)
+
+        self.exp_status_sizer = wx.StaticBoxSizer(wx.StaticBox(self,
             label='Exposure Status'), wx.HORIZONTAL)
 
-        exp_status_sizer.Add(wx.StaticText(self, label='Status:'), border=5,
+        self.exp_status_sizer.Add(wx.StaticText(self, label='Status:'), border=5,
             flag=wx.ALIGN_CENTER_VERTICAL|wx.TOP|wx.LEFT|wx.BOTTOM)
-        exp_status_sizer.Add(self.status, border=5,
+        self.exp_status_sizer.Add(self.status, border=5,
             flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT|wx.TOP|wx.BOTTOM)
-        exp_status_sizer.Add(wx.StaticText(self, label='Time remaining:'), border=5,
+        self.exp_status_sizer.Add(wx.StaticText(self, label='Time remaining:'), border=5,
             flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT|wx.TOP|wx.BOTTOM)
-        exp_status_sizer.Add(self.time_remaining, border=5,
-            flag=wx.ALIGN_CENTER_VERTICAL|wx.ALL)
-        exp_status_sizer.AddStretchSpacer(1)
+        self.exp_status_sizer.Add(self.time_remaining, border=5,
+            flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT|wx.TOP|wx.BOTTOM)
+        self.exp_status_sizer.Add(self.scan_num_sizer, border=5,
+            flag=wx.ALIGN_CENTER_VERTICAL|wx.ALL|wx.RESERVE_SPACE_EVEN_IF_HIDDEN)
+        self.exp_status_sizer.AddStretchSpacer(1)
 
-
+        self.exp_status_sizer.Hide(self.scan_num_sizer, recursive=True)
 
         top_sizer = wx.BoxSizer(wx.VERTICAL)
         top_sizer.Add(exp_ctrl_box_sizer, flag=wx.EXPAND)
-        top_sizer.Add(exp_status_sizer, border=10, flag=wx.EXPAND|wx.TOP)
+        top_sizer.Add(self.exp_status_sizer, border=10, flag=wx.EXPAND|wx.TOP)
 
         return top_sizer
 
@@ -1186,6 +1457,11 @@ class ExpPanel(wx.Panel):
                     style=wx.OK|wx.ICON_ERROR)
 
         return
+
+    def _on_change_exp_param(self, evt):
+        if 'trsaxs' in self.settings['components']:
+            trsaxs_panel = wx.FindWindowByName('trsaxs')
+            trsaxs_panel.update_params()
 
     def _on_start_exp(self, evt):
         self.start_exp()
@@ -1207,7 +1483,7 @@ class ExpPanel(wx.Panel):
         if not exp_valid:
             return
 
-        comp_valid = self._check_components()
+        comp_valid, comp_settings = self._check_components()
 
         if not comp_valid:
             return
@@ -1219,13 +1495,23 @@ class ExpPanel(wx.Panel):
         self.stop_exp_btn.Enable()
         self.total_time = exp_values['num_frames']*exp_values['exp_period']
 
-        #Exposure time fudge factors for the overhead and readout
-        if exp_values['exp_period'] < exp_values['exp_time'] + self.settings['slow_mode_thres']:
-            self.total_time = self.total_time+2
+        if 'trsaxs' in self.settings['components']:
+            self.set_time_remaining(comp_settings['total_time'])
+            self.exp_cmd_q.append('start_tr_exp', (exp_values, comp_settings), {})
+        else:
+            #Exposure time fudge factors for the overhead and readout
+            if exp_values['exp_period'] < exp_values['exp_time'] + self.settings['slow_mode_thres']:
+                self.total_time = self.total_time+2
 
-        self.set_time_remaining(self.total_time)
+            self.set_time_remaining(self.total_time)
 
-        self.exp_cmd_q.append(('start_exp', (), exp_values))
+            self.exp_cmd_q.append(('start_exp', (), exp_values))
+
+        if 'trsaxs' in self.settings['components'] or exp_values['wait_for_trig']:
+            self.exp_status_sizer.Show(self.scan_num_sizer, recursive=True)
+            self.scan_number.SetLabel('1')
+        else:
+            self.exp_status_sizer.Hide(self.scan_num_sizer, recursive=True)
 
         start_thread = threading.Thread(target=self._wait_for_exp_start)
         start_thread.daemon = True
@@ -1277,6 +1563,9 @@ class ExpPanel(wx.Panel):
 
         self.time_remaining.SetLabel(tr)
 
+    def set_scan_number(self, val):
+        self.scan_number.SetLabel(str(val))
+
     def _on_tr_timer(self, evt):
         if self.exp_event.is_set():
             tr = self.total_time - (time.time() - self.initial_time)
@@ -1285,6 +1574,12 @@ class ExpPanel(wx.Panel):
                 tr = 0
 
             self.set_time_remaining(tr)
+
+            if len(self.exp_ret_q) > 0:
+                status, val = self.exp_ret_q.popleft()
+
+                if status == 'scan':
+                    self.set_scan_number(val)
 
         else:
             self._on_exp_finish()
@@ -1450,11 +1745,18 @@ class ExpPanel(wx.Panel):
         return exp_values, valid
 
     def _check_components(self):
+        comp_settings = {}
+
         if 'coflow' in self.settings['components']:
             coflow_panel = wx.FindWindowByName('coflow')
             coflow_started = coflow_panel.auto_start()
         else:
             coflow_started = True
+
+        if 'trsaxs' in self.settings['components']:
+            trsaxs_panel = wx.FindWindowByName('trsaxs')
+            trsaxs_values, trsaxs_valid = trsaxs_panel.get_scan_values()
+            comp_settings['trsaxs'] = trsaxs_values
 
         if not coflow_started:
             msg = ('Coflow failed to start, so exposure has been canceled. '
@@ -1463,9 +1765,9 @@ class ExpPanel(wx.Panel):
             wx.CallAfter(wx.MessageBox, msg, 'Error starting coflow',
                 style=wx.OK|wx.ICON_ERROR)
 
-        valid = coflow_started
+        valid = coflow_started and trsaxs_valid
 
-        return valid
+        return valid, comp_settings
 
     def _get_metadata(self):
 
@@ -1476,6 +1778,13 @@ class ExpPanel(wx.Panel):
             coflow_metadata = coflow_panel.metadata()
 
             for key, value in coflow_metadata.items():
+                metadata[key] = value
+
+        if 'trsaxs' in self.settings['components']:
+            trsaxs_panel = wx.FindWindowByName('trsaxs')
+            trsaxs_metadata = trsaxs_panel.metadata()
+
+            for key, value in trsaxs_metadata.items():
                 metadata[key] = value
 
         return metadata
@@ -1511,15 +1820,66 @@ class ExpPanel(wx.Panel):
 
         return metadata
 
+    def exp_settings_decimal(self):
+        exp_settings = {}
+
+        try:
+            exp_settings['num_frames'] = int(self.num_frames.GetValue())
+        except ValueError:
+            pass
+
+        try:
+            exp_settings['exp_time'] = D(self.exp_time.GetValue())
+        except (ValueError, decimal.InvalidOperation):
+            pass
+
+        try:
+            exp_settings['exp_period'] = D(self.exp_period.GetValue())
+        except (ValueError, decimal.InvalidOperation):
+            pass
+
+        try:
+            exp_settings['num_trig'] = D(self.num_trig.GetValue())
+        except (ValueError, decimal.InvalidOperation):
+            pass
+
+        exp_settings['data_dir'] = self.data_dir.GetValue()
+        exp_settings['filename'] = self.filename.GetValue()
+        exp_settings['run_num'] = self.run_num.GetLabel()
+        exp_settings['wait_for_trig'] = self.wait_for_trig.GetValue()
+
+        return exp_settings
+
+    def set_exp_settings(self, exp_settings):
+        if 'num_frames' in exp_settings:
+            self.num_frames.ChangeValue(str(exp_settings['num_frames']))
+        if 'exp_time' in exp_settings:
+            self.exp_time.ChangeValue(str(exp_settings['exp_time']))
+        if 'exp_period' in exp_settings:
+            self.exp_period.ChangeValue(str(exp_settings['exp_period']))
+        if 'num_trig' in exp_settings:
+            self.num_trig.ChangeValue(str(exp_settings['num_trig']))
+        if 'data_dir' in exp_settings:
+            self.data_dir.ChangeValue(str(exp_settings['data_dir']))
+        if 'filename' in exp_settings:
+            self.filename.ChangeValue(str(exp_settings['filename']))
+        if 'run_num' in exp_settings:
+            self.run_num.ChangeValue(str(exp_settings['run_num']))
+        if 'wait_for_trig' in exp_settings:
+            self.wait_for_trig.ChangeValue(str(exp_settings['wait_for_trig']))
+
     def on_exit(self):
         if self.exp_event.is_set() and not self.abort_event.is_set():
             self.abort_event.set()
             time.sleep(2)
 
-        self.exp_con.stop()
-        self.exp_con.join()
-        while self.exp_con.is_alive():
-            time.sleep(0.001)
+        try:
+            self.exp_con.stop()
+            self.exp_con.join()
+            while self.exp_con.is_alive():
+                time.sleep(0.001)
+        except AttributeError:
+            pass #For testing, when there is no exp_con
 
 class ExpFrame(wx.Frame):
     """
