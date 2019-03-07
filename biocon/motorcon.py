@@ -281,7 +281,8 @@ class NewportXPSMotor(Motor):
             if error !=0:
                 self.get_error('status', self.sockets['status'], error, descrip)
             else:
-                logger.debug('Group status: %i - %s', group_status, descrip)
+                # logger.debug('Group status: %i - %s', group_status, descrip)
+                pass
 
         return group_status, descrip
 
@@ -801,6 +802,9 @@ class NewportXPSMotor(Motor):
         nearest detectable trigger position. For AquadB encoders such as those on
         our Newport ILS motors, this is the encoder resolution (0.5 um)
         """
+        min_position = float(min_position)
+        max_position = float(max_position)
+        position_step = float(position_step)
 
         logger.debug('Setting %s position compare settings', positioner)
 
@@ -883,6 +887,9 @@ class NewportXPSMotor(Motor):
         Pulse width in us, options: 0.2 (default), 1, 2, 5, or 10
         Encoder signal settling time in us, options: 0.075 (default), 1, 4, or 12
         """
+        pulse_width = float(pulse_width)
+        encoder_settle_time = float(encoder_settle_time)
+
         logger.debug('Setting %s position compare pulse parameters', positioner)
 
         ret = self.xps.PositionerPositionComparePulseParametersSet(self.sockets['general'],
@@ -2892,7 +2899,7 @@ if __name__ == '__main__':
 
     my_motor.set_velocity('XY.X', 0, 0.1)
     my_motor.set_velocity('XY.Y', 1, 0.1)
-
+    my_motor.stop_position_compare('XY.X')
     my_motor.set_position_compare('XY.X', 0, 0., 10., 0.1)
     my_motor.set_position_compare_pulse('XY.X', 10, 12)
     # min_pos, max_pos, step, enable = my_motor.get_position_compare('XY.X', 0)

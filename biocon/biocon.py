@@ -206,8 +206,8 @@ if __name__ == '__main__':
         'motor_x_name'          : 'XY.X',
         'motor_y_name'          : 'XY.Y',
         'pco_direction'         : 'x',
-        'pco_pulse_width'       : D('0.2'), #In microseconds, opt: 0.2, 1, 2.5, 10
-        'pco_encoder_settle_t'  : D('0.075'), #In microseconds, opt: 0.075, 1, 4, 12
+        'pco_pulse_width'       : D('10'), #In microseconds, opt: 0.2, 1, 2.5, 10
+        'pco_encoder_settle_t'  : D('12'), #In microseconds, opt: 0.075, 1, 4, 12
         'encoder_resolution'    : D('0.0005'), #for ILS50PP, in mm
         'encoder_precision'     : 4, #Number of significant decimals in encoder value
         'min_off_time'          : D('0.001'),
@@ -221,8 +221,8 @@ if __name__ == '__main__':
 
     components = OrderedDict([
         ('exposure', expcon.ExpPanel),
-        # ('coflow', coflowcon.CoflowPanel),
-        ('trsaxs', trcon.TRPanel),
+        ('coflow', coflowcon.CoflowPanel),
+        # ('trsaxs', trcon.TRPanel),
         ])
 
     settings = {
@@ -243,15 +243,15 @@ if __name__ == '__main__':
     standard_paths = wx.StandardPaths.Get() #Can't do this until you start the wx app
     info_dir = standard_paths.GetUserLocalDataDir()
 
-    # if not os.path.exists(info_dir):
-    #     os.mkdir(info_dir)
+    if not os.path.exists(info_dir):
+        os.mkdir(info_dir)
 
-    # h2 = handlers.RotatingFileHandler(os.path.join(info_dir, 'expcon.log'), maxBytes=10e6, backupCount=5, delay=True)
-    # h2.setLevel(logging.DEBUG)
-    # formatter2 = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
-    # h2.setFormatter(formatter2)
+    h2 = handlers.RotatingFileHandler(os.path.join(info_dir, 'expcon.log'), maxBytes=10e6, backupCount=5, delay=True)
+    h2.setLevel(logging.DEBUG)
+    formatter2 = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
+    h2.setFormatter(formatter2)
 
-    # logger.addHandler(h2)
+    logger.addHandler(h2)
 
     logger.debug('Setting up wx app')
     frame = BioFrame(settings, None, title='BioCAT Control')
