@@ -22,11 +22,13 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 from builtins import object, range, map
 from io import open
 
-from collections import OrderedDict
+from collections import OrderedDict, deque
 import logging
 import sys
 import math
 from decimal import Decimal as D
+import time
+import threading
 
 if __name__ != '__main__':
     logger = logging.getLogger(__name__)
@@ -98,6 +100,8 @@ class TRPanel(wx.Panel):
 
         self.settings = settings
         self.motor = None
+
+        self._abort_event = threading.Event()
 
         self._create_layout()
         self._init_values()
@@ -302,15 +306,138 @@ class TRPanel(wx.Panel):
         self._param_change()
 
     def _on_test_scan(self, evt):
-        scan_values, valid = self.get_scan_values()
+        if self.test_scan.GetLabel() == 'Run test':
+            self._abort_event.clear()
+            self.test_scan.SetLabel('Stop test')
 
-        print(scan_values)
-        print(valid)
+            t = threading.Thread(target=self._run_test_scan)
+            t.daemon = True
+            t.start()
 
-        metadata = self.metadata()
+        else:
+            self._abort_event.set()
+            self.test_scan.SetLabel('Run test')
 
-        print(metadata)
+    def _run_test_scan(self):
+        scan_settings, valid = self.get_scan_values()
 
+        if valid:
+            num_runs = scan_settings['num_scans']
+            x_start = scan_settings['scan_x_start']
+            x_end = scan_settings['scan_x_end']
+            y_start = scan_settings['scan_y_start']
+            y_end = scan_settings['scan_y_end']
+            motor_type = scan_settings['motor_type']
+            motor = scan_settings['motor']
+            vect_scan_speed = scan_settings['vect_scan_speed']
+            vect_scan_accel = scan_settings['vect_scan_accel']
+            vect_return_speed = scan_settings['vect_return_speed']
+            vect_return_accel = scan_settings['vect_return_accel']
+            return_speed = scan_settings['return_speed']
+            return_accel = scan_settings['return_accel']
+
+            if motor_type == 'Newport_XPS':
+                pco_start = scan_settings['pco_start']
+                pco_end = scan_settings['pco_end']
+                pco_step = scan_settings['pco_step']
+                pco_direction = scan_settings['pco_direction']
+                pco_pulse_width = scan_settings['pco_pulse_width']
+                pco_encoder_settle_t = scan_settings['pco_encoder_settle_t']
+                x_motor = str(scan_settings['motor_x_name'])
+                y_motor = str(scan_settings['motor_y_name'])
+
+            motor_cmd_q = deque()
+            motor_answer_q = deque()
+            abort_event = threading.Event()
+            motor_con = motorcon.MotorCommThread(motor_cmd_q, motor_answer_q, abort_event, name='MotorCon')
+            motor_con.start()
+
+            motor_cmd_q.append(('add_motor', (motor, 'TR_motor'), {}))
+
+            if motor_type == 'Newport_XPS':
+                if pco_direction == 'x':
+                    motor.stop_position_compare(x_motor)
+                    motor.set_position_compare(x_motor, 0, pco_start, pco_end, pco_step)
+                    motor.set_position_compare_pulse(x_motor, pco_pulse_width, pco_encoder_settle_t)
+                else:
+                    motor.stop_position_compare(y_motor)
+                    motor.set_position_compare(y_motor, 1, pco_start, pco_end, pco_step)
+                    motor.set_position_compare_pulse(x_motor, pco_pulse_width, pco_encoder_settle_t)
+
+            motor.set_velocity(x_motor, 0, return_speed)
+            motor.set_velocity(y_motor, 1, return_speed)
+            motor.set_acceleration(x_motor, 0, return_accel)
+            motor.set_acceleration(y_motor, 1, return_accel)
+
+            motor_cmd_q.append(('move_absolute', ('TR_motor', (x_start, y_start)), {}))
+
+            for current_run in range(1,num_runs+1):
+                start = time.time()
+                timeout = False
+                while not motor.is_moving() and not timeout:
+                    time.sleep(0.001) #Waits for motion to start
+                    if time.time()-start>0.1:
+                        timeout = True
+
+                while motor.is_moving():
+                    if self._abort_event.is_set():
+                        break
+                    time.sleep(0.001)
+
+                if self._abort_event.is_set():
+                    break
+
+                if motor_type == 'Newport_XPS':
+                    if pco_direction == 'x':
+                        logger.debug('starting x pco')
+                        motor.start_position_compare(x_motor)
+                    else:
+                        logger.debug('starting x pco')
+                        motor.start_position_compare(y_motor)
+
+                if vect_scan_speed[0] != 0:
+                    motor.set_velocity(x_motor, 0, vect_scan_speed[0])
+                if vect_scan_speed[1] != 0:
+                    motor.set_velocity(y_motor, 1, vect_scan_speed[1])
+                if vect_scan_accel[0] != 0:
+                    motor.set_acceleration(x_motor, 0, vect_scan_accel[0])
+                if vect_scan_accel[1] != 0:
+                    motor.set_acceleration(y_motor, 1, vect_scan_accel[1])
+
+                motor_cmd_q.append(('move_absolute', ('TR_motor', (x_end, y_end)), {}))
+
+                logger.info('Scan %s started', current_run)
+
+                start = time.time()
+                timeout = False
+                while not motor.is_moving() and not timeout:
+                    time.sleep(0.001) #Waits for motion to start
+                    if time.time()-start>0.5:
+                        timeout = True
+
+                while motor.is_moving():
+                    if self._abort_event.is_set():
+                        break
+                    time.sleep(0.001)
+
+                if motor_type == 'Newport_XPS':
+                    if pco_direction == 'x':
+                        motor.stop_position_compare(x_motor)
+                    else:
+                        motor.stop_position_compare(y_motor)
+
+                if vect_return_speed[0] != 0:
+                    motor.set_velocity(x_motor, 0, vect_return_speed[0])
+                if vect_return_speed[1] != 0:
+                    motor.set_velocity(y_motor, 1, vect_return_speed[1])
+                if vect_return_accel[0] != 0:
+                    motor.set_acceleration(x_motor, 0, vect_return_accel[0])
+                if vect_return_accel[1] != 0:
+                    motor.set_acceleration(y_motor, 1, vect_return_accel[1])
+
+                motor_cmd_q.append(('move_absolute', ('TR_motor', (x_start, y_start)), {}))
+
+        self.test_scan.SetLabel('Run test')
 
 
     def _param_change(self):
@@ -1014,14 +1141,6 @@ if __name__ == '__main__':
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
     h1.setFormatter(formatter)
     logger.addHandler(h1)
-
-    # logger = logging.getLogger('biocon')
-    # logger.setLevel(logging.DEBUG)
-    # h1 = logging.StreamHandler(sys.stdout)
-    # h1.setLevel(logging.INFO)
-    # formatter = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
-    # h1.setFormatter(formatter)
-    # logger.addHandler(h1)
 
     #Settings
     settings = {

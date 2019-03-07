@@ -46,8 +46,6 @@ utils.set_mppath() #This must be done before importing any Mp Modules.
 import Mp as mp
 import MpCa as mpca
 
-print_lock = threading.RLock()
-
 class ExpCommThread(threading.Thread):
     """
     This class creates a control thread for flow meters attached to the system.
