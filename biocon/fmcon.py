@@ -318,6 +318,9 @@ class FlowMeterCommThread(threading.Thread):
                     if command == 'connect' or command == 'disconnect':
                         self.answer_queue.append((command, False))
 
+            else:
+                time.sleep(0.01)
+
         if self._stop_event.is_set():
             self._stop_event.clear()
         else:

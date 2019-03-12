@@ -1057,6 +1057,8 @@ class MotorCommThread(threading.Thread):
 
                     if command == 'connect' or command == 'disconnect':
                         self.answer_queue.append(False)
+            else:
+                time.sleep(.01)
 
         if self._stop_event.is_set():
             self._stop_event.clear()

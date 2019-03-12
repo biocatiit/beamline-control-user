@@ -169,6 +169,10 @@ class ControlServer(threading.Thread):
                         ', '.join(['{}:{}'.format(kw, item) for kw, item in device_cmd[2].items()])))
                     logger.exception(msg)
                     logger.exception(traceback.print_exc())
+
+            else:
+                time.sleep(0.01)
+
         if self._stop_event.is_set():
             self._stop_event.clear()
         # else:

@@ -238,6 +238,8 @@ class ExpCommThread(threading.Thread):
                     logger.exception(msg)
 
                     self.abort_all()
+            else:
+                time.sleep(.01)
 
         if self._stop_event.is_set():
             self._stop_event.clear()
