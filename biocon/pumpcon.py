@@ -1373,7 +1373,7 @@ class PumpFrame(wx.Frame):
         self.Fit()
         self.Raise()
 
-        # self._initpumps()
+        self._initpumps()
 
     def _create_layout(self):
         """Creates the layout"""
@@ -1384,7 +1384,7 @@ class PumpFrame(wx.Frame):
         self.pump_sizer = wx.BoxSizer(wx.HORIZONTAL)
         self.pump_sizer.Add(pump_panel, flag=wx.RESERVE_SPACE_EVEN_IF_HIDDEN)
 
-        # self.pump_sizer.Hide(pump_panel, recursive=True)
+        self.pump_sizer.Hide(pump_panel, recursive=True)
 
         button_panel = wx.Panel(self)
 
