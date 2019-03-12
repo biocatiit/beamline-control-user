@@ -161,6 +161,7 @@ class CoflowPanel(wx.Panel):
         self.outlet_setpoint = None
         self.lc_flow_rate = None
         self.warning_dialog = None
+        self.error_dialog = None
         self.monitor_timer = wx.Timer(self)
         self.Bind(wx.EVT_TIMER, self._on_monitor_timer, self.monitor_timer)
 
@@ -183,7 +184,7 @@ class CoflowPanel(wx.Panel):
 
             dialog = wx.MessageDialog(self, msg, 'Connection error',
                 style=wx.OK|wx.ICON_ERROR)
-            dialog.ShowModal()
+            wx.CallAfter(dialog.ShowModal)
 
 
     def _create_layout(self):
@@ -204,7 +205,7 @@ class CoflowPanel(wx.Panel):
         self.stop_flow_button = wx.Button(self, label='Stop Coflow')
         self.change_flow_button = wx.Button(self, label='Change Flow Rate')
         self.auto_flow = wx.CheckBox(self, label='Start/stop coflow automatically with exposure')
-        self.auto_flow.SetValue(True)
+        self.auto_flow.SetValue(False)
 
         self.start_flow_button.Bind(wx.EVT_BUTTON, self._on_startbutton)
         self.stop_flow_button.Bind(wx.EVT_BUTTON, self._on_stopbutton)
@@ -213,6 +214,7 @@ class CoflowPanel(wx.Panel):
         self.start_flow_button.Disable()
         self.stop_flow_button.Disable()
         self.change_flow_button.Disable()
+        self.auto_flow.Disable()
 
         if 'exposure' not in self.settings['components']:
             self.auto_flow.SetValue(False)
@@ -339,6 +341,8 @@ class CoflowPanel(wx.Panel):
             dialog.ShowModal()
 
         if outlet_init and sheath_init:
+            self.auto_flow.Enable()
+
             self._send_pumpcmd(('set_units', ('sheath_pump', self.settings['flow_units']), {}))
             self._send_pumpcmd(('set_units', ('outlet_pump', self.settings['flow_units']), {}))
 
@@ -667,8 +671,10 @@ class CoflowPanel(wx.Panel):
         start_time = copy.copy(cycle_time)
 
         while not self.stop_get_fr_event.is_set():
-            s_type, sheath_fr = self._send_fmcmd(sheath_fr_cmd, True)
-            o_type, outlet_fr = self._send_fmcmd(outlet_fr_cmd, True)
+            if not self.stop_get_fr_event.is_set():
+                s_type, sheath_fr = self._send_fmcmd(sheath_fr_cmd, True)
+            if not self.stop_get_fr_event.is_set():
+                o_type, outlet_fr = self._send_fmcmd(outlet_fr_cmd, True)
 
             if s_type == 'flow_rate' and o_type == 'flow_rate':
                 self.get_plot_data_lock.acquire()
@@ -690,11 +696,15 @@ class CoflowPanel(wx.Panel):
                         logger.error('Outlet flow out of bounds (%f to %f): %f', low_warning*self.outlet_setpoint, high_warning*self.outlet_setpoint, outlet_fr)
 
             if time.time() - cycle_time > 0.25:
-                s1_type, sheath_density = self._send_fmcmd(sheath_density_cmd, True)
-                o1_type, outlet_density = self._send_fmcmd(outlet_density_cmd, True)
+                if not self.stop_get_fr_event.is_set():
+                    s1_type, sheath_density = self._send_fmcmd(sheath_density_cmd, True)
+                if not self.stop_get_fr_event.is_set():
+                    o1_type, outlet_density = self._send_fmcmd(outlet_density_cmd, True)
 
-                s2_type, sheath_t = self._send_fmcmd(sheath_t_cmd, True)
-                o2_type, outlet_t = self._send_fmcmd(outlet_t_cmd, True)
+                if not self.stop_get_fr_event.is_set():
+                    s2_type, sheath_t = self._send_fmcmd(sheath_t_cmd, True)
+                if not self.stop_get_fr_event.is_set():
+                    o2_type, outlet_t = self._send_fmcmd(outlet_t_cmd, True)
 
                 if s1_type == o1_type and s1_type == 'density' and s2_type == o2_type and s2_type == 'temperature':
                     self.get_plot_data_lock.acquire()
@@ -713,12 +723,13 @@ class CoflowPanel(wx.Panel):
                     wx.CallAfter(self.sheath_flow.SetLabel, str(round(sheath_fr, 3)))
                     wx.CallAfter(self.outlet_flow.SetLabel, str(round(outlet_fr,3 )))
 
-                logger.debug('Sheath flow rate: %f', sheath_fr)
-                logger.debug('Outlet flow rate: %f', outlet_fr)
-                logger.debug('Sheath density: %f', sheath_density)
-                logger.debug('Outlet density: %f', outlet_density)
-                logger.debug('Sheath temperature: %f', sheath_t)
-                logger.debug('Outlet temperature: %f', outlet_t)
+                if not self.stop_get_fr_event.is_set():
+                    logger.debug('Sheath flow rate: %f', sheath_fr)
+                    logger.debug('Outlet flow rate: %f', outlet_fr)
+                    logger.debug('Sheath density: %f', sheath_density)
+                    logger.debug('Outlet density: %f', outlet_density)
+                    logger.debug('Sheath temperature: %f', sheath_t)
+                    logger.debug('Outlet temperature: %f', outlet_t)
 
         logging.info('Stopping continuous logging of flow rates')
 
@@ -755,6 +766,11 @@ class CoflowPanel(wx.Panel):
             self.warning_dialog = CoflowWarningMessage(self, msg, 'Coflow flow is unstable')
             self.warning_dialog.Show()
 
+    def _show_error_dialog(self, msg, title):
+        if self.error_dialog is None:
+            self.error_dialog = CoflowWarningMessage(self, msg, title)
+            self.error_dialog.Show()
+
     def metadata(self):
 
         metadata = OrderedDict()
@@ -788,18 +804,13 @@ class CoflowPanel(wx.Panel):
                 else:
                     msg = ('Lost connection to the coflow control server. '
                         'Contact your beamline scientist.')
-
-                    dialog = wx.MessageDialog(self, msg, 'Connection error',
-                        style=wx.OK|wx.ICON_ERROR)
-                    dialog.ShowModal()
+                    wx.CallAfter(self._show_error_dialog, msg, 'Connection error')
 
         else:
             msg = ('No connection to the coflow control server. '
                 'Contact your beamline scientist.')
 
-            dialog = wx.MessageDialog(self, msg, 'Connection error',
-                style=wx.OK|wx.ICON_ERROR)
-            dialog.ShowModal()
+            wx.CallAfter(self._show_error_dialog, msg, 'Connection error')
 
 
         return ret_val
@@ -812,7 +823,7 @@ class CoflowPanel(wx.Panel):
         :param str cmd: The command to send, matching the command in the
             :py:class:`FlowMeterCommThread` ``_commands`` dictionary.
         """
-        ret_val = None
+        ret_val = (None, None)
         if not self.timeout_event.is_set():
             full_cmd = {'device': 'fm', 'command': cmd, 'response': response}
             self.coflow_fm_cmd_q.append(full_cmd)
@@ -829,7 +840,9 @@ class CoflowPanel(wx.Panel):
 
                     dialog = wx.MessageDialog(self, msg, 'Connection error',
                         style=wx.OK|wx.ICON_ERROR)
-                    dialog.ShowModal()
+                    wx.CallAfter(dialog.ShowModal)
+
+                    self.stop_get_fr_event.set()
 
         else:
             msg = ('No connection to the coflow control server. '
@@ -837,7 +850,9 @@ class CoflowPanel(wx.Panel):
 
             dialog = wx.MessageDialog(self, msg, 'Connection error',
                 style=wx.OK|wx.ICON_ERROR)
-            dialog.ShowModal()
+            wx.CallAfter(dialog.ShowModal)
+
+            self.stop_get_fr_event.set()
 
         return ret_val
 
