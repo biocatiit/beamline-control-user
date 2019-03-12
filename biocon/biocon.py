@@ -126,8 +126,8 @@ if __name__ == '__main__':
     logger.setLevel(logging.DEBUG)
 
     h1 = logging.StreamHandler(sys.stdout)
-    # h1.setLevel(logging.INFO)
-    h1.setLevel(logging.DEBUG)
+    h1.setLevel(logging.INFO)
+    # h1.setLevel(logging.DEBUG)
     formatter = logging.Formatter('%(asctime)s - %(message)s')
     h1.setFormatter(formatter)
 
@@ -221,7 +221,7 @@ if __name__ == '__main__':
 
     components = OrderedDict([
         ('exposure', expcon.ExpPanel),
-        # ('coflow', coflowcon.CoflowPanel),
+        ('coflow', coflowcon.CoflowPanel),
         # ('trsaxs', trcon.TRPanel),
         ])
 
@@ -243,15 +243,15 @@ if __name__ == '__main__':
     standard_paths = wx.StandardPaths.Get() #Can't do this until you start the wx app
     info_dir = standard_paths.GetUserLocalDataDir()
 
-    # if not os.path.exists(info_dir):
-    #     os.mkdir(info_dir)
+    if not os.path.exists(info_dir):
+        os.mkdir(info_dir)
 
-    # h2 = handlers.RotatingFileHandler(os.path.join(info_dir, 'expcon.log'), maxBytes=10e6, backupCount=5, delay=True)
-    # h2.setLevel(logging.DEBUG)
-    # formatter2 = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
-    # h2.setFormatter(formatter2)
+    h2 = handlers.RotatingFileHandler(os.path.join(info_dir, 'expcon.log'), maxBytes=10e6, backupCount=5, delay=True)
+    h2.setLevel(logging.DEBUG)
+    formatter2 = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
+    h2.setFormatter(formatter2)
 
-    # logger.addHandler(h2)
+    logger.addHandler(h2)
 
     logger.debug('Setting up wx app')
     frame = BioFrame(settings, None, title='BioCAT Control')

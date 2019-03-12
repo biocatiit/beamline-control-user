@@ -365,9 +365,9 @@ class ExpCommThread(threading.Thread):
 
         motor_cmd_q.append(('move_absolute', ('TR_motor', (x_start, y_start)), {}))
 
-        if det_datadir.get() != data_dir:
-            logger.debug(det_datadir.get())
-            det_datadir.put(data_dir)
+        det_datadir.put(data_dir)
+        while det_datadir.get().rstrip('/') != data_dir.rstrip('/'):
+            time.sleep(0.001)
 
         det.set_duration_mode(num_frames)
         det.set_trigger_mode(2)
@@ -411,20 +411,22 @@ class ExpCommThread(threading.Thread):
 
             if wait_for_trig:
                 cur_fprefix = '{}_{:04}'.format(fprefix, current_run)
-                det_filename.put('{}_0001.tif'.format(cur_fprefix))
+                new_fname = '{}_0001.tif'.format(cur_fprefix)
             else:
                 cur_fprefix = fprefix
-                det_filename.put('{}_0001.tif'.format(cur_fprefix))
+                new_fname = '{}_0001.tif'.format(cur_fprefix)
 
-            while det_filename.get() != '{}_0001.tif'.format(cur_fprefix):
+            det_filename.put(new_fname)
+
+            while det_filename.get() != new_fname:
                 logger.debug(det_filename.get())
                 time.sleep(0.01)
 
             dio_out6.write(0) #Open the slow normally closed xia shutter
 
-            det.arm()
             struck.start()
             ab_burst.arm()
+            det.arm()
 
             #If the softglue is running, could replace this by a put to a variable that ors with the XPS enable signal?
             # if continuous_exp:
@@ -515,6 +517,13 @@ class ExpCommThread(threading.Thread):
             logger.info('Writing counters')
             self.write_counters_struck(measurement, num_frames, 5, data_dir, cur_fprefix,
                 exp_period, dark_counts, metadata=exp_settings['metadata'])
+
+            while det.get_status() & 0x1 !=0:
+                time.sleep(0.001)
+                if self._abort_event.is_set():
+                    self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6,
+                        tr_settings)
+                    break
 
             logger.info('Scan %s done', current_run)
 
@@ -621,13 +630,20 @@ class ExpCommThread(threading.Thread):
             dio_out10.write(0) # Make sure the trigger is off
 
             det_datadir.put(data_dir)
+            while det_datadir.get().rstrip('/') != data_dir.rstrip('/'):
+                time.sleep(0.001)
 
             if wait_for_trig:
-                cur_fprefix = '{}_{:02}'.format(fprefix, cur_trig)
-                det_filename.put('{}_0001.tif'.format(cur_fprefix))
+                cur_fprefix = '{}_{:04}'.format(fprefix, cur_trig)
+                new_fname = '{}_0001.tif'.format(cur_fprefix)
             else:
                 cur_fprefix = fprefix
-                det_filename.put('{}_0001.tif'.format(cur_fprefix))
+                new_fname = '{}_0001.tif'.format(cur_fprefix)
+
+            det_filename.put(new_fname)
+
+            while det_filename.get() != new_fname:
+                time.sleep(0.001)
 
             det.set_duration_mode(num_frames)
             det.set_trigger_mode(2)
@@ -655,7 +671,7 @@ class ExpCommThread(threading.Thread):
             dio_out6.write(0) #Open the slow normally closed xia shutter
 
             ab_burst.get_status() #Maybe need to clear this status?
-            logger.info(ab_burst.get_status())
+            logger.debug(ab_burst.get_status())
 
             det.arm()
             struck.start()
@@ -726,6 +742,12 @@ class ExpCommThread(threading.Thread):
                 exp_period, dark_counts, metadata=kwargs['metadata'])
 
             ab_burst.get_status() #Maybe need to clear this status?
+
+            while det.get_status() & 0x1 !=0:
+                time.sleep(0.001)
+                if self._abort_event.is_set():
+                    self.fast_mode_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6)
+                    break
 
             logger.info('Exposures done')
 
