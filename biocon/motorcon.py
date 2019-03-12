@@ -972,7 +972,7 @@ class MotorCommThread(threading.Thread):
         threading.Thread.__init__(self, name=name)
         self.daemon = True
 
-        logger.info("Starting pump control thread: %s", self.name)
+        logger.info("Starting motor control thread: %s", self.name)
 
         self.command_queue = command_queue
         self.answer_queue = answer_queue
@@ -1062,7 +1062,7 @@ class MotorCommThread(threading.Thread):
             self._stop_event.clear()
         else:
             self._abort()
-        logger.info("Quitting pump control thread: %s", self.name)
+        logger.info("Quitting motor control thread: %s", self.name)
 
     def _connect_motor(self, device, name, motor_type, **kwargs):
         """

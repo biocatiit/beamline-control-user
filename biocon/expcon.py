@@ -297,7 +297,6 @@ class ExpCommThread(threading.Thread):
         dio_out6 = self._mx_data['dio'][6]      #Xia/wharberton shutter N.C.
         dio_out9 = self._mx_data['dio'][9]      #Shutter control signal (alt.)
         dio_out10 = self._mx_data['dio'][10]    #SRS DG645 trigger
-        dio_out11 = self._mx_data['dio'][11]    #Struck LNE/channel advance signal (alt.)
 
         det_datadir = self._mx_data['det_datadir']
         det_filename = self._mx_data['det_filename']
@@ -346,12 +345,6 @@ class ExpCommThread(threading.Thread):
 
         motor_cmd_q.append(('add_motor', (motor, 'TR_motor'), {}))
 
-        # logger.debug('%s', x_motor)
-        # logger.debug('%s',y_motor)
-        logger.debug(type(x_motor))
-        # logger.debug(type(pco_pulse_width))
-        # logger.debug(pco_pulse_width)
-
         if motor_type == 'Newport_XPS':
             if pco_direction == 'x':
                 motor.stop_position_compare(x_motor)
@@ -372,26 +365,32 @@ class ExpCommThread(threading.Thread):
 
         motor_cmd_q.append(('move_absolute', ('TR_motor', (x_start, y_start)), {}))
 
-        # #Read out the struck initially, takes ~2-3 seconds the first time
-        # struck.set_num_measurements(1)
-        # struck.start()
-        # dio_out11.write(1)
-        # time.sleep(0.05)
-        # dio_out11.write(0)
+        if det_datadir.get() != data_dir:
+            logger.debug(det_datadir.get())
+            det_datadir.put(data_dir)
 
-        # time.sleep(0.1)
+        det.set_duration_mode(num_frames)
+        det.set_trigger_mode(2)
 
-        # dio_out11.write(1)
-        # time.sleep(0.05)
-        # dio_out11.write(0)
+        struck_mode_pv.caput(1)
+        struck.set_measurement_time(exp_time)   #Ignored for external LNE of Struck
+        struck.set_num_measurements(num_frames)
+        struck.set_trigger_mode(0x8)    #Sets 'autotrigger' mode, i.e. counting as soon as armed
 
-        # while True:
-        #     busy = struck.is_busy()
+        if exp_period > exp_time+0.01 and exp_period >= 0.02:
+            #Shutter opens and closes, Takes 4 ms for open and close
+            ab_burst.setup(exp_time+0.007, exp_time+0.006, 1, 0, 1, -1)
+            cd_burst.setup(exp_time+0.007, 0.0001, 1, exp_time+0.006, 1, -1)
+            ef_burst.setup(exp_time+0.007, exp_time, 1, 0.005, 1, -1)
+            gh_burst.setup(exp_time+0.007, exp_time, 1, 0, 1, -1)
+        else:
+            #Shutter will be open continuously, via dio_out9
+            ab_burst.setup(exp_time+0.001, exp_time, 1, 0, 1, -1) #Irrelevant
+            cd_burst.setup(exp_time+0.001, 0.0001, 1, exp_time+0.00015, 1, -1)
+            ef_burst.setup(exp_time+0.001, exp_time, 1, 0, 1, -1)
+            gh_burst.setup(exp_time+0.001, exp_time, 1, 0, 1, -1)
 
-        #     if (busy == 0):
-        #         measurement = struck.read_all()
-        #         logger.debug( "Initial struck readout done" )
-        #         break
+        dg645_trigger_source.put(2) #Change this to 2 for external falling edges
 
         for current_run in range(1,num_runs+1):
             self.return_queue.append(['scan', current_run])
@@ -409,9 +408,6 @@ class ExpCommThread(threading.Thread):
 
             dio_out9.write(0) # Make sure the NM shutter is closed
             dio_out10.write(0) # Make sure the trigger is off
-            dio_out11.write(0) # Make sure the LNE is off
-
-            det_datadir.put(data_dir)
 
             if wait_for_trig:
                 cur_fprefix = '{}_{:04}'.format(fprefix, current_run)
@@ -420,27 +416,9 @@ class ExpCommThread(threading.Thread):
                 cur_fprefix = fprefix
                 det_filename.put('{}_0001.tif'.format(cur_fprefix))
 
-            det.set_duration_mode(num_frames)
-            det.set_trigger_mode(2)
-
-            struck_mode_pv.caput(1)
-            struck.set_measurement_time(exp_time)   #Ignored for external LNE of Struck
-            struck.set_num_measurements(num_frames)
-
-            if exp_period > exp_time+0.01 and exp_period >= 0.02:
-                #Shutter opens and closes, Takes 4 ms for open and close
-                ab_burst.setup(exp_time+0.007, exp_time+0.006, 1, 0, 1, -1)
-                cd_burst.setup(exp_time+0.007, 0.0001, 1, exp_time+0.006, 1, -1)
-                ef_burst.setup(exp_time+0.007, exp_time, 1, 0.005, 1, -1)
-                gh_burst.setup(exp_time+0.007, exp_time, 1, 0, 1, -1)
-            else:
-                #Shutter will be open continuously, via dio_out9
-                ab_burst.setup(exp_time+0.001, exp_time, 1, 0, 1, -1) #Irrelevant
-                cd_burst.setup(exp_time+0.001, 0.0001, 1, exp_time+0.00015, 1, -1)
-                ef_burst.setup(exp_time+0.001, exp_time, 1, 0, 1, -1)
-                gh_burst.setup(exp_time+0.001, exp_time, 1, 0, 1, -1)
-
-            dg645_trigger_source.put(2) #Change this to 2 for external falling edges
+            while det_filename.get() != '{}_0001.tif'.format(cur_fprefix):
+                logger.debug(det_filename.get())
+                time.sleep(0.01)
 
             dio_out6.write(0) #Open the slow normally closed xia shutter
 
@@ -451,10 +429,6 @@ class ExpCommThread(threading.Thread):
             #If the softglue is running, could replace this by a put to a variable that ors with the XPS enable signal?
             # if continuous_exp:
             #     dio_out9.write(1)
-
-            dio_out11.write(1)
-            time.sleep(0.02)
-            dio_out11.write(0)
 
             logger.info("Waiting to start scan %s", current_run)
 
@@ -564,6 +538,9 @@ class ExpCommThread(threading.Thread):
 
             time.sleep(0.001)
 
+        motor_con.stop()
+        motor_con.join()
+
         self._exp_event.clear()
 
     def fast_exposure(self, data_dir, fprefix, num_frames, exp_time, exp_period, **kwargs):
@@ -588,7 +565,6 @@ class ExpCommThread(threading.Thread):
         dio_out6 = self._mx_data['dio'][6]      #Xia/wharberton shutter N.C.
         dio_out9 = self._mx_data['dio'][9]      #Shutter control signal (alt.)
         dio_out10 = self._mx_data['dio'][10]    #SRS DG645 trigger
-        dio_out11 = self._mx_data['dio'][11]    #Struck LNE/channel advance signal (alt.)
 
         det_datadir = self._mx_data['det_datadir']
         det_filename = self._mx_data['det_filename']
@@ -643,7 +619,6 @@ class ExpCommThread(threading.Thread):
 
             dio_out9.write(0) # Make sure the NM shutter is closed
             dio_out10.write(0) # Make sure the trigger is off
-            dio_out11.write(0) # Make sure the LNE is off
 
             det_datadir.put(data_dir)
 
@@ -660,6 +635,7 @@ class ExpCommThread(threading.Thread):
             struck_mode_pv.caput(1)
             struck.set_measurement_time(exp_time)   #Ignored for external LNE of Struck
             struck.set_num_measurements(num_frames)
+            struck.set_trigger_mode(0x8)    #Sets 'autotrigger' mode, i.e. counting as soon as armed
 
             if exp_period > exp_time+0.01 and exp_period >= 0.02:
                 #Shutter opens and closes, Takes 4 ms for open and close
@@ -687,10 +663,6 @@ class ExpCommThread(threading.Thread):
 
             if continuous_exp:
                 dio_out9.write(1)
-
-            dio_out11.write(1)
-            time.sleep(0.02)
-            dio_out11.write(0)
 
             time.sleep(1)
 
@@ -1595,7 +1567,7 @@ class ExpPanel(wx.Panel):
         self.total_time = exp_values['num_frames']*exp_values['exp_period']
 
         if 'trsaxs' in self.settings['components']:
-            self.total_time = comp_settings['trsaxs']['total_time']
+            self.total_time = comp_settings['trsaxs']['total_time']+1*comp_settings['trsaxs']['num_scans']
             self.exp_cmd_q.append(('start_tr_exp', (exp_values, comp_settings), {}))
         else:
             #Exposure time fudge factors for the overhead and readout
