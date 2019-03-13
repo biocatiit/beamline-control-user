@@ -442,7 +442,6 @@ class TRPanel(wx.Panel):
 
     def _param_change(self):
         calc = True
-        a = time.time()
         constant_speed = self.constant_scan_speed.IsChecked()
 
         try:
@@ -458,20 +457,14 @@ class TRPanel(wx.Panel):
         except ValueError:
             calc = False
 
-        print ('1: {}'.format(time.time()-a))
-
         if constant_speed and calc:
             if scan_acceleration != 0:
                 accel_time = scan_speed/scan_acceleration
                 scan_start_offset_dist = 0.5*scan_acceleration*(accel_time)**2
                 scan_end_offset_dist = scan_start_offset_dist
 
-                print ('1.5: {}'.format(time.time()-a))
-
                 wx.CallAfter(self.scan_start_offset_dist.ChangeValue, str(round(scan_start_offset_dist, 3)))
                 wx.CallAfter(self.scan_end_offset_dist.ChangeValue, str(round(scan_end_offset_dist, 3)))
-
-            print ('2: {}'.format(time.time()-a))
 
         elif constant_speed and not calc:
             try:
@@ -487,18 +480,12 @@ class TRPanel(wx.Panel):
             except ValueError:
                 calc = False
 
-            print ('3: {}'.format(time.time()-a))
-
         elif calc:
             try:
                 scan_start_offset_dist = float(self.scan_start_offset_dist.GetValue())
                 scan_end_offset_dist = float(self.scan_end_offset_dist.GetValue())
             except ValueError:
                 calc = False
-
-            print ('4: {}'.format(time.time()-a))
-
-        print ('5: {}'.format(time.time()-a))
 
         if (calc and scan_speed != 0 and return_speed !=0 and
             scan_acceleration != 0 and return_acceleration !=0):
@@ -508,15 +495,11 @@ class TRPanel(wx.Panel):
                 return_acceleration, scan_start_offset_dist, scan_end_offset_dist,
                 num_scans)
 
-            print ('6: {}'.format(time.time()-a))
-
             self.scan_length.SetLabel(str(round(scan_length, 3)))
             self.total_length.SetLabel(str(round(total_length, 3)))
             self.scan_time.SetLabel(str(round(time_per_scan, 3)))
             self.return_time.SetLabel(str(round(return_time, 3)))
             self.total_scan_time.SetLabel(str(round(total_time, 3)))
-
-            print ('7: {}'.format(time.time()-a))
 
             try:
                 return_vals = self._calc_exposure_params()
@@ -530,10 +513,6 @@ class TRPanel(wx.Panel):
                 if 'exposure' in self.settings['components']:
                     exp_panel = wx.FindWindowByName('exposure')
                     exp_panel.set_exp_settings({'num_frames': num_images})
-
-            print ('8: {}'.format(time.time()-a))
-
-        print ('9: {}'.format(time.time()-a))
 
     def _calc_scan_params(self, x_start, x_end, y_start, y_end, scan_speed,
         return_speed, scan_acceleration, return_acceleration,
