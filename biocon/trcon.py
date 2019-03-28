@@ -613,7 +613,8 @@ class TRPanel(wx.Panel):
 
                     return_vals.extend([num_images, pco_step, pco_start, pco_end,
                     vect_scan_speed, vect_scan_accel, vect_return_speed,
-                    vect_return_accel])
+                    vect_return_accel, x_pco_step, y_pco_step, x_start,
+                    y_start])
 
                 else:
                     errors.append(('Motor type {} not known, cannot '
@@ -997,6 +998,10 @@ class TRPanel(wx.Panel):
                 scan_values['vect_scan_accel'] = return_vals[6]
                 scan_values['vect_return_speed'] = return_vals[7]
                 scan_values['vect_return_accel'] = return_vals[8]
+                scan_values['x_pco_step'] = return_vals[9]
+                scan_values['y_pco_step'] = return_vals[10]
+                scan_values['x_pco_start'] = return_vals[11]
+                scan_values['y_pco_start'] = return_vals[12]
 
                 scan_values['motor_group_name'] = self.settings['motor_group_name']
                 scan_values['motor_x_name'] = self.settings['motor_x_name']
