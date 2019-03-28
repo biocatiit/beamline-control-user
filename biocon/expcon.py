@@ -275,7 +275,7 @@ class ExpCommThread(threading.Thread):
             self.slow_exposure2(data_dir, fprefix, num_frames, exp_time, exp_period, **kwargs)
 
     def _start_tr_exp(self, exp_settings, comp_settings):
-        kwargs['metadata'] = self._add_metadata(kwargs['metadata'])
+        # kwargs['metadata'] = self._add_metadata(kwargs['metadata'])
         self.tr_exposure(exp_settings, comp_settings['trsaxs'])
 
     def tr_exposure(self, exp_settings, tr_settings):
