@@ -205,7 +205,7 @@ class NewportXPSMotor(Motor):
     documentation contains an example.
     """
 
-    def __init__(self, name, ip_address, port, timeout, group, num_axes):
+    def __init__(self, name, xps, ip_address, port, timeout, group, num_axes):
         """
         :param device: The device comport as sent to pyserial
         :type device: str
@@ -222,7 +222,7 @@ class NewportXPSMotor(Motor):
         self.group = group
         self.num_axes = num_axes
 
-        self.xps = xps_drivers.XPS()
+        self.xps = xps
 
         self.sockets = {}
 
@@ -250,14 +250,15 @@ class NewportXPSMotor(Motor):
         self._units = 'mm/s'
 
     def connect_to_xps(self, socket_name):
-        logger.debug('Connecting to the XPS at %s:%i', self.ip_address, self.port)
+        logger.debug('%s connecting to the XPS at %s:%i', self.name, self.ip_address, self.port)
         my_socket = self.xps.TCP_ConnectToServer(self.ip_address, self.port, self.timeout)
 
         if my_socket != -1:
-            logger.info('Connected to the XPS at %s:%i on socket %i', self.ip_address, self.port, my_socket)
+            logger.info('%s connected to the XPS at %s:%i on socket %i', self.name,
+                self.ip_address, self.port, my_socket)
             self.sockets[socket_name] = my_socket
         else:
-            logger.error('Failed to connect to the XPS at %s:%i', self.ip_address, self.port)
+            logger.error('%s failed to connect to the XPS at %s:%i', self.name, self.ip_address, self.port)
 
     def get_error(self, socket_name, socket_id, error_code, ret_str):
         error, descrip = self.xps.ErrorStringGet(socket_id, str(error_code))
@@ -922,7 +923,8 @@ class NewportXPSMotor(Motor):
     def disconnect(self):
         """Close any communication connections"""
         for socket_id in self.sockets.values():
-            logger.info('Disconnecting from the XPS at %s:%i on socket %s', self.ip_address, self.port, socket_id)
+            logger.info('%s disconnecting from the XPS at %s:%i on socket %s', self.name,
+                self.ip_address, self.port, socket_id)
             self.xps.TCP_CloseSocket(socket_id)
 
 class MotorCommThread(threading.Thread):
@@ -1775,7 +1777,7 @@ class MotorPanel(wx.Panel):
 
         status_sizer = wx.StaticBoxSizer(wx.StaticBox(self, label='Info'),
             wx.VERTICAL)
-        status_sizer.Add(status_grid, 1, wx.EXPAND)
+        status_sizer.Add(status_grid, 1, flag=wx.EXPAND|wx.ALL, border=5)
 
 
         self.low_limit = wx.TextCtrl(self, size=(60,-1), style=wx.TE_PROCESS_ENTER,
@@ -2013,9 +2015,11 @@ class MotorPanel(wx.Panel):
 
         self.control_sizer = wx.StaticBoxSizer(wx.StaticBox(self, label='Controls'),
             wx.VERTICAL)
-        self.control_sizer.Add(self.control_sub_sizer)
+        self.control_sizer.Add(self.control_sub_sizer, border=5,
+            flag=wx.LEFT|wx.RIGHT|wx.TOP)
         self.control_sizer.Add(self.group_btn_sizer, border=20,
             flag=wx.ALIGN_CENTER_HORIZONTAL|wx.TOP)
+        self.control_sizer.AddSpacer(5)
 
 
         types = [key.replace('_', ' ') for key in self.known_motors.keys()]
@@ -2070,11 +2074,11 @@ class MotorPanel(wx.Panel):
 
         self.settings_sizer = wx.StaticBoxSizer(wx.StaticBox(self, label='Settings'),
             wx.VERTICAL)
-        self.settings_sizer.Add(type_sizer, flag=wx.EXPAND)
-        self.settings_sizer.Add(self.newport_xps_sizer, border=2,
-            flag=wx.EXPAND|wx.TOP)
+        self.settings_sizer.Add(type_sizer, border=5, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.TOP)
+        self.settings_sizer.Add(self.newport_xps_sizer, border=5,
+            flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT)
         self.settings_sizer.Add(self.connect_button, border=5,
-            flag=wx.ALIGN_CENTER_HORIZONTAL|wx.TOP)
+            flag=wx.ALIGN_CENTER_HORIZONTAL|wx.TOP|wx.BOTTOM)
 
         if self.type_ctrl.GetStringSelection() != 'Newport XPS':
             self.settings_sizer.Hide(self.newport_xps_sizer, recursive=True)
@@ -2440,7 +2444,11 @@ class MotorPanel(wx.Panel):
             else:
                 num_axes = 2
 
-            self.motor = NewportXPSMotor(group, ip, port, 20, group, num_axes)
+            frame = wx.FindWindowByName('MotorFrame')
+            if frame.xps is None:
+                frame.xps = xps_drivers.XPS()
+
+            self.motor = NewportXPSMotor(group, frame.xps, ip, port, 20, group, num_axes)
 
             group_status, descrip = self.motor.get_group_status()
 
@@ -2639,12 +2647,16 @@ class MotorPanel(wx.Panel):
 
 
     def on_exit(self):
+        logger.info('Exiting MotorPanel %s', self.name)
         self.monitor_event.set()
         if self.monitor_thread.is_alive():
             self.monitor_thread.join()
 
-        self.motor.stop()
-        self.motor.disconnect()
+        try:
+            self.motor.stop()
+            self.motor.disconnect()
+        except Exception:
+            pass
 
 
 class MotorFrame(wx.Frame):
@@ -2668,6 +2680,8 @@ class MotorFrame(wx.Frame):
         self.Bind(wx.EVT_CLOSE, self._on_exit)
 
         self.motors =[]
+
+        self.xps = None
 
         top_sizer = self._create_layout()
 
@@ -2704,7 +2718,7 @@ class MotorFrame(wx.Frame):
 
         top_sizer = wx.BoxSizer(wx.VERTICAL)
         top_sizer.Add(self.motor_sizer, flag=wx.EXPAND)
-        top_sizer.Add(button_panel, flag=wx.EXPAND)
+        top_sizer.Add(button_panel, flag=wx.EXPAND|wx.ALL, border=5)
 
         return top_sizer
 
@@ -2738,7 +2752,7 @@ class MotorFrame(wx.Frame):
                 self.motor_answer_q, self.motor_con.known_motors, motor[0][0],
                 motor[0][1], motor[0], motor[1])
 
-            self.motor_sizer.Add(new_motor)
+            self.motor_sizer.Add(new_motor, border=5, flag=wx.LEFT|wx.RIGHT)
             self.motors.append(new_motor)
 
         self.Layout()
@@ -2765,9 +2779,9 @@ class MotorFrame(wx.Frame):
                     return
 
             new_motor = MotorPanel(self, wx.ID_ANY, name, self.motor_cmd_q,
-                self.motor_con.known_motors, name)
+                self.motor_answer_q, self.motor_con.known_motors, name)
             logger.info('Added new motor %s to the motor control panel.', name)
-            self.motor_sizer.Add(new_motor)
+            self.motor_sizer.Add(new_motor, border=5, flag=wx.LEFT|wx.RIGHT)
             self.motors.append(new_motor)
 
             self.Layout()
@@ -2791,16 +2805,17 @@ if __name__ == '__main__':
     logger.setLevel(logging.DEBUG)
     h1 = logging.StreamHandler(sys.stdout)
     h1.setLevel(logging.INFO)
+    # h1.setLevel(logging.DEBUG)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
     h1.setFormatter(formatter)
     logger.addHandler(h1)
 
     # my_motor = NewportXPSMotor('X', '164.54.204.65', 5001, 20, 'GROUP1', 1)
-    my_motor = NewportXPSMotor('XY', '164.54.204.65', 5001, 20, 'XY', 2)
+    # my_motor = NewportXPSMotor('XY', '164.54.204.65', 5001, 20, 'XY', 2)
 
-    group_status, descrip = my_motor.get_group_status()
-    if group_status == 42:
-        my_motor.home()
+    # group_status, descrip = my_motor.get_group_status()
+    # if group_status == 42:
+    #     my_motor.home()
 
     # 1 axis
     # my_motor.move_absolute([20.0])
@@ -2899,21 +2914,21 @@ if __name__ == '__main__':
     # current_position = my_motor.position
     # print(current_position)
 
-    my_motor.set_velocity('XY.X', 0, 0.1)
-    my_motor.set_velocity('XY.Y', 1, 0.1)
-    my_motor.stop_position_compare('XY.X')
-    my_motor.set_position_compare('XY.X', 0, 0., 10., 0.1)
-    my_motor.set_position_compare_pulse('XY.X', 10, 12)
+    # my_motor.set_velocity('XY.X', 0, 0.1)
+    # my_motor.set_velocity('XY.Y', 1, 0.1)
+    # my_motor.stop_position_compare('XY.X')
+    # my_motor.set_position_compare('XY.X', 0, 0., 10., 0.1)
+    # my_motor.set_position_compare_pulse('XY.X', 10, 12)
     # min_pos, max_pos, step, enable = my_motor.get_position_compare('XY.X', 0)
-    my_motor.start_position_compare('XY.X')
-    # min_pos, max_pos, step, enable = my_motor.get_position_compare('XY.X', 0)
-    # print(enable)
-    my_motor.move_positioner_absolute('XY.X', 0, 1)
-    my_motor.stop_position_compare('XY.X')
+    # my_motor.start_position_compare('XY.X')
     # min_pos, max_pos, step, enable = my_motor.get_position_compare('XY.X', 0)
     # print(enable)
-    my_motor.set_velocity('XY.X', 0, 50)
-    my_motor.move_positioner_absolute('XY.X', 0, 0)
+    # my_motor.move_positioner_absolute('XY.X', 0, 1)
+    # my_motor.stop_position_compare('XY.X')
+    # min_pos, max_pos, step, enable = my_motor.get_position_compare('XY.X', 0)
+    # print(enable)
+    # my_motor.set_velocity('XY.X', 0, 50)
+    # my_motor.move_positioner_absolute('XY.X', 0, 0)
 
     # my_motor.set_position_compare('XY.Y', 1, 0., 1., .1)
     # my_motor.set_position_compare_pulse('XY.Y', 0.2, 12)
@@ -2979,10 +2994,10 @@ if __name__ == '__main__':
     # pmp_cmd_q.append(stop_cmd)
     # my_pumpcon.stop()
 
-    # app = wx.App()
-    # logger.debug('Setting up wx app')
-    # frame = MotorFrame(None, title='Motor Control')
-    # frame.Show()
-    # app.MainLoop()
+    app = wx.App()
+    logger.debug('Setting up wx app')
+    frame = MotorFrame(None, title='Motor Control', name='MotorFrame')
+    frame.Show()
+    app.MainLoop()
 
 

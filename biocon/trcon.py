@@ -36,6 +36,7 @@ if __name__ != '__main__':
 import wx
 
 import motorcon
+import XPS_C8_drivers as xps_drivers
 import utils
 
 class TRPanel(wx.Panel):
@@ -100,6 +101,8 @@ class TRPanel(wx.Panel):
 
         self.settings = settings
         self.motor = None
+
+        self.xps = None
 
         self._abort_event = threading.Event()
 
@@ -286,7 +289,10 @@ class TRPanel(wx.Panel):
             self.scan_end_offset_dist.Enable()
 
         if self.settings['motor_type'] == 'Newport_XPS':
-            self.motor = motorcon.NewportXPSMotor('TRSAXS', self.settings['motor_ip'],
+            if self.xps is None:
+                self.xps = xps_drivers.XPS()
+
+            self.motor = motorcon.NewportXPSMotor('TRSAXS', self.xps, self.settings['motor_ip'],
                 int(self.settings['motor_port']), 20, self.settings['motor_group_name'],
                 2)
 

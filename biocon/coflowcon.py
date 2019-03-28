@@ -669,6 +669,8 @@ class CoflowPanel(wx.Panel):
 
         cycle_time = time.time()
         start_time = copy.copy(cycle_time)
+        log_time = time.time()
+
 
         while not self.stop_get_fr_event.is_set():
             if not self.stop_get_fr_event.is_set():
@@ -730,6 +732,16 @@ class CoflowPanel(wx.Panel):
                     logger.debug('Outlet density: %f', outlet_density)
                     logger.debug('Sheath temperature: %f', sheath_t)
                     logger.debug('Outlet temperature: %f', outlet_t)
+
+                if not self.stop_get_fr_event.is_set() and time.time() - log_time > 10:
+                    logger.info('Sheath flow rate: %f', sheath_fr)
+                    logger.info('Outlet flow rate: %f', outlet_fr)
+                    logger.info('Sheath density: %f', sheath_density)
+                    logger.info('Outlet density: %f', outlet_density)
+                    logger.info('Sheath temperature: %f', sheath_t)
+                    logger.info('Outlet temperature: %f', outlet_t)
+
+                    log_time = time.time()
 
         logging.info('Stopping continuous logging of flow rates')
 

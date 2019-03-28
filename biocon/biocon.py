@@ -156,7 +156,7 @@ if __name__ == '__main__':
         'd_shutter_pv'          : 'PA:18ID:STA_D_SDS_OPEN_PL.VAL',
         'local_dir_root'        : '/nas_data/Pilatus1M',
         'remote_dir_root'       : '/nas_data',
-        'base_data_dir'         : '/nas_data/Pilatus1M/20190301Srinivas', #CHANGE ME
+        'base_data_dir'         : '/nas_data/Pilatus1M/20190326Hopkins', #CHANGE ME
         }
 
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']
@@ -170,7 +170,7 @@ if __name__ == '__main__':
         'remote_fm_port'        : '5557',
         'flow_units'            : 'mL/min',
         'sheath_pump'           : ('VICI_M50', 'COM5', [626.2, 9.278], {}),
-        'outlet_pump'           : ('VICI_M50', 'COM6', [627.32, 11.826], {}),
+        'outlet_pump'           : ('VICI_M50', 'COM6', [623.56, 12.222], {}),
         'sheath_fm'             : ('BFS', 'COM3', [], {}),
         'outlet_fm'             : ('BFS', 'COM4', [], {}),
         'sheath_ratio'          : 0.5,
@@ -178,7 +178,7 @@ if __name__ == '__main__':
         'warning_threshold_low' : 0.8,
         'warning_threshold_high': 1.2,
         'settling_time'         : 5000, #in ms
-        'lc_flow_rate'          : '0.8',
+        'lc_flow_rate'          : '0.7',
         }
 
     trsaxs_settings = {
@@ -221,8 +221,8 @@ if __name__ == '__main__':
 
     components = OrderedDict([
         ('exposure', expcon.ExpPanel),
-        ('coflow', coflowcon.CoflowPanel),
-        # ('trsaxs', trcon.TRPanel),
+        # ('coflow', coflowcon.CoflowPanel),
+        ('trsaxs', trcon.TRPanel),
         ])
 
     settings = {
@@ -247,7 +247,7 @@ if __name__ == '__main__':
         os.mkdir(info_dir)
 
     h2 = handlers.RotatingFileHandler(os.path.join(info_dir, 'expcon.log'), maxBytes=10e6, backupCount=5, delay=True)
-    h2.setLevel(logging.DEBUG)
+    h2.setLevel(logging.INFO)
     formatter2 = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
     h2.setFormatter(formatter2)
 

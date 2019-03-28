@@ -275,6 +275,7 @@ class ExpCommThread(threading.Thread):
             self.slow_exposure2(data_dir, fprefix, num_frames, exp_time, exp_period, **kwargs)
 
     def _start_tr_exp(self, exp_settings, comp_settings):
+        kwargs['metadata'] = self._add_metadata(kwargs['metadata'])
         self.tr_exposure(exp_settings, comp_settings['trsaxs'])
 
     def tr_exposure(self, exp_settings, tr_settings):
@@ -392,7 +393,7 @@ class ExpCommThread(threading.Thread):
             ef_burst.setup(exp_time+0.001, exp_time, 1, 0, 1, -1)
             gh_burst.setup(exp_time+0.001, exp_time, 1, 0, 1, -1)
 
-        dg645_trigger_source.put(2) #Change this to 2 for external falling edges
+        dg645_trigger_source.put(1) #Change this to 2 for external falling edges
 
         for current_run in range(1,num_runs+1):
             self.return_queue.append(['scan', current_run])
