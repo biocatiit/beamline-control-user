@@ -304,6 +304,17 @@ class ExpCommThread(threading.Thread):
         det_datadir = self._mx_data['det_datadir']
         det_filename = self._mx_data['det_filename']
 
+        exp_period = exp_settings['exp_period']
+        exp_time = exp_settings['exp_time']
+        data_dir = exp_settings['data_dir']
+        fprefix = exp_settings['fprefix']
+        num_frames = exp_settings['num_frames']
+
+        if exp_period > exp_time+0.01 and exp_period >= 0.02:
+            logger.info('Shuttered mode')
+        else:
+            logger.info('Continuous mode')
+
         wait_for_trig = True
         num_runs = tr_settings['num_scans']
         x_start = tr_settings['scan_x_start']
@@ -328,17 +339,10 @@ class ExpCommThread(threading.Thread):
             pco_encoder_settle_t = tr_settings['pco_encoder_settle_t']
             x_motor = str(tr_settings['motor_x_name'])
             y_motor = str(tr_settings['motor_y_name'])
-
-        exp_period = exp_settings['exp_period']
-        exp_time = exp_settings['exp_time']
-        data_dir = exp_settings['data_dir']
-        fprefix = exp_settings['fprefix']
-        num_frames = exp_settings['num_frames']
-
-        if exp_period > exp_time+0.01 and exp_period >= 0.02:
-            logger.info('Shuttered mode')
-        else:
-            logger.info('Continuous mode')
+            x_positions = [i*tr_settings['x_pco_step']+tr_settings['x_pco_start']
+                for i in range(num_frames)]
+            y_positions = [i*tr_settings['y_pco_step']+tr_settings['x_pco_start']
+                for i in range(num_frames)]
 
         motor_cmd_q = deque()
         motor_answer_q = deque()
@@ -518,8 +522,9 @@ class ExpCommThread(threading.Thread):
                 s2.get_dark_current(), s3.get_dark_current(), s11.get_dark_current()]
 
             logger.info('Writing counters')
-            self.write_counters_struck(measurement, num_frames, 5, data_dir, cur_fprefix,
-                exp_period, dark_counts, metadata=exp_settings['metadata'])
+            self.write_counters_trsaxs(measurement, num_frames, 5, x_positions,
+                y_positions, data_dir, cur_fprefix, exp_period, dark_counts,
+                metadata=exp_settings['metadata'])
 
             while det.get_status() & 0x1 !=0:
                 time.sleep(0.001)
@@ -1134,6 +1139,39 @@ class ExpCommThread(threading.Thread):
                     val = val + "\t{}".format((cvals[10][i]-0.5*exp_time)/5000/(exp_time)) #Convert beam current from counts to numbers, 5kHz/ma + 0.5 kHz
                 else:
                     val = val + "\t{}".format(cvals[10][i])
+
+                val = val + '\n'
+                f.write(val)
+
+    def write_counters_trsaxs(self, cvals, num_frames, num_counters, x, y, data_dir,
+            fprefix, exp_period, dark_counts, metadata):
+        data_dir = data_dir.replace(self._settings['remote_dir_root'], self._settings['local_dir_root'], 1)
+
+        header = ''
+        for key, value in metadata.items():
+            header = header + '#{}\t{}\n'.format(key, value)
+        header = header+'#Filename\tstart_time\texposure_time\tI0\tI1\tI2\tI3\tBeam_current\tx\ty\n'
+
+        log_file = os.path.join(data_dir, '{}.log'.format(fprefix))
+        # print (cvals)
+
+        with open(log_file, 'w') as f:
+            f.write(header)
+            for i in range(num_frames):
+                val = "{}_{:04d}.tif\t{}".format(fprefix, i+1, exp_period*i)
+
+                exp_time = cvals[0][i]/50.e6
+                val = val + "\t{}".format(exp_time)
+
+                for j in range(2, num_counters+1):
+                    val = val + "\t{}".format(cvals[j][i]-dark_counts[j-2]*exp_time)
+
+                if exp_time > 0:
+                    val = val + "\t{}".format((cvals[10][i]-0.5*exp_time)/5000/(exp_time)) #Convert beam current from counts to numbers, 5kHz/ma + 0.5 kHz
+                else:
+                    val = val + "\t{}".format(cvals[10][i])
+
+                val = val + "\t{}\t{}".format(x[i], y[i])
 
                 val = val + '\n'
                 f.write(val)
