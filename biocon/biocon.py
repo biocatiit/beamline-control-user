@@ -147,6 +147,10 @@ if __name__ == '__main__':
         'exp_period_max'        : 5184000,
         'nframes_max'           : 9999, # For Pilatus: 999999, for Struck: 4000 (set by maxChannels in the driver configuration)
         'exp_period_delta'      : 0.00095,
+        'shutter_speed_open'    : 0.004, #in s
+        'shutter_speed_close'   : 0.004, # in s
+        'shutter_pad'           : 0.002, #padding for shutter related values
+        'shutter_cycle'         : 0.02, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
         'slow_mode_thres'       : 0.1,
         'fast_mode_max_exp_time': 2000,
         'wait_for_trig'         : False,

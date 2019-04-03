@@ -311,7 +311,16 @@ class ExpCommThread(threading.Thread):
         fprefix = exp_settings['fprefix']
         num_frames = exp_settings['num_frames']
 
-        if exp_period > exp_time+0.01 and exp_period >= 0.02:
+        shutter_speed_open = exp_settings['shutter_speed_open']
+        shutter_speed_closed = exp_settings['shutter_speed_closed']
+        shutter_pad = exp_settings['shutter_pad']
+        shutter_cycle = exp_settings['shutter_cycle']
+
+        total_shutter_speed = shutter_speed_open+shutter_speed_closed+shutter_pad
+        s_offset = shutter_speed_open + shutter_pad
+        s_offset_half = shutter_speed_open + shutter_pad
+
+        if exp_period > exp_time+total_shutter_speed and exp_period >= shutter_cycle:
             logger.info('Shuttered mode')
         else:
             logger.info('Continuous mode')
@@ -387,9 +396,9 @@ class ExpCommThread(threading.Thread):
 
         if exp_period > exp_time+0.01 and exp_period >= 0.02:
             #Shutter opens and closes, Takes 4 ms for open and close
-            ab_burst.setup(exp_time+0.007, exp_time+0.006, 1, 0, 1, -1)
-            cd_burst.setup(exp_time+0.007, 0.0001, 1, exp_time+0.006, 1, -1)
-            ef_burst.setup(exp_time+0.007, exp_time, 1, 0.005, 1, -1)
+            ab_burst.setup(exp_time+0.007, exp_time+s_offset, 1, 0, 1, -1)
+            cd_burst.setup(exp_time+0.007, 0.0001, 1, exp_time+s_offset, 1, -1)
+            ef_burst.setup(exp_time+0.007, exp_time, 1, s_offset_half, 1, -1)
             gh_burst.setup(exp_time+0.007, exp_time, 1, 0, 1, -1)
         else:
             #Shutter will be open continuously, via dio_out9
@@ -594,12 +603,23 @@ class ExpCommThread(threading.Thread):
         else:
             num_trig = 1
 
-        if exp_period > exp_time+0.01 and exp_period >= 0.02:
+        shutter_speed_open = kwargs['shutter_speed_open']
+        shutter_speed_closed = kwargs['shutter_speed_closed']
+        shutter_pad = kwargs['shutter_pad']
+        shutter_cycle = kwargs['shutter_cycle']
+
+        total_shutter_speed = shutter_speed_open+shutter_speed_closed+shutter_pad
+        s_offset = shutter_speed_open + shutter_pad
+        s_offset_half = shutter_speed_open + shutter_pad
+
+        if exp_period > exp_time + total_shutter_speed and exp_period >= shutter_cycle:
             logger.info('Shuttered mode')
             continuous_exp = False
         else:
             logger.info('Continuous mode')
             continuous_exp = True
+
+
 
         # #Read out the struck initially, takes ~2-3 seconds the first time
         # struck.set_num_measurements(1)
@@ -643,7 +663,7 @@ class ExpCommThread(threading.Thread):
             while det_datadir.get().rstrip('/') != data_dir.rstrip('/'):
                 time.sleep(0.001)
 
-            if wait_for_trig:
+            if wait_for_trig and num_trig > 1:
                 cur_fprefix = '{}_{:04}'.format(fprefix, cur_trig)
                 new_fname = '{}_0001.tif'.format(cur_fprefix)
             else:
@@ -663,11 +683,11 @@ class ExpCommThread(threading.Thread):
             struck.set_num_measurements(num_frames)
             struck.set_trigger_mode(0x8)    #Sets 'autotrigger' mode, i.e. counting as soon as armed
 
-            if exp_period > exp_time+0.01 and exp_period >= 0.02:
+            if exp_period > exp_time+total_shutter_speed and exp_period >= shutter_cycle:
                 #Shutter opens and closes, Takes 4 ms for open and close
-                ab_burst.setup(exp_period, exp_time+0.006, num_frames, 0, 1, -1)
-                cd_burst.setup(exp_period, 0.0001, num_frames, exp_time+0.006, 1, -1)
-                ef_burst.setup(exp_period, exp_time, num_frames, 0.005, 1, -1)
+                ab_burst.setup(exp_period, exp_time+s_offset, num_frames, 0, 1, -1)
+                cd_burst.setup(exp_period, 0.0001, num_frames, exp_time+s_offset, 1, -1)
+                ef_burst.setup(exp_period, exp_time, num_frames, s_offset_half, 1, -1)
                 gh_burst.setup(exp_period, exp_time, num_frames, 0, 1, -1)
             else:
                 #Shutter will be open continuously, via dio_out9
@@ -939,6 +959,15 @@ class ExpCommThread(threading.Thread):
         det_datadir = self._mx_data['det_datadir']
         det_filename = self._mx_data['det_filename']
 
+        shutter_speed_open = kwargs['shutter_speed_open']
+        shutter_speed_closed = kwargs['shutter_speed_closed']
+        shutter_pad = kwargs['shutter_pad']
+        shutter_cycle = kwargs['shutter_cycle']
+
+        total_shutter_speed = shutter_speed_open+shutter_speed_closed+shutter_pad
+        s_offset = shutter_speed_open + shutter_pad
+        s_offset_half = shutter_speed_open + shutter_pad
+
         try:
             det.abort()
         except mp.Device_Action_Failed_Error:
@@ -973,10 +1002,10 @@ class ExpCommThread(threading.Thread):
         for scaler in scl_list:
             scaler.read()
 
-        ab_burst.setup(exp_time+0.02, exp_time+0.01, 1, 0, 1, -1)
-        cd_burst.setup(exp_time+0.02, exp_time+0.01, 1, 0, 1, -1)
-        ef_burst.setup(exp_time+0.02, exp_time, 1, 0.005, 1, -1)
-        gh_burst.setup(exp_time+0.02, exp_time, 1, 0, 1, -1)
+        ab_burst.setup(exp_time+total_shutter_speed*1.5, exp_time+s_offset, 1, 0, 1, -1)
+        cd_burst.setup(exp_time+total_shutter_speed*1.5, exp_time+s_offset, 1, 0, 1, -1)
+        ef_burst.setup(exp_time+total_shutter_speed*1.5, exp_time, 1, s_offset_half, 1, -1)
+        gh_burst.setup(exp_time+total_shutter_speed*1.5, exp_time, 1, 0, 1, -1)
 
         dg645_trigger_source.put(1)
 
@@ -1782,6 +1811,10 @@ class ExpPanel(wx.Panel):
         run_num = self.run_num.GetLabel()
         wait_for_trig = self.wait_for_trig.GetValue()
         num_trig = self.num_trig.GetValue()
+        shutter_speed_open = self.settings['shutter_speed_open']
+        shutter_speed_closed = self.settings['shutter_speed_closed']
+        shutter_cycle = self.settings['shutter_cycle']
+        shutter_pad = self.settings['shutter_pad']
 
         errors = []
 
@@ -1878,6 +1911,10 @@ class ExpPanel(wx.Panel):
                 'fprefix': filename+run_num,
                 'wait_for_trig': wait_for_trig,
                 'num_trig': num_trig,
+                'shutter_speed_open' : shutter_speed_open,
+                'shutter_speed_closed' : shutter_speed_closed,
+                'shutter_cycle' : shutter_cycle,
+                'shutter_pad' : shutter_pad,
                 }
             valid = True
 
@@ -2132,6 +2169,10 @@ if __name__ == '__main__':
         'exp_period_max'        : 5184000,
         'nframes_max'           : 4000, # For Pilatus: 999999, for Struck: 4000 (set by maxChannels in the driver configuration)
         'exp_period_delta'      : 0.00095,
+        'shutter_speed_open'    : 0.004, #in s
+        'shutter_speed_close'   : 0.004, # in s
+        'shutter_pad'           : 0.002, #padding for shutter related values
+        'shutter_cycle'         : 0.02, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
         'slow_mode_thres'       : 0.1,
         'fast_mode_max_exp_time': 2000,
         'wait_for_trig'         : False,
