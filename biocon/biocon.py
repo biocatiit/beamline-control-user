@@ -222,7 +222,7 @@ if __name__ == '__main__':
     components = OrderedDict([
         ('exposure', expcon.ExpPanel),
         # ('coflow', coflowcon.CoflowPanel),
-        ('trsaxs', trcon.TRPanel),
+        # ('trsaxs', trcon.TRPanel),
         ])
 
     settings = {

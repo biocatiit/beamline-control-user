@@ -178,7 +178,7 @@ class ExpCommThread(threading.Thread):
             'det_datadir': det_datadir,
             'det_filename': det_filename,
             'struck': mx_database.get_record('sis3820'),
-            'struck_ctrs': [mx_database.get_record('mcs{}'.format(i)) for i in range(3,7)]+[mx_database.get_record('mcs11')],
+            'struck_ctrs': [mx_database.get_record('mcs{}'.format(i)) for i in range(3,7)]+[mx_database.get_record('mcs11'), mx_database.get_record('mcs12')],
             'struck_pv': '18ID:mcs',
             'ab_burst': mx_database.get_record('ab_burst'),
             'cd_burst': mx_database.get_record('cd_burst'),
@@ -275,7 +275,7 @@ class ExpCommThread(threading.Thread):
             self.slow_exposure2(data_dir, fprefix, num_frames, exp_time, exp_period, **kwargs)
 
     def _start_tr_exp(self, exp_settings, comp_settings):
-        # kwargs['metadata'] = self._add_metadata(kwargs['metadata'])
+        exp_settings['metadata'] = self._add_metadata(exp_settings['metadata'])
         self.tr_exposure(exp_settings, comp_settings['trsaxs'])
 
     def tr_exposure(self, exp_settings, tr_settings):
@@ -288,6 +288,7 @@ class ExpCommThread(threading.Thread):
         s2 = self._mx_data['struck_ctrs'][2]
         s3 = self._mx_data['struck_ctrs'][3]
         s11 = self._mx_data['struck_ctrs'][4]
+        s12 = self._mx_data['struck_ctrs'][5]
         struck_mode_pv = mpca.PV(self._mx_data['struck_pv']+':ChannelAdvance')
         # struck_current_channel_pv = mpca.PV(self._mx_data['struck_pv']+':CurrentChannel')
 
@@ -341,7 +342,7 @@ class ExpCommThread(threading.Thread):
             y_motor = str(tr_settings['motor_y_name'])
             x_positions = [i*tr_settings['x_pco_step']+tr_settings['x_pco_start']
                 for i in range(num_frames)]
-            y_positions = [i*tr_settings['y_pco_step']+tr_settings['x_pco_start']
+            y_positions = [i*tr_settings['y_pco_step']+tr_settings['y_pco_start']
                 for i in range(num_frames)]
 
         motor_cmd_q = deque()
@@ -519,7 +520,8 @@ class ExpCommThread(threading.Thread):
             measurement = struck.read_all()
 
             dark_counts = [s0.get_dark_current(), s1.get_dark_current(),
-                s2.get_dark_current(), s3.get_dark_current(), s11.get_dark_current()]
+                s2.get_dark_current(), s3.get_dark_current(),
+                s11.get_dark_current(), s12.get_dark_current()]
 
             logger.info('Writing counters')
             self.write_counters_trsaxs(measurement, num_frames, 5, x_positions,
@@ -1150,10 +1152,9 @@ class ExpCommThread(threading.Thread):
         header = ''
         for key, value in metadata.items():
             header = header + '#{}\t{}\n'.format(key, value)
-        header = header+'#Filename\tstart_time\texposure_time\tI0\tI1\tI2\tI3\tBeam_current\tx\ty\n'
+        header = header+'#Filename\tstart_time\texposure_time\tI0\tI1\tI2\tI3\tBeam_current\tx\ty\tflow_rate\n'
 
         log_file = os.path.join(data_dir, '{}.log'.format(fprefix))
-        # print (cvals)
 
         with open(log_file, 'w') as f:
             f.write(header)
@@ -1172,6 +1173,12 @@ class ExpCommThread(threading.Thread):
                     val = val + "\t{}".format(cvals[10][i])
 
                 val = val + "\t{}\t{}".format(x[i], y[i])
+
+                if exp_time > 0:
+                    fr = (cvals[11][i]-dark_counts[5]*exp_time)/10e6/exp_time
+                    val = val + "\t{}".format(fr)
+                else:
+                    val = val + "\t{}".format(cvals[11][i])
 
                 val = val + '\n'
                 f.write(val)
@@ -2135,7 +2142,7 @@ if __name__ == '__main__':
         'local_dir_root'        : '/nas_data/Pilatus1M',
         'remote_dir_root'       : '/nas_data',
         'components'            : ['exposure'],
-        'base_data_dir'         : '/nas_data/Pilatus1M/20190301Srinivas', #CHANGE ME
+        'base_data_dir'         : '/nas_data/Pilatus1M/20190326Hopkins', #CHANGE ME
         }
 
     settings['data_dir'] = settings['base_data_dir']
