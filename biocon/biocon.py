@@ -164,6 +164,21 @@ if __name__ == '__main__':
         'd_shutter_pv'          : 'PA:18ID:STA_D_SDS_OPEN_PL.VAL',
         'local_dir_root'        : '/nas_data/Pilatus1M',
         'remote_dir_root'       : '/nas_data',
+        'struck_log_vals'       : [{'mx_record': 'mcs3', 'channel': 2, 'name': 'I0',
+            'scale': 1, 'offset': 0, 'dark': True, 'norm_time': False}, #Format: (mx_record_name, struck_channel, header_name, scale, offset, use_dark_current, normalize_by_exp_time)
+            {'mx_record': 'mcs4', 'channel': 3, 'name': 'I1', 'scale': 1,
+            'offset': 0, 'dark': True, 'norm_time': False},
+            {'mx_record': 'mcs5', 'channel': 4, 'name': 'I2', 'scale': 1,
+            'offset': 0, 'dark': True, 'norm_time': False},
+            {'mx_record': 'mcs6', 'channel': 5, 'name': 'I3', 'scale': 1,
+            'offset': 0, 'dark': True, 'norm_time': False},
+            {'mx_record': 'mcs11', 'channel': 10, 'name': 'Beam_current',
+            'scale': 5000, 'offset': 0.5, 'dark': False, 'norm_time': True},
+            # {'mx_record': 'mcs12', 'channel': 11, 'name': 'Flow_rate',
+            # 'scale': 10e6, 'offset': 0, 'dark': True, 'norm_time': True},
+            {'mx_record': 'mcs12', 'channel': 11, 'name': 'Force',
+            'scale': 10e6, 'offset': 0, 'dark': True, 'norm_time': True},
+            ],
         'base_data_dir'         : '/nas_data/Pilatus1M/20190402Granzier', #CHANGE ME
         }
 
