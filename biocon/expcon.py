@@ -581,6 +581,7 @@ class ExpCommThread(threading.Thread):
         s2 = self._mx_data['struck_ctrs'][2]
         s3 = self._mx_data['struck_ctrs'][3]
         s11 = self._mx_data['struck_ctrs'][4]
+        s12 = self._mx_data['struck_ctrs'][5]
         struck_mode_pv = mpca.PV(self._mx_data['struck_pv']+':ChannelAdvance')
         # struck_current_channel_pv = mpca.PV(self._mx_data['struck_pv']+':CurrentChannel')
 
@@ -765,7 +766,7 @@ class ExpCommThread(threading.Thread):
             measurement = struck.read_all()
 
             dark_counts = [s0.get_dark_current(), s1.get_dark_current(),
-                s2.get_dark_current(), s3.get_dark_current(), s11.get_dark_current()]
+                s2.get_dark_current(), s3.get_dark_current(), s11.get_dark_current(), s12.get_dark_current()]
 
             logger.info('Writing counters')
             self.write_counters_struck(measurement, num_frames, 5, data_dir, cur_fprefix,
@@ -1171,6 +1172,12 @@ class ExpCommThread(threading.Thread):
                 else:
                     val = val + "\t{}".format(cvals[10][i])
 
+                if exp_time > 0:
+                    fr = (cvals[11][i]-dark_counts[5]*exp_time)/10e6/exp_time
+                    val = val + "\t{}".format(fr)
+                else:
+                    val = val + "\t{}".format(cvals[11][i])
+
                 val = val + '\n'
                 f.write(val)
 
@@ -1241,7 +1248,7 @@ class ExpCommThread(threading.Thread):
         header = ''
         for key, value in metadata.items():
             header = header + '#{}\t{}\n'.format(key, value)
-        header = header+'#Filename\tstart_time\texposure_time\tI0\tI1\tI2\tI3\tBeam_current\n'
+        header = header+'#Filename\tstart_time\texposure_time\tI0\tI1\tI2\tI3\tBeam_current\tForce\n'
 
         return header
 
