@@ -178,7 +178,7 @@ class ExpCommThread(threading.Thread):
             'det_datadir': det_datadir,
             'det_filename': det_filename,
             'struck': mx_database.get_record('sis3820'),
-            'struck_ctrs': [mx_database.get_record('mcs{}'.format(i)) for i in range(3,7)]+[mx_database.get_record('mcs11'), mx_database.get_record('mcs12')],
+            'struck_ctrs': [mx_database.get_record(log['mx_record']) for log in self.settings['struck_log_vals']],
             'struck_pv': '18ID:mcs',
             'ab_burst': mx_database.get_record('ab_burst'),
             'cd_burst': mx_database.get_record('cd_burst'),
@@ -283,12 +283,7 @@ class ExpCommThread(threading.Thread):
         det = self._mx_data['det']          #Detector
 
         struck = self._mx_data['struck']    #Struck SIS3820
-        s0 = self._mx_data['struck_ctrs'][0]
-        s1 = self._mx_data['struck_ctrs'][1]
-        s2 = self._mx_data['struck_ctrs'][2]
-        s3 = self._mx_data['struck_ctrs'][3]
-        s11 = self._mx_data['struck_ctrs'][4]
-        s12 = self._mx_data['struck_ctrs'][5]
+        s_counters = self._mx_data['struck_ctrs']
         struck_mode_pv = mpca.PV(self._mx_data['struck_pv']+':ChannelAdvance')
         # struck_current_channel_pv = mpca.PV(self._mx_data['struck_pv']+':CurrentChannel')
 
@@ -312,11 +307,11 @@ class ExpCommThread(threading.Thread):
         num_frames = exp_settings['num_frames']
 
         shutter_speed_open = exp_settings['shutter_speed_open']
-        shutter_speed_closed = exp_settings['shutter_speed_closed']
+        shutter_speed_close = exp_settings['shutter_speed_close']
         shutter_pad = exp_settings['shutter_pad']
         shutter_cycle = exp_settings['shutter_cycle']
 
-        total_shutter_speed = shutter_speed_open+shutter_speed_closed+shutter_pad
+        total_shutter_speed = shutter_speed_open+shutter_speed_close+shutter_pad
         s_offset = shutter_speed_open + shutter_pad
         s_offset_half = shutter_speed_open + shutter_pad
 
@@ -326,6 +321,9 @@ class ExpCommThread(threading.Thread):
             logger.info('Continuous mode')
 
         wait_for_trig = True
+
+        log_vals = exp_settings['log_vals']
+
         num_runs = tr_settings['num_scans']
         x_start = tr_settings['scan_x_start']
         x_end = tr_settings['scan_x_end']
@@ -528,14 +526,18 @@ class ExpCommThread(threading.Thread):
 
             measurement = struck.read_all()
 
-            dark_counts = [s0.get_dark_current(), s1.get_dark_current(),
-                s2.get_dark_current(), s3.get_dark_current(),
-                s11.get_dark_current(), s12.get_dark_current()]
+            dark_counts = []
+            for i in range(len(s_counters)):
+                if log_vals['dark']:
+                    dark_counts.append(s_counters[i].get_dark_current())
+                else:
+                    dark_counts.append(0)
 
             logger.info('Writing counters')
-            self.write_counters_trsaxs(measurement, num_frames, 5, x_positions,
-                y_positions, data_dir, cur_fprefix, exp_period, dark_counts,
-                metadata=exp_settings['metadata'])
+            extra_vals = [['x', x_positions], ['y', y_positions]]
+            self.write_counters_struck(measurement, num_frames, data_dir,
+                cur_fprefix, exp_period, dark_counts, log_vals,
+                exp_settings['metadata'], extra_vals)
 
             while det.get_status() & 0x1 !=0:
                 time.sleep(0.001)
@@ -576,12 +578,7 @@ class ExpCommThread(threading.Thread):
         det = self._mx_data['det']          #Detector
 
         struck = self._mx_data['struck']    #Struck SIS3820
-        s0 = self._mx_data['struck_ctrs'][0]
-        s1 = self._mx_data['struck_ctrs'][1]
-        s2 = self._mx_data['struck_ctrs'][2]
-        s3 = self._mx_data['struck_ctrs'][3]
-        s11 = self._mx_data['struck_ctrs'][4]
-        s12 = self._mx_data['struck_ctrs'][5]
+        s_counters = self._mx_data['struck_ctrs']
         struck_mode_pv = mpca.PV(self._mx_data['struck_pv']+':ChannelAdvance')
         # struck_current_channel_pv = mpca.PV(self._mx_data['struck_pv']+':CurrentChannel')
 
@@ -605,13 +602,15 @@ class ExpCommThread(threading.Thread):
             num_trig = 1
 
         shutter_speed_open = kwargs['shutter_speed_open']
-        shutter_speed_closed = kwargs['shutter_speed_closed']
+        shutter_speed_close = kwargs['shutter_speed_close']
         shutter_pad = kwargs['shutter_pad']
         shutter_cycle = kwargs['shutter_cycle']
 
-        total_shutter_speed = shutter_speed_open+shutter_speed_closed+shutter_pad
+        total_shutter_speed = shutter_speed_open+shutter_speed_close+shutter_pad
         s_offset = shutter_speed_open + shutter_pad
         s_offset_half = shutter_speed_open + shutter_pad
+
+        log_vals = kwargs['log_vals']
 
         if exp_period > exp_time + total_shutter_speed and exp_period >= shutter_cycle:
             logger.info('Shuttered mode')
@@ -619,29 +618,6 @@ class ExpCommThread(threading.Thread):
         else:
             logger.info('Continuous mode')
             continuous_exp = True
-
-
-
-        # #Read out the struck initially, takes ~2-3 seconds the first time
-        # struck.set_num_measurements(1)
-        # struck.start()
-        # dio_out11.write(1)
-        # time.sleep(0.001)
-        # dio_out11.write(0)
-
-        # time.sleep(0.1)
-
-        # dio_out11.write(1)
-        # time.sleep(0.001)
-        # dio_out11.write(0)
-
-        # while True:
-        #     busy = struck.is_busy()
-
-        #     if (busy == 0):
-        #         measurement = struck.read_all()
-        #         logger.debug( "Initial Struck Readout Done!\n" )
-        #         break
 
         for cur_trig in range(1,num_trig+1):
             self.return_queue.append(['scan', cur_trig])
@@ -765,12 +741,16 @@ class ExpCommThread(threading.Thread):
 
             measurement = struck.read_all()
 
-            dark_counts = [s0.get_dark_current(), s1.get_dark_current(),
-                s2.get_dark_current(), s3.get_dark_current(), s11.get_dark_current(), s12.get_dark_current()]
+            dark_counts = []
+            for i in range(len(s_counters)):
+                if log_vals['dark']:
+                    dark_counts.append(s_counters[i].get_dark_current())
+                else:
+                    dark_counts.append(0)
 
             logger.info('Writing counters')
-            self.write_counters_struck(measurement, num_frames, 5, data_dir, cur_fprefix,
-                exp_period, dark_counts, metadata=kwargs['metadata'])
+            self.write_counters_struck(measurement, num_frames, data_dir,
+                cur_fprefix, exp_period, dark_counts, log_vals, kwargs['metadata'])
 
             ab_burst.get_status() #Maybe need to clear this status?
 
@@ -961,11 +941,11 @@ class ExpCommThread(threading.Thread):
         det_filename = self._mx_data['det_filename']
 
         shutter_speed_open = kwargs['shutter_speed_open']
-        shutter_speed_closed = kwargs['shutter_speed_closed']
+        shutter_speed_close = kwargs['shutter_speed_close']
         shutter_pad = kwargs['shutter_pad']
         shutter_cycle = kwargs['shutter_cycle']
 
-        total_shutter_speed = shutter_speed_open+shutter_speed_closed+shutter_pad
+        total_shutter_speed = shutter_speed_open+shutter_speed_close+shutter_pad
         s_offset = shutter_speed_open + shutter_pad
         s_offset_half = shutter_speed_open + shutter_pad
 
@@ -1147,48 +1127,17 @@ class ExpCommThread(threading.Thread):
 
         return
 
-    def write_counters_struck(self, cvals, num_frames, num_counters, data_dir,
-            fprefix, exp_period, dark_counts, metadata):
+    def write_counters_struck(self, cvals, num_frames, data_dir,
+            fprefix, exp_period, dark_counts, log_vals, metadata, extra_vals=None):
         data_dir = data_dir.replace(self._settings['remote_dir_root'], self._settings['local_dir_root'], 1)
 
-        header = self._get_header(metadata)
+        header = self._get_header(metadata, log_vals)
 
-        log_file = os.path.join(data_dir, '{}.log'.format(fprefix))
-        # print (cvals)
-
-        with open(log_file, 'w') as f:
-            f.write(header)
-            for i in range(num_frames):
-                val = "{}_{:04d}.tif\t{}".format(fprefix, i+1, exp_period*i)
-
-                exp_time = cvals[0][i]/50.e6
-                val = val + "\t{}".format(exp_time)
-
-                for j in range(2, num_counters+1):
-                    val = val + "\t{}".format(cvals[j][i]-dark_counts[j-2]*exp_time)
-
-                if exp_time > 0:
-                    val = val + "\t{}".format((cvals[10][i]-0.5*exp_time)/5000/(exp_time)) #Convert beam current from counts to numbers, 5kHz/ma + 0.5 kHz
-                else:
-                    val = val + "\t{}".format(cvals[10][i])
-
-                if exp_time > 0:
-                    fr = (cvals[11][i]-dark_counts[5]*exp_time)/10e6/exp_time
-                    val = val + "\t{}".format(fr)
-                else:
-                    val = val + "\t{}".format(cvals[11][i])
-
-                val = val + '\n'
-                f.write(val)
-
-    def write_counters_trsaxs(self, cvals, num_frames, num_counters, x, y, data_dir,
-            fprefix, exp_period, dark_counts, metadata):
-        data_dir = data_dir.replace(self._settings['remote_dir_root'], self._settings['local_dir_root'], 1)
-
-        header = ''
-        for key, value in metadata.items():
-            header = header + '#{}\t{}\n'.format(key, value)
-        header = header+'#Filename\tstart_time\texposure_time\tI0\tI1\tI2\tI3\tBeam_current\tx\ty\tflow_rate\n'
+        if extra_vals is not None:
+            header.rstrip('\n')
+            for ev in extra_vals:
+                header = header + '\t{}'.format(ev[0])
+            header = header + '\n'
 
         log_file = os.path.join(data_dir, '{}.log'.format(fprefix))
 
@@ -1200,23 +1149,25 @@ class ExpCommThread(threading.Thread):
                 exp_time = cvals[0][i]/50.e6
                 val = val + "\t{}".format(exp_time)
 
-                for j in range(2, num_counters+1):
-                    val = val + "\t{}".format(cvals[j][i]-dark_counts[j-2]*exp_time)
+                for j, log in enumerate(log_vals):
+                    dark = dark_counts[j]
+                    scale = log['scale']
+                    offset = log['offset']
+                    chan = log['channel']
 
-                if exp_time > 0:
-                    val = val + "\t{}".format((cvals[10][i]-0.5*exp_time)/5000/(exp_time)) #Convert beam current from counts to numbers, 5kHz/ma + 0.5 kHz
-                else:
-                    val = val + "\t{}".format(cvals[10][i])
+                    counter = (cvals[chan][i]-(dark+offset)*exp_time)/scale
 
-                val = val + "\t{}\t{}".format(x[i], y[i])
+                    if log['norm_time'] and exp_time > 0:
+                        counter = counter/exp_time
 
-                if exp_time > 0:
-                    fr = (cvals[11][i]-dark_counts[5]*exp_time)/10e6/exp_time
-                    val = val + "\t{}".format(fr)
-                else:
-                    val = val + "\t{}".format(cvals[11][i])
+                    val = val + "\t{}".format(counter)
 
-                val = val + '\n'
+                if extra_vals is not None:
+                    for ev in extra_vals:
+                        val = val + "\t{}".format(ev[1][i])
+
+                val = val + "\n"
+
                 f.write(val)
 
     def write_counters_joerger(self, cvals, num_frames, data_dir, fprefix, exp_start,
@@ -1244,11 +1195,16 @@ class ExpCommThread(threading.Thread):
                 val = val + '\n'
                 f.write(val)
 
-    def _get_header(self, metadata):
+    def _get_header(self, metadata, log_vals):
         header = ''
         for key, value in metadata.items():
             header = header + '#{}\t{}\n'.format(key, value)
-        header = header+'#Filename\tstart_time\texposure_time\tI0\tI1\tI2\tI3\tBeam_current\tForce\n'
+
+        header=header+'#Filename\tstart_time\texposure_time'
+        for log in log_vals:
+            header = header+'\t{}'.format(log['name'])
+
+        header = header + '\n'
 
         return header
 
@@ -1819,7 +1775,7 @@ class ExpPanel(wx.Panel):
         wait_for_trig = self.wait_for_trig.GetValue()
         num_trig = self.num_trig.GetValue()
         shutter_speed_open = self.settings['shutter_speed_open']
-        shutter_speed_closed = self.settings['shutter_speed_closed']
+        shutter_speed_close = self.settings['shutter_speed_close']
         shutter_cycle = self.settings['shutter_cycle']
         shutter_pad = self.settings['shutter_pad']
         struck_log_vals = self.settings['struck_log_vals']
@@ -1920,7 +1876,7 @@ class ExpPanel(wx.Panel):
                 'wait_for_trig': wait_for_trig,
                 'num_trig': num_trig,
                 'shutter_speed_open' : shutter_speed_open,
-                'shutter_speed_closed' : shutter_speed_closed,
+                'shutter_speed_close' : shutter_speed_close,
                 'shutter_cycle' : shutter_cycle,
                 'shutter_pad' : shutter_pad,
                 'struck_log_vals' : struck_log_vals,
@@ -2191,9 +2147,17 @@ if __name__ == '__main__':
         'd_shutter_pv'          : 'PA:18ID:STA_D_SDS_OPEN_PL.VAL',
         'local_dir_root'        : '/nas_data/Pilatus1M',
         'remote_dir_root'       : '/nas_data',
-        'struck_log_vals'       : [('mcs3', 'I0', 1, 0, True, False), #Format: (mx_record_name, header_name, scale, offset, use_dark_current, normalize_by_exp_time)
-            ('mcs4', 'I1', 1, 0, True, False), ('mcs5', 'I3', 1, 0, True, False),
-            ('mcs6', 'I4', 1, 0, False), ('mcs11', 'Beam_current', 0.5, 0, True)]
+        'struck_log_vals'       : [{'mx_record': 'mcs3', 'channel': 2, 'name': 'I0',
+            'scale': 1, 'offset': 0, 'dark': True, 'norm_time': False}, #Format: (mx_record_name, struck_channel, header_name, scale, offset, use_dark_current, normalize_by_exp_time)
+            {'mx_record': 'mcs4', 'channel': 3, 'name': 'I1', 'scale': 1,
+            'offset': 0, 'dark': True, 'norm_time': False},
+            {'mx_record': 'mcs5', 'channel': 4, 'name': 'I2', 'scale': 1,
+            'offset': 0, 'dark': True, 'norm_time': False},
+            {'mx_record': 'mcs6', 'channel': 5, 'name': 'I3', 'scale': 1,
+            'offset': 0, 'dark': True, 'norm_time': False},
+            {'mx_record': 'mcs11', 'channel': 10, 'name': 'Beam_current',
+            'scale': 5000, 'offset': 0.5, 'dark': False, 'norm_time': True}
+            ],
         'components'            : ['exposure'],
         'base_data_dir'         : '/nas_data/Pilatus1M/20190326Hopkins', #CHANGE ME
         }
