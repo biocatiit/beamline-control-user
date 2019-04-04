@@ -147,20 +147,24 @@ if __name__ == '__main__':
         'exp_period_max'        : 5184000,
         'nframes_max'           : 9999, # For Pilatus: 999999, for Struck: 4000 (set by maxChannels in the driver configuration)
         'exp_period_delta'      : 0.00095,
-        'shutter_speed_open'    : 0.004, #in s
-        'shutter_speed_close'   : 0.004, # in s
-        'shutter_pad'           : 0.002, #padding for shutter related values
-        'shutter_cycle'         : 0.02, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
+        # 'shutter_speed_open'    : 0.004, #in s
+        # 'shutter_speed_closed'  : 0.004, # in s
+        # 'shutter_pad'           : 0.002, #padding for shutter related values
+        # 'shutter_cycle'         : 0.02, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
+        'shutter_speed_open'    : 0.001, #in s
+        'shutter_speed_closed'  : 0.001, # in s
+        'shutter_pad'           : 0.00, #padding for shutter related values
+        'shutter_cycle'         : 0.002, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
         'slow_mode_thres'       : 0.1,
         'fast_mode_max_exp_time': 2000,
-        'wait_for_trig'         : False,
-        'num_trig'              : '4',
-        'show_advanced_options' : False,
+        'wait_for_trig'         : True,
+        'num_trig'              : '1',
+        'show_advanced_options' : True,
         'fe_shutter_pv'         : 'FE:18:ID:FEshutter',
         'd_shutter_pv'          : 'PA:18ID:STA_D_SDS_OPEN_PL.VAL',
         'local_dir_root'        : '/nas_data/Pilatus1M',
         'remote_dir_root'       : '/nas_data',
-        'base_data_dir'         : '/nas_data/Pilatus1M/20190326Hopkins', #CHANGE ME
+        'base_data_dir'         : '/nas_data/Pilatus1M/20190402Granzier', #CHANGE ME
         }
 
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']
