@@ -1815,6 +1815,7 @@ class ExpPanel(wx.Panel):
         shutter_speed_closed = self.settings['shutter_speed_closed']
         shutter_cycle = self.settings['shutter_cycle']
         shutter_pad = self.settings['shutter_pad']
+        struck_log_vals = self.settings['struck_log_vals']
 
         errors = []
 
@@ -1915,6 +1916,7 @@ class ExpPanel(wx.Panel):
                 'shutter_speed_closed' : shutter_speed_closed,
                 'shutter_cycle' : shutter_cycle,
                 'shutter_pad' : shutter_pad,
+                'struck_log_vals' : struck_log_vals,
                 }
             valid = True
 
@@ -2182,6 +2184,9 @@ if __name__ == '__main__':
         'd_shutter_pv'          : 'PA:18ID:STA_D_SDS_OPEN_PL.VAL',
         'local_dir_root'        : '/nas_data/Pilatus1M',
         'remote_dir_root'       : '/nas_data',
+        'struck_log_vals'       : [('mcs3', 'I0', 1, 0, True, False), #Format: (mx_record_name, header_name, scale, offset, use_dark_current, normalize_by_exp_time)
+            ('mcs4', 'I1', 1, 0, True, False), ('mcs5', 'I3', 1, 0, True, False),
+            ('mcs6', 'I4', 1, 0, False), ('mcs11', 'Beam_current', 0.5, 0, True)]
         'components'            : ['exposure'],
         'base_data_dir'         : '/nas_data/Pilatus1M/20190326Hopkins', #CHANGE ME
         }
