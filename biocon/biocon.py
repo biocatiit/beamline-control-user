@@ -179,6 +179,17 @@ if __name__ == '__main__':
             {'mx_record': 'mcs12', 'channel': 11, 'name': 'Force',
             'scale': 10e6, 'offset': 0, 'dark': True, 'norm_time': True},
             ],
+        'joerger_log_vals'      : [{'mx_record': 'j3', 'name': 'I0',
+            'scale': 1, 'offset': 0, 'norm_time': False}, #Format: (mx_record_name, struck_channel, header_name, scale, offset, use_dark_current, normalize_by_exp_time)
+            {'mx_record': 'j4', 'name': 'I1', 'scale': 1, 'offset': 0,
+            'norm_time': False},
+            {'mx_record': 'j5', 'name': 'I2', 'scale': 1, 'offset': 0,
+            'norm_time': False},
+            {'mx_record': 'j6', 'name': 'I3', 'scale': 1, 'offset': 0,
+            'norm_time': False},
+            {'mx_record': 'j11', 'name': 'Beam_current', 'scale': 5000,
+            'offset': 0.5, 'norm_time': True}
+            ],
         'base_data_dir'         : '/nas_data/Pilatus1M/20190326Hopkins', #CHANGE ME
         }
 

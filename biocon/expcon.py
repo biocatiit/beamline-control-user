@@ -188,7 +188,7 @@ class ExpCommThread(threading.Thread):
             'ab': mx_database.get_record('ab'),
             'dio': [mx_database.get_record('avme944x_out{}'.format(i)) for i in range(16)],
             'joerger': mx_database.get_record('joerger_timer'),
-            'joerger_ctrs':[mx_database.get_record('j2')] + [mx_database.get_record(log['mx_record']) for log in self.settings['joerger_log_vals']],
+            'joerger_ctrs':[mx_database.get_record('j2')] + [mx_database.get_record(log['mx_record']) for log in self._settings['joerger_log_vals']],
             'ki0'   : mx_database.get_record('ki0'),
             'ki1'   : mx_database.get_record('ki1'),
             'ki2'   : mx_database.get_record('ki2'),
@@ -934,7 +934,7 @@ class ExpCommThread(threading.Thread):
         shutter_pad = kwargs['shutter_pad']
         shutter_cycle = kwargs['shutter_cycle']
 
-        log_vals = kwargs['log_vals']
+        log_vals = kwargs['joerger_log_vals']
 
         total_shutter_speed = shutter_speed_open+shutter_speed_close+shutter_pad
         s_offset = shutter_speed_open + shutter_pad
@@ -1800,6 +1800,7 @@ class ExpPanel(wx.Panel):
         shutter_cycle = self.settings['shutter_cycle']
         shutter_pad = self.settings['shutter_pad']
         struck_log_vals = self.settings['struck_log_vals']
+        joerger_log_vals = self.settings['joerger_log_vals']
 
         errors = []
 
@@ -1901,6 +1902,7 @@ class ExpPanel(wx.Panel):
                 'shutter_cycle' : shutter_cycle,
                 'shutter_pad' : shutter_pad,
                 'struck_log_vals' : struck_log_vals,
+                'joerger_log_vals'  : joerger_log_vals,
                 }
             valid = True
 
