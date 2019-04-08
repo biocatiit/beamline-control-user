@@ -399,10 +399,11 @@ class ExpCommThread(threading.Thread):
                 gh_burst.setup(exp_period, exp_time, num_frames, 0, 1, -1) #Irrelevant
             else:
                 #Shutter will be open continuously, via dio_out9
-                ab_burst.setup(exp_period, exp_time, num_frames, exp_time/2., 1, -1) #Irrelevant
-                cd_burst.setup(exp_period, exp_time, num_frames, exp_time/2., 1, -1) #Irrelevant
-                ef_burst.setup(exp_period, exp_time, num_frames, exp_time/2., 1, -1)
-                gh_burst.setup(exp_period, exp_time, num_frames, exp_time/2., 1, -1) #Irrelevant
+                offset = (exp_period - exp_time)/2.
+                ab_burst.setup(exp_period, exp_time, num_frames, offset, 1, -1) #Irrelevant
+                cd_burst.setup(exp_period, exp_time, num_frames, offset, 1, -1) #Irrelevant
+                ef_burst.setup(exp_period, exp_time, num_frames, offset, 1, -1)
+                gh_burst.setup(exp_period, exp_time, num_frames, offset, 1, -1) #Irrelevant
 
             dg645_trigger_source.put(1)
 
@@ -2117,7 +2118,6 @@ class ExpPanel(wx.Panel):
         struck_log_vals = self.settings['struck_log_vals']
         joerger_log_vals = self.settings['joerger_log_vals']
         struck_measurement_time = self.muscle_sampling.GetValue()
-        struck_num_meas = self.settings['struck_num_meas']
 
         errors = []
 
@@ -2193,6 +2193,10 @@ class ExpPanel(wx.Panel):
                 errors.append(('Total experiment time (exposure period * number '
                     'of frames) divided by parameter sampling time must be '
                     'less than {}.'.format(self.settings['nparams_max'])))
+
+            if struck_measurement_time >= exp_period*num_frames:
+                errors.append(('Total experiment time (exposure period * number '
+                    'of frames) must be longer than parameter sampling time.'))
 
         if filename == '':
             errors.append('Filename (must not be blank)')
@@ -2501,7 +2505,7 @@ if __name__ == '__main__':
         'shutter_pad'           : 0.002, #padding for shutter related values
         'shutter_cycle'         : 0.02, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
         'struck_measurement_time' : '0.001', #in s
-        'tr_muscle_exp'         : False,
+        'tr_muscle_exp'         : True,
         'slow_mode_thres'       : 0.1,
         'fast_mode_max_exp_time': 2000,
         'wait_for_trig'         : False,
