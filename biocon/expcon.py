@@ -188,7 +188,7 @@ class ExpCommThread(threading.Thread):
             'ab': mx_database.get_record('ab'),
             'dio': [mx_database.get_record('avme944x_out{}'.format(i)) for i in range(16)],
             'joerger': mx_database.get_record('joerger_timer'),
-            'joerger_ctrs':[mx_database.get_record('j{}'.format(i)) for i in range(2,7)]+[mx_database.get_record('j11')],
+            'joerger_ctrs':[mx_database.get_record('j2')] + [mx_database.get_record(log['mx_record']) for log in self.settings['joerger_log_vals']],
             'ki0'   : mx_database.get_record('ki0'),
             'ki1'   : mx_database.get_record('ki1'),
             'ki2'   : mx_database.get_record('ki2'),
@@ -923,16 +923,7 @@ class ExpCommThread(threading.Thread):
         dio_out10 = self._mx_data['dio'][10]    #SRS DG645 trigger
 
         joerger = self._mx_data['joerger']
-
-        j2 = self._mx_data['joerger_ctrs'][0]
-        j3 = self._mx_data['joerger_ctrs'][1]
-        j4 = self._mx_data['joerger_ctrs'][2]
-        j5 = self._mx_data['joerger_ctrs'][3]
-        j6 = self._mx_data['joerger_ctrs'][4]
-        j11 = self._mx_data['joerger_ctrs'][5]
-        # j7 = self._mx_data['joerger_ctrs'][6]
-
-        scl_list = [j2, j3, j4, j5, j6, j11]
+        scl_list = self._mx_data['joerger_ctrs']
 
         measurement = [[0 for i in range(num_frames)] for j in range(len(scl_list))]
         exp_start = [0 for i in range(num_frames)]
@@ -944,6 +935,8 @@ class ExpCommThread(threading.Thread):
         shutter_speed_close = kwargs['shutter_speed_close']
         shutter_pad = kwargs['shutter_pad']
         shutter_cycle = kwargs['shutter_cycle']
+
+        log_vals = kwargs['log_vals']
 
         total_shutter_speed = shutter_speed_open+shutter_speed_close+shutter_pad
         s_offset = shutter_speed_open + shutter_pad
@@ -971,9 +964,16 @@ class ExpCommThread(threading.Thread):
         det.arm()
 
         #Start writing counter file
+        extra_vals = None
         local_data_dir = data_dir.replace(self._settings['remote_dir_root'], self._settings['local_dir_root'], 1)
-        header = self._get_header(kwargs['metadata'])
+        header = self._get_header(kwargs['metadata'], log_vals)
         log_file = os.path.join(local_data_dir, '{}.log'.format(fprefix))
+
+        if extra_vals is not None:
+            header.rstrip('\n')
+            for ev in extra_vals:
+                header = header + '\t{}'.format(ev[0])
+            header = header + '\n'
 
         with open(log_file, 'w') as f:
             f.write(header)
@@ -998,8 +998,8 @@ class ExpCommThread(threading.Thread):
             if self._abort_event.is_set():
                 logger.debug('abort 1')
                 self.slow_mode2_abort_cleanup(det, joerger, ab_burst, dio_out6,
-                        measurement, num_frames, data_dir, fprefix, exp_start,
-                        metadata=kwargs['metadata'])
+                    measurement, num_frames, data_dir, fprefix, exp_start,
+                    metadata=kwargs['metadata'], log_vals=log_vals)
                 return
 
             logger.info( "*** Starting exposure %d ***" % (i+1) )
@@ -1022,7 +1022,7 @@ class ExpCommThread(threading.Thread):
                 if self._abort_event.is_set():
                     self.slow_mode2_abort_cleanup(det, joerger, ab_burst, dio_out6,
                         measurement, num_frames, data_dir, fprefix, exp_start,
-                        metadata=kwargs['metadata'])
+                        metadata=kwargs['metadata'], log_vals=log_vals)
                     return
 
             joerger.start(exp_time+2)
@@ -1045,7 +1045,8 @@ class ExpCommThread(threading.Thread):
                     # logger.debug('abort 3')
                     self.slow_mode2_abort_cleanup(det, joerger, ab_burst, dio_out6,
                         measurement, num_frames, data_dir, fprefix, exp_start,
-                        True, i, scl_list, metadata=kwargs['metadata'])
+                        True, i, scl_list, metadata=kwargs['metadata'],
+                        log_vals=log_vals)
                     return
 
                 if ( ( status & 0x1 ) == 0 ):
@@ -1065,7 +1066,8 @@ class ExpCommThread(threading.Thread):
                     # logger.debug('abort 4')
                     self.slow_mode2_abort_cleanup(det, joerger, ab_burst, dio_out6,
                         measurement, num_frames, data_dir, fprefix, exp_start,
-                        True, i, scl_list, metadata=kwargs['metadata'])
+                        True, i, scl_list, metadata=kwargs['metadata'],
+                        log_vals=log_vals)
 
                     msg = ('Exposure {} failed to start properly. Exposure sequence '
                         'has been aborted. Please contact your beamline scientist '
@@ -1100,13 +1102,20 @@ class ExpCommThread(threading.Thread):
                         m_exp_t = measurement[0][i]/10.e6
                         val = val + "\t{}".format(m_exp_t)
 
-                        for j in range(1, len(measurement)-1):
-                                val = val + "\t{}".format(measurement[j][i])
+                        for j, log in enumerate(log_vals):
+                            scale = log['scale']
+                            offset = log['offset']
 
-                        if m_exp_t > 0:
-                            val = val + "\t{}".format((measurement[-1][i]-0.5*m_exp_t)/5000/(m_exp_t)) #Convert beam current from counts to numbers, 5kHz/ma + 0.5 kHz
-                        else:
-                            val = val + "\t{}".format(measurement[-1][i])
+                            counter = (measurement[j+1][i]-offset*exp_time)/scale
+
+                            if log['norm_time'] and exp_time > 0:
+                                counter = counter/exp_time
+
+                            val = val + "\t{}".format(counter)
+
+                        if extra_vals is not None:
+                            for ev in extra_vals:
+                                val = val + "\t{}".format(ev[1][i])
 
                         val = val + '\n'
                         f.write(val)
@@ -1171,12 +1180,19 @@ class ExpCommThread(threading.Thread):
                 f.write(val)
 
     def write_counters_joerger(self, cvals, num_frames, data_dir, fprefix, exp_start,
-            metadata):
+            log_vals, metadata, extra_vals=None):
         data_dir = data_dir.replace(self._settings['remote_dir_root'], self._settings['local_dir_root'], 1)
 
-        header = self._get_header(metadata)
+        header = self._get_header(metadata, log_vals)
+
+        if extra_vals is not None:
+            header.rstrip('\n')
+            for ev in extra_vals:
+                header = header + '\t{}'.format(ev[0])
+            header = header + '\n'
 
         log_file = os.path.join(data_dir, '{}.log'.format(fprefix))
+
         with open(log_file, 'w') as f:
             f.write(header)
             for i in range(num_frames):
@@ -1184,15 +1200,22 @@ class ExpCommThread(threading.Thread):
                 exp_time = cvals[0][i]/10.e6
                 val = val + "\t{}".format(exp_time)
 
-                for j in range(1, len(cvals)-1):
-                        val = val + "\t{}".format(cvals[j][i])
+                for j, log in enumerate(log_vals):
+                    scale = log['scale']
+                    offset = log['offset']
 
-                if exp_time > 0:
-                    val = val + "\t{}".format((cvals[-1][i]-0.5*exp_time)/5000/(exp_time)) #Convert beam current from counts to numbers, 5kHz/ma + 0.5 kHz
-                else:
-                    val = val+"\t{}".format(cvals[-1][i])
+                    counter = (cvals[j+1][i]-offset*exp_time)/scale
 
-                val = val + '\n'
+                    if log['norm_time'] and exp_time > 0:
+                        counter = counter/exp_time
+
+                    val = val + "\t{}".format(counter)
+
+                if extra_vals is not None:
+                    for ev in extra_vals:
+                        val = val + "\t{}".format(ev[1][i])
+
+                val = val + "\n"
                 f.write(val)
 
     def _get_header(self, metadata, log_vals):
@@ -1218,7 +1241,7 @@ class ExpCommThread(threading.Thread):
 
     def slow_mode2_abort_cleanup(self, det, joerger, ab_burst, dio_out6,
         measurement, num_frames, data_dir, fprefix, exp_start, read_joerger=False,
-        i=0, scl_list=[], metadata={}):
+        i=0, scl_list=[], metadata={}, log_vals=[]):
         logger.info("Aborting slow exposure")
         try:
             det.abort()
@@ -1243,7 +1266,7 @@ class ExpCommThread(threading.Thread):
                     break
 
         self.write_counters_joerger(measurement, num_frames, data_dir, fprefix,
-            exp_start, metadata)
+            exp_start, log_vals, metadata)
 
         self._exp_event.clear()
         return
@@ -2157,6 +2180,17 @@ if __name__ == '__main__':
             'offset': 0, 'dark': True, 'norm_time': False},
             {'mx_record': 'mcs11', 'channel': 10, 'name': 'Beam_current',
             'scale': 5000, 'offset': 0.5, 'dark': False, 'norm_time': True}
+            ],
+        'joerger_log_vals'      : [{'mx_record': 'j3', 'name': 'I0',
+            'scale': 1, 'offset': 0, 'norm_time': False}, #Format: (mx_record_name, struck_channel, header_name, scale, offset, use_dark_current, normalize_by_exp_time)
+            {'mx_record': 'j4', 'name': 'I1', 'scale': 1, 'offset': 0,
+            'norm_time': False},
+            {'mx_record': 'j5', 'name': 'I2', 'scale': 1, 'offset': 0,
+            'norm_time': False},
+            {'mx_record': 'j6', 'name': 'I3', 'scale': 1, 'offset': 0,
+            'norm_time': False},
+            {'mx_record': 'j11', 'name': 'Beam_current', 'scale': 5000,
+            'offset': 0.5, 'norm_time': True}
             ],
         'components'            : ['exposure'],
         'base_data_dir'         : '/nas_data/Pilatus1M/20190326Hopkins', #CHANGE ME
