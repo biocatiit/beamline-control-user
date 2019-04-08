@@ -178,7 +178,7 @@ class ExpCommThread(threading.Thread):
             'det_datadir': det_datadir,
             'det_filename': det_filename,
             'struck': mx_database.get_record('sis3820'),
-            'struck_ctrs': [mx_database.get_record(log['mx_record']) for log in self.settings['struck_log_vals']],
+            'struck_ctrs': [mx_database.get_record(log['mx_record']) for log in self._settings['struck_log_vals']],
             'struck_pv': '18ID:mcs',
             'ab_burst': mx_database.get_record('ab_burst'),
             'cd_burst': mx_database.get_record('cd_burst'),
@@ -322,7 +322,7 @@ class ExpCommThread(threading.Thread):
 
         wait_for_trig = True
 
-        log_vals = exp_settings['log_vals']
+        log_vals = exp_settings['struck_log_vals']
 
         num_runs = tr_settings['num_scans']
         x_start = tr_settings['scan_x_start']
@@ -610,7 +610,7 @@ class ExpCommThread(threading.Thread):
         s_offset = shutter_speed_open + shutter_pad
         s_offset_half = shutter_speed_open + shutter_pad
 
-        log_vals = kwargs['log_vals']
+        log_vals = kwargs['struck_log_vals']
 
         if exp_period > exp_time + total_shutter_speed and exp_period >= shutter_cycle:
             logger.info('Shuttered mode')
@@ -710,7 +710,6 @@ class ExpCommThread(threading.Thread):
                 self.fast_mode_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6)
                 break
 
-
             logger.info('Exposures started')
             self._exp_event.set()
 
@@ -733,7 +732,6 @@ class ExpCommThread(threading.Thread):
 
                 time.sleep(0.01)
 
-
             if continuous_exp:
                 dio_out9.write(0)
 
@@ -743,7 +741,7 @@ class ExpCommThread(threading.Thread):
 
             dark_counts = []
             for i in range(len(s_counters)):
-                if log_vals['dark']:
+                if log_vals[i]['dark']:
                     dark_counts.append(s_counters[i].get_dark_current())
                 else:
                     dark_counts.append(0)

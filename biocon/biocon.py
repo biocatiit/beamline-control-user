@@ -179,7 +179,7 @@ if __name__ == '__main__':
             {'mx_record': 'mcs12', 'channel': 11, 'name': 'Force',
             'scale': 10e6, 'offset': 0, 'dark': True, 'norm_time': True},
             ],
-        'base_data_dir'         : '/nas_data/Pilatus1M/20190402Granzier', #CHANGE ME
+        'base_data_dir'         : '/nas_data/Pilatus1M/20190326Hopkins', #CHANGE ME
         }
 
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']
