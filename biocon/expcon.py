@@ -1768,6 +1768,8 @@ class ExpPanel(wx.Panel):
         self.wait_for_trig.SetValue(self.settings['wait_for_trig'])
         self.num_trig = wx.TextCtrl(self, value=self.settings['num_trig'],
             size=(60,-1), validator=utils.CharValidator('int'))
+        self.muscle_sampling = wx.TextCtrl(self, value=self.settings['struck_measurement_time'],
+            size=(60,-1), validator=utils.CharValidator('float'))
 
         if 'trsaxs' in self.settings['components']:
             self.num_frames.SetValue('')
@@ -1813,9 +1815,18 @@ class ExpPanel(wx.Panel):
         trig_sizer.Add(self.num_trig, border=2, flag=wx.LEFT|wx.ALIGN_CENTER_VERTICAL)
         trig_sizer.AddStretchSpacer(1)
 
+
+        self.muscle_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        self.muscle_sizer.Add(wx.StaticText(self, label='Parameter sampling time [s]:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        self.muscle_sizer.Add(self.muscle_sampling, border=2,
+            flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT)
+        self.muscle_sizer.AddStretchSpacer(1)
+
         self.advanced_options = wx.StaticBoxSizer(wx.StaticBox(self,
             label='Advanced Options'), wx.VERTICAL)
         self.advanced_options.Add(trig_sizer, border=5, flag=wx.ALL|wx.EXPAND)
+        self.advanced_options.Add(self.muscle_sizer, border=5, flag=wx.ALL|wx.EXPAND)
 
 
         self.start_exp_btn = wx.Button(self, label='Start Exposure')
@@ -1847,6 +1858,10 @@ class ExpPanel(wx.Panel):
 
         exp_ctrl_box_sizer.Show(self.advanced_options,
             self.settings['show_advanced_options'], recursive=True)
+
+        if self.settings['show_advanced_options']:
+            self.advanced_options.Show(self.muscle_sizer,
+            self.settings['tr_muscle_exp'], recursive=True)
 
 
         self.status = wx.StaticText(self, label='Ready', style=wx.ST_NO_AUTORESIZE,
@@ -1950,7 +1965,7 @@ class ExpPanel(wx.Panel):
         if 'trsaxs' in self.settings['components']:
             self.total_time = comp_settings['trsaxs']['total_time']+1*comp_settings['trsaxs']['num_scans']
             self.exp_cmd_q.append(('start_tr_exp', (exp_values, comp_settings), {}))
-        elif self.settings['is_muscle']:
+        elif self.settings['tr_muscle_exp']:
             self.exp_cmd_q.append(('start_ms_exp', (), exp_values))
         else:
             #Exposure time fudge factors for the overhead and readout
@@ -2101,7 +2116,7 @@ class ExpPanel(wx.Panel):
         shutter_pad = self.settings['shutter_pad']
         struck_log_vals = self.settings['struck_log_vals']
         joerger_log_vals = self.settings['joerger_log_vals']
-        struck_measurement_time = self.settings['struck_measurement_time']
+        struck_measurement_time = self.muscle_sampling.GetValue()
         struck_num_meas = self.settings['struck_num_meas']
 
         errors = []
@@ -2131,6 +2146,12 @@ class ExpPanel(wx.Panel):
                 num_trig = int(num_trig)
             except Exception:
                 errors.append(('Number of triggers (greater than 0)'))
+
+        if self.settings['tr_muscle_exp']:
+            try:
+                struck_measurement_time = float(struck_measurement_time)
+            except Exception:
+                errors.append(('Parameter sampling time (greater than 0)'))
 
         if isinstance(num_frames, int):
             if num_frames < 1 or num_frames > self.settings['nframes_max']:
@@ -2166,6 +2187,13 @@ class ExpPanel(wx.Panel):
                     'exposure time.'.format(self.settings['fast_mode_max_exp_time'],
                     self.settings['slow_mode_thres'])))
 
+        if (isinstance(exp_period, float) and isinstance(num_frames, int) and
+            isinstance(struck_measurement_time, float)):
+            if exp_period*num_frames/struck_measurement_time > self.settings['nparams_max']:
+                errors.append(('Total experiment time (exposure period * number '
+                    'of frames) divided by parameter sampling time must be '
+                    'less than {}.'.format(self.settings['nparams_max'])))
+
         if filename == '':
             errors.append('Filename (must not be blank)')
 
@@ -2191,6 +2219,12 @@ class ExpPanel(wx.Panel):
 
         else:
             data_dir = data_dir.replace(self.settings['local_dir_root'], self.settings['remote_dir_root'], 1)
+
+            if self.settings['tr_muscle_exp']:
+                struck_num_meas = exp_period*num_frames/struck_measurement_time
+                struck_num_meas = int(struck_num_meas+0.5)
+            else:
+                struck_num_meas = 0
 
             exp_values = {'num_frames': num_frames,
                 'exp_time'                  : exp_time,
@@ -2459,15 +2493,15 @@ if __name__ == '__main__':
         'exp_time_max'          : 5184000,
         'exp_period_min'        : 0.002,
         'exp_period_max'        : 5184000,
-        'nframes_max'           : 15000, # For Pilatus: 999999, for Struck: 4000 (set by maxChannels in the driver configuration)
+        'nframes_max'           : 15000, # For Pilatus: 999999, for Struck: 15000 (set by maxChannels in the driver configuration)
+        'nparams_max'           : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
         'exp_period_delta'      : 0.00095,
         'shutter_speed_open'    : 0.004, #in s
         'shutter_speed_close'   : 0.004, # in s
         'shutter_pad'           : 0.002, #padding for shutter related values
         'shutter_cycle'         : 0.02, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
-        'struck_measurement_time' : 0.001,
-        'struck_num_meas'       : 1001,
-        'is_muscle'             : True,
+        'struck_measurement_time' : '0.001', #in s
+        'tr_muscle_exp'         : False,
         'slow_mode_thres'       : 0.1,
         'fast_mode_max_exp_time': 2000,
         'wait_for_trig'         : False,

@@ -145,7 +145,8 @@ if __name__ == '__main__':
         'exp_time_max'          : 5184000,
         'exp_period_min'        : 0.002,
         'exp_period_max'        : 5184000,
-        'nframes_max'           : 9999, # For Pilatus: 999999, for Struck: 4000 (set by maxChannels in the driver configuration)
+        'nframes_max'           : 15000, # For Pilatus: 999999, for Struck: 15000 (set by maxChannels in the driver configuration)
+        'nparams_max'           : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
         'exp_period_delta'      : 0.00095,
         # 'shutter_speed_open'    : 0.004, #in s
         # 'shutter_speed_close'   : 0.004, # in s
@@ -155,6 +156,8 @@ if __name__ == '__main__':
         'shutter_speed_close'   : 0.001, # in s
         'shutter_pad'           : 0.00, #padding for shutter related values
         'shutter_cycle'         : 0.002, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
+        'struck_measurement_time' : '0.001', #in s
+        'tr_muscle_exp'         : False,
         'slow_mode_thres'       : 0.1,
         'fast_mode_max_exp_time': 2000,
         'wait_for_trig'         : True,
@@ -176,6 +179,8 @@ if __name__ == '__main__':
             'scale': 5000, 'offset': 0.5, 'dark': False, 'norm_time': True},
             # {'mx_record': 'mcs12', 'channel': 11, 'name': 'Flow_rate',
             # 'scale': 10e6, 'offset': 0, 'dark': True, 'norm_time': True},
+            {'mx_record': 'mcs7', 'channel': 6, 'name': 'Pilatus_Enable',
+            'scale': 1e5, 'offset': 0, 'dark': True, 'norm_time': True},
             {'mx_record': 'mcs12', 'channel': 11, 'name': 'Force',
             'scale': 10e6, 'offset': 0, 'dark': True, 'norm_time': True},
             ],
