@@ -181,8 +181,10 @@ if __name__ == '__main__':
             # 'scale': 10e6, 'offset': 0, 'dark': True, 'norm_time': True},
             {'mx_record': 'mcs7', 'channel': 6, 'name': 'Pilatus_Enable',
             'scale': 1e5, 'offset': 0, 'dark': True, 'norm_time': True},
-            {'mx_record': 'mcs12', 'channel': 11, 'name': 'Force',
-            'scale': 10e6, 'offset': 0, 'dark': True, 'norm_time': True},
+            {'mx_record': 'mcs12', 'channel': 11, 'name': 'Length',
+            'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
+            {'mx_record': 'mcs13', 'channel': 11, 'name': 'Force',
+            'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
             ],
         'joerger_log_vals'      : [{'mx_record': 'j3', 'name': 'I0',
             'scale': 1, 'offset': 0, 'norm_time': False}, #Format: (mx_record_name, struck_channel, header_name, scale, offset, use_dark_current, normalize_by_exp_time)
@@ -195,7 +197,7 @@ if __name__ == '__main__':
             {'mx_record': 'j11', 'name': 'Beam_current', 'scale': 5000,
             'offset': 0.5, 'norm_time': True}
             ],
-        'base_data_dir'         : '/nas_data/Pilatus1M/20190326Hopkins', #CHANGE ME
+        'base_data_dir'         : '/nas_data/Pilatus1M/20190409Fusi', #CHANGE ME
         }
 
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']

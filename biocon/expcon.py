@@ -438,16 +438,19 @@ class ExpCommThread(threading.Thread):
                 ab_burst.get_status() #Maybe need to clear this status?
                 waiting = True
                 while waiting:
-                    logger.info(ab_burst.get_status())
-                    waiting = np.any([ab_burst.get_status() == 16777216 for i in range(10)])
-                    time.sleep(0.1)
+                    logger.debug(ab_burst.get_status())
+                    waiting = np.any([ab_burst.get_status() == 16777216 for i in range(5)])
+                    time.sleep(0.01)
 
                     if self._abort_event.is_set():
-                        self.muscle_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6)
+                        self.muscle_abort_cleanup(det, struck, ab_burst, ab_burst_2, dio_out9, dio_out6)
                         break
 
+                    if (det.get_status() & 0x1) == 0:
+                        break #In case you miss the srs trigger
+
             if self._abort_event.is_set():
-                self.muscle_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6)
+                self.muscle_abort_cleanup(det, struck, ab_burst, ab_burst_2, dio_out9, dio_out6)
                 break
 
             logger.info('Exposures started')
@@ -463,7 +466,7 @@ class ExpCommThread(threading.Thread):
                     break
 
                 if self._abort_event.is_set():
-                    self.muscle_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6)
+                    self.muscle_abort_cleanup(det, struck, ab_burst, ab_burst_2, dio_out9, dio_out6)
                     break
 
                 # current_meas = struck_current_channel_pv.caget()
@@ -930,12 +933,15 @@ class ExpCommThread(threading.Thread):
                 waiting = True
                 while waiting:
                     logger.info(ab_burst.get_status())
-                    waiting = np.any([ab_burst.get_status() == 16777216 for i in range(10)])
-                    time.sleep(0.1)
+                    waiting = np.any([ab_burst.get_status() == 16777216 for i in range(5)])
+                    time.sleep(0.01)
 
                     if self._abort_event.is_set():
                         self.fast_mode_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6)
                         break
+
+                    if (det.get_status() & 0x1) == 0:
+                        break #In case you miss the srs trigger
 
             if self._abort_event.is_set():
                 self.fast_mode_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6)
@@ -943,6 +949,8 @@ class ExpCommThread(threading.Thread):
 
             logger.info('Exposures started')
             self._exp_event.set()
+
+            # current_channel = 0
 
             while True:
                 #Struck is_busy doesn't work in thread! So have to go elsewhere
@@ -957,9 +965,10 @@ class ExpCommThread(threading.Thread):
                     break
 
                 # current_meas = struck_current_channel_pv.caget()
-                # if current_meas != current_channel:
+                # logger.debug(current_meas)
+                # if current_meas != current_channel and current_meas != 0:
                 #     current_channel = current_meas
-                    # print(struck.read_all()) #This should work but it doesn't, gives a timeout error
+                #     logger.debug(struck.read_all()) #This should work but it doesn't, gives a timeout error
 
                 time.sleep(0.01)
 
@@ -2505,7 +2514,7 @@ if __name__ == '__main__':
         'shutter_pad'           : 0.002, #padding for shutter related values
         'shutter_cycle'         : 0.02, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
         'struck_measurement_time' : '0.001', #in s
-        'tr_muscle_exp'         : True,
+        'tr_muscle_exp'         : False,
         'slow_mode_thres'       : 0.1,
         'fast_mode_max_exp_time': 2000,
         'wait_for_trig'         : False,
@@ -2540,7 +2549,7 @@ if __name__ == '__main__':
             'offset': 0.5, 'norm_time': True}
             ],
         'components'            : ['exposure'],
-        'base_data_dir'         : '/nas_data/Pilatus1M/20190326Hopkins', #CHANGE ME
+        'base_data_dir'         : '/nas_data/Pilatus1M/20190415Hopkins', #CHANGE ME
         }
 
     settings['data_dir'] = settings['base_data_dir']
