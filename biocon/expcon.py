@@ -1429,16 +1429,40 @@ class ExpCommThread(threading.Thread):
                 header = header + '\t{}'.format(ev[0])
             header = header + '\n'
 
+            ev_len = len(extra_vals)
+        else:
+            ev_len = 0
+
         log_file = os.path.join(data_dir, '{}.log'.format(fprefix))
+        log_summary_file = os.path.join(data_dir, '{}_summary.log'.format(fprefix))
 
         filenum = 0
         prev_pil_en_ctr = 0
+        write_summary = False
+        sum_start = 0
+        sum_end = 0
 
-        with open(log_file, 'w') as f:
+        data = [[] for i in range(len(log_vals)+ev_len+3)]
+
+        avg_index = []
+        for l, log in enumerate(log_vals):
+            if log['norm_time']:
+                avg_index.append(l)
+
+        # logger.debug(avg_index)
+
+        with open(log_file, 'w') as f, open(log_summary_file, 'w') as f_sum:
             f.write(header)
+            f_sum.write(header)
+
             for i in range(num_frames):
+                write_summary = False
+
                 exp_time = cvals[0][i]/50.e6
                 val = "{}\t{}".format(exp_period*i, exp_time)
+
+                data[1].append(exp_period*i)
+                data[2].append(exp_time)
 
                 for j, log in enumerate(log_vals):
                     dark = dark_counts[j]
@@ -1456,6 +1480,11 @@ class ExpCommThread(threading.Thread):
                     if log['name'] == 'Pilatus_Enable':
                         if prev_pil_en_ctr < 1 and counter > 1:
                             filenum = filenum + 1
+                            sum_start = i
+
+                        elif prev_pil_en_ctr > 1 and counter < 1:
+                            sum_end = i
+                            write_summary = True
 
                         if counter > 1:
                             pil_file = True
@@ -1464,18 +1493,42 @@ class ExpCommThread(threading.Thread):
 
                         prev_pil_en_ctr = counter
 
+                    data[j+3].append(counter)
+
                 if extra_vals is not None:
-                    for ev in extra_vals:
+                    for k, ev in enumerate(extra_vals):
                         val = val + "\t{}".format(ev[1][i])
 
-                if pil_file:
-                    val = "{}_{:04d}.tif\t".format(fprefix, filenum) + val
-                else:
-                    val = "no_image\t" + val
+                        data[len(log_vals)+3+k].append(ev[1][i])
 
+                if pil_file:
+                    fname = "{}_{:04d}.tif".format(fprefix, filenum)
+
+                else:
+                    fname = "no_image"
+
+                val = fname + '\t' + val
                 val = val + "\n"
 
                 f.write(val)
+
+                data[0].append(fname)
+
+                if write_summary:
+                    ctr_sum_vals = []
+
+                    for m, ctr in enumerate(data[2:]):
+                        if m-1 in avg_index:
+                            ctr_sum_vals.append('{}'.format(np.mean(ctr[sum_start:sum_end])))
+                        else:
+                            ctr_sum_vals.append('{}'.format(np.sum(ctr[sum_start:sum_end])))
+
+                    sum_val = '{}\t{}\t'.format(data[0][sum_start], data[1][sum_start])
+                    sum_val = sum_val + '\t'.join(ctr_sum_vals)
+                    sum_val = sum_val + '\n'
+                    f_sum.write(sum_val)
+
+
 
     def write_counters_joerger(self, cvals, num_frames, data_dir, fprefix, exp_start,
             log_vals, metadata, extra_vals=None):
