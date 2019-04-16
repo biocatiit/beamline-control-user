@@ -1906,6 +1906,11 @@ if __name__ == '__main__':
     my_pump.flow_rate = 10
     my_pump.refill_rate = 10
 
+    my_pump2 = PHD4400Pump('COM4', 'H2', '2', 23.5, 30,
+        30, '30 mL')
+    my_pump2.flow_rate = 10
+    my_pump2.refill_rate = 10
+
     # pmp_cmd_q = deque()
     # return_q = queue.Queue()
     # abort_event = threading.Event()
