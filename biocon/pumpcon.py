@@ -112,7 +112,7 @@ class SerialComm(object):
 
         return ret.decode()
 
-    def write(self, data, get_response=False, term_char='>'):
+    def write(self, data, get_response=False, send_term_char = '\r\n', term_char='>'):
         """
         This warps the Serial.write() function. It encodes the input
         data if necessary. It can return any expected response from the
@@ -129,8 +129,8 @@ class SerialComm(object):
         """
         logger.debug("Sending '%s' to serial device on port %s", data, self.ser.port)
         if isinstance(data, str):
-            if not data.endswith('\r\n'):
-                data += '\r\n'
+            if not data.endswith(send_term_char):
+                data += send_term_char
             data = data.encode()
 
         out = ''
@@ -199,6 +199,59 @@ class MForceSerialComm(SerialComm):
             logger.exception("Failed to write %r to serial device on port %s", data, self.ser.port)
 
         logger.debug("Recived %r after writing to serial device on port %s", out, self.ser.port)
+
+        return out
+
+class PHD4400SerialComm(SerialComm):
+    """
+    This class subclases ``SerialComm`` to handle PHD4400 specific
+    quirks.
+    """
+
+    def write(self, data, pump_address, get_response=False, send_term_char = '\r',
+        term_chars=':></*^'):
+        """
+        This warps the Serial.write() function. It encodes the input
+        data if necessary. It can return any expected response from the
+        controller.
+
+        :param data: Data to be written to the serial device.
+        :type data: str, bytes
+
+        :param term_char: The terminal character expected in a response
+        :type term_char: str
+
+        :returns: The requested response, or an empty string
+        :rtype: str
+        """
+        logger.debug("Sending '%s' to serial device on port %s", data, self.ser.port)
+        if isinstance(data, str):
+            if not data.endswith(send_term_char):
+                data += send_term_char
+            data = data.encode()
+
+        out = ''
+
+        possible_term = ['\n{}{}'.format(pump_address, char) for char in term_chars]
+        try:
+            with self.ser as s:
+                s.write(data)
+                if get_response:
+                    got_resp = False
+                    while not got_resp:
+                        if s.in_waiting > 0:
+                            ret = s.read(s.in_waiting)
+                            out += ret.decode('ascii')
+
+                        for term in possible_term:
+                            if out.ends_with(term):
+                                got_resp = True
+
+                        time.sleep(.001)
+        except ValueError:
+            logger.exception("Failed to write '%s' to serial device on port %s", data, self.ser.port)
+
+        logger.debug("Recived '%s' after writing to serial device on port %s", out, self.ser.port)
 
         return out
 
@@ -380,6 +433,7 @@ class M50Pump(Pump):
         :type backlash_cal: float
         """
         Pump.__init__(self, device, name)
+
         logstr = ("Initializing pump {} on serial port {}, flow "
             "calibration: {} uL/rev, backlash calibration: {} uL".format(self.name,
             self.device, flow_cal, backlash_cal))
@@ -551,6 +605,315 @@ class M50Pump(Pump):
         self._is_dispensing = False
 
     def disconnect(self):
+        logger.debug("Closing pump %s serial connection", self.name)
+        self.pump_comm.ser.close()
+
+class PHD4400Pump(object):
+    """
+    This class contains the settings and communication for a generic pump.
+    It is intended to be subclassed by other pump classes, which contain
+    specific information for communicating with a given pump. A pump object
+    can be wrapped in a thread for using a GUI, implimented in :py:class:`PumpCommThread`
+    or it can be used directly from the command line. The :py:class:`M5Pump`
+    documentation contains an example.
+    """
+
+    def __init__(self, device, name, pump_address, diameter, max_volume, max_rate,
+        syringe_id):
+        """
+        :param device: The device comport as sent to pyserial
+        :type device: str
+
+        :param name: A unique identifier for the pump
+        :type name: str
+        """
+
+        Pump.__init__(self, device, name)
+
+        logstr = ("Initializing PHD4400 pump {} on serial port {}")
+        logger.info(logstr)
+
+        self.pump_comm = SerialComm(device, stopbits=serial.STOPBITS_TWO)
+
+        self._is_flowing = False
+        self._is_dispensing = False
+
+        self._units = 'uL/min'
+        self._flow_rate = 0
+        self._refill_rate = 0
+        self._flow_dir = 0
+
+        self._volume = 0
+
+        self._pump_address = pump_address
+
+        self.stop()
+        self.set_pump_cal(diameter, max_volume, max_rate, syringe_id)
+        self.send_cmd('MOD VOL')
+
+
+    def __repr__(self):
+        return '{}({}, {})'.format(self.__class__.__name__, self.name, self.device)
+
+    def __str__(self):
+        return '{} {}, connected to {}'.format(self.__class__.__name__, self.name, self.device)
+
+    @property
+    def flow_rate(self):
+        """
+        Sets and returns the pump flow rate in units specified by ``Pump.units``.
+        Can be set while the pump is moving, and it will update the flow rate
+        appropriately.
+
+        Pump _flow_rate variable should always be stored in ml/min.
+
+        For these pumps, the flow_rate variable is considered to be the infuse rate,
+        whereas the refill_rate variable is the refill rate.
+
+        :type: float
+        """
+        rate = self._flow_rate
+
+        if self.units.split('/')[1] == 's':
+            rate = rate/60.
+
+        if self.units.split('/')[0] == 'uL':
+            rate = rate*1000.
+        elif self.units.split('/')[0] == 'nL':
+            rate = rate*1.e6
+
+        return rate
+
+    @flow_rate.setter
+    def flow_rate(self, rate):
+        logger.info("Setting pump %s infuse flow rate to %f %s", self.name, rate, self.units)
+
+        if self.units.split('/')[0] == 'uL':
+            rate = rate/1000.
+        elif self.units.split('/')[0] == 'nL':
+            rate = rate/1.e6
+
+        if self.units.split('/')[1] == 's':
+            rate = rate*60.
+
+        self._flow_rate = rate
+
+        self.send_cmd("RAT {} MM".format(self._flow_rate))
+
+    @property
+    def refill_rate(self):
+        """
+        Sets and returns the pump flow rate in units specified by ``Pump.units``.
+        Can be set while the pump is moving, and it will update the flow rate
+        appropriately.
+
+        Pump _refill_rate variable should always be stored in ml/min.
+
+        For these pumps, the refill_rate variable is considered to be the infuse rate,
+        whereas the refill_rate variable is the refill rate.
+
+        :type: float
+        """
+        rate = self._refill_rate
+
+        if self.units.split('/')[1] == 's':
+            rate = rate/60.
+
+        if self.units.split('/')[0] == 'uL':
+            rate = rate*1000.
+        elif self.units.split('/')[0] == 'nL':
+            rate = rate*1.e6
+
+        return rate
+
+    @refill_rate.setter
+    def refill_rate(self, rate):
+        logger.info("Setting pump %s refill flow rate to %f %s", self.name, rate, self.units)
+
+        if self.units.split('/')[0] == 'uL':
+            rate = rate/1000.
+        elif self.units.split('/')[0] == 'nL':
+            rate = rate/1.e6
+
+        if self.units.split('/')[1] == 's':
+            rate = rate*60.
+
+        self._refill_rate = rate
+
+        self.send_cmd("RFR {} MM".format(self._refill_rate))
+
+    @property
+    def volume(self):
+        volume = self._volume
+
+        if self.is_dispensing:
+            vol = self.get_delivered_volume()
+
+            if self._flow_dir > 0:
+                volume = volume - vol
+            elif self._flow_dir < 0:
+                volume = volume + vol
+
+        return volume
+
+    def send_cmd(self, cmd):
+        """
+        Sends a command to the pump.
+
+        :param cmd: The command to send to the pump.
+        """
+
+        logger.debug("Sending pump %s cmd %r", self.name, cmd)
+
+        ret = self.pmp_comm.write("{}, {}".format(self.pump_address, cmd),
+            self.pump_address, get_response=True, send_term_char='\r')
+
+        if get_response:
+            logger.debug("Pump %s returned %r", self.name, ret)
+
+        return ret
+
+    def is_moving(self):
+        """
+        Queries the pump about whether or not it's moving.
+
+        :returns: True if the pump is moving, False otherwise
+        :rtype: bool
+        """
+        resp = self.send_cmd("")
+
+        if '>\r\n' in resp or '<\r\n' in resp:
+            moving = True
+        else:
+            moving = False
+
+        return moving
+
+    def get_delivered_volume(self):
+        ret = self.send_cmd("DEL")
+
+        vol = float(ret.split('\n')[1].split(',')[-1])
+
+        return vol
+
+    def dispense_all(self):
+        if self._is_flowing or self._is_dispensing:
+            logger.debug("Stopping pump %s current motion before infusing", self.name)
+            self.stop()
+
+        self.dispense(self.volume)
+
+    def dispense(self, vol, units='mL'):
+        """
+        Dispenses a fixed volume.
+
+        :param vol: Volume to dispense
+        :type vol: float
+
+        :param units: Volume units, defaults to mL, also accepts uL or nL
+        :type units: str
+        """
+        if units == 'uL':
+            vol = vol/1000.
+        elif units == 'nL':
+            vol = vol/1e6
+
+        if self._is_flowing or self._is_dispensing:
+            logger.debug("Stopping pump %s current motion before infusing", self.name)
+            self.stop()
+
+        cont = True
+
+        if self.volume - vol < 0:
+            logger.error(("Attempting to infuse {} mL, which is more than the "
+                "current volume of the syringe ({} mL)".format(vol, self.volume)))
+            cont = False
+
+        if cont:
+            logger.info("Pump %s infusing %f %s at %f %s", self.name, vol, units, self.flow_rate, self.units)
+
+            self.send_cmd('MOD VOL')
+            self.send_cmd("DIR INF")
+            self.send_cmd("CLD")
+            self.send_cmd("TGT {}".format(vol))
+            self.send_cmd("RUN")
+
+            self._is_dispensing = True
+            self._flow_dir = 1
+
+    def aspirate_all(self):
+        if self._is_flowing or self._is_dispensing:
+            logger.debug("Stopping pump %s current motion before infusing", self.name)
+            self.stop()
+
+        self.dispense(self.max_volume - self.volume)
+
+    def aspirate(self, vol, units='mL'):
+        """
+        Aspirates a fixed volume.
+
+        :param vol: Volume to aspirate
+        :type vol: float
+
+        :param units: Volume units, defaults to mL, also accepts uL or nL
+        :type units: str
+        """
+        if units == 'uL':
+            vol = vol/1000.
+        elif units == 'nL':
+            vol = vol/1e6
+
+        if self._is_flowing or self._is_dispensing:
+            logger.debug("Stopping pump %s current motion before refilling", self.name)
+            self.stop()
+
+        cont = True
+
+        if self.volume + vol > self.max_volume:
+            logger.error(("Attempting to refill {} mL, which will take the total "
+                "loaded volume to more than the maximum volume of the syringe "
+                "({} mL)".format(vol, self.max_volume)))
+            cont = False
+
+        if cont:
+            logger.info("Pump %s refilling %f %s at %f %s", self.name, vol, units, self.flow_rate, self.units)
+
+            self.send_cmd('MOD VOL')
+            self.send_cmd("DIR REF")
+            self.send_cmd("CLD")
+            self.send_cmd("TGT {}".format(vol))
+            self.send_cmd("RUN")
+
+            self._is_dispensing = True
+            self._flow_dir = -1
+
+    def stop(self):
+        """Stops all pump flow."""
+        logger.info("Pump %s stopping all motions", self.name)
+        self.send_cmd("STP")
+
+        if self.is_dispensing:
+            vol = self.get_delivered_volume()
+
+            if self._flow_dir > 0:
+                self._volume = self._volume - vol
+            elif self._flow_dir < 0:
+                self._volume = self._volume + vol
+
+        self._is_dispensing = False
+        self._is_flowing = False
+        self._flow_dir = 0
+
+    def set_pump_cal(self, diameter, max_volume, max_rate, syringe_id):
+        self.diameter = diameter
+        self.max_volume = max_volume
+        self.max_rate = max_rate
+        self.syringe_id = syringe_id
+
+        self.send_cmd("DIA {}".format(self.diameter))
+
+    def disconnect(self):
+        """Close any communication connections"""
         logger.debug("Closing pump %s serial connection", self.name)
         self.pump_comm.ser.close()
 
@@ -1500,6 +1863,9 @@ if __name__ == '__main__':
     logger.addHandler(h1)
 
     # my_pump = M50Pump('COM6', '2', 626.2, 9.278)
+
+    # my_pump = PHD4400Pump(device, name, pump_address, diameter, max_volume,
+    #     max_rate, syringe_id)
 
     # pmp_cmd_q = deque()
     # return_q = queue.Queue()
