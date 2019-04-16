@@ -242,10 +242,11 @@ class PHD4400SerialComm(SerialComm):
                         if s.in_waiting > 0:
                             ret = s.read(s.in_waiting)
                             out += ret.decode('ascii')
-
-                        for term in possible_term:
-                            if out.ends_with(term):
-                                got_resp = True
+                            # logger.debug(out)
+                            for term in possible_term:
+                                if out.endswith(term):
+                                    got_resp = True
+                                    break
 
                         time.sleep(.001)
         except ValueError:
@@ -608,7 +609,7 @@ class M50Pump(Pump):
         logger.debug("Closing pump %s serial connection", self.name)
         self.pump_comm.ser.close()
 
-class PHD4400Pump(object):
+class PHD4400Pump(Pump):
     """
     This class contains the settings and communication for a generic pump.
     It is intended to be subclassed by other pump classes, which contain
@@ -633,12 +634,12 @@ class PHD4400Pump(object):
         logstr = ("Initializing PHD4400 pump {} on serial port {}")
         logger.info(logstr)
 
-        self.pump_comm = SerialComm(device, stopbits=serial.STOPBITS_TWO)
+        self.pump_comm = PHD4400SerialComm(device, stopbits=serial.STOPBITS_TWO)
 
         self._is_flowing = False
         self._is_dispensing = False
 
-        self._units = 'uL/min'
+        self._units = 'mL/min'
         self._flow_rate = 0
         self._refill_rate = 0
         self._flow_dir = 0
@@ -696,7 +697,7 @@ class PHD4400Pump(object):
         if self.units.split('/')[1] == 's':
             rate = rate*60.
 
-        self._flow_rate = rate
+        self._flow_rate = self.round(rate)
 
         self.send_cmd("RAT {} MM".format(self._flow_rate))
 
@@ -738,7 +739,7 @@ class PHD4400Pump(object):
         if self.units.split('/')[1] == 's':
             rate = rate*60.
 
-        self._refill_rate = rate
+        self._refill_rate = self.round(rate)
 
         self.send_cmd("RFR {} MM".format(self._refill_rate))
 
@@ -746,7 +747,7 @@ class PHD4400Pump(object):
     def volume(self):
         volume = self._volume
 
-        if self.is_dispensing:
+        if self._is_dispensing:
             vol = self.get_delivered_volume()
 
             if self._flow_dir > 0:
@@ -756,7 +757,20 @@ class PHD4400Pump(object):
 
         return volume
 
-    def send_cmd(self, cmd):
+    @volume.setter
+    def volume(self, volume):
+
+        if self._is_dispensing:
+            vol = self.get_delivered_volume()
+
+            if self._flow_dir > 0:
+                volume = volume + vol
+            elif self._flow_dir < 0:
+                volume = volume - vol
+
+        self._volume = volume
+
+    def send_cmd(self, cmd, get_response=True):
         """
         Sends a command to the pump.
 
@@ -765,11 +779,10 @@ class PHD4400Pump(object):
 
         logger.debug("Sending pump %s cmd %r", self.name, cmd)
 
-        ret = self.pmp_comm.write("{}, {}".format(self.pump_address, cmd),
-            self.pump_address, get_response=True, send_term_char='\r')
+        ret = self.pump_comm.write("{}{}".format(self._pump_address, cmd),
+            self._pump_address, get_response=True, send_term_char='\r')
 
-        if get_response:
-            logger.debug("Pump %s returned %r", self.name, ret)
+        logger.debug("Pump %s returned %r", self.name, ret)
 
         return ret
 
@@ -780,9 +793,9 @@ class PHD4400Pump(object):
         :returns: True if the pump is moving, False otherwise
         :rtype: bool
         """
-        resp = self.send_cmd("")
+        ret = self.send_cmd("")
 
-        if '>\r\n' in resp or '<\r\n' in resp:
+        if ret.endswith('>') or ret.endswith('<'):
             moving = True
         else:
             moving = False
@@ -792,7 +805,7 @@ class PHD4400Pump(object):
     def get_delivered_volume(self):
         ret = self.send_cmd("DEL")
 
-        vol = float(ret.split('\n')[1].split(',')[-1])
+        vol = float(ret.split('\n')[1].strip())
 
         return vol
 
@@ -829,10 +842,15 @@ class PHD4400Pump(object):
                 "current volume of the syringe ({} mL)".format(vol, self.volume)))
             cont = False
 
+        if vol <= 0:
+            logger.error(("Infuse volume must be positive."))
+            cont = False
+
         if cont:
+            vol = self.round(vol)
+
             logger.info("Pump %s infusing %f %s at %f %s", self.name, vol, units, self.flow_rate, self.units)
 
-            self.send_cmd('MOD VOL')
             self.send_cmd("DIR INF")
             self.send_cmd("CLD")
             self.send_cmd("TGT {}".format(vol))
@@ -846,7 +864,10 @@ class PHD4400Pump(object):
             logger.debug("Stopping pump %s current motion before infusing", self.name)
             self.stop()
 
-        self.dispense(self.max_volume - self.volume)
+        if self.max_volume - self.volume > 0:
+            self.aspirate(self.max_volume - self.volume)
+        else:
+            logger.error(("Already at maximum volume, can't aspirate more."))
 
     def aspirate(self, vol, units='mL'):
         """
@@ -858,6 +879,7 @@ class PHD4400Pump(object):
         :param units: Volume units, defaults to mL, also accepts uL or nL
         :type units: str
         """
+
         if units == 'uL':
             vol = vol/1000.
         elif units == 'nL':
@@ -875,10 +897,15 @@ class PHD4400Pump(object):
                 "({} mL)".format(vol, self.max_volume)))
             cont = False
 
+        if vol <= 0:
+            logger.error(("Refill volume must be positive."))
+            cont = False
+
         if cont:
+            vol = self.round(vol)
+
             logger.info("Pump %s refilling %f %s at %f %s", self.name, vol, units, self.flow_rate, self.units)
 
-            self.send_cmd('MOD VOL')
             self.send_cmd("DIR REF")
             self.send_cmd("CLD")
             self.send_cmd("TGT {}".format(vol))
@@ -892,7 +919,7 @@ class PHD4400Pump(object):
         logger.info("Pump %s stopping all motions", self.name)
         self.send_cmd("STP")
 
-        if self.is_dispensing:
+        if self._is_dispensing:
             vol = self.get_delivered_volume()
 
             if self._flow_dir > 0:
@@ -911,6 +938,16 @@ class PHD4400Pump(object):
         self.syringe_id = syringe_id
 
         self.send_cmd("DIA {}".format(self.diameter))
+
+    def round(self, val):
+        oom = int('{:e}'.format(val).split('e')[1])
+
+        if oom < 0:
+            oom = 0
+
+        num_dig = 6-(oom + 2)
+
+        return round(val, num_dig)
 
     def disconnect(self):
         """Close any communication connections"""
@@ -1864,8 +1901,10 @@ if __name__ == '__main__':
 
     # my_pump = M50Pump('COM6', '2', 626.2, 9.278)
 
-    # my_pump = PHD4400Pump(device, name, pump_address, diameter, max_volume,
-    #     max_rate, syringe_id)
+    my_pump = PHD4400Pump('COM4', 'H1', '1', 23.5, 30,
+        30, '30 mL')
+    my_pump.flow_rate = 10
+    my_pump.refill_rate = 10
 
     # pmp_cmd_q = deque()
     # return_q = queue.Queue()
@@ -1892,10 +1931,10 @@ if __name__ == '__main__':
     # pmp_cmd_q.append(stop_cmd)
     # my_pumpcon.stop()
 
-    app = wx.App()
-    logger.debug('Setting up wx app')
-    frame = PumpFrame(None, title='Pump Control')
-    frame.Show()
-    app.MainLoop()
+    # app = wx.App()
+    # logger.debug('Setting up wx app')
+    # frame = PumpFrame(None, title='Pump Control')
+    # frame.Show()
+    # app.MainLoop()
 
 
