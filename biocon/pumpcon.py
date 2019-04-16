@@ -620,7 +620,7 @@ class PHD4400Pump(Pump):
     """
 
     def __init__(self, device, name, pump_address, diameter, max_volume, max_rate,
-        syringe_id):
+        syringe_id, comm_lock):
         """
         :param device: The device comport as sent to pyserial
         :type device: str
@@ -635,6 +635,8 @@ class PHD4400Pump(Pump):
         logger.info(logstr)
 
         self.pump_comm = PHD4400SerialComm(device, stopbits=serial.STOPBITS_TWO)
+
+        self.comm_lock.acquire()
 
         self._is_flowing = False
         self._is_dispensing = False
@@ -779,8 +781,12 @@ class PHD4400Pump(Pump):
 
         logger.debug("Sending pump %s cmd %r", self.name, cmd)
 
+        self.comm_lock.acquire()
+
         ret = self.pump_comm.write("{}{}".format(self._pump_address, cmd),
             self._pump_address, get_response=True, send_term_char='\r')
+
+        self.comm_lock.release()
 
         logger.debug("Pump %s returned %r", self.name, ret)
 
@@ -1900,9 +1906,9 @@ if __name__ == '__main__':
     logger.addHandler(h1)
 
     # my_pump = M50Pump('COM6', '2', 626.2, 9.278)
+    comm_lock = threading.Lock()
 
-    my_pump = PHD4400Pump('COM4', 'H1', '1', 23.5, 30,
-        30, '30 mL')
+    my_pump = PHD4400Pump('COM4', 'H1', '1', 23.5, 30, 30, '30 mL', comm_lock)
     my_pump.flow_rate = 10
     my_pump.refill_rate = 10
 
