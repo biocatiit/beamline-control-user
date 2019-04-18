@@ -1353,7 +1353,8 @@ class PumpPanel(wx.Panel):
     """
     def __init__(self, parent, panel_id, panel_name, all_comports, pump_cmd_q,
         pump_answer_q, known_pumps, pump_name, pump_type=None, comport=None,
-        pump_args=[], pump_kwargs={}, comm_lock=threading.Lock()):
+        pump_args=[], pump_kwargs={}, comm_lock=threading.Lock(), flow_rate='',
+        refill_rate=''):
         """
         Initializes the custom thread. Important parameters here are the
         list of known commands ``_commands`` and known pumps ``known_pumps``.
@@ -1412,11 +1413,21 @@ class PumpPanel(wx.Panel):
         self.connected = False
         self.comm_lock = comm_lock
 
-        self.known_syringes = {'EXEL 30 mL': {'diameter': 23.5, 'max_volume': 30,
+        self.known_syringes = {'30 mL, EXEL': {'diameter': 23.5, 'max_volume': 30,
             'max_rate': 70},
+            '3 mL, Medline P.C.': {'diameter': 9.1, 'max_volume': 3,
+            'max_rate': 11},
+            '6 mL, Medline P.C.': {'diameter': 12.8, 'max_volume': 6,
+            'max_rate': 23},
+            '10 mL, Medline P.C.': {'diameter': 16.4, 'max_volume': 10,
+            'max_rate': 31},
+            '20 mL, Medline P.C.': {'diameter': 20.4, 'max_volume': 20,
+            'max_rate': 55},
+            '0.5 mL, Hamilton Glass.': {'diameter': 3.26, 'max_volume': 10,
+            'max_rate': 11},
             }
 
-        self.top_sizer = self._create_layout()
+        self.top_sizer = self._create_layout(flow_rate, refill_rate)
 
         self.monitor_flow_evt = threading.Event()
         self.monitor_flow_evt.clear()
@@ -1430,7 +1441,7 @@ class PumpPanel(wx.Panel):
         self._initpump(pump_type, comport, pump_args, pump_kwargs)
 
 
-    def _create_layout(self):
+    def _create_layout(self, flow_rate='', refill_rate=''):
         """Creates the layout for the panel."""
         self.status = wx.StaticText(self, label='Not connected')
         self.syringe_vol_units = wx.StaticText(self, label='mL')
@@ -1464,10 +1475,10 @@ class PumpPanel(wx.Panel):
         self.mode_ctrl.SetSelection(0)
         self.direction_ctrl = wx.Choice(self, choices=['Dispense', 'Aspirate'])
         self.direction_ctrl.SetSelection(0)
-        self.flow_rate_ctrl = wx.TextCtrl(self)
+        self.flow_rate_ctrl = wx.TextCtrl(self, value=flow_rate)
         self.flow_units_lbl = wx.StaticText(self, label='mL/min')
         self.refill_rate_lbl = wx.StaticText(self, label='Refill rate:')
-        self.refill_rate_ctrl = wx.TextCtrl(self)
+        self.refill_rate_ctrl = wx.TextCtrl(self, value=refill_rate)
         self.refill_rate_units = wx.StaticText(self, label='mL')
         self.volume_lbl = wx.StaticText(self, label='Volume:')
         self.volume_ctrl = wx.TextCtrl(self)
@@ -1847,7 +1858,8 @@ class PumpPanel(wx.Panel):
 
 
     def _on_syringe_type(self, evt):
-        self._send_cmd('set_pump_cal')
+        if self.connected:
+            self._send_cmd('set_pump_cal')
 
     def _connect(self):
         """Initializes the pump in the PumpCommThread"""
@@ -2045,7 +2057,7 @@ class PumpPanel(wx.Panel):
         elif cmd == 'set_pump_cal':
             vals = self.known_syringes[self.syringe_type.GetStringSelection()]
             vals['syringe_id'] = self.syringe_type.GetStringSelection()
-            self.pump_cmd_q.append(('set_pump_cal', (), vals))
+            self.pump_cmd_q.append(('set_pump_cal', (self.name,), vals))
         elif cmd == 'connect':
             com = self.com_ctrl.GetStringSelection()
             pump = self.type_ctrl.GetStringSelection().replace(' ', '_')
@@ -2073,7 +2085,7 @@ class PumpFrame(wx.Frame):
     Only meant to be used when the pumpcon module is run directly,
     rather than when it is imported into another program.
     """
-    def __init__(self, *args, **kwargs):
+    def __init__(self, comm_locks, *args, **kwargs):
         """
         Initializes the pump frame. Takes args and kwargs for the wx.Frame class.
         """
@@ -2084,6 +2096,8 @@ class PumpFrame(wx.Frame):
         self.abort_event = threading.Event()
         self.pump_con = PumpCommThread(self.pump_cmd_q, self.pump_answer_q, self.abort_event, 'PumpCon')
         self.pump_con.start()
+
+        self.comm_locks = comm_locks
 
         self.Bind(wx.EVT_CLOSE, self._on_exit)
 
@@ -2139,9 +2153,10 @@ class PumpFrame(wx.Frame):
 
         If you want to add pumps here, add them to the ``setup_pumps`` list.
         Each entry should be an iterable with the following parameters: name,
-        pump type, comport, arg list, and kwarg dict in that order. How the
-        arg list and kwarg dict are handled are defined in the
-        :py:func:`PumpPanel._initpump` function, and depends on the pump type.
+        pump type, comport, pump arg list, pump kwarg dict, and pump panel
+        kwarg dict in that order. How the arg list and kwarg dict are handled
+        are defined in the :py:func:`PumpPanel._initpump` function, and depends
+        on the pump type.
         """
         if not self.pumps:
             self.pump_sizer.Remove(0)
@@ -2150,22 +2165,18 @@ class PumpFrame(wx.Frame):
         #             ('3', 'VICI M50', 'COM6', ['627.32', '11.826'], {})
         #             ]
 
-        setup_pumps = [('1', 'PHD 4400', 'COM4', ['EXEL 30 mL', '1'], {}),
-                    ('2', 'PHD 4400', 'COM4', ['EXEL 30 mL', '2'], {}),
-                    ('3', 'PHD 4400', 'COM4', ['EXEL 30 mL', '3'], {}),
+        setup_pumps = [('1', 'PHD 4400', 'COM4', ['30 mL, EXEL', '1'], {},
+                {'flow_rate' : '30', 'refill_rate' : '30'}),
+                    ('2', 'PHD 4400', 'COM4', ['30 mL, EXEL', '2'], {},
+                {'flow_rate' : '30', 'refill_rate' : '30'}),
+                    ('3', 'PHD 4400', 'COM4', ['30 mL, EXEL', '3'], {},
+                {'flow_rate' : '30', 'refill_rate' : '30'}),
                     ]
-
-        comm_lock = threading.Lock()
 
         logger.info('Initializing %s pumps on startup', str(len(setup_pumps)))
 
         for pump in setup_pumps:
-            new_pump = PumpPanel(self, wx.ID_ANY, pump[0], self.ports, self.pump_cmd_q,
-                self.pump_answer_q, self.pump_con.known_pumps, pump[0], pump[1],
-                pump[2], pump[3], pump[4], comm_lock)
-
-            self.pump_sizer.Add(new_pump)
-            self.pumps.append(new_pump)
+            self._add_pump(pump)
 
         self.Layout()
         self.Fit()
@@ -2190,16 +2201,28 @@ class PumpFrame(wx.Frame):
                     logger.debug('Attempted to add a pump with the same name (%s) as another pump.', name)
                     return
 
-            new_pump = PumpPanel(self, wx.ID_ANY, name, self.ports, self.pump_cmd_q,
-                self.pump_con.known_pumps, name)
+            pump_vals = (self.name, None, None, [], {})
+            self._add_pump(pump_vals)
             logger.info('Added new pump %s to the pump control panel.', name)
-            self.pump_sizer.Add(new_pump)
-            self.pumps.append(new_pump)
 
             self.Layout()
             self.Fit()
 
         return
+
+    def _add_pump(self, pump):
+        if pump[0] in self.comm_locks:
+            comm_lock = self.comm_locks[pump[0]]
+            new_pump = PumpPanel(self, wx.ID_ANY, pump[0], self.ports, self.pump_cmd_q,
+                self.pump_answer_q, self.pump_con.known_pumps, pump[0], pump[1],
+                pump[2], pump[3], pump[4], comm_lock, **pump[5])
+        else:
+            new_pump = PumpPanel(self, wx.ID_ANY, pump[0], self.ports, self.pump_cmd_q,
+                self.pump_answer_q, self.pump_con.known_pumps, pump[0], pump[1],
+                pump[2], pump[3], pump[4], **pump[5])
+
+        self.pump_sizer.Add(new_pump)
+        self.pumps.append(new_pump)
 
     def _get_ports(self):
         """
@@ -2268,9 +2291,25 @@ if __name__ == '__main__':
     # pmp_cmd_q.append(stop_cmd)
     # my_pumpcon.stop()
 
+    #Use this with PHD 4400
+    comm_lock = threading.Lock()
+
+    comm_locks = {'1'   : comm_lock,
+        '2' : comm_lock,
+        '3' : comm_lock,
+        }
+
+    # #Use this with M50s
+    # comm_locks = {'2' : threading.Lock(),
+    #     '3' : threading.Lock(),
+    #     }
+
+    # #Otherwise use this:
+    # comm_locks = {}
+
     app = wx.App()
     logger.debug('Setting up wx app')
-    frame = PumpFrame(None, title='Pump Control')
+    frame = PumpFrame(comm_locks, None, title='Pump Control')
     frame.Show()
     app.MainLoop()
 
