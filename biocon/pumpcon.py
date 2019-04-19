@@ -442,6 +442,8 @@ class M50Pump(Pump):
 
         self.pump_comm = MForceSerialComm(device)
 
+        self.comm_lock = comm_lock
+
         #Make sure parameters are set right
         self.send_cmd('EM 0') #Echo mode to full duplex
         self.send_cmd('MS 256') #Microstepping to 256, MForce default
@@ -530,7 +532,9 @@ class M50Pump(Pump):
         """
         logger.debug("Sending pump %s cmd %r", self.name, cmd)
 
+        self.comm_lock.acquire()
         ret = self.pump_comm.write(cmd, get_response)
+        self.comm_lock.release()
 
         if get_response:
             logger.debug("Pump %s returned %r", self.name, ret)
@@ -1953,7 +1957,7 @@ class PumpPanel(wx.Panel):
         pump = self.type_ctrl.GetStringSelection().replace(' ', '_')
 
         if pump == 'VICI_M50':
-            kwargs = {'flow_cal': fc, 'backlash_cal':bc}
+            kwargs = {'flow_cal': fc, 'backlash_cal': bc, 'comm_lock': self.comm_lock}
         elif pump == 'PHD_4400':
             kwargs = self.known_syringes[self.syringe_type.GetStringSelection()]
             kwargs['comm_lock'] = self.comm_lock
@@ -1965,10 +1969,10 @@ class PumpPanel(wx.Panel):
         try:
             self.pump = self.known_pumps[pump](com, self.name, **kwargs)
             self._set_status('Connected')
-        except Exception:
+            self._send_cmd('add_pump')
+        except Exception as e:
+            logger.error(e)
             self._set_status('Connection Failed')
-
-        self._send_cmd('add_pump')
 
         start_time = time.time()
         while len(self.answer_q) == 0 and time.time()-start_time < 5:
@@ -2056,11 +2060,12 @@ class PumpPanel(wx.Panel):
                 if self.pump_mode == 'syringe':
                     self._send_cmd('stop')
 
-            self._get_volume()
+            if self.pump_mode == 'syringe':
+                self._get_volume()
 
             time.sleep(1)
 
-            if not is_moving:
+            if not is_moving and self.pump_mode == 'syringe':
                 wx.CallAfter(self._get_volume_delay, 2)
 
     def _send_cmd(self, cmd, args=None):
@@ -2230,17 +2235,17 @@ class PumpFrame(wx.Frame):
         if not self.pumps:
             self.pump_sizer.Remove(0)
 
-        # setup_pumps = [('2', 'VICI M50', 'COM5', ['626.2', '9.278'], {}, {}),
-        #             ('3', 'VICI M50', 'COM6', ['627.32', '11.826'], {}, {})
-        #             ]
-
-        setup_pumps = [('1', 'PHD 4400', 'COM4', ['30 mL, EXEL', '1'], {},
-                {'flow_rate' : '30', 'refill_rate' : '30'}),
-                    ('2', 'PHD 4400', 'COM4', ['30 mL, EXEL', '2'], {},
-                {'flow_rate' : '30', 'refill_rate' : '30'}),
-                    ('3', 'PHD 4400', 'COM4', ['30 mL, EXEL', '3'], {},
-                {'flow_rate' : '30', 'refill_rate' : '30'}),
+        setup_pumps = [('2', 'VICI M50', 'COM2', ['626.2', '9.278'], {}, {}),
+                    ('1', 'VICI M50', 'COM1', ['627.32', '11.826'], {}, {})
                     ]
+
+        # setup_pumps = [('1', 'PHD 4400', 'COM4', ['30 mL, EXEL', '1'], {},
+        #         {'flow_rate' : '30', 'refill_rate' : '30'}),
+        #             ('2', 'PHD 4400', 'COM4', ['30 mL, EXEL', '2'], {},
+        #         {'flow_rate' : '30', 'refill_rate' : '30'}),
+        #             ('3', 'PHD 4400', 'COM4', ['30 mL, EXEL', '3'], {},
+        #         {'flow_rate' : '30', 'refill_rate' : '30'}),
+        #             ]
 
         logger.info('Initializing %s pumps on startup', str(len(setup_pumps)))
 
@@ -2360,18 +2365,18 @@ if __name__ == '__main__':
     # pmp_cmd_q.append(stop_cmd)
     # my_pumpcon.stop()
 
-    #Use this with PHD 4400
-    comm_lock = threading.Lock()
+    # #Use this with PHD 4400
+    # comm_lock = threading.Lock()
 
-    comm_locks = {'1'   : comm_lock,
-        '2' : comm_lock,
-        '3' : comm_lock,
-        }
-
-    # #Use this with M50s
-    # comm_locks = {'2' : threading.Lock(),
-    #     '3' : threading.Lock(),
+    # comm_locks = {'1'   : comm_lock,
+    #     '2' : comm_lock,
+    #     '3' : comm_lock,
     #     }
+
+    #Use this with M50s
+    comm_locks = {'2' : threading.Lock(),
+        '3' : threading.Lock(),
+        }
 
     # #Otherwise use this:
     # comm_locks = {}
