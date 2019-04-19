@@ -30,6 +30,7 @@ from collections import OrderedDict, deque
 import queue
 import logging
 import sys
+import copy
 
 if __name__ != '__main__':
     logger = logging.getLogger(__name__)
@@ -1210,7 +1211,7 @@ class PumpCommThread(threading.Thread):
         self.answer_queue.append((name, 'volume', volume))
         logger.debug("Pump %s volume is %f", name, volume)
 
-    def _start_flow(self, name):
+    def _start_flow(self, name, callback):
         """
         This method starts continuous flow for a pump.
 
@@ -1220,6 +1221,8 @@ class PumpCommThread(threading.Thread):
         logger.info("Starting pump %s continuous flow", name)
         pump = self._connected_pumps[name]
         pump.start_flow()
+        self.answer_queue.append((name, 'start', True))
+        callback()
         logger.debug("Pump %s flow started", name)
 
     def _stop_flow(self, name):
@@ -1232,9 +1235,10 @@ class PumpCommThread(threading.Thread):
         logger.info("Stopping pump %s", name)
         pump = self._connected_pumps[name]
         pump.stop()
+        self.answer_queue.append((name, 'stop', True))
         logger.debug("Pump %s stopped", name)
 
-    def _aspirate(self, name, vol, units='uL'):
+    def _aspirate(self, name, vol, callback, units='uL'):
         """
         This method aspirates a fixed volume.
 
@@ -1248,9 +1252,11 @@ class PumpCommThread(threading.Thread):
         logger.info("Aspirating pump %s", name)
         pump = self._connected_pumps[name]
         pump.aspirate(vol, units)
+        self.answer_queue.append((name, 'start', True))
+        callback()
         logger.debug("Pump %s aspiration started", name)
 
-    def _aspirate_all(self, name):
+    def _aspirate_all(self, name, callback):
         """
         This method aspirates all remaning volume for a fixed volume pump.
 
@@ -1260,9 +1266,11 @@ class PumpCommThread(threading.Thread):
         logger.info("Aspirating all for pump %s", name)
         pump = self._connected_pumps[name]
         pump.aspirate_all()
+        self.answer_queue.append((name, 'start', True))
+        callback()
         logger.debug("Pump %s aspiration started", name)
 
-    def _dispense(self, name, vol, units='uL'):
+    def _dispense(self, name, vol, callback, units='uL'):
         """
         This method dispenses a fixed volume.
 
@@ -1276,10 +1284,11 @@ class PumpCommThread(threading.Thread):
         logger.info("Dispensing pump %s", name)
         pump = self._connected_pumps[name]
         pump.dispense(vol, units)
-
+        self.answer_queue.append((name, 'start', True))
+        callback()
         logger.debug("Pump %s dispensing started", name)
 
-    def _dispense_all(self, name):
+    def _dispense_all(self, name, callback):
         """
         This method dispenses all remaining volume for a fixed volume pump.
 
@@ -1289,6 +1298,8 @@ class PumpCommThread(threading.Thread):
         logger.info("Dispensing all from pump %s", name)
         pump = self._connected_pumps[name]
         pump.dispense_all()
+        self.answer_queue.append((name, 'start', True))
+        callback()
         logger.debug("Pump %s dispensing started", name)
 
     def _is_moving(self, name):
@@ -1607,7 +1618,8 @@ class PumpPanel(wx.Panel):
             flag=wx.ALIGN_CENTER_VERTICAL)
 
 
-        self.syringe_type = wx.Choice(self, choices=sorted(self.known_syringes.keys()))
+        syr_types = sorted(self.known_syringes.keys(), key=lambda x: float(x.split()[0]))
+        self.syringe_type = wx.Choice(self, choices=syr_types)
         self.syringe_type.SetSelection(0)
         self.syringe_type.Bind(wx.EVT_CHOICE, self._on_syringe_type)
         self.pump_address = wx.TextCtrl(self, size=(60, -1))
@@ -1881,8 +1893,6 @@ class PumpPanel(wx.Panel):
                         self._set_status(direction.capitalize())
 
                 self.fr_button.Show()
-                self.monitor_flow_evt.set()
-
                 self.run_button.SetLabel('Stop')
 
             else:
@@ -1918,7 +1928,7 @@ class PumpPanel(wx.Panel):
         try:
             vol = float(vol)
             if vol != -1:
-                self._send_cmd('set_volume', [vol])
+                self.pump.volume = vol
 
             self._get_volume()
 
@@ -1959,7 +1969,7 @@ class PumpPanel(wx.Panel):
         if pump == 'VICI_M50':
             kwargs = {'flow_cal': fc, 'backlash_cal': bc, 'comm_lock': self.comm_lock}
         elif pump == 'PHD_4400':
-            kwargs = self.known_syringes[self.syringe_type.GetStringSelection()]
+            kwargs = copy.deepcopy(self.known_syringes[self.syringe_type.GetStringSelection()])
             kwargs['comm_lock'] = self.comm_lock
             kwargs['syringe_id'] = self.syringe_type.GetStringSelection()
             kwargs['pump_address'] = self.pump_address.GetValue()
@@ -1982,6 +1992,9 @@ class PumpPanel(wx.Panel):
             self.answer_q.popleft()
 
         return
+
+    def start_callback(self):
+        self.monitor_flow_evt.set()
 
     def _get_volume(self):
         """Initializes the pump in the PumpCommThread"""
@@ -2080,21 +2093,21 @@ class PumpPanel(wx.Panel):
         if cmd == 'is_moving':
             self.pump_cmd_q.append(('is_moving', (self.name), {}))
         elif cmd == 'start_flow':
-            self.pump_cmd_q.append(('start_flow', (self.name,), {}))
+            self.pump_cmd_q.append(('start_flow', (self.name, self.start_callback), {}))
         elif cmd == 'stop':
             self.pump_cmd_q.append(('stop', (self.name,), {}))
         elif cmd == 'dispense':
             units = self.flow_units_lbl.GetLabel()
             vol = float(self.volume_ctrl.GetValue())
-            self.pump_cmd_q.append(('dispense', (self.name, vol, units), {}))
+            self.pump_cmd_q.append(('dispense', (self.name, vol, self.start_callback, units), {}))
         elif cmd == 'aspirate':
             units = self.flow_units_lbl.GetLabel()
             vol = float(self.volume_ctrl.GetValue())
-            self.pump_cmd_q.append(('aspirate', (self.name, vol, units), {}))
+            self.pump_cmd_q.append(('aspirate', (self.name, vol, self.start_callback, units), {}))
         elif cmd == 'dispense_all':
-            self.pump_cmd_q.append(('dispense_all', (self.name), {}))
+            self.pump_cmd_q.append(('dispense_all', (self.name, self.start_callback), {}))
         elif cmd == 'aspirate_all':
-            self.pump_cmd_q.append(('aspirate_all', (self.name), {}))
+            self.pump_cmd_q.append(('aspirate_all', (self.name, self.start_callback), {}))
         elif cmd == 'set_flow_rate':
             direction = self.direction_ctrl.GetStringSelection().lower()
             if self.pump_mode == 'continuous':
@@ -2118,7 +2131,7 @@ class PumpPanel(wx.Panel):
         elif cmd == 'get_volume':
             self.pump_cmd_q.append(('get_volume', (self.name,), {}))
         elif cmd == 'set_pump_cal':
-            vals = self.known_syringes[self.syringe_type.GetStringSelection()]
+            vals = copy.deepcopy(self.known_syringes[self.syringe_type.GetStringSelection()])
             vals['syringe_id'] = self.syringe_type.GetStringSelection()
             self.pump_cmd_q.append(('set_pump_cal', (self.name,), vals))
         elif cmd == 'connect':
