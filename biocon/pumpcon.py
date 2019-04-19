@@ -417,7 +417,7 @@ class M50Pump(Pump):
         >>> my_pump.stop_flow()
     """
 
-    def __init__(self, device, name, flow_cal=628., backlash_cal=1.5):
+    def __init__(self, device, name, comm_lock, flow_cal=628., backlash_cal=1.5):
         """
         This makes the initial serial connection, and then sets the MForce
         controller parameters to the correct values.
@@ -1462,7 +1462,6 @@ class PumpPanel(wx.Panel):
     def _create_layout(self, flow_rate='', refill_rate=''):
         """Creates the layout for the panel."""
         self.status = wx.StaticText(self, label='Not connected')
-        self.syringe_vol_units = wx.StaticText(self, label='mL')
         self.syringe_volume = wx.StaticText(self, label='0', size=(40,-1),
             style=wx.ST_NO_AUTORESIZE)
         self.syringe_volume_label = wx.StaticText(self, label='Current volume:')
@@ -1502,22 +1501,9 @@ class PumpPanel(wx.Panel):
         status_grid.Add(self.set_syringe_volume, (4,1), span=(1,2),
             flag=wx.LEFT|wx.ALIGN_RIGHT|wx.ALIGN_CENTER_VERTICAL)
 
-        # self.syringe_status = wx.BoxSizer(wx.HORIZONTAL)
-        # self.syringe_status.Add(wx.StaticText(self, label='Current volume:'),
-        #     flag=wx.ALIGN_CENTER_VERTICAL)
-        # self.syringe_status.Add(self.syringe_volume, border=5,
-        #     flag=wx.LEFT|wx.ALIGN_CENTER_VERTICAL)
-        # self.syringe_status.Add(self.syringe_vol_units, border=2,
-        #     flag=wx.LEFT|wx.ALIGN_CENTER_VERTICAL)
-        # self.syringe_status.AddStretchSpacer(1)
-        # self.syringe_status.Add(self.set_syringe_volume, border=5,
-        #     flag=wx.LEFT|wx.ALIGN_RIGHT|wx.ALIGN_CENTER_VERTICAL)
-
         self.status_sizer = wx.StaticBoxSizer(wx.StaticBox(self, label='Info'),
             wx.VERTICAL)
         self.status_sizer.Add(status_grid, 1, wx.EXPAND)
-        # self.status_sizer.Add(self.syringe_status, flag=wx.EXPAND)
-
 
         self.mode_ctrl = wx.Choice(self, choices=['Continuous flow', 'Fixed volume'])
         self.mode_ctrl.SetSelection(0)
@@ -1692,7 +1678,7 @@ class PumpPanel(wx.Panel):
         t_unit = self.time_unit_ctrl.GetStringSelection()
         self.flow_units_lbl.SetLabel('{}/{}'.format(vol_unit, t_unit))
         self.vol_units_lbl.SetLabel(vol_unit)
-        self.syringe_vol_units.SetLabel(vol_unit)
+        self.syringe_volume_units.SetLabel(vol_unit)
         self.refill_rate_units.SetLabel('{}/{}'.format(vol_unit, t_unit))
         self.Refresh()
 
@@ -1794,7 +1780,7 @@ class PumpPanel(wx.Panel):
 
         self.flow_units_lbl.SetLabel('{}/{}'.format(vol_unit, t_unit))
         self.vol_units_lbl.SetLabel(vol_unit)
-        self.syringe_vol_units.SetLabel(vol_unit)
+        self.syringe_volume_units.SetLabel(vol_unit)
         self.refill_units_lbl.SetLabel('{}/{}'.format(vol_unit, t_unit))
 
         try:
@@ -2152,7 +2138,7 @@ class PumpPanel(wx.Panel):
             if pump == 'VICI_M50':
                 fc = float(self.m50_fcal.GetValue())
                 bc = float(self.m50_bcal.GetValue())
-                kwargs = {'flow_cal': fc, 'backlash_cal':bc}
+                kwargs = {'flow_cal': fc, 'backlash_cal': bc, 'comm_lock': self.comm_lock}
             elif pump == 'PHD_4400':
                 kwargs = self.known_syringes[self.syringe_type.GetStringSelection()]
                 kwargs['comm_lock'] = self.comm_lock
@@ -2257,8 +2243,8 @@ class PumpFrame(wx.Frame):
         if not self.pumps:
             self.pump_sizer.Remove(0)
 
-        # setup_pumps = [('2', 'VICI M50', 'COM5', ['626.2', '9.278'], {}),
-        #             ('3', 'VICI M50', 'COM6', ['627.32', '11.826'], {})
+        # setup_pumps = [('2', 'VICI M50', 'COM5', ['626.2', '9.278'], {}, {}),
+        #             ('3', 'VICI M50', 'COM6', ['627.32', '11.826'], {}, {})
         #             ]
 
         setup_pumps = [('1', 'PHD 4400', 'COM4', ['30 mL, EXEL', '1'], {},
