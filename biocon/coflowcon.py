@@ -303,7 +303,7 @@ class CoflowPanel(wx.Panel):
         else:
             sheath_kwargs = {}
 
-        sheath_init_cmd = ('connect', sheath_args, sheath_kwargs)
+        sheath_init_cmd = ('connect_remote', sheath_args, sheath_kwargs)
 
         outlet_args = (outlet_pump[1], 'outlet_pump', outlet_pump[0])
         if outlet_pump[0] == 'VICI_M50':
@@ -312,7 +312,7 @@ class CoflowPanel(wx.Panel):
         else:
             outlet_kwargs = {}
 
-        outlet_init_cmd = ('connect', outlet_args, outlet_kwargs)
+        outlet_init_cmd = ('connect_remote', outlet_args, outlet_kwargs)
 
 
         #Need some way to make threads wait until pumps initialize

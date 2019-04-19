@@ -83,7 +83,7 @@ class ControlServer(threading.Thread):
         pump_con.start()
 
         if self.pump_comm_locks is not None:
-            pump_cmd_q.add(('add_comlocks', (self.pump_comm_locks), {}))
+            pump_cmd_q.append(('add_comlocks', (self.pump_comm_locks,), {}))
 
         pump_ctrl = {'queue': pump_cmd_q,
             'abort': pump_abort_event,
@@ -225,7 +225,7 @@ if __name__ == '__main__':
     ip = '164.54.204.37'
 
     pump_comm_locks = {'COM1'   : threading.Lock(),
-        'COM2'  : threading.Lock,
+        'COM2'  : threading.Lock(),
         }
 
     control_server1 = ControlServer(ip, port1, name='PumpControlServer',
@@ -236,11 +236,14 @@ if __name__ == '__main__':
     control_server2.start()
 
 
-    setup_pumps = [('2', 'VICI M50', 'COM2', ['626.2', '9.278'], {}, {}),
-                        ('1', 'VICI M50', 'COM1', ['627.32', '11.826'], {}, {})
+    setup_pumps = [('sheath', 'VICI M50', 'COM2', ['626.2', '9.278'], {}, {}),
+                        ('outlet', 'VICI M50', 'COM1', ['627.32', '11.826'], {}, {})
                         ]
 
-    frame = pumpcon.PumpFrame(pump_comm_locks, setup_pumps, None, title='Pump Control')
+    local_comm_locks = {'sheath'    : pump_comm_locks[setup_pumps[0][2]],
+        'outlet'    : pump_comm_locks[setup_pumps[1][2]]
+        }
+    frame = pumpcon.PumpFrame(local_comm_locks, setup_pumps, None, title='Pump Control')
     frame.Show()
     app.MainLoop()
 
