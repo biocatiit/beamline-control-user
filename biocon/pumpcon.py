@@ -1445,61 +1445,104 @@ class PumpPanel(wx.Panel):
         """Creates the layout for the panel."""
         self.status = wx.StaticText(self, label='Not connected')
         self.syringe_vol_units = wx.StaticText(self, label='mL')
-        self.syringe_volume = wx.StaticText(self, label='0', size=(80,-1),
+        self.syringe_volume = wx.StaticText(self, label='0', size=(40,-1),
             style=wx.ST_NO_AUTORESIZE)
-        self.set_syringe_volume = wx.Button(self, label='Set Volume')
+        self.syringe_volume_label = wx.StaticText(self, label='Current volume:')
+        self.syringe_volume_units = wx.StaticText(self, label='mL')
+        self.set_syringe_volume = wx.Button(self, label='Set Current Volume')
         self.set_syringe_volume.Bind(wx.EVT_BUTTON, self._on_set_volume)
+        self.syringe_vol_gauge = wx.Gauge(self, size=(40, -1), 
+            style=wx.GA_HORIZONTAL|wx.GA_SMOOTH)
+        self.syringe_vol_gauge_low = wx.StaticText(self, label='0')
+        self.syringe_vol_gauge_high = wx.StaticText(self, label='')
 
-        status_grid = wx.FlexGridSizer(rows=2, cols=2, vgap=2, hgap=2)
-        status_grid.AddGrowableCol(1)
-        status_grid.Add(wx.StaticText(self, label='Pump name:'))
-        status_grid.Add(wx.StaticText(self, label=self.name), 1, wx.EXPAND)
-        status_grid.Add(wx.StaticText(self, label='Status: '))
-        status_grid.Add(self.status, 1, wx.EXPAND)
+        self.vol_gauge = wx.BoxSizer(wx.HORIZONTAL)
+        self.vol_gauge.Add(self.syringe_vol_gauge_low,
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        self.vol_gauge.Add(self.syringe_vol_gauge, 1, border=2, 
+            flag=wx.LEFT|wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
+        self.vol_gauge.Add(self.syringe_vol_gauge_high, border=2, 
+            flag=wx.LEFT|wx.ALIGN_CENTER_VERTICAL)
 
-        self.syringe_status = wx.BoxSizer(wx.HORIZONTAL)
-        self.syringe_status.Add(wx.StaticText(self, label='Current volume:'))
-        self.syringe_status.Add(self.syringe_volume, border=2, flag=wx.LEFT)
-        self.syringe_status.Add(self.syringe_vol_units, border=2, flag=wx.LEFT)
-        self.syringe_status.AddStretchSpacer(1)
-        self.syringe_status.Add(self.set_syringe_volume, border=2,
-            flag=wx.LEFT|wx.ALIGN_RIGHT)
+        status_grid = wx.GridBagSizer(vgap=5, hgap=5)
+        status_grid.Add(wx.StaticText(self, label='Pump name:'), (0,0), 
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        status_grid.Add(wx.StaticText(self, label=self.name), (0,1), span=(1,2),
+            flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
+        status_grid.Add(wx.StaticText(self, label='Status: '), (1,0), 
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        status_grid.Add(self.status, (1,1), span=(1,2),
+            flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
+        status_grid.Add(self.syringe_volume_label, (2,0), 
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        status_grid.Add(self.syringe_volume, (2,1), 
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        status_grid.Add(self.syringe_volume_units, (2,2), 
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        status_grid.Add(self.vol_gauge, (3,1), span=(1,2),
+            flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
+        status_grid.Add(self.set_syringe_volume, (4,1), span=(1,2),
+            flag=wx.LEFT|wx.ALIGN_RIGHT|wx.ALIGN_CENTER_VERTICAL)
+
+        # self.syringe_status = wx.BoxSizer(wx.HORIZONTAL)
+        # self.syringe_status.Add(wx.StaticText(self, label='Current volume:'),
+        #     flag=wx.ALIGN_CENTER_VERTICAL)
+        # self.syringe_status.Add(self.syringe_volume, border=5, 
+        #     flag=wx.LEFT|wx.ALIGN_CENTER_VERTICAL)
+        # self.syringe_status.Add(self.syringe_vol_units, border=2, 
+        #     flag=wx.LEFT|wx.ALIGN_CENTER_VERTICAL)
+        # self.syringe_status.AddStretchSpacer(1)
+        # self.syringe_status.Add(self.set_syringe_volume, border=5,
+        #     flag=wx.LEFT|wx.ALIGN_RIGHT|wx.ALIGN_CENTER_VERTICAL)
 
         self.status_sizer = wx.StaticBoxSizer(wx.StaticBox(self, label='Info'),
             wx.VERTICAL)
         self.status_sizer.Add(status_grid, 1, wx.EXPAND)
-        self.status_sizer.Add(self.syringe_status, flag=wx.EXPAND)
+        # self.status_sizer.Add(self.syringe_status, flag=wx.EXPAND)
 
 
         self.mode_ctrl = wx.Choice(self, choices=['Continuous flow', 'Fixed volume'])
         self.mode_ctrl.SetSelection(0)
         self.direction_ctrl = wx.Choice(self, choices=['Dispense', 'Aspirate'])
         self.direction_ctrl.SetSelection(0)
-        self.flow_rate_ctrl = wx.TextCtrl(self, value=flow_rate)
+        self.flow_rate_ctrl = wx.TextCtrl(self, value=flow_rate, size=(60,-1))
         self.flow_units_lbl = wx.StaticText(self, label='mL/min')
         self.refill_rate_lbl = wx.StaticText(self, label='Refill rate:')
-        self.refill_rate_ctrl = wx.TextCtrl(self, value=refill_rate)
+        self.refill_rate_ctrl = wx.TextCtrl(self, value=refill_rate, size=(60,-1))
         self.refill_rate_units = wx.StaticText(self, label='mL')
         self.volume_lbl = wx.StaticText(self, label='Volume:')
-        self.volume_ctrl = wx.TextCtrl(self)
+        self.volume_ctrl = wx.TextCtrl(self, size=(60,-1))
         self.vol_units_lbl = wx.StaticText(self, label='mL')
 
         self.mode_ctrl.Bind(wx.EVT_CHOICE, self._on_mode)
 
         basic_ctrl_sizer = wx.GridBagSizer(vgap=2, hgap=2)
-        basic_ctrl_sizer.Add(wx.StaticText(self, label='Mode:'), (0,0))
-        basic_ctrl_sizer.Add(self.mode_ctrl, (0,1), span=(1,2), flag=wx.EXPAND)
-        basic_ctrl_sizer.Add(wx.StaticText(self, label='Direction:'), (1,0))
-        basic_ctrl_sizer.Add(self.direction_ctrl, (1,1), span=(1,2), flag=wx.EXPAND)
-        basic_ctrl_sizer.Add(wx.StaticText(self, label='Flow rate:'), (2,0))
-        basic_ctrl_sizer.Add(self.flow_rate_ctrl, (2,1), flag=wx.EXPAND)
-        basic_ctrl_sizer.Add(self.flow_units_lbl, (2,2), flag=wx.EXPAND)
-        basic_ctrl_sizer.Add(self.refill_rate_lbl, (3,0))
-        basic_ctrl_sizer.Add(self.refill_rate_ctrl, (3,1), flag=wx.EXPAND)
-        basic_ctrl_sizer.Add(self.refill_rate_units, (3,2))
-        basic_ctrl_sizer.Add(self.volume_lbl, (4,0), flag=wx.RESERVE_SPACE_EVEN_IF_HIDDEN)
-        basic_ctrl_sizer.Add(self.volume_ctrl, (4,1), flag=wx.EXPAND|wx.RESERVE_SPACE_EVEN_IF_HIDDEN)
-        basic_ctrl_sizer.Add(self.vol_units_lbl, (4,2), flag=wx.RESERVE_SPACE_EVEN_IF_HIDDEN)
+        basic_ctrl_sizer.Add(wx.StaticText(self, label='Mode:'), (0,0), 
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        basic_ctrl_sizer.Add(self.mode_ctrl, (0,1), span=(1,2), 
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        basic_ctrl_sizer.Add(wx.StaticText(self, label='Direction:'), (1,0), 
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        basic_ctrl_sizer.Add(self.direction_ctrl, (1,1), span=(1,2), 
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        basic_ctrl_sizer.Add(wx.StaticText(self, label='Flow rate:'), (2,0), 
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        basic_ctrl_sizer.Add(self.flow_rate_ctrl, (2,1), 
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        basic_ctrl_sizer.Add(self.flow_units_lbl, (2,2), 
+            flag=wx.ALIGN_CENTER_VERTICAL|wx.ALIGN_LEFT)
+        basic_ctrl_sizer.Add(self.refill_rate_lbl, (3,0), 
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        basic_ctrl_sizer.Add(self.refill_rate_ctrl, (3,1), 
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        basic_ctrl_sizer.Add(self.refill_rate_units, (3,2), 
+            flag=wx.ALIGN_CENTER_VERTICAL|wx.ALIGN_LEFT)
+        basic_ctrl_sizer.Add(self.volume_lbl, (4,0), 
+            flag=wx.RESERVE_SPACE_EVEN_IF_HIDDEN|wx.ALIGN_CENTER_VERTICAL)
+        basic_ctrl_sizer.Add(self.volume_ctrl, (4,1), 
+            flag=wx.RESERVE_SPACE_EVEN_IF_HIDDEN|wx.ALIGN_CENTER_VERTICAL)
+        basic_ctrl_sizer.Add(self.vol_units_lbl, (4,2), 
+            flag=wx.RESERVE_SPACE_EVEN_IF_HIDDEN|wx.ALIGN_CENTER_VERTICAL|wx.ALIGN_LEFT)
         basic_ctrl_sizer.AddGrowableCol(1)
         basic_ctrl_sizer.SetEmptyCellSize((0,0))
 
@@ -1531,27 +1574,40 @@ class PumpPanel(wx.Panel):
 
         gen_settings_sizer = wx.FlexGridSizer(rows=4, cols=2, vgap=2, hgap=2)
         gen_settings_sizer.AddGrowableCol(1)
-        gen_settings_sizer.Add(wx.StaticText(self, label='Pump type:'))
-        gen_settings_sizer.Add(self.type_ctrl, 1, wx.EXPAND)
+        gen_settings_sizer.Add(wx.StaticText(self, label='Pump type:'), 
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        gen_settings_sizer.Add(self.type_ctrl, 1, 
+            flag=wx.ALIGN_CENTER_VERTICAL)
         gen_settings_sizer.Add(wx.StaticText(self, label='COM port:'))
-        gen_settings_sizer.Add(self.com_ctrl, 1, wx.EXPAND)
-        gen_settings_sizer.Add(wx.StaticText(self, label='Volume unit:'))
-        gen_settings_sizer.Add(self.vol_unit_ctrl)
-        gen_settings_sizer.Add(wx.StaticText(self, label='Time unit:'))
-        gen_settings_sizer.Add(self.time_unit_ctrl)
+        gen_settings_sizer.Add(self.com_ctrl, 1, 
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        gen_settings_sizer.Add(wx.StaticText(self, label='Volume unit:'), 
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        gen_settings_sizer.Add(self.vol_unit_ctrl, 
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        gen_settings_sizer.Add(wx.StaticText(self, label='Time unit:'), 
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        gen_settings_sizer.Add(self.time_unit_ctrl, 
+            flag=wx.ALIGN_CENTER_VERTICAL)
 
 
-        self.m50_fcal = wx.TextCtrl(self, value='628')
-        self.m50_bcal = wx.TextCtrl(self, value='1.5')
+        self.m50_fcal = wx.TextCtrl(self, value='628', size=(60, -1))
+        self.m50_bcal = wx.TextCtrl(self, value='1.5', size=(60, -1))
 
         self.m50_settings_sizer = wx.FlexGridSizer(rows=2, cols=3, vgap=2, hgap=2)
         self.m50_settings_sizer.AddGrowableCol(1)
-        self.m50_settings_sizer.Add(wx.StaticText(self, label='Flow Cal.:'))
-        self.m50_settings_sizer.Add(self.m50_fcal,1, wx.EXPAND)
-        self.m50_settings_sizer.Add(wx.StaticText(self, label='uL/rev.'))
-        self.m50_settings_sizer.Add(wx.StaticText(self, label='Backlash:'))
-        self.m50_settings_sizer.Add(self.m50_bcal, 1, wx.EXPAND)
-        self.m50_settings_sizer.Add(wx.StaticText(self, label='uL'))
+        self.m50_settings_sizer.Add(wx.StaticText(self, label='Flow Cal.:'), 
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        self.m50_settings_sizer.Add(self.m50_fcal,1, 
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        self.m50_settings_sizer.Add(wx.StaticText(self, label='uL/rev.'), 
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        self.m50_settings_sizer.Add(wx.StaticText(self, label='Backlash:'), 
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        self.m50_settings_sizer.Add(self.m50_bcal, 1, 
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        self.m50_settings_sizer.Add(wx.StaticText(self, label='uL'), 
+            flag=wx.ALIGN_CENTER_VERTICAL)
 
 
         self.syringe_type = wx.Choice(self, choices=sorted(self.known_syringes.keys()))
@@ -1560,12 +1616,14 @@ class PumpPanel(wx.Panel):
         self.pump_address = wx.TextCtrl(self, size=(60, -1))
 
         self.phd4400_settings_sizer = wx.FlexGridSizer(rows=2, cols=2, vgap=2, hgap=2)
-        self.phd4400_settings_sizer.Add(wx.StaticText(self, label='Syringe type:'))
+        self.phd4400_settings_sizer.Add(wx.StaticText(self, label='Syringe type:'), 
+            flag=wx.ALIGN_CENTER_VERTICAL)
         self.phd4400_settings_sizer.Add(self.syringe_type, border=2,
-            flag=wx.LEFT|wx.EXPAND)
-        self.phd4400_settings_sizer.Add(wx.StaticText(self, label='Pump address:'))
+            flag=wx.LEFT|wx.ALIGN_CENTER_VERTICAL)
+        self.phd4400_settings_sizer.Add(wx.StaticText(self, label='Pump address:'), 
+            flag=wx.ALIGN_CENTER_VERTICAL)
         self.phd4400_settings_sizer.Add(self.pump_address, border=2,
-            flag=wx.LEFT|wx.EXPAND)
+            flag=wx.LEFT|wx.ALIGN_CENTER_VERTICAL)
 
 
         self.connect_button = wx.Button(self, label='Connect')
@@ -1586,8 +1644,8 @@ class PumpPanel(wx.Panel):
 
         top_sizer = wx.BoxSizer(wx.VERTICAL)
         top_sizer.Add(self.status_sizer, flag=wx.EXPAND)
-        top_sizer.Add(self.control_box_sizer, flag=wx.EXPAND)
-        top_sizer.Add(self.settings_box_sizer, flag=wx.EXPAND)
+        top_sizer.Add(self.control_box_sizer, border=5, flag=wx.EXPAND|wx.TOP)
+        top_sizer.Add(self.settings_box_sizer, border=5, flag=wx.EXPAND|wx.TOP)
 
         self.volume_lbl.Hide()
         self.volume_ctrl.Hide()
@@ -1602,7 +1660,11 @@ class PumpPanel(wx.Panel):
             self.pump_mode = 'syringe'
 
         if self.pump_mode == 'continuous':
-            self.status_sizer.Hide(self.syringe_status, recursive=True)
+            self.status_sizer.Hide(self.vol_gauge, recursive=True)
+            self.syringe_volume.Hide()
+            self.syringe_volume_units.Hide()
+            self.syringe_volume_label.Hide()
+            self.set_syringe_volume.Hide()
             self.refill_rate_ctrl.Hide()
             self.refill_rate_lbl.Hide()
             self.refill_rate_units.Hide()
@@ -1659,6 +1721,9 @@ class PumpPanel(wx.Panel):
 
             if len(pump_args) >=1:
                 self.syringe_type.SetStringSelection(pump_args[0])
+                max_vol = self.known_syringes[pump_args[0]]['max_volume']
+                self.syringe_vol_gauge_high.SetLabel(str(max_vol))
+                self.syringe_vol_gauge.SetRange(int(round(float(max_vol)*1000)))
             if len(pump_args) == 2:
                 self.pump_address.SetValue(pump_args[1])
 
@@ -1681,12 +1746,20 @@ class PumpPanel(wx.Panel):
             self.pump_mode = 'syringe'
 
         if self.pump_mode == 'continuous':
-            self.status_sizer.Hide(self.syringe_status, recursive=True)
+            self.status_sizer.Hide(self.vol_gauge, recursive=True)
+            self.syringe_volume.Hide()
+            self.syringe_volume_units.Hide()
+            self.syringe_volume_label.Hide()
+            self.set_syringe_volume.Hide()
             self.refill_rate_ctrl.Hide()
             self.refill_rate_lbl.Hide()
             self.refill_rate_units.Hide()
         else:
-            self.status_sizer.Show(self.syringe_status, recursive=True)
+            self.status_sizer.Show(self.vol_gauge, recursive=True)
+            self.syringe_volume.Show()
+            self.syringe_volume_units.Show()
+            self.syringe_volume_label.Show()
+            self.set_syringe_volume.Show()
             self.refill_rate_ctrl.Show()
             self.refill_rate_lbl.Show()
             self.refill_rate_units.Show()
@@ -1861,6 +1934,10 @@ class PumpPanel(wx.Panel):
         if self.connected:
             self._send_cmd('set_pump_cal')
 
+        max_vol = self.known_syringes[self.syringe_type.GetStringSelection()]['max_volume']
+        self.syringe_vol_gauge_high.SetLabel(str(max_vol))
+        self.syringe_vol_gauge.SetRange(int(round(float(max_vol)*1000)))
+
     def _connect(self):
         """Initializes the pump in the PumpCommThread"""
         pump = self.type_ctrl.GetStringSelection().replace(' ', '_')
@@ -1915,6 +1992,10 @@ class PumpPanel(wx.Panel):
             if volume[0] == self.name and volume[1] == 'volume':
                 volume = volume[2]
                 wx.CallAfter(self._set_status_volume, volume)
+                wx.CallAfter(self.syringe_vol_gauge.SetValue, 
+                    int(round(float(volume)*1000)))
+            else:
+                logger.info('Got wrong answer')
 
     def _get_volume_delay(self, delay):
         wx.CallLater(delay*1000, self._get_volume)
@@ -2116,7 +2197,9 @@ class PumpFrame(wx.Frame):
 
     def _create_layout(self):
         """Creates the layout"""
-        pump_panel = PumpPanel(self, wx.ID_ANY, 'stand_in', self.ports,
+        self.top_panel = wx.Panel(self)
+
+        pump_panel = PumpPanel(self.top_panel, wx.ID_ANY, 'stand_in', self.ports,
             self.pump_cmd_q, self.pump_answer_q, self.pump_con.known_pumps,
             'stand_in')
 
@@ -2125,7 +2208,7 @@ class PumpFrame(wx.Frame):
 
         self.pump_sizer.Hide(pump_panel, recursive=True)
 
-        button_panel = wx.Panel(self)
+        button_panel = wx.Panel(self.top_panel)
 
         add_pump = wx.Button(button_panel, label='Add pump')
         add_pump.Bind(wx.EVT_BUTTON, self._on_addpump)
@@ -2139,9 +2222,14 @@ class PumpFrame(wx.Frame):
 
         button_panel.SetSizer(button_panel_sizer)
 
+        top_panel_sizer = wx.BoxSizer(wx.VERTICAL)
+        top_panel_sizer.Add(self.pump_sizer, flag=wx.EXPAND)
+        top_panel_sizer.Add(button_panel, border=10, flag=wx.EXPAND|wx.TOP)
+
+        self.top_panel.SetSizer(top_panel_sizer)
+
         top_sizer = wx.BoxSizer(wx.VERTICAL)
-        top_sizer.Add(self.pump_sizer, flag=wx.EXPAND)
-        top_sizer.Add(button_panel, flag=wx.EXPAND)
+        top_sizer.Add(self.top_panel)
 
         return top_sizer
 
@@ -2213,15 +2301,15 @@ class PumpFrame(wx.Frame):
     def _add_pump(self, pump):
         if pump[0] in self.comm_locks:
             comm_lock = self.comm_locks[pump[0]]
-            new_pump = PumpPanel(self, wx.ID_ANY, pump[0], self.ports, self.pump_cmd_q,
+            new_pump = PumpPanel(self.top_panel, wx.ID_ANY, pump[0], self.ports, self.pump_cmd_q,
                 self.pump_answer_q, self.pump_con.known_pumps, pump[0], pump[1],
                 pump[2], pump[3], pump[4], comm_lock, **pump[5])
         else:
-            new_pump = PumpPanel(self, wx.ID_ANY, pump[0], self.ports, self.pump_cmd_q,
+            new_pump = PumpPanel(self.top_panel, wx.ID_ANY, pump[0], self.ports, self.pump_cmd_q,
                 self.pump_answer_q, self.pump_con.known_pumps, pump[0], pump[1],
                 pump[2], pump[3], pump[4], **pump[5])
 
-        self.pump_sizer.Add(new_pump)
+        self.pump_sizer.Add(new_pump, border=5, flag=wx.LEFT|wx.RIGHT)
         self.pumps.append(new_pump)
 
     def _get_ports(self):
