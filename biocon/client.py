@@ -167,18 +167,18 @@ class ControlClient(threading.Thread):
         self.socket.close()
         self.context.destroy()
 
-        logger.info("Quitting pump control thread: %s", self.name)
+        logger.info("Quitting remote client thread: %s", self.name)
 
     def _abort(self):
         """Clears the ``command_queue`` and aborts all current pump motions."""
-        logger.info("Aborting pump control thread %s current and future commands", self.name)
+        logger.info("Aborting remote client thread %s current and future commands", self.name)
         self.command_queue.clear()
         self._abort_event.clear()
-        logger.debug("Pump control thread %s aborted", self.name)
+        logger.debug("Remote client thread %s aborted", self.name)
 
     def stop(self):
         """Stops the thread cleanly."""
-        logger.info("Starting to clean up and shut down pump control thread: %s", self.name)
+        logger.info("Starting to clean up and shut down remote client thread: %s", self.name)
 
 
         self._stop_event.set()

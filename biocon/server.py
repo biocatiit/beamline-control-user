@@ -46,7 +46,7 @@ class ControlServer(threading.Thread):
 
     """
 
-    def __init__(self, ip, port, name='ControlServer'):
+    def __init__(self, ip, port, name='ControlServer', pump_comm_locks = None):
         """
         Initializes the custom thread. Important parameters here are the
         list of known commands ``_commands`` and known pumps ``known_pumps``.
@@ -74,11 +74,16 @@ class ControlServer(threading.Thread):
         self.socket = self.context.socket(zmq.PAIR)
         self.socket.bind("tcp://{}:{}".format(self.ip, self.port))
 
+        self.pump_comm_locks = pump_comm_locks
+
         pump_cmd_q = deque()
         pump_return_q = deque()
         pump_abort_event = threading.Event()
         pump_con = pumpcon.PumpCommThread(pump_cmd_q, pump_return_q, pump_abort_event, 'PumpCon')
         pump_con.start()
+
+        if self.pump_comm_locks is not None:
+            pump_cmd_q.add(('add_comlocks', (self.pump_comm_locks), {}))
 
         pump_ctrl = {'queue': pump_cmd_q,
             'abort': pump_abort_event,
@@ -219,11 +224,25 @@ if __name__ == '__main__':
     port2 = '5557'
     ip = '164.54.204.37'
 
-    control_server1 = ControlServer(ip, port1, name='PumpControlServer')
+    pump_comm_locks = {'COM1'   : threading.Lock(),
+        'COM2'  : threading.Lock,
+        }
+
+    control_server1 = ControlServer(ip, port1, name='PumpControlServer',
+        pump_comm_locks = pump_comm_locks)
     control_server1.start()
 
     control_server2 = ControlServer(ip, port2, name='FMControlServer')
     control_server2.start()
+
+
+    setup_pumps = [('2', 'VICI M50', 'COM2', ['626.2', '9.278'], {}, {}),
+                        ('1', 'VICI M50', 'COM1', ['627.32', '11.826'], {}, {})
+                        ]
+
+    frame = pumpcon.PumpFrame(pump_comm_locks, setup_pumps, None, title='Pump Control')
+    frame.Show()
+    app.MainLoop()
 
     try:
         while True:

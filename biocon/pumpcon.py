@@ -417,7 +417,7 @@ class M50Pump(Pump):
         >>> my_pump.stop_flow()
     """
 
-    def __init__(self, device, name, comm_lock, flow_cal=628., backlash_cal=1.5):
+    def __init__(self, device, name, comm_lock=threading.Lock(), flow_cal=628., backlash_cal=1.5):
         """
         This makes the initial serial connection, and then sets the MForce
         controller parameters to the correct values.
@@ -1036,9 +1036,13 @@ class PumpCommThread(threading.Thread):
                         'aspirate_all'  : self._aspirate_all,
                         'set_pump_cal'  : self._set_pump_cal,
                         'add_pump'      : self._add_pump,
+                        'add_comlocks'  : self._add_comlocks,
+                        'connect_remote': self._connect_pump_remote,
                         }
 
         self._connected_pumps = OrderedDict()
+
+        self.comm_locks = {}
 
         self.known_pumps = {'VICI_M50'  : M50Pump,
                             'PHD_4400'   : PHD4400Pump,
@@ -1112,6 +1116,36 @@ class PumpCommThread(threading.Thread):
         """
         logger.info("Connecting pump %s", name)
         new_pump = self.known_pumps[pump_type](device, name, **kwargs)
+        self._connected_pumps[name] = new_pump
+        self.answer_queue.append((name, 'connect', True))
+        logger.debug("Pump %s connected", name)
+
+    def _connect_pump_remote(self, device, name, pump_type, **kwargs):
+        """
+        This method connects to a pump by creating a new :py:class:`Pump` subclass
+        object (e.g. a new :py:class:`M50Pump` object). This pump is saved in the thread
+        and can be called later to do stuff. All pumps must be connected before
+        they can be used.
+
+        :param device: The device comport as sent to pyserial
+        :type device: str
+
+        :param name: A unique identifier for the pump
+        :type name: str
+
+        :param pump_type: A pump type in the ``known_pumps`` dictionary.
+        :type pump_type: str
+
+        :param \*\*kwargs: This function accepts arbitrary keyword args that are passed
+            directly to the :py:class:`Pump` subclass that is called. For example,
+            for an :py:class:`M50Pump` you could pass ``flow_cal`` and ``backlash``.
+        """
+        logger.info("Connecting pump %s", name)
+        if device in self.comm_locks:
+            kwargs['comm_lock'] = self.comm_locks[device]
+
+        new_pump = self.known_pumps[pump_type](device, name, **kwargs)
+
         self._connected_pumps[name] = new_pump
         self.answer_queue.append((name, 'connect', True))
         logger.debug("Pump %s connected", name)
@@ -1344,6 +1378,9 @@ class PumpCommThread(threading.Thread):
         pump = self._connected_pumps[name]
         pump.send_cmd(cmd, get_response)
         logger.debug("Pump %s command sent", name)
+
+    def _add_comlocks(self, comm_locks):
+        self.comm_locks.update(comm_locks)
 
     def _abort(self):
         """Clears the ``command_queue`` and aborts all current pump motions."""
@@ -2165,7 +2202,7 @@ class PumpFrame(wx.Frame):
     Only meant to be used when the pumpcon module is run directly,
     rather than when it is imported into another program.
     """
-    def __init__(self, comm_locks, *args, **kwargs):
+    def __init__(self, comm_locks, setup_pumps, *args, **kwargs):
         """
         Initializes the pump frame. Takes args and kwargs for the wx.Frame class.
         """
@@ -2192,7 +2229,7 @@ class PumpFrame(wx.Frame):
         self.Fit()
         self.Raise()
 
-        self._initpumps()
+        self._initpumps(setup_pumps)
 
     def _create_layout(self):
         """Creates the layout"""
@@ -2232,7 +2269,7 @@ class PumpFrame(wx.Frame):
 
         return top_sizer
 
-    def _initpumps(self):
+    def _initpumps(self, setup_pumps):
         """
         This is a convenience function for initalizing pumps on startup, if you
         already know what pumps you want to add. You can comment it out in
@@ -2248,17 +2285,18 @@ class PumpFrame(wx.Frame):
         if not self.pumps:
             self.pump_sizer.Remove(0)
 
-        setup_pumps = [('2', 'VICI M50', 'COM2', ['626.2', '9.278'], {}, {}),
-                    ('1', 'VICI M50', 'COM1', ['627.32', '11.826'], {}, {})
-                    ]
+        if setup_pumps is None:
+            setup_pumps = [('2', 'VICI M50', 'COM2', ['626.2', '9.278'], {}, {}),
+                        ('1', 'VICI M50', 'COM1', ['627.32', '11.826'], {}, {})
+                        ]
 
-        # setup_pumps = [('1', 'PHD 4400', 'COM4', ['30 mL, EXEL', '1'], {},
-        #         {'flow_rate' : '30', 'refill_rate' : '30'}),
-        #             ('2', 'PHD 4400', 'COM4', ['30 mL, EXEL', '2'], {},
-        #         {'flow_rate' : '30', 'refill_rate' : '30'}),
-        #             ('3', 'PHD 4400', 'COM4', ['30 mL, EXEL', '3'], {},
-        #         {'flow_rate' : '30', 'refill_rate' : '30'}),
-        #             ]
+            # setup_pumps = [('1', 'PHD 4400', 'COM4', ['30 mL, EXEL', '1'], {},
+            #         {'flow_rate' : '30', 'refill_rate' : '30'}),
+            #             ('2', 'PHD 4400', 'COM4', ['30 mL, EXEL', '2'], {},
+            #         {'flow_rate' : '30', 'refill_rate' : '30'}),
+            #             ('3', 'PHD 4400', 'COM4', ['30 mL, EXEL', '3'], {},
+            #         {'flow_rate' : '30', 'refill_rate' : '30'}),
+            #             ]
 
         logger.info('Initializing %s pumps on startup', str(len(setup_pumps)))
 
@@ -2396,7 +2434,7 @@ if __name__ == '__main__':
 
     app = wx.App()
     logger.debug('Setting up wx app')
-    frame = PumpFrame(comm_locks, None, title='Pump Control')
+    frame = PumpFrame(comm_locks, None, None, title='Pump Control')
     frame.Show()
     app.MainLoop()
 
