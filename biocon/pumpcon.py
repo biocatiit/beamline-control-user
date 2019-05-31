@@ -1245,7 +1245,7 @@ class PumpCommThread(threading.Thread):
         self.answer_queue.append((name, 'volume', volume))
         logger.debug("Pump %s volume is %f", name, volume)
 
-    def _start_flow(self, name, callback):
+    def _start_flow(self, name, callback=None):
         """
         This method starts continuous flow for a pump.
 
@@ -1256,7 +1256,10 @@ class PumpCommThread(threading.Thread):
         pump = self._connected_pumps[name]
         pump.start_flow()
         self.answer_queue.append((name, 'start', True))
-        callback()
+
+        if callback is not None:
+            callback()
+
         logger.debug("Pump %s flow started", name)
 
     def _stop_flow(self, name):
@@ -1272,7 +1275,7 @@ class PumpCommThread(threading.Thread):
         self.answer_queue.append((name, 'stop', True))
         logger.debug("Pump %s stopped", name)
 
-    def _aspirate(self, name, vol, callback, units='uL'):
+    def _aspirate(self, name, vol, callback=None, units='uL'):
         """
         This method aspirates a fixed volume.
 
@@ -1287,10 +1290,13 @@ class PumpCommThread(threading.Thread):
         pump = self._connected_pumps[name]
         pump.aspirate(vol, units)
         self.answer_queue.append((name, 'start', True))
-        callback()
+
+        if callback is not None:
+            callback()
+
         logger.debug("Pump %s aspiration started", name)
 
-    def _aspirate_all(self, name, callback):
+    def _aspirate_all(self, name, callback=None):
         """
         This method aspirates all remaning volume for a fixed volume pump.
 
@@ -1301,10 +1307,13 @@ class PumpCommThread(threading.Thread):
         pump = self._connected_pumps[name]
         pump.aspirate_all()
         self.answer_queue.append((name, 'start', True))
-        callback()
+
+        if callback is not None:
+            callback()
+
         logger.debug("Pump %s aspiration started", name)
 
-    def _dispense(self, name, vol, callback, units='uL'):
+    def _dispense(self, name, vol, callback=None, units='uL'):
         """
         This method dispenses a fixed volume.
 
@@ -1319,10 +1328,13 @@ class PumpCommThread(threading.Thread):
         pump = self._connected_pumps[name]
         pump.dispense(vol, units)
         self.answer_queue.append((name, 'start', True))
-        callback()
+
+        if callback is not None:
+            callback()
+
         logger.debug("Pump %s dispensing started", name)
 
-    def _dispense_all(self, name, callback):
+    def _dispense_all(self, name, callback=None):
         """
         This method dispenses all remaining volume for a fixed volume pump.
 
@@ -1333,7 +1345,10 @@ class PumpCommThread(threading.Thread):
         pump = self._connected_pumps[name]
         pump.dispense_all()
         self.answer_queue.append((name, 'start', True))
-        callback()
+
+        if callback is not None:
+            callback()
+
         logger.debug("Pump %s dispensing started", name)
 
     def _is_moving(self, name):

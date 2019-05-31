@@ -303,7 +303,7 @@ class CoflowPanel(wx.Panel):
         else:
             sheath_kwargs = {}
 
-        sheath_init_cmd = ('connect', sheath_args, sheath_kwargs)
+        sheath_init_cmd = ('connect_remote', sheath_args, sheath_kwargs)
 
         outlet_args = (outlet_pump[1], 'outlet_pump', outlet_pump[0])
         if outlet_pump[0] == 'VICI_M50':
@@ -312,7 +312,7 @@ class CoflowPanel(wx.Panel):
         else:
             outlet_kwargs = {}
 
-        outlet_init_cmd = ('connect', outlet_args, outlet_kwargs)
+        outlet_init_cmd = ('connect_remote', outlet_args, outlet_kwargs)
 
 
         #Need some way to make threads wait until pumps initialize
@@ -1289,9 +1289,9 @@ if __name__ == '__main__':
         'remote_fm_port'        : '5557',
         'flow_units'            : 'mL/min',
         'sheath_pump'           : ('VICI_M50', 'COM2', [626.2, 9.278], {}),
-        'outlet_pump'           : ('VICI_M50', 'COM1', [627.32, 11.826], {}),
-        'sheath_fm'             : ('BFS', 'COM3', [], {}),
-        'outlet_fm'             : ('BFS', 'COM4', [], {}),
+        'outlet_pump'           : ('VICI_M50', 'COM1', [623.56, 12.222], {}),
+        'sheath_fm'             : ('BFS', 'COM4', [], {}),
+        'outlet_fm'             : ('BFS', 'COM3', [], {}),
         'components'            : ['coflow'],
         'sheath_ratio'          : 0.5,
         'sheath_excess'         : 2.1,
