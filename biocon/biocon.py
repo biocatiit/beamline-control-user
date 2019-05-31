@@ -157,12 +157,12 @@ if __name__ == '__main__':
         'shutter_pad'           : 0.00, #padding for shutter related values
         'shutter_cycle'         : 0.002, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
         'struck_measurement_time' : '0.001', #in s
-        'tr_muscle_exp'         : True,
+        'tr_muscle_exp'         : False,
         'slow_mode_thres'       : 0.1,
         'fast_mode_max_exp_time': 2000,
         'wait_for_trig'         : True,
         'num_trig'              : '1',
-        'show_advanced_options' : True,
+        'show_advanced_options' : False,
         'fe_shutter_pv'         : 'FE:18:ID:FEshutter',
         'd_shutter_pv'          : 'PA:18ID:STA_D_SDS_OPEN_PL.VAL',
         'local_dir_root'        : '/nas_data/Pilatus1M',
@@ -197,7 +197,7 @@ if __name__ == '__main__':
             {'mx_record': 'j11', 'name': 'Beam_current', 'scale': 5000,
             'offset': 0.5, 'norm_time': True}
             ],
-        'base_data_dir'         : '/nas_data/Pilatus1M/20190409Fusi', #CHANGE ME
+        'base_data_dir'         : '/nas_data/Pilatus1M/20190423Hopkins', #CHANGE ME
         }
 
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']
