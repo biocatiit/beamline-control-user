@@ -124,6 +124,7 @@ class ExpCommThread(threading.Thread):
 
         mx_database = mp.setup_database(database_filename)
         mx_database.set_plot_enable(2)
+        mp.set_program_name("expcon")
 
         #
         # #  Create a new record list.
