@@ -912,7 +912,7 @@ class ExpCommThread(threading.Thread):
             dio_out6.write(0) #Open the slow normally closed xia shutter
 
             ab_burst.get_status() #Maybe need to clear this status?
-            logger.debug(ab_burst.get_status())
+            logger.debug("DG status: %s", ab_burst.get_status())
 
             det.arm()
             struck.start()
@@ -924,6 +924,7 @@ class ExpCommThread(threading.Thread):
             time.sleep(1)
 
             if not wait_for_trig:
+                logger.debug("Sending trigger")
                 dio_out10.write(1)
                 time.sleep(0.1)
                 dio_out10.write(0)
@@ -2123,15 +2124,21 @@ class ExpPanel(wx.Panel):
         fe_shutter_pv = mpca.PV(self.settings['fe_shutter_pv'])
         d_shutter_pv = mpca.PV(self.settings['d_shutter_pv'])
 
-        if fe_shutter_pv.caget() == 0:
-            fes = False
-        else:
-            fes = True
+        try:
+            if fe_shutter_pv.caget() == 0:
+                fes = False
+            else:
+                fes = True
+        except mp.Timed_Out_Error:
+            fes = True #REVISIT
 
-        if d_shutter_pv.caget() == 0:
-            ds = False
-        else:
-            ds = True
+        try:
+            if d_shutter_pv.caget() == 0:
+                ds = False
+            else:
+                ds = True
+        except mp.Timed_Out_Error:
+            ds = True #REVISIT
 
         if not fes and not ds:
             msg = ('Both the Front End shutter and the D Hutch '
@@ -2602,7 +2609,7 @@ if __name__ == '__main__':
             'offset': 0.5, 'norm_time': True}
             ],
         'components'            : ['exposure'],
-        'base_data_dir'         : '/nas_data/Pilatus1M/20190415Hopkins', #CHANGE ME
+        'base_data_dir'         : '/nas_data/Pilatus1M/20190417Weikang', #CHANGE ME
         }
 
     settings['data_dir'] = settings['base_data_dir']

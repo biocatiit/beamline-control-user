@@ -157,12 +157,12 @@ if __name__ == '__main__':
         'shutter_pad'           : 0.00, #padding for shutter related values
         'shutter_cycle'         : 0.002, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
         'struck_measurement_time' : '0.001', #in s
-        'tr_muscle_exp'         : True,
+        'tr_muscle_exp'         : False,
         'slow_mode_thres'       : 0.1,
         'fast_mode_max_exp_time': 2000,
-        'wait_for_trig'         : True,
+        'wait_for_trig'         : False,
         'num_trig'              : '1',
-        'show_advanced_options' : True,
+        'show_advanced_options' : False,
         'fe_shutter_pv'         : 'FE:18:ID:FEshutter',
         'd_shutter_pv'          : 'PA:18ID:STA_D_SDS_OPEN_PL.VAL',
         'local_dir_root'        : '/nas_data/Pilatus1M',
@@ -183,7 +183,7 @@ if __name__ == '__main__':
             'scale': 1e5, 'offset': 0, 'dark': True, 'norm_time': True},
             {'mx_record': 'mcs12', 'channel': 11, 'name': 'Length',
             'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
-            {'mx_record': 'mcs13', 'channel': 11, 'name': 'Force',
+            {'mx_record': 'mcs13', 'channel': 12, 'name': 'Force',
             'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
             ],
         'joerger_log_vals'      : [{'mx_record': 'j3', 'name': 'I0',
@@ -197,7 +197,7 @@ if __name__ == '__main__':
             {'mx_record': 'j11', 'name': 'Beam_current', 'scale': 5000,
             'offset': 0.5, 'norm_time': True}
             ],
-        'base_data_dir'         : '/nas_data/Pilatus1M/20190409Fusi', #CHANGE ME
+        'base_data_dir'         : '/nas_data/Pilatus1M/20190430Hopkins', #CHANGE ME
         }
 
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']
@@ -210,10 +210,10 @@ if __name__ == '__main__':
         'remote_fm_ip'          : '164.54.204.37',
         'remote_fm_port'        : '5557',
         'flow_units'            : 'mL/min',
-        'sheath_pump'           : ('VICI_M50', 'COM5', [626.2, 9.278], {}),
-        'outlet_pump'           : ('VICI_M50', 'COM6', [623.56, 12.222], {}),
-        'sheath_fm'             : ('BFS', 'COM3', [], {}),
-        'outlet_fm'             : ('BFS', 'COM4', [], {}),
+        'sheath_pump'           : ('VICI_M50', 'COM2', [626.2, 9.278], {}),
+        'outlet_pump'           : ('VICI_M50', 'COM1', [623.56, 12.222], {}),
+        'sheath_fm'             : ('BFS', 'COM4', [], {}),
+        'outlet_fm'             : ('BFS', 'COM3', [], {}),
         'sheath_ratio'          : 0.5,
         'sheath_excess'         : 2.1,
         'warning_threshold_low' : 0.8,
