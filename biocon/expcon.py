@@ -124,7 +124,7 @@ class ExpCommThread(threading.Thread):
 
         mx_database = mp.setup_database(database_filename)
         mx_database.set_plot_enable(2)
-        mp.set_program_name("expcon")
+        mx_database.set_program_name("expcon")
 
         #
         # #  Create a new record list.
@@ -162,9 +162,13 @@ class ExpCommThread(threading.Thread):
         server_record = mx_database.get_record(server_record_name)
         det_datadir_name = '{}.datafile_directory'.format(remote_det_name)
         det_datafile_name = '{}.datafile_pattern'.format(remote_det_name)
+        det_exp_time_name = '{}.ext_enable_time'.format(remote_det_name)
+        det_exp_period_name = '{}.ext_enable_period'.format(remote_det_name)
 
         det_datadir = mp.Net(server_record, det_datadir_name)
         det_filename = mp.Net(server_record, det_datafile_name)
+        det_exp_time = mp.Net(server_record, det_exp_time_name)
+        det_exp_period = mp.Net(server_record, det_exp_period_name)
 
         logger.debug("Got detector records")
 
@@ -183,6 +187,8 @@ class ExpCommThread(threading.Thread):
         mx_data = {'det': det,
             'det_datadir': det_datadir,
             'det_filename': det_filename,
+            'det_exp_time'      : det_exp_time,
+            'det_exp_period'    : det_exp_period,
             'struck': mx_database.get_record('sis3820'),
             'struck_ctrs': [mx_database.get_record(log['mx_record']) for log in self._settings['struck_log_vals']],
             'struck_pv': '18ID:mcs',
@@ -326,6 +332,8 @@ class ExpCommThread(threading.Thread):
 
         det_datadir = self._mx_data['det_datadir']
         det_filename = self._mx_data['det_filename']
+        det_exp_time = self._mx_data['det_exp_time']
+        det_exp_period = self._mx_data['det_exp_period']
 
         wait_for_trig = kwargs['wait_for_trig']
         if wait_for_trig:
@@ -386,6 +394,8 @@ class ExpCommThread(threading.Thread):
 
             det.set_duration_mode(num_frames)
             det.set_trigger_mode(2)
+            det_exp_time.put(exp_time)
+            det_exp_period.put(exp_period)
 
             struck_mode_pv.caput(1)
             struck.set_measurement_time(struck_meas_time)   #Ignored for external LNE of Struck
@@ -534,6 +544,8 @@ class ExpCommThread(threading.Thread):
 
         det_datadir = self._mx_data['det_datadir']
         det_filename = self._mx_data['det_filename']
+        det_exp_time = self._mx_data['det_exp_time']
+        det_exp_period = self._mx_data['det_exp_period']
 
         exp_period = exp_settings['exp_period']
         exp_time = exp_settings['exp_time']
@@ -621,6 +633,8 @@ class ExpCommThread(threading.Thread):
 
         det.set_duration_mode(num_frames)
         det.set_trigger_mode(2)
+        det_exp_time.put(exp_time)
+        det_exp_period.put(exp_period)
 
         struck_mode_pv.caput(1)
         struck.set_measurement_time(exp_time)   #Ignored for external LNE of Struck
@@ -829,6 +843,8 @@ class ExpCommThread(threading.Thread):
 
         det_datadir = self._mx_data['det_datadir']
         det_filename = self._mx_data['det_filename']
+        det_exp_time = self._mx_data['det_exp_time']
+        det_exp_period = self._mx_data['det_exp_period']
 
         wait_for_trig = kwargs['wait_for_trig']
         if wait_for_trig:
@@ -889,6 +905,8 @@ class ExpCommThread(threading.Thread):
 
             det.set_duration_mode(num_frames)
             det.set_trigger_mode(2)
+            det_exp_time.put(exp_time)
+            det_exp_period.put(exp_period)
 
             struck_mode_pv.caput(1)
             struck.set_measurement_time(exp_time)   #Ignored for external LNE of Struck
@@ -1024,6 +1042,8 @@ class ExpCommThread(threading.Thread):
 
         det_datadir = self._mx_data['det_datadir']
         det_filename = self._mx_data['det_filename']
+        det_exp_time = self._mx_data['det_exp_time']
+        det_exp_period = self._mx_data['det_exp_period']
 
         logger.debug(det)
         logger.debug(struck)
@@ -1043,6 +1063,8 @@ class ExpCommThread(threading.Thread):
 
         det.set_duration_mode(num_frames)
         det.set_trigger_mode(2)
+        det_exp_time.put(exp_time)
+        det_exp_period.put(exp_period)
         det.arm()
 
         struck.set_num_measurements(1)
@@ -1170,6 +1192,8 @@ class ExpCommThread(threading.Thread):
 
         det_datadir = self._mx_data['det_datadir']
         det_filename = self._mx_data['det_filename']
+        det_exp_time = self._mx_data['det_exp_time']
+        det_exp_period = self._mx_data['det_exp_period']
 
         shutter_speed_open = kwargs['shutter_speed_open']
         shutter_speed_close = kwargs['shutter_speed_close']
@@ -1200,7 +1224,9 @@ class ExpCommThread(threading.Thread):
         det_filename.put('{}_0001.tif'.format(fprefix))
 
         det.set_duration_mode(num_frames)
-        det.set_trigger_mode( 2 )
+        det.set_trigger_mode(2)
+        det_exp_time.put(exp_time)
+        det_exp_period.put(exp_period)
         det.arm()
 
         #Start writing counter file
