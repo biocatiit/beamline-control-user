@@ -237,7 +237,7 @@ if __name__ == '__main__':
 
 
     setup_pumps = [('sheath', 'VICI M50', 'COM2', ['626.2', '9.278'], {}, {}),
-                        ('outlet', 'VICI M50', 'COM1', ['627.32', '11.826'], {}, {})
+                        ('outlet', 'VICI M50', 'COM1', ['623.56', '12.222'], {}, {})
                         ]
 
     local_comm_locks = {'sheath'    : pump_comm_locks[setup_pumps[0][2]],
