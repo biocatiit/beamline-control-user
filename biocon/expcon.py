@@ -167,8 +167,8 @@ class ExpCommThread(threading.Thread):
 
         det_datadir = mp.Net(server_record, det_datadir_name)
         det_filename = mp.Net(server_record, det_datafile_name)
-        det_exp_time = mp.Net(server_record, det_exp_time_name)
-        det_exp_period = mp.Net(server_record, det_exp_period_name)
+        # det_exp_time = mp.Net(server_record, det_exp_time_name)
+        # det_exp_period = mp.Net(server_record, det_exp_period_name)
 
         logger.debug("Got detector records")
 
@@ -177,18 +177,18 @@ class ExpCommThread(threading.Thread):
         ab_burst_server_record = mx_database.get_record(ab_burst_server_record_name)
         dg645_trigger_source = mp.Net(ab_burst_server_record, 'dg645.trigger_source')
 
-        ab_burst_2 = mx_database.get_record('ab_burst_2')
-        ab_burst_server_record_name2 = ab_burst_2.get_field('server_record')
-        ab_burst_server_record2 = mx_database.get_record(ab_burst_server_record_name2)
-        dg645_trigger_source2 = mp.Net(ab_burst_server_record2, 'dg645.trigger_source')
+        # ab_burst_2 = mx_database.get_record('ab_burst_2')
+        # ab_burst_server_record_name2 = ab_burst_2.get_field('server_record')
+        # ab_burst_server_record2 = mx_database.get_record(ab_burst_server_record_name2)
+        # dg645_trigger_source2 = mp.Net(ab_burst_server_record2, 'dg645.trigger_source')
 
         logger.debug("Got dg645 records")
 
         mx_data = {'det': det,
             'det_datadir': det_datadir,
             'det_filename': det_filename,
-            'det_exp_time'      : det_exp_time,
-            'det_exp_period'    : det_exp_period,
+            # 'det_exp_time'      : det_exp_time,
+            # 'det_exp_period'    : det_exp_period,
             'struck': mx_database.get_record('sis3820'),
             'struck_ctrs': [mx_database.get_record(log['mx_record']) for log in self._settings['struck_log_vals']],
             'struck_pv': '18ID:mcs',
@@ -197,11 +197,11 @@ class ExpCommThread(threading.Thread):
             'ef_burst': mx_database.get_record('ef_burst'),
             'gh_burst': mx_database.get_record('gh_burst'),
             'dg645_trigger_source': dg645_trigger_source,
-            'ab_burst_2': mx_database.get_record('ab_burst_2'),
-            'cd_burst_2': mx_database.get_record('cd_burst_2'),
-            'ef_burst_2': mx_database.get_record('ef_burst_2'),
-            'gh_burst_2': mx_database.get_record('gh_burst_2'),
-            'dg645_trigger_source2': dg645_trigger_source2,
+            # 'ab_burst_2': mx_database.get_record('ab_burst_2'),
+            # 'cd_burst_2': mx_database.get_record('cd_burst_2'),
+            # 'ef_burst_2': mx_database.get_record('ef_burst_2'),
+            # 'gh_burst_2': mx_database.get_record('gh_burst_2'),
+            # 'dg645_trigger_source2': dg645_trigger_source2,
             'ab': mx_database.get_record('ab'),
             'dio': [mx_database.get_record('avme944x_out{}'.format(i)) for i in range(16)],
             'joerger': mx_database.get_record('joerger_timer'),
@@ -290,7 +290,7 @@ class ExpCommThread(threading.Thread):
             self.fast_exposure(data_dir, fprefix, num_frames, exp_time, exp_period, **kwargs)
         else:
             logger.debug('Choosing slow exposure')
-            self.slow_exposure2(data_dir, fprefix, num_frames, exp_time, exp_period, **kwargs)
+            self.slow_exposure(data_dir, fprefix, num_frames, exp_time, exp_period, **kwargs)
 
     def _start_tr_exp(self, exp_settings, comp_settings):
         exp_settings['metadata'] = self._add_metadata(exp_settings['metadata'])
@@ -332,8 +332,8 @@ class ExpCommThread(threading.Thread):
 
         det_datadir = self._mx_data['det_datadir']
         det_filename = self._mx_data['det_filename']
-        det_exp_time = self._mx_data['det_exp_time']
-        det_exp_period = self._mx_data['det_exp_period']
+        # det_exp_time = self._mx_data['det_exp_time']
+        # det_exp_period = self._mx_data['det_exp_period']
 
         wait_for_trig = kwargs['wait_for_trig']
         if wait_for_trig:
@@ -394,8 +394,8 @@ class ExpCommThread(threading.Thread):
 
             det.set_duration_mode(num_frames)
             det.set_trigger_mode(2)
-            det_exp_time.put(exp_time)
-            det_exp_period.put(exp_period)
+            # det_exp_time.put(exp_time)
+            # det_exp_period.put(exp_period)
 
             struck_mode_pv.caput(1)
             struck.set_measurement_time(struck_meas_time)   #Ignored for external LNE of Struck
@@ -544,8 +544,8 @@ class ExpCommThread(threading.Thread):
 
         det_datadir = self._mx_data['det_datadir']
         det_filename = self._mx_data['det_filename']
-        det_exp_time = self._mx_data['det_exp_time']
-        det_exp_period = self._mx_data['det_exp_period']
+        # det_exp_time = self._mx_data['det_exp_time']
+        # det_exp_period = self._mx_data['det_exp_period']
 
         exp_period = exp_settings['exp_period']
         exp_time = exp_settings['exp_time']
@@ -633,8 +633,8 @@ class ExpCommThread(threading.Thread):
 
         det.set_duration_mode(num_frames)
         det.set_trigger_mode(2)
-        det_exp_time.put(exp_time)
-        det_exp_period.put(exp_period)
+        # det_exp_time.put(exp_time)
+        # det_exp_period.put(exp_period)
 
         struck_mode_pv.caput(1)
         struck.set_measurement_time(exp_time)   #Ignored for external LNE of Struck
@@ -843,8 +843,8 @@ class ExpCommThread(threading.Thread):
 
         det_datadir = self._mx_data['det_datadir']
         det_filename = self._mx_data['det_filename']
-        det_exp_time = self._mx_data['det_exp_time']
-        det_exp_period = self._mx_data['det_exp_period']
+        # det_exp_time = self._mx_data['det_exp_time']
+        # det_exp_period = self._mx_data['det_exp_period']
 
         wait_for_trig = kwargs['wait_for_trig']
         if wait_for_trig:
@@ -888,8 +888,8 @@ class ExpCommThread(threading.Thread):
             dio_out10.write(0) # Make sure the trigger is off
 
             det_datadir.put(data_dir)
-            while det_datadir.get().rstrip('/') != data_dir.rstrip('/'):
-                time.sleep(0.001)
+            # while det_datadir.get().rstrip('/') != data_dir.rstrip('/'):
+            #     time.sleep(0.001)
 
             if wait_for_trig and num_trig > 1:
                 cur_fprefix = '{}_{:04}'.format(fprefix, cur_trig)
@@ -900,13 +900,13 @@ class ExpCommThread(threading.Thread):
 
             det_filename.put(new_fname)
 
-            while det_filename.get() != new_fname:
-                time.sleep(0.001)
+            # while det_filename.get() != new_fname:
+            #     time.sleep(0.001)
 
             det.set_duration_mode(num_frames)
             det.set_trigger_mode(2)
-            det_exp_time.put(exp_time)
-            det_exp_period.put(exp_period)
+            # det_exp_time.put(exp_time)
+            # det_exp_period.put(exp_period)
 
             struck_mode_pv.caput(1)
             struck.set_measurement_time(exp_time)   #Ignored for external LNE of Struck
@@ -1026,151 +1026,7 @@ class ExpCommThread(threading.Thread):
 
         self._exp_event.clear()
 
-
     def slow_exposure(self, data_dir, fprefix, num_frames, exp_time, exp_period, **kwargs):
-        logger.debug('Setting up slow exposure')
-        det = self._mx_data['det']     #Detector
-        struck = self._mx_data['struck']   #Struck SIS3820
-
-        ab_burst = self._mx_data['ab_burst']   #Shutter control signal
-        cd_burst = self._mx_data['cd_burst']   #Struck LNE/channel advance signal
-        ef_burst = self._mx_data['ef_burst']   #Pilatus trigger signal
-
-        dio_out6 = self._mx_data['dio'][6]      #Xia/wharberton shutter N.C.
-        dio_out10 = self._mx_data['dio'][10]    #SRS DG645 trigger
-        dio_out11 = self._mx_data['dio'][11]    #Struck LNE/channel advance signal (alt.)
-
-        det_datadir = self._mx_data['det_datadir']
-        det_filename = self._mx_data['det_filename']
-        det_exp_time = self._mx_data['det_exp_time']
-        det_exp_period = self._mx_data['det_exp_period']
-
-        logger.debug(det)
-        logger.debug(struck)
-        logger.debug(ab_burst)
-        logger.debug(cd_burst)
-        logger.debug(ef_burst)
-        logger.debug(dio_out10)
-
-        det.abort()
-        struck.stop()
-        ab_burst.stop()
-
-        det_datadir.put(data_dir)
-        det_filename.put('{}_0001.tif'.format(fprefix))
-
-        dio_out6.write(0) #Open the slow normally closed xia shutter
-
-        det.set_duration_mode(num_frames)
-        det.set_trigger_mode(2)
-        det_exp_time.put(exp_time)
-        det_exp_period.put(exp_period)
-        det.arm()
-
-        struck.set_num_measurements(1)
-
-        # ab_burst.setup(1, exp_time+0.02, exp_time+0.01, 1, 0)
-        # cd_burst.setup(1, exp_time+0.02, 0.0001, 1, exp_time+0.006)
-        # ef_burst.setup(1, exp_time+0.02, exp_time, 1, 0.005)
-
-        # ab_burst.start()
-
-        #Read out the struck initially, takes ~2-3 seconds the first time
-        struck.start()
-        dio_out11.write(1)
-        time.sleep(0.001)
-        dio_out11.write(0)
-
-        time.sleep(0.1)
-
-        dio_out11.write(1)
-        time.sleep(0.001)
-        dio_out11.write(0)
-
-        while True:
-            busy = struck.is_busy()
-
-            if (busy == 0):
-                measurement = struck.read_all()
-                logger.debug( "Initial Struck Readout Done!\n" )
-                break
-
-        start = time.time()
-
-        for i in range(num_frames):
-            if self._abort_event.is_set():
-                logger.info("Aborting slow exposure")
-                det.abort()
-                struck.stop()
-                ab_burst.stop()
-                dio_out6.write(1) #Closes the slow normally closed xia shutter
-                self._exp_event.clear()
-                return
-
-            logger.debug( "*** i = %d ***" % (i) )
-            logger.debug( "Time = %f\n" % (time.time() - start) )
-
-            struck.start()
-
-            logger.debug( "After struck.start() = %f\n" % (time.time() - start) )
-
-            dio_out11.write(1)
-            time.sleep(0.001)
-            dio_out11.write(0)
-
-            logger.debug('After dio_out11 signal = %f\n' %(time.time()-start))
-
-            if i == 0:
-                logger.info('Exposure started')
-                self._exp_event.set()
-                meas_start = time.time()
-
-            while time.time() - meas_start < i*exp_period:
-                time.sleep(0.001)
-
-            logger.debug("Measurement start time = %f\n" %(time.time() - meas_start))
-
-            dio_out10.write(1)
-            time.sleep(0.001)
-            dio_out10.write(0)
-            logger.debug( "After dio_out10 signal = %f\n" % (time.time() - start) )
-
-            while True:
-                busy = struck.is_busy()
-
-                if self._abort_event.is_set():
-                    logger.info("Aborting slow exposure")
-                    det.abort()
-                    struck.stop()
-                    ab_burst.stop()
-                    dio_out6.write(1) #Close the slow normally closed xia shutter
-                    self._exp_event.clear()
-                    return
-
-                if busy == 0:
-                    logger.debug( "Struck Done!\n" )
-
-                    logger.debug( "After Struck Done = %f\n" % \
-                            (time.time() - start ) )
-
-                    measurement = struck.read_measurement(0)
-
-                    logger.debug( "After Struck Readout = %f\n" % \
-                            (time.time() - start ) )
-
-                    logger.info(measurement)
-                    break
-
-                time.sleep(0.001)
-
-        dio_out6.write(1) #Close the slow normally closed xia shutter
-
-        logger.info('Exposure done')
-        self._exp_event.clear()
-
-        return
-
-    def slow_exposure2(self, data_dir, fprefix, num_frames, exp_time, exp_period, **kwargs):
         logger.debug('Setting up slow exposure 2')
         det = self._mx_data['det']     #Detector
 
@@ -1192,8 +1048,8 @@ class ExpCommThread(threading.Thread):
 
         det_datadir = self._mx_data['det_datadir']
         det_filename = self._mx_data['det_filename']
-        det_exp_time = self._mx_data['det_exp_time']
-        det_exp_period = self._mx_data['det_exp_period']
+        # det_exp_time = self._mx_data['det_exp_time']
+        # det_exp_period = self._mx_data['det_exp_period']
 
         shutter_speed_open = kwargs['shutter_speed_open']
         shutter_speed_close = kwargs['shutter_speed_close']
@@ -1225,8 +1081,8 @@ class ExpCommThread(threading.Thread):
 
         det.set_duration_mode(num_frames)
         det.set_trigger_mode(2)
-        det_exp_time.put(exp_time)
-        det_exp_period.put(exp_period)
+        # det_exp_time.put(exp_time)
+        # det_exp_period.put(exp_period)
         det.arm()
 
         #Start writing counter file
@@ -1254,7 +1110,9 @@ class ExpCommThread(threading.Thread):
         ef_burst.setup(exp_time+total_shutter_speed*1.5, exp_time, 1, s_offset_half, 1, -1)
         gh_burst.setup(exp_time+total_shutter_speed*1.5, exp_time, 1, 0, 1, -1)
 
+        logger.debug('Before dg645 trigger')
         dg645_trigger_source.put(1)
+        logger.debug('After dg645 trigger')
 
         time.sleep(0.1)
 
@@ -2636,7 +2494,7 @@ if __name__ == '__main__':
             'offset': 0.5, 'norm_time': True}
             ],
         'components'            : ['exposure'],
-        'base_data_dir'         : '/nas_data/Pilatus1M/20190417Weikang', #CHANGE ME
+        'base_data_dir'         : '/nas_data/Pilatus1M/20190605Hopkins', #CHANGE ME
         }
 
     settings['data_dir'] = settings['base_data_dir']
