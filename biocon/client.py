@@ -24,7 +24,7 @@ from io import open
 
 import threading
 import logging
-from collections import deque
+from collections import deque, defaultdict
 import traceback
 import time
 import sys
@@ -70,25 +70,9 @@ class ControlClient(threading.Thread):
         self.socket = self.context.socket(zmq.PAIR)
         self.socket.connect("tcp://{}:{}".format(self.ip, self.port))
 
-        logger.debug("Checking if server is active")
-        cmd = {'device': 'server', 'command': ('ping', (), {}), 'response': False}
+        self._ping()
 
-        self.socket.send_json(cmd)
-
-        start_time = time.time()
-        while self.socket.poll(10) == 0 and time.time()-start_time < 2:
-            pass
-
-        if self.socket.poll(10) > 0:
-            answer = self.socket.recv_json()
-        else:
-            answer = ''
-
-        if answer == 'ping received':
-            logger.info("Connection to server verified")
-        else:
-            logger.error("Could not get a response from the server")
-            self.timeout_event.set()
+        self.connect_error = defaultdict(int)
 
     def run(self):
         """
@@ -129,6 +113,8 @@ class ControlClient(threading.Thread):
 
                     if answer == '':
                         raise zmq.ZMQError(msg="Could not get a response from the server")
+                    else:
+                        self.connect_error[device] = 0
 
                     logger.debug('Command response: %s' %(answer))
 
@@ -143,8 +129,8 @@ class ControlClient(threading.Thread):
                         ', '.join(['{}'.format(a) for a in device_cmd[1]]),
                         ', '.join(['{}:{}'.format(kw, item) for kw, item in device_cmd[2].items()])))
                     logger.error(msg)
-                    logger.error('Connection to server timed out.')
-                    self.timeout_event.set()
+                    self.connect_error[device] += 1
+                    self._ping()
 
                 except Exception:
                     device = command['device']
@@ -155,6 +141,13 @@ class ControlClient(threading.Thread):
                         ', '.join(['{}:{}'.format(kw, item) for kw, item in device_cmd[2].items()])))
                     logger.error(msg)
                     logger.error(traceback.print_exc())
+                    self.connect_error[device] += 1
+
+                if self.connect_error[device] > 5:
+                    msg = ('5 consecutive failures to run a command on device'
+                        '%s.'.format(device))
+                    logger.error(msg)
+                    self.timeout_event.set()
             else:
                 time.sleep(0.01)
 
@@ -168,6 +161,27 @@ class ControlClient(threading.Thread):
         self.context.destroy()
 
         logger.info("Quitting remote client thread: %s", self.name)
+
+    def _ping(self):
+        logger.debug("Checking if server is active")
+        cmd = {'device': 'server', 'command': ('ping', (), {}), 'response': False}
+
+        self.socket.send_json(cmd)
+
+        start_time = time.time()
+        while self.socket.poll(10) == 0 and time.time()-start_time < 2:
+            pass
+
+        if self.socket.poll(10) > 0:
+            answer = self.socket.recv_json()
+        else:
+            answer = ''
+
+        if answer == 'ping received':
+            logger.info("Connection to server verified")
+        else:
+            logger.error("Could not get a response from the server")
+            self.timeout_event.set()
 
     def _abort(self):
         """Clears the ``command_queue`` and aborts all current pump motions."""
