@@ -2302,7 +2302,7 @@ class PumpFrame(wx.Frame):
 
         if setup_pumps is None:
             setup_pumps = [('2', 'VICI M50', 'COM2', ['626.2', '9.278'], {}, {}),
-                        ('1', 'VICI M50', 'COM1', ['627.32', '11.826'], {}, {})
+                        ('1', 'VICI M50', 'COM1', ['623.56', '12.222'], {}, {})
                         ]
 
             # setup_pumps = [('1', 'PHD 4400', 'COM4', ['30 mL, EXEL', '1'], {},
@@ -2441,7 +2441,7 @@ if __name__ == '__main__':
 
     #Use this with M50s
     comm_locks = {'2' : threading.Lock(),
-        '3' : threading.Lock(),
+        '1' : threading.Lock(),
         }
 
     # #Otherwise use this:

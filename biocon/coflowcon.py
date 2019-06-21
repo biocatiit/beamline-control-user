@@ -654,7 +654,7 @@ class CoflowPanel(wx.Panel):
         return valid, lc_flow_rate
 
     def _get_flow_rates(self):
-        logging.info('Starting continuous logging of flow rates')
+        logger.info('Starting continuous logging of flow rates')
         sheath_density_cmd = ('get_density', ('sheath_fm',), {})
         outlet_density_cmd = ('get_density', ('outlet_fm',), {})
 
@@ -733,7 +733,8 @@ class CoflowPanel(wx.Panel):
                     logger.debug('Sheath temperature: %f', sheath_t)
                     logger.debug('Outlet temperature: %f', outlet_t)
 
-                if not self.stop_get_fr_event.is_set() and time.time() - log_time > 10:
+                if (not self.stop_get_fr_event.is_set() and time.time() - log_time > 10
+                    and self.coflow_on):
                     logger.info('Sheath flow rate: %f', sheath_fr)
                     logger.info('Outlet flow rate: %f', outlet_fr)
                     logger.info('Sheath density: %f', sheath_density)
@@ -743,18 +744,18 @@ class CoflowPanel(wx.Panel):
 
                     log_time = time.time()
 
-        logging.info('Stopping continuous logging of flow rates')
+        logger.info('Stopping continuous logging of flow rates')
 
     def _on_monitor_timer(self, evt):
         self.monitor_timer.Stop()
 
-        logging.info('Flow monitoring started')
+        logger.info('Flow monitoring started')
 
         low_warning = self.settings['warning_threshold_low']
         high_warning = self.settings['warning_threshold_high']
 
-        logging.info('Sheath flow bounds: %f to %f %s', low_warning*self.sheath_setpoint, high_warning*self.sheath_setpoint, self.settings['flow_units'])
-        logging.info('Outlet flow bounds: %f to %f %s', low_warning*self.outlet_setpoint, high_warning*self.outlet_setpoint, self.settings['flow_units'])
+        logger.info('Sheath flow bounds: %f to %f %s', low_warning*self.sheath_setpoint, high_warning*self.sheath_setpoint, self.settings['flow_units'])
+        logger.info('Outlet flow bounds: %f to %f %s', low_warning*self.outlet_setpoint, high_warning*self.outlet_setpoint, self.settings['flow_units'])
 
         self.monitor = True
 
