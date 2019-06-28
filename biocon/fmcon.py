@@ -261,7 +261,8 @@ class FlowMeterCommThread(threading.Thread):
         :param threading.Event abort_event: An event that is set when the thread
             needs to abort, and otherwise is not set.
         """
-        threading.Thread.__init__(self, name=name, daemon=True)
+        threading.Thread.__init__(self, name=name)
+        self.daemon = True
 
         logger.info("Starting flow meter control thread: %s", self.name)
 
@@ -316,7 +317,7 @@ class FlowMeterCommThread(threading.Thread):
                     logger.exception(msg)
 
                     if command == 'connect' or command == 'disconnect':
-                        self.answer_queue.append((command, False))
+                        self.return_queue.append((command, False))
 
             else:
                 time.sleep(0.01)

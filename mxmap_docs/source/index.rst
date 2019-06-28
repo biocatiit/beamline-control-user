@@ -13,6 +13,11 @@ Welcome to MxMap's documentation!
    other_utils
 
 
+As a note, here's how you run mxmap from the top level directory (with setup in it):
+
+pythonw -m mxmap.main scan
+
+
 Indices and tables
 ==================
 

@@ -1265,8 +1265,10 @@ if __name__ == '__main__':
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
     h1 = logging.StreamHandler(sys.stdout)
-    h1.setLevel(logging.INFO)
+    # h1.setLevel(logging.INFO)
     # h1.setLevel(logging.DEBUG)
+    h1.setLevel(logging.ERROR)
+
     # formatter = logging.Formatter('%(asctime)s - %(message)s')
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
     h1.setFormatter(formatter)
@@ -1299,7 +1301,7 @@ if __name__ == '__main__':
         'warning_threshold_low' : 0.8,
         'warning_threshold_high': 1.2,
         'settling_time'         : 5000, #in ms
-        'lc_flow_rate'          : '0.8',
+        'lc_flow_rate'          : '0.7',
         }
 
     app = wx.App()
