@@ -370,10 +370,10 @@ class TRPanel(wx.Panel):
                     motor.set_position_compare(y_motor, 1, pco_start, pco_end, pco_step)
                     motor.set_position_compare_pulse(x_motor, pco_pulse_width, pco_encoder_settle_t)
 
-            motor.set_velocity(x_motor, 0, return_speed)
-            motor.set_velocity(y_motor, 1, return_speed)
-            motor.set_acceleration(x_motor, 0, return_accel)
-            motor.set_acceleration(y_motor, 1, return_accel)
+                motor.set_velocity(return_speed, x_motor, 0)
+                motor.set_velocity(return_speed, y_motor, 1)
+                motor.set_acceleration(return_accel, x_motor, 0)
+                motor.set_acceleration(return_accel, y_motor, 1,)
 
             motor_cmd_q.append(('move_absolute', ('TR_motor', (x_start, y_start)), {}))
 
@@ -401,14 +401,14 @@ class TRPanel(wx.Panel):
                         logger.debug('starting x pco')
                         motor.start_position_compare(y_motor)
 
-                if vect_scan_speed[0] != 0:
-                    motor.set_velocity(x_motor, 0, vect_scan_speed[0])
-                if vect_scan_speed[1] != 0:
-                    motor.set_velocity(y_motor, 1, vect_scan_speed[1])
-                if vect_scan_accel[0] != 0:
-                    motor.set_acceleration(x_motor, 0, vect_scan_accel[0])
-                if vect_scan_accel[1] != 0:
-                    motor.set_acceleration(y_motor, 1, vect_scan_accel[1])
+                    if vect_scan_speed[0] != 0:
+                        motor.set_velocity(vect_scan_speed[0], x_motor, 0)
+                    if vect_scan_speed[1] != 0:
+                        motor.set_velocity(vect_scan_speed[1], y_motor, 1)
+                    if vect_scan_accel[0] != 0:
+                        motor.set_acceleration(vect_scan_accel[0], x_motor, 0)
+                    if vect_scan_accel[1] != 0:
+                        motor.set_acceleration(vect_scan_accel[1], y_motor, 1)
 
                 motor_cmd_q.append(('move_absolute', ('TR_motor', (x_end, y_end)), {}))
 
@@ -432,18 +432,21 @@ class TRPanel(wx.Panel):
                     else:
                         motor.stop_position_compare(y_motor)
 
-                if vect_return_speed[0] != 0:
-                    motor.set_velocity(x_motor, 0, vect_return_speed[0])
-                if vect_return_speed[1] != 0:
-                    motor.set_velocity(y_motor, 1, vect_return_speed[1])
-                if vect_return_accel[0] != 0:
-                    motor.set_acceleration(x_motor, 0, vect_return_accel[0])
-                if vect_return_accel[1] != 0:
-                    motor.set_acceleration(y_motor, 1, vect_return_accel[1])
+                    if vect_return_speed[0] != 0:
+                        motor.set_velocity(vect_return_speed[0], x_motor, 0)
+                    if vect_return_speed[1] != 0:
+                        motor.set_velocity(vect_return_speed[1], y_motor, 1)
+                    if vect_return_accel[0] != 0:
+                        motor.set_acceleration(vect_return_accel[0], x_motor, 0)
+                    if vect_return_accel[1] != 0:
+                        motor.set_acceleration(vect_return_accel[1], y_motor, 1)
 
                 motor_cmd_q.append(('move_absolute', ('TR_motor', (x_start, y_start)), {}))
 
         self.test_scan.SetLabel('Run test')
+
+        motor_con.stop()
+        motor_con.join()
 
 
     def _param_change(self):
