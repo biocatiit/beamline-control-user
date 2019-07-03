@@ -177,10 +177,10 @@ class ExpCommThread(threading.Thread):
         ab_burst_server_record = mx_database.get_record(ab_burst_server_record_name)
         dg645_trigger_source = mp.Net(ab_burst_server_record, 'dg645.trigger_source')
 
-        # ab_burst_2 = mx_database.get_record('ab_burst_2')
-        # ab_burst_server_record_name2 = ab_burst_2.get_field('server_record')
-        # ab_burst_server_record2 = mx_database.get_record(ab_burst_server_record_name2)
-        # dg645_trigger_source2 = mp.Net(ab_burst_server_record2, 'dg645.trigger_source')
+        ab_burst_2 = mx_database.get_record('ab_burst_2')
+        ab_burst_server_record_name2 = ab_burst_2.get_field('server_record')
+        ab_burst_server_record2 = mx_database.get_record(ab_burst_server_record_name2)
+        dg645_trigger_source2 = mp.Net(ab_burst_server_record2, 'dg645.trigger_source')
 
         logger.debug("Got dg645 records")
 
@@ -197,11 +197,11 @@ class ExpCommThread(threading.Thread):
             'ef_burst': mx_database.get_record('ef_burst'),
             'gh_burst': mx_database.get_record('gh_burst'),
             'dg645_trigger_source': dg645_trigger_source,
-            # 'ab_burst_2': mx_database.get_record('ab_burst_2'),
-            # 'cd_burst_2': mx_database.get_record('cd_burst_2'),
-            # 'ef_burst_2': mx_database.get_record('ef_burst_2'),
-            # 'gh_burst_2': mx_database.get_record('gh_burst_2'),
-            # 'dg645_trigger_source2': dg645_trigger_source2,
+            'ab_burst_2': mx_database.get_record('ab_burst_2'),
+            'cd_burst_2': mx_database.get_record('cd_burst_2'),
+            'ef_burst_2': mx_database.get_record('ef_burst_2'),
+            'gh_burst_2': mx_database.get_record('gh_burst_2'),
+            'dg645_trigger_source2': dg645_trigger_source2,
             'ab': mx_database.get_record('ab'),
             'dio': [mx_database.get_record('avme944x_out{}'.format(i)) for i in range(16)],
             'joerger': mx_database.get_record('joerger_timer'),
@@ -314,14 +314,14 @@ class ExpCommThread(threading.Thread):
         struck_meas_time = kwargs['struck_measurement_time']
         struck_num_meas = kwargs['struck_num_meas']
 
-        ab_burst = self._mx_data['ab_burst']   #Shutter control signal
+        ab_burst = self._mx_data['ab_burst']   #Shutter open/close control signal
         cd_burst = self._mx_data['cd_burst']
         ef_burst = self._mx_data['ef_burst']   #Pilatus trigger signal
         gh_burst = self._mx_data['gh_burst']
         dg645_trigger_source = self._mx_data['dg645_trigger_source']
 
-        ab_burst_2 = self._mx_data['ab_burst_2']   #Struck channel advance
-        cd_burst_2 = self._mx_data['cd_burst_2']
+        ab_burst_2 = self._mx_data['ab_burst_2'] #Shutter continuously open control signal
+        cd_burst_2 = self._mx_data['cd_burst_2'] #Struck channel advance
         ef_burst_2 = self._mx_data['ef_burst_2']
         gh_burst_2 = self._mx_data['gh_burst_2']
         dg645_trigger_source2 = self._mx_data['dg645_trigger_source2']
@@ -418,8 +418,8 @@ class ExpCommThread(threading.Thread):
 
             dg645_trigger_source.put(1)
 
-            ab_burst_2.setup(struck_meas_time, struck_meas_time/2., struck_num_meas+1, 0, 1, -1)
-            cd_burst_2.setup(struck_meas_time, struck_meas_time/2., struck_num_meas+1, 0, 1, -1) #Irrelevant
+            ab_burst_2.setup(struck_meas_time, struck_meas_time*(1-1/1000.), struck_num_meas+1, 0, 1, -1)
+            cd_burst_2.setup(struck_meas_time, struck_meas_time/2., struck_num_meas+1, 0, 1, -1)
             ef_burst_2.setup(struck_meas_time, struck_meas_time/2., struck_num_meas+1, 0, 1, -1) #Irrelevant
             gh_burst_2.setup(struck_meas_time, struck_meas_time/2., struck_num_meas+1, 0, 1, -1) #Irrelevant
 
@@ -435,7 +435,7 @@ class ExpCommThread(threading.Thread):
             ab_burst.arm()
             ab_burst_2.arm()
 
-            if continuous_exp:
+            if continuous_exp and not wait_for_trig:
                 dio_out9.write(1)
 
             time.sleep(1)
