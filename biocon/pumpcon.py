@@ -129,7 +129,7 @@ class SerialComm(object):
         :rtype: str
         """
         logger.debug("Sending '%s' to serial device on port %s", data, self.ser.port)
-        if isinstance(data, str):
+        if isinstance(data, basestring):
             if not data.endswith(send_term_char):
                 data += send_term_char
             data = data.encode()
@@ -226,7 +226,7 @@ class PHD4400SerialComm(SerialComm):
         :rtype: str
         """
         logger.debug("Sending '%s' to serial device on port %s", data, self.ser.port)
-        if isinstance(data, str):
+        if isinstance(data, basestring):
             if not data.endswith(send_term_char):
                 data += send_term_char
             data = data.encode()
@@ -998,7 +998,7 @@ class PumpCommThread(threading.Thread):
         my_pumpcon.stop()
     """
 
-    def __init__(self, command_queue, answer_queue, abort_event, name=None):
+    def __init__(self, command_queue, return_queue, abort_event, name=None):
         """
         Initializes the custom thread. Important parameters here are the
         list of known commands ``_commands`` and known pumps ``known_pumps``.
@@ -1015,7 +1015,7 @@ class PumpCommThread(threading.Thread):
         logger.info("Starting pump control thread: %s", self.name)
 
         self.command_queue = command_queue
-        self.answer_queue = answer_queue
+        self.return_queue = return_queue
         self._abort_event = abort_event
         self._stop_event = threading.Event()
 
@@ -1081,9 +1081,9 @@ class PumpCommThread(threading.Thread):
                     logger.exception(msg)
 
                     if command == 'connect':
-                        self.answer_queue.append((args[1], 'connect', False))
+                        self.return_queue.append((args[1], 'connect', False))
                     elif command == 'disconnect':
-                        self.answer_queue.append((args[0], 'disconnect', False))
+                        self.return_queue.append((args[0], 'disconnect', False))
 
             else:
                 time.sleep(0.01)
@@ -1117,7 +1117,7 @@ class PumpCommThread(threading.Thread):
         logger.info("Connecting pump %s", name)
         new_pump = self.known_pumps[pump_type](device, name, **kwargs)
         self._connected_pumps[name] = new_pump
-        self.answer_queue.append((name, 'connect', True))
+        self.return_queue.append((name, 'connect', True))
         logger.debug("Pump %s connected", name)
 
     def _connect_pump_remote(self, device, name, pump_type, **kwargs):
@@ -1147,7 +1147,7 @@ class PumpCommThread(threading.Thread):
         new_pump = self.known_pumps[pump_type](device, name, **kwargs)
 
         self._connected_pumps[name] = new_pump
-        self.answer_queue.append((name, 'connect', True))
+        self.return_queue.append((name, 'connect', True))
         logger.debug("Pump %s connected", name)
 
     def _disconnect_pump(self, name):
@@ -1163,13 +1163,13 @@ class PumpCommThread(threading.Thread):
         pump = self._connected_pumps[name]
         pump.disconnect()
         del self._connected_pumps[name]
-        self.answer_queue.append((name, 'disconnect', True))
+        self.return_queue.append((name, 'disconnect', True))
         logger.debug("Pump %s disconnected", name)
 
     def _add_pump(self, pump, name, **kwargs):
         logger.info('Adding pump %s', name)
         self._connected_pumps[name] = pump
-        self.answer_queue.append((name, 'add', True))
+        self.return_queue.append((name, 'add', True))
         logger.debug('Pump %s added', name)
 
     def _set_flow_rate(self, name, flow_rate):
@@ -1242,7 +1242,7 @@ class PumpCommThread(threading.Thread):
         logger.debug("Getting pump %s volume", name)
         pump = self._connected_pumps[name]
         volume = pump.volume
-        self.answer_queue.append((name, 'volume', volume))
+        self.return_queue.append((name, 'volume', volume))
         logger.debug("Pump %s volume is %f", name, volume)
 
     def _start_flow(self, name, callback=None):
@@ -1255,7 +1255,7 @@ class PumpCommThread(threading.Thread):
         logger.info("Starting pump %s continuous flow", name)
         pump = self._connected_pumps[name]
         pump.start_flow()
-        self.answer_queue.append((name, 'start', True))
+        self.return_queue.append((name, 'start', True))
 
         if callback is not None:
             callback()
@@ -1272,7 +1272,7 @@ class PumpCommThread(threading.Thread):
         logger.info("Stopping pump %s", name)
         pump = self._connected_pumps[name]
         pump.stop()
-        self.answer_queue.append((name, 'stop', True))
+        self.return_queue.append((name, 'stop', True))
         logger.debug("Pump %s stopped", name)
 
     def _aspirate(self, name, vol, callback=None, units='uL'):
@@ -1289,7 +1289,7 @@ class PumpCommThread(threading.Thread):
         logger.info("Aspirating pump %s", name)
         pump = self._connected_pumps[name]
         pump.aspirate(vol, units)
-        self.answer_queue.append((name, 'start', True))
+        self.return_queue.append((name, 'start', True))
 
         if callback is not None:
             callback()
@@ -1306,7 +1306,7 @@ class PumpCommThread(threading.Thread):
         logger.info("Aspirating all for pump %s", name)
         pump = self._connected_pumps[name]
         pump.aspirate_all()
-        self.answer_queue.append((name, 'start', True))
+        self.return_queue.append((name, 'start', True))
 
         if callback is not None:
             callback()
@@ -1327,7 +1327,7 @@ class PumpCommThread(threading.Thread):
         logger.info("Dispensing pump %s", name)
         pump = self._connected_pumps[name]
         pump.dispense(vol, units)
-        self.answer_queue.append((name, 'start', True))
+        self.return_queue.append((name, 'start', True))
 
         if callback is not None:
             callback()
@@ -1344,7 +1344,7 @@ class PumpCommThread(threading.Thread):
         logger.info("Dispensing all from pump %s", name)
         pump = self._connected_pumps[name]
         pump.dispense_all()
-        self.answer_queue.append((name, 'start', True))
+        self.return_queue.append((name, 'start', True))
 
         if callback is not None:
             callback()
@@ -1366,7 +1366,7 @@ class PumpCommThread(threading.Thread):
         logger.debug("Checking if pump %s is moving", name)
         pump = self._connected_pumps[name]
         is_moving = pump.is_moving()
-        self.answer_queue.append((name, 'moving', is_moving))
+        self.return_queue.append((name, 'moving', is_moving))
         logger.debug("Pump %s is moving: %s", name, str(is_moving))
 
     def _set_pump_cal(self, name, diameter, max_volume, max_rate, syringe_id):
@@ -2302,7 +2302,7 @@ class PumpFrame(wx.Frame):
 
         if setup_pumps is None:
             setup_pumps = [('2', 'VICI M50', 'COM2', ['626.2', '9.278'], {}, {}),
-                        ('1', 'VICI M50', 'COM1', ['627.32', '11.826'], {}, {})
+                        ('1', 'VICI M50', 'COM1', ['623.56', '12.222'], {}, {})
                         ]
 
             # setup_pumps = [('1', 'PHD 4400', 'COM4', ['30 mL, EXEL', '1'], {},
@@ -2441,7 +2441,7 @@ if __name__ == '__main__':
 
     #Use this with M50s
     comm_locks = {'2' : threading.Lock(),
-        '3' : threading.Lock(),
+        '1' : threading.Lock(),
         }
 
     # #Otherwise use this:

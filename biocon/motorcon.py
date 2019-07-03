@@ -37,9 +37,12 @@ if __name__ != '__main__':
 import wx
 import wx.lib.buttons as buttons
 import numpy as np
+import serial.tools.list_ports as list_ports
+import zaber.serial as zaber #pip install zaber.serial
 
 import XPS_C8_drivers as xps_drivers
 import utils
+
 
 class Motor(object):
     """
@@ -99,30 +102,29 @@ class Motor(object):
     @units.setter
     def units(self, units):
         old_units = self._units
-        flow_rate = self.flow_rate
 
-        if units in ['nL/s', 'nL/min', 'uL/s', 'uL/min', 'mL/s', 'mL/min']:
+        if units in ['um/s', 'um/min', 'mm/s', 'mm/min', 'm/s', 'm/min']:
             self._units = units
             old_vu, old_tu = old_units.split('/')
-            new_vu, new_tu = self._units.split('/')[0]
+            new_vu, new_tu = self._units.split('/')
             if old_vu != new_vu:
-                if (old_vu == 'nL' and new_vu == 'uL') or (old_vu == 'uL' and new_vu == 'mL'):
-                    flow_rate = flow_rate/1000.
-                elif old_vu == 'nL' and new_vu == 'mL':
-                    flow_rate = flow_rate/1000000.
-                elif (old_vu == 'mL' and new_vu == 'uL') or (old_vu == 'uL' and new_vu == 'nL'):
-                    flow_rate = flow_rate*1000.
-                elif old_vu == 'mL' and new_vu == 'nL':
-                    flow_rate = flow_rate*1000000.
+                if (old_vu == 'um' and new_vu == 'mm') or (old_vu == 'mm' and new_vu == 'm'):
+                    self._scale = self._scale/1000.
+                elif old_vu == 'um' and new_vu == 'm':
+                    self._scale = self._scale/1000000.
+                elif (old_vu == 'm' and new_vu == 'mm') or (old_vu == 'mm' and new_vu == 'um'):
+                    self._scale = self._scale*1000.
+                elif old_vu == 'm' and new_vu == 'um':
+                    self._scale = self._scale*1000000.
             if old_tu != new_tu:
                 if old_tu == 'min':
-                    flow_rate = flow_rate/60
+                    self._scale = self._scale/60
                 else:
-                    flow_rate = flow_rate*60
+                    self._scale = self._scale*60
 
-            logger.info("Changed pump %s units from %s to %s", self.name, old_units, units)
+            logger.info("Changed motor %s units from %s to %s", self.name, old_units, units)
         else:
-            logger.warning("Failed to change pump %s units, units supplied were invalid: %s", self.name, units)
+            logger.warning("Failed to change motor %s units, units supplied were invalid: %s", self.name, units)
 
 
     def send_cmd(self, cmd, get_response=True):
@@ -155,36 +157,34 @@ class Motor(object):
     def home(self):
         pass #should be implimented in each subclass
 
-    @property
-    def high_limit(self):
+    def get_high_limit(self):
         pass #should be implimented in each subclass
 
-    @high_limit.setter
-    def high_limit(self, limit):
+    def set_high_limit(self, limit):
         pass
 
-    @property
-    def low_limit(self):
+    def get_low_limit(self):
         pass #should be implimented in each subclass
 
-    @low_limit.setter
-    def low_limit(self, limit):
+    def set_low_limit(self, limit):
         pass
 
-    @property
-    def speed(self):
-        pass #should be implimented in each subclass
-
-    @speed.setter
-    def speed(self, speed):
+    def get_limits(self):
         pass
 
-    @property
-    def acceleration(self):
+    def set_limits(self, low_lim, high_lim):
+        pass
+
+    def get_velocity(self):
         pass #should be implimented in each subclass
 
-    @acceleration.setter
-    def acceleration(self, acceleration):
+    def set_velocity(self, velocity):
+        pass
+
+    def get_acceleration(self):
+        pass #should be implimented in each subclass
+
+    def set_acceleration(self, acceleration):
         pass
 
     def stop(self):
@@ -414,7 +414,7 @@ class NewportXPSMotor(Motor):
         if units in ['um/s', 'um/min', 'mm/s', 'mm/min', 'm/s', 'm/min']:
             self._units = units
             old_vu, old_tu = old_units.split('/')
-            new_vu, new_tu = self._units.split('/')[0]
+            new_vu, new_tu = self._units.split('/')
             if old_vu != new_vu:
                 if (old_vu == 'um' and new_vu == 'mm') or (old_vu == 'mm' and new_vu == 'm'):
                     self._scale = self._scale/1000.
@@ -566,7 +566,7 @@ class NewportXPSMotor(Motor):
         return high_lim
 
 
-    def set_high_limit(self, positioner, index, limit):
+    def set_high_limit(self, limit,  positioner, index):
         logger.debug('Setting %s high limit', positioner)
 
         ret = self.xps.PositionerUserTravelLimitsGet(self.sockets['general'],
@@ -614,7 +614,7 @@ class NewportXPSMotor(Motor):
 
         return low_lim
 
-    def set_low_limit(self, positioner, index, limit):
+    def set_low_limit(self, limit, positioner, index):
         logger.debug('Setting %s high limit', positioner)
 
         ret = self.xps.PositionerUserTravelLimitsGet(self.sockets['general'],
@@ -642,7 +642,33 @@ class NewportXPSMotor(Motor):
 
         return success
 
-    def set_limits(self, positioner, index, low_lim, high_lim):
+    def get_limits(self, positioner, index):
+        logger.debug('Getting %s limits', positioner)
+
+        ret = self.xps.PositionerUserTravelLimitsGet(self.sockets['general'],
+            positioner)
+
+        error = ret[0]
+
+        if error != 0:
+            self.get_error('general', self.sockets['general'], error, ret[1])
+            low_lim = None
+            high_lim = None
+        else:
+            low_lim = ret[1]
+
+            logger.info('%s low limit %f', positioner, low_lim)
+            low_lim = low_lim*self._scale+self._offset[index]
+            logger.info('%s user high limit %f', positioner, low_lim)
+
+            high_lim = ret[2]
+            logger.info('%s high limit %f', positioner, high_lim)
+            high_lim = high_lim*self._scale+self._offset[index]
+            logger.info('%s user high limit %f', positioner, high_lim)
+
+        return low_lim, high_lim
+
+    def set_limits(self, low_lim, high_lim, positioner, index):
         logger.debug('Setting %s high limit', positioner)
 
         error, ret = self.xps.PositionerUserTravelLimitsSet(self.sockets['general'],
@@ -677,7 +703,7 @@ class NewportXPSMotor(Motor):
 
         return velocity
 
-    def set_velocity(self, positioner, index, velocity):
+    def set_velocity(self, velocity, positioner, index,):
         logger.debug('Getting %s velocity', positioner)
 
         ret = self.xps.PositionerSGammaParametersGet(self.sockets['general'],
@@ -724,7 +750,7 @@ class NewportXPSMotor(Motor):
 
         return acceleration
 
-    def set_acceleration(self, positioner, index, acceleration):
+    def set_acceleration(self, acceleration, positioner, index):
         logger.debug('Setting %s acceleration', positioner)
 
         ret = self.xps.PositionerSGammaParametersGet(self.sockets['general'],
@@ -927,6 +953,337 @@ class NewportXPSMotor(Motor):
                 self.ip_address, self.port, socket_id)
             self.xps.TCP_CloseSocket(socket_id)
 
+class ZaberMotor(object):
+    """
+    This class contains the settings and communication for a generic pump.
+    It is intended to be subclassed by other pump classes, which contain
+    specific information for communicating with a given pump. A pump object
+    can be wrapped in a thread for using a GUI, implimented in :py:class:`PumpCommThread`
+    or it can be used directly from the command line. The :py:class:`M5Pump`
+    documentation contains an example.
+    """
+
+    def __init__(self, device, name, binary_serial, lock, device_number, travel,
+        step_conversion=1.984375e-3):
+        """
+        :param device: The device comport as sent to pyserial
+        :type device: str
+
+        :param name: A unique identifier for the pump
+        :type name: str
+        """
+
+        self.device = device
+        self.name = name
+        self.serial = binary_serial
+        self.lock = lock
+        self.number = device_number
+        self.step_conversion = step_conversion
+
+        self._offset = 0.
+        self._scale = 1
+        self._units = 'mm/s'
+
+        self._high_lim = (travel-self._offset)/self._scale/self.step_conversion
+        self._low_lim = 0
+
+        self._initialize()
+
+    def __repr__(self):
+        return '{}({}, {})'.format(self.__class__.__name__, self.name, self.device)
+
+    def __str__(self):
+        return '{} {}, connected to {}'.format(self.__class__.__name__, self.name, self.device)
+
+    def _initialize(self):
+        mode = 0
+        mode = mode + 2**1 #Anti-backlash
+        mode = mode + 2**2 #Anti-sticktion
+        mode = mode + 2**3 #Disable Potentiometer (manual adjustment)
+        # mode = mode + 2**8 #Disable Auto-Home (Doesn't work!)
+        mode = mode + 2**11 #Enable circular phase microstepping mode
+        # mode = mode + 2**14 #Disable power LED
+
+        self.send_cmd(40, mode)
+
+        self.set_velocity(75)
+        self.set_home_velocity(10)
+        self.set_acceleration(500)
+
+
+    @property
+    def position(self):
+        """
+        Sets and returns the motor flow rate in units specified by ``motor.units``.
+        Can be set while the motor is moving, and it will update the flow rate
+        appropriately.
+
+        :type: float
+        """
+        position, _ = self.send_cmd(60)
+
+        position = position*self.step_conversion*self._scale + self._offset
+
+        return position
+
+    @position.setter
+    def position(self, position):
+        cur_position, _ = self.send_cmd(60)
+        cur_position = cur_position*self.step_conversion*self._scale
+
+        self._offset = position - cur_position
+
+    @property
+    def units(self):
+        """
+        Sets and returns the pump flow rate units. This can be set to:
+        nL/s, nL/min, uL/s, uL/min, mL/s, mL/min. Changing units keeps the
+        flow rate constant, i.e. if the flow rate was set to 100 uL/min, and
+        the units are changed to mL/min, the flow rate is set to 0.1 mL/min.
+
+        :type: str
+        """
+        return self._units
+
+    @units.setter
+    def units(self, units):
+        old_units = self._units
+
+        if units in ['um/s', 'um/min', 'mm/s', 'mm/min', 'm/s', 'm/min']:
+            self._units = units
+            old_vu, old_tu = old_units.split('/')
+            new_vu, new_tu = self._units.split('/')
+            if old_vu != new_vu:
+                if (old_vu == 'um' and new_vu == 'mm') or (old_vu == 'mm' and new_vu == 'm'):
+                    self._scale = self._scale/1000.
+                elif old_vu == 'um' and new_vu == 'm':
+                    self._scale = self._scale/1000000.
+                elif (old_vu == 'm' and new_vu == 'mm') or (old_vu == 'mm' and new_vu == 'um'):
+                    self._scale = self._scale*1000.
+                elif old_vu == 'm' and new_vu == 'um':
+                    self._scale = self._scale*1000000.
+            if old_tu != new_tu:
+                if old_tu == 'min':
+                    self._scale = self._scale/60
+                else:
+                    self._scale = self._scale*60
+
+            logger.info("Changed motor %s units from %s to %s", self.name, old_units, units)
+        else:
+            logger.warning("Failed to change motor %s units, units supplied were invalid: %s", self.name, units)
+
+
+    def send_cmd(self, cmd_num, cmd_data=None, get_response=True, check_error=True):
+        """
+        Sends a command to the pump.
+
+        :param cmd: The command to send to the pump.
+
+        :param get_response: Whether the program should get a response from the pump
+        :type get_response: bool
+        """
+        if cmd_data is not None:
+            cmd = zaber.BinaryCommand(self.number, cmd_num, cmd_data)
+        else:
+            cmd = zaber.BinaryCommand(self.number, cmd_num)
+
+        self.lock.acquire()
+        self.serial.lock.acquire()
+        try:
+            self.serial.open()
+            while self.serial.can_read():
+                self.serial.read()
+
+            self.serial.write(cmd)
+
+            if get_response:
+                while not self.serial.can_read():
+                    time.sleep(0.01)
+
+                reply = self.serial.read()
+
+            else:
+                reply = None
+
+        except Exception:
+            raise
+        finally:
+            self.serial.close()
+
+        self.serial.lock.release()
+        self.lock.release()
+
+        if reply is not None and check_error:
+            success = self.check_command_succeeded(reply)
+            data = reply.data
+        else:
+            success = True
+            data = None
+
+        return data, success
+
+
+    @classmethod
+    def check_command_succeeded(cls, reply):
+        """
+        Return true if command succeeded, print reason and return false if command
+        rejected
+
+        param reply: BinaryReply
+
+        return: boolean
+        """
+        if reply.command_number == 255: # 255 is the binary error response code.
+            logger.error("Command rejected. Error code: " + str(reply.data))
+            return False
+        else: # Command was accepted
+            return True
+
+    def get_status(self):
+        status, success = self.send_cmd(54)
+
+        return status
+
+    def is_moving(self):
+        """
+        Queries the pump about whether or not it's moving.
+
+        :returns: True if the pump is moving, False otherwise
+        :rtype: bool
+        """
+        status = self.get_status()
+
+        if (status == 1 or status == 10 or status == 18 or status == 20 or
+            status ==21 or status == 22 or status == 23):
+            moving = True
+        else:
+            moving = False
+
+        return moving
+
+    def move_relative(self, displacement):
+        steps = (displacement-self._offset)/self._scale/self.step_conversion
+        steps = int(round(steps))
+
+        cur_pos = (self.position-self._offset)/self._scale/self.step_conversion
+
+        if self._low_lim <= cur_pos+steps and cur_pos+steps <= self._high_lim:
+            _, success = self.send_cmd(21, steps)
+        else:
+            if self._low_lim >= cur_pos+steps:
+                logger.error('Target position is <= the low limit')
+            if cur_pos+steps >= self._high_lim:
+                logger.error('Target position is >= the high limit')
+
+            success = False
+
+        return success
+
+    def move_absolute(self, position):
+        steps = (position-self._offset)/self._scale/self.step_conversion
+        steps = int(round(steps))
+
+        if self._low_lim <= steps and steps <= self._high_lim:
+            _, success = self.send_cmd(20, steps)
+        else:
+            if self._low_lim >= steps:
+                logger.error('Target position is <= the low limit')
+            if steps >= self._high_lim:
+                logger.error('Target position is >= the high limit')
+
+            success = False
+
+        return success
+
+    def home(self):
+        _, success = self.send_cmd(1)
+
+        return success
+
+    def get_home_velocity(self):
+        #Note: only works with firmware > 5.2
+        velocity, success = self.send_cmd(53, 41)
+        if success:
+            velocity = velocity*9.375*self.step_conversion*self._scale
+        else:
+            velocity = None
+
+        return velocity
+
+    def set_home_velocity(self, velocity):
+        #Note: only works with firmware > 5.2
+        velocity = velocity/self._scale/self.step_conversion/9.375
+        velocity = int(round(velocity))
+
+        _, success = self.send_cmd(41, velocity)
+
+        return success
+
+    def get_high_limit(self):
+        return self._high_lim*self.step_conversion*self._scale + self._offset
+
+    def set_high_limit(self, limit):
+        self._high_lim = (limit - self._offset)/self._scale/self.step_conversion
+
+    def get_low_limit(self):
+        return self._low_lim*self.step_conversion*self._scale + self._offset
+
+    def set_low_limit(self, limit):
+        self._low_lim = (limit - self._offset)/self._scale/self.step_conversion
+
+    def set_limits(self, low_lim, high_lim):
+        self.set_low_limit(low_lim)
+        self.set_high_limit(high_lim)
+
+    def get_limits(self):
+        low_lim = self.get_low_limit()
+        high_lim = self.get_high_limit()
+
+        return low_lim, high_lim
+
+    def get_velocity(self):
+        velocity, success = self.send_cmd(53, 42)
+        if success:
+            velocity = velocity*9.375*self.step_conversion*self._scale
+        else:
+            velocity = None
+
+        return velocity
+
+    def set_velocity(self, velocity):
+        velocity = velocity/self._scale/self.step_conversion/9.375
+        velocity = int(round(velocity))
+
+        _, success = self.send_cmd(42, velocity)
+
+        return success
+
+    def get_acceleration(self):
+        accel, success = self.send_cmd(53, 43)
+        if success:
+            accel = accel*11250*self.step_conversion*self._scale
+        else:
+            accel = None
+
+        return accel
+
+    def set_acceleration(self, acceleration):
+        acceleration = acceleration/self._scale/self.step_conversion/11250
+        acceleration = int(round(acceleration))
+
+        _, success = self.send_cmd(43, acceleration)
+
+        return success
+
+    def stop(self):
+        _, success = self.send_cmd(23)
+
+        return success
+
+    def disconnect(self):
+        """Close any communication connections"""
+        pass #Should be implimented in each subclass
+
 class MotorCommThread(threading.Thread):
     """
     This class creates a control thread for pumps attached to the system.
@@ -1005,6 +1362,7 @@ class MotorCommThread(threading.Thread):
             'set_high_limit'            : self._set_high_limit,
             'set_low_limit'             : self._set_low_limit,
             'set_limits'                : self._set_limits,
+            'get_limits'                : self._get_limits,
             'get_velocity'              : self._get_velocity,
             'set_velocity'              : self._set_velocity,
             'get_acceleration'          : self._get_acceleration,
@@ -1023,7 +1381,8 @@ class MotorCommThread(threading.Thread):
             self._connected_motors[motor[0]] = motor[1]
 
         self.known_motors = {'Newport_XPS' : NewportXPSMotor,
-                            }
+            'Zaber' : ZaberMotor,
+            }
 
     def run(self):
         """
@@ -1377,7 +1736,7 @@ class MotorCommThread(threading.Thread):
         self.answer_queue.append(success)
         logger.debug("Motor %s positioner %s homed", name, positioner)
 
-    def _get_high_limit(self, name, positioner, index, **kwargs):
+    def _get_high_limit(self, name, **kwargs):
         """
         This method returns where or not the pump is moving.
 
@@ -1389,13 +1748,19 @@ class MotorCommThread(threading.Thread):
 
         :rtype: bool
         """
-        logger.info("Getting motor %s positioner %s high limit", name, positioner)
+        if 'positioner' in kwargs:
+            logger.info("Getting motor %s positioner %s high limit", name, kwargs['positioner'])
+        else:
+            logger.info("Getting motor %s high limit", name)
         motor = self._connected_motors[name]
-        limit = motor.get_high_limit(positioner, index)
+        limit = motor.get_high_limit(**kwargs)
         self.answer_queue.append(limit)
-        logger.debug("Got motor %s positioner %s high limit", name, positioner)
+        if 'positioner' in kwargs:
+            logger.debug("Got motor %s positioner %s high limit", name, kwargs['positioner'])
+        else:
+            logger.debug("Got motor %s high limit", name)
 
-    def _get_low_limit(self, name, positioner, index, **kwargs):
+    def _get_low_limit(self, name, **kwargs):
         """
         This method returns where or not the pump is moving.
 
@@ -1407,13 +1772,32 @@ class MotorCommThread(threading.Thread):
 
         :rtype: bool
         """
-        logger.info("Getting motor %s positioner %s low limit", name, positioner)
+        if 'positioner' in kwargs:
+            logger.info("Getting motor %s positioner %s low limit", name, kwargs['positioner'])
+        else:
+            logger.info("Getting motor %s low limit", name)
         motor = self._connected_motors[name]
-        limit = motor.get_low_limit(positioner, index)
+        limit = motor.get_low_limit(**kwargs)
         self.answer_queue.append(limit)
-        logger.debug("Got motor %s positioner %s low limit", name, positioner)
+        if 'positioner' in kwargs:
+            logger.debug("Got motor %s positioner %s low limit", name, kwargs['positioner'])
+        else:
+            logger.debug("Got motor %s low limit", name)
 
-    def _set_high_limit(self, name, positioner, index, limit, **kwargs):
+    def _get_limits(self, name, **kwargs):
+        if 'positioner' in kwargs:
+            logger.info("Getting motor %s positioner %s limits", name, kwargs['positioner'])
+        else:
+            logger.info("Getting motor %s limits", name)
+        motor = self._connected_motors[name]
+        limit = motor.get_limits(**kwargs)
+        self.answer_queue.append(limit)
+        if 'positioner' in kwargs:
+            logger.debug("Got motor %s positioner %s limits", name, kwargs['positioner'])
+        else:
+            logger.debug("Got motor %s limits", name)
+
+    def _set_high_limit(self, name, limit, **kwargs):
         """
         This method returns where or not the pump is moving.
 
@@ -1425,13 +1809,19 @@ class MotorCommThread(threading.Thread):
 
         :rtype: bool
         """
-        logger.info("Setting motor %s positioner %s high limit", name, positioner)
+        if 'positioner' in kwargs:
+            logger.info("Setting motor %s positioner %s high limit", name, kwargs['positioner'])
+        else:
+            logger.info("Setting motor %s high limit", name)
         motor = self._connected_motors[name]
-        success = motor.set_high_limit(positioner, index, limit)
+        success = motor.set_high_limit(limit, **kwargs)
         self.answer_queue.append(success)
-        logger.debug("Set motor %s positioner %s high limit", name, positioner)
+        if 'positioner' in kwargs:
+            logger.debug("Set motor %s positioner %s high limit", name, kwargs['positioner'])
+        else:
+            logger.debug("Set motor %s positioner %s high limit", name)
 
-    def _set_low_limit(self, name, positioner, index, limit, **kwargs):
+    def _set_low_limit(self, name, limit, **kwargs):
         """
         This method returns where or not the pump is moving.
 
@@ -1443,13 +1833,19 @@ class MotorCommThread(threading.Thread):
 
         :rtype: bool
         """
-        logger.info("Setting motor %s positioner %s low limit", name, positioner)
+        if 'positioner' in kwargs:
+            logger.info("Setting motor %s positioner %s low limit", name, kwargs['positioner'])
+        else:
+            logger.info("Setting motor %s low limit", name)
         motor = self._connected_motors[name]
-        success = motor.set_low_limit(positioner, index, limit)
+        success = motor.set_low_limit(limit, **kwargs)
         self.answer_queue.append(success)
-        logger.debug("Set motor %s positioner %s low limit", name, positioner)
+        if 'positioner' in kwargs:
+            logger.debug("Set motor %s positioner %s low limit", name, kwargs['positioner'])
+        else:
+            logger.debug("Set motor %s low limit", name)
 
-    def _set_limits(self, name, positioner, index, low_limit, high_limit, **kwargs):
+    def _set_limits(self, name, low_limit, high_limit, **kwargs):
         """
         This method returns where or not the pump is moving.
 
@@ -1461,13 +1857,19 @@ class MotorCommThread(threading.Thread):
 
         :rtype: bool
         """
-        logger.info("Setting motor %s positioner %s limits", name, positioner)
+        if 'positioner' in kwargs:
+            logger.info("Setting motor %s positioner %s limits", name, kwargs['positioner'])
+        else:
+            logger.info("Setting motor %s limits", name)
         motor = self._connected_motors[name]
-        success = motor.set_limits(positioner, index, low_limit, high_limit)
+        success = motor.set_limits(low_limit, high_limit, **kwargs)
         self.answer_queue.append(success)
-        logger.debug("Set motor %s positioner %s limits", name, positioner)
+        if 'positioner' in kwargs:
+            logger.debug("Set motor %s positioner %s limits", name, kwargs['positioner'])
+        else:
+            logger.debug("Set motor %s limits", name)
 
-    def _get_velocity(self, name, positioner, index, **kwargs):
+    def _get_velocity(self, name, **kwargs):
         """
         This method returns where or not the pump is moving.
 
@@ -1479,13 +1881,19 @@ class MotorCommThread(threading.Thread):
 
         :rtype: bool
         """
-        logger.info("Getting motor %s positioner %s velocity", name, positioner)
+        if 'positioner' in kwargs:
+            logger.info("Getting motor %s positioner %s velocity", name, kwargs['positioner'])
+        else:
+            logger.info("Getting motor %s velocity", name)
         motor = self._connected_motors[name]
-        velocity = motor.get_velocity(positioner, index)
+        velocity = motor.get_velocity(**kwargs)
         self.answer_queue.append(velocity)
-        logger.debug("Got motor %s positioner %s velocity", name, positioner)
+        if 'positioner' in kwargs:
+            logger.debug("Got motor %s positioner %s velocity", name, kwargs['positioner'])
+        else:
+            logger.debug("Got motor %s velocity", name)
 
-    def _set_velocity(self, name, positioner, index, velocity, **kwargs):
+    def _set_velocity(self, name, velocity, **kwargs):
         """
         This method returns where or not the pump is moving.
 
@@ -1497,13 +1905,19 @@ class MotorCommThread(threading.Thread):
 
         :rtype: bool
         """
-        logger.info("Setting motor %s positioner %s velocity", name, positioner)
+        if 'positioner' in kwargs:
+            logger.info("Setting motor %s positioner %s velocity", name, kwargs['positioner'])
+        else:
+            logger.info("Setting motor %s velocity", name)
         motor = self._connected_motors[name]
-        success = motor.set_velocity(positioner, index, velocity)
+        success = motor.set_velocity(velocity, **kwargs)
         self.answer_queue.append(success)
-        logger.debug("Set motor %s positioner %s velocity", name, positioner)
+        if 'positioner' in kwargs:
+            logger.debug("Set motor %s positioner %s velocity", name, kwargs['positioner'])
+        else:
+            logger.debug("Set motor %s velocity", name)
 
-    def _get_acceleration(self, name, positioner, index, **kwargs):
+    def _get_acceleration(self, name, **kwargs):
         """
         This method returns where or not the pump is moving.
 
@@ -1515,13 +1929,19 @@ class MotorCommThread(threading.Thread):
 
         :rtype: bool
         """
-        logger.info("Getting motor %s positioner %s acceleration", name, positioner)
+        if 'positioner' in kwargs:
+            logger.info("Getting motor %s positioner %s acceleration", name, kwargs['positioner'])
+        else:
+            logger.info("Getting motor %s acceleration", name)
         motor = self._connected_motors[name]
-        acceleration = motor.get_acceleration(positioner, index)
+        acceleration = motor.get_acceleration(**kwargs)
         self.answer_queue.append(acceleration)
-        logger.debug("Got motor %s positioner %s acceleration", name, positioner)
+        if 'positioner' in kwargs:
+            logger.debug("Got motor %s positioner %s acceleration", name, kwargs['positioner'])
+        else:
+            logger.debug("Got motor %s positioner", name)
 
-    def _set_acceleration(self, name, positioner, index, acceleration, **kwargs):
+    def _set_acceleration(self, name, acceleration, **kwargs):
         """
         This method returns where or not the pump is moving.
 
@@ -1533,11 +1953,17 @@ class MotorCommThread(threading.Thread):
 
         :rtype: bool
         """
-        logger.info("Setting motor %s positioner %s acceleration", name, positioner)
+        if 'positioner' in kwargs:
+            logger.info("Setting motor %s positioner %s acceleration", name, kwargs['positioner'])
+        else:
+            logger.info("Setting motor %s acceleration", name)
         motor = self._connected_motors[name]
-        success = motor.set_acceleration(positioner, index, acceleration)
+        success = motor.set_acceleration(acceleration, **kwargs)
         self.answer_queue.append(success)
-        logger.debug("Set motor %s positioner %s acceleration", name, positioner)
+        if 'positioner' in kwargs:
+            logger.debug("Set motor %s positioner %s acceleration", name, kwargs['positioner'])
+        else:
+            logger.debug("Set motor %s acceleration", name)
 
     def _get_position_compare(self, name, positioner, index, **kwargs):
         """
@@ -1695,7 +2121,7 @@ class MotorPanel(wx.Panel):
     :py:func:`_on_type` function.
     """
     def __init__(self, parent, panel_id, panel_name, motor_cmd_q, motor_answer_q,
-        known_motors, motor_name, motor_type=None, motor_args=[], motor_kwargs={}):
+        known_motors, motor_name, ports, motor_type=None, motor_args=[], motor_kwargs={}):
         """
         Initializes the custom thread. Important parameters here are the
         list of known commands ``_commands`` and known pumps ``known_pumps``.
@@ -1744,6 +2170,7 @@ class MotorPanel(wx.Panel):
         self.known_motors = known_motors
         self.answer_q = motor_answer_q
         self.connected = False
+        self.ports = ports
 
         self.monitor_event = threading.Event()
         self.monitor_thread = threading.Thread(target=self._update_status)
@@ -2069,6 +2496,25 @@ class MotorPanel(wx.Panel):
             flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
         self.newport_xps_sizer.AddGrowableCol(1)
 
+
+        self.zaber_port = wx.Choice(self, choices=self.ports)
+        self.zaber_number = wx.TextCtrl(self, size=(60,-1))
+        self.zaber_travel = wx.TextCtrl(self, size=(60, -1))
+
+        self.zaber_sizer = wx.FlexGridSizer(cols=2, vgap=2, hgap=2)
+        self.zaber_sizer.Add(wx.StaticText(self, label='Port:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        self.zaber_sizer.Add(self.zaber_port,
+            flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
+        self.zaber_sizer.Add(wx.StaticText(self, label='Number:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        self.zaber_sizer.Add(self.zaber_number,
+            flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
+        self.zaber_sizer.Add(wx.StaticText(self, label='Travel:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        self.zaber_sizer.Add(self.zaber_travel,
+            flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
+
         self.connect_button = wx.Button(self, label='Connect')
         self.connect_button.Bind(wx.EVT_BUTTON, self._on_connect)
 
@@ -2077,11 +2523,15 @@ class MotorPanel(wx.Panel):
         self.settings_sizer.Add(type_sizer, border=5, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.TOP)
         self.settings_sizer.Add(self.newport_xps_sizer, border=5,
             flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT)
+        self.settings_sizer.Add(self.zaber_sizer, border=5,
+            flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT)
         self.settings_sizer.Add(self.connect_button, border=5,
             flag=wx.ALIGN_CENTER_HORIZONTAL|wx.TOP|wx.BOTTOM)
 
         if self.type_ctrl.GetStringSelection() != 'Newport XPS':
             self.settings_sizer.Hide(self.newport_xps_sizer, recursive=True)
+        if self.type_ctrl.GetStringSelection != 'Zaber':
+            self.settings_sizer.Hide(self.zaber_sizer, recursive=True)
 
         if self.np_group_type.GetStringSelection() == 'Single':
             self.newport_xps_sizer.Hide(self.np_pos2_label)
@@ -2135,26 +2585,42 @@ class MotorPanel(wx.Panel):
 
     def _on_move(self, evt):
         pos = self.pos_ctrl.GetValue()
-        mtr = self.motor_params['mtr1']
-        index = 0
+        if self.motor_params['type'] == 'Newport_XPS':
+            mtr = self.motor_params['mtr1']
+            index = 0
+        else:
+            mtr = None
+            index = None
         self.move_abs(mtr, index, pos)
 
     def _on_set(self, evt):
         pos = self.pos_ctrl.GetValue()
-        mtr = self.motor_params['mtr1']
-        index = 0
+        if self.motor_params['type'] == 'Newport_XPS':
+            mtr = self.motor_params['mtr1']
+            index = 0
+        else:
+            mtr = None
+            index = None
         self.set_position(mtr, index, pos)
 
     def _on_mrel_plus(self, evt):
         pos = self.mrel_ctrl.GetValue()
-        mtr = self.motor_params['mtr1']
-        index = 0
+        if self.motor_params['type'] == 'Newport_XPS':
+            mtr = self.motor_params['mtr1']
+            index = 0
+        else:
+            mtr = None
+            index = None
         self.move_rel(mtr, index, pos, True)
 
     def _on_mrel_minus(self, evt):
         pos = self.mrel_ctrl.GetValue()
-        mtr = self.motor_params['mtr1']
-        index = 0
+        if self.motor_params['type'] == 'Newport_XPS':
+            mtr = self.motor_params['mtr1']
+            index = 0
+        else:
+            mtr = None
+            index = None
         self.move_rel(mtr, index, pos, False)
 
     def _on_limit_text(self, evt):
@@ -2165,40 +2631,66 @@ class MotorPanel(wx.Panel):
         evt_obj = evt.GetEventObject()
         evt_obj.SetBackgroundColour(wx.NullColour)
         lim = self.low_limit.GetValue()
-        mtr = self.motor_params['mtr1']
-        index = 0
+        if self.motor_params['type'] == 'Newport_XPS':
+            mtr = self.motor_params['mtr1']
+            index = 0
+        else:
+            mtr = None
+            index = None
         self.set_low_limit(mtr, index, lim)
 
     def _on_high_limit(self, evt):
         evt_obj = evt.GetEventObject()
         evt_obj.SetBackgroundColour(wx.NullColour)
         lim = self.high_limit.GetValue()
-        mtr = self.motor_params['mtr1']
-        index = 0
+        if self.motor_params['type'] == 'Newport_XPS':
+            mtr = self.motor_params['mtr1']
+            index = 0
+        else:
+            mtr = None
+            index = None
         self.set_high_limit(mtr, index, lim)
 
     def _on_v(self, evt):
         evt_obj = evt.GetEventObject()
         evt_obj.SetBackgroundColour(wx.NullColour)
         lim = self.v_ctrl.GetValue()
-        mtr = self.motor_params['mtr1']
-        index = 0
+        if self.motor_params['type'] == 'Newport_XPS':
+            mtr = self.motor_params['mtr1']
+            index = 0
+        else:
+            mtr = None
+            index = None
         self.set_v(mtr, index, lim)
 
     def _on_a(self, evt):
         evt_obj = evt.GetEventObject()
         evt_obj.SetBackgroundColour(wx.NullColour)
         lim = self.a_ctrl.GetValue()
-        mtr = self.motor_params['mtr1']
-        index = 0
+        if self.motor_params['type'] == 'Newport_XPS':
+            mtr = self.motor_params['mtr1']
+            index = 0
+        else:
+            mtr = None
+            index = None
         self.set_a(mtr, index, lim)
 
     def _on_home(self, evt):
-        mtr = self.motor_params['mtr1']
+        if self.motor_params['type'] == 'Newport_XPS':
+            mtr = self.motor_params['mtr1']
+            index = 0
+        else:
+            mtr = None
+            index = None
         self.home(mtr)
 
     def _on_stop(self, evt):
-        self.motor.stop_positioner(self.motor_params['mtr1'])
+        if self.motor_params['type'] == 'Newport_XPS':
+            mtr = self.motor_params['mtr1']
+            index = 0
+            self.motor.stop_positioner(mtr)
+        else:
+            self.motor.stop()
 
     def _on_move2(self, evt):
         pos = self.pos_ctrl2.GetValue()
@@ -2276,10 +2768,17 @@ class MotorPanel(wx.Panel):
     def move_abs(self, mtr, index, pos):
         try:
             pos = float(pos)
-            args = (self.name, mtr, index, pos)
-            self._send_cmd('move_positioner_absolute', args)
-            self.answer_type_q.put('move_positioner_absolute')
-            self.answer_event.set()
+
+            if self.motor_params['type'] == 'Newport_XPS':
+                args = (self.name, mtr, index, pos)
+                self._send_cmd('move_positioner_absolute', args)
+                self.answer_type_q.put('move_positioner_absolute')
+                self.answer_event.set()
+            else:
+                args = (self.name, pos)
+                self._send_cmd('move_absolute', args)
+                self.answer_type_q.put('move_absolute')
+                self.answer_event.set()
 
         except ValueError:
             msg = ('Move failed, position must be a number.')
@@ -2290,10 +2789,17 @@ class MotorPanel(wx.Panel):
             pos = float(pos)
             if not move_positive:
                 pos = -1*pos
-            args = (self.name, mtr, index, pos)
-            self._send_cmd('move_positioner_relative', args)
-            self.answer_type_q.put('move_positioner_relative')
-            self.answer_event.set()
+
+            if self.motor_params['type'] == 'Newport_XPS':
+                args = (self.name, mtr, index, pos)
+                self._send_cmd('move_positioner_relative', args)
+                self.answer_type_q.put('move_positioner_relative')
+                self.answer_event.set()
+            else:
+                args = (self.name, pos)
+                self._send_cmd('move_relative', args)
+                self.answer_type_q.put('move_relative')
+                self.answer_event.set()
 
         except ValueError:
             msg = ('Move failed, position must be a number.')
@@ -2315,10 +2821,17 @@ class MotorPanel(wx.Panel):
     def set_position(self, mtr, index, pos):
         try:
             pos = float(pos)
-            args = (self.name, mtr, index, pos)
-            self._send_cmd('set_positioner_position', args)
-            self.answer_type_q.put('set_positioner_position')
-            self.answer_event.set()
+
+            if self.motor_params['type'] == 'Newport_XPS':
+                args = (self.name, mtr, index, pos)
+                self._send_cmd('set_positioner_position', args)
+                self.answer_type_q.put('set_positioner_position')
+                self.answer_event.set()
+            else:
+                args = (self.name, pos)
+                self._send_cmd('set_position', args)
+                self.answer_type_q.put('set_position')
+                self.answer_event.set()
 
         except ValueError:
             msg = ('Set position failed, position must be a number.')
@@ -2327,8 +2840,9 @@ class MotorPanel(wx.Panel):
     def set_low_limit(self, mtr, index, limit):
         try:
             limit = float(limit)
-            args = (self.name, mtr, index, limit)
-            self._send_cmd('set_low_limit', args)
+            args = (self.name, limit)
+            kwargs = {'positioner':  mtr, 'index': index}
+            self._send_cmd('set_low_limit', args, kwargs)
             self.answer_type_q.put('set_low_limit')
             self.answer_event.set()
 
@@ -2339,8 +2853,9 @@ class MotorPanel(wx.Panel):
     def set_high_limit(self, mtr, index, limit):
         try:
             limit = float(limit)
-            args = (self.name, mtr, index, limit)
-            self._send_cmd('set_high_limit', args)
+            args = (self.name, limit)
+            kwargs = {'positioner':  mtr, 'index': index}
+            self._send_cmd('set_high_limit', args, kwargs)
             self.answer_type_q.put('set_high_limit')
             self.answer_event.set()
 
@@ -2351,8 +2866,9 @@ class MotorPanel(wx.Panel):
     def set_v(self, mtr, index, velocity):
         try:
             velocity = float(velocity)
-            args = (self.name, mtr, index, velocity)
-            self._send_cmd('set_velocity', args)
+            args = (self.name, velocity)
+            kwargs = {'positioner':  mtr, 'index': index}
+            self._send_cmd('set_velocity', args, kwargs)
             self.answer_type_q.put('set_velocity')
             self.answer_event.set()
 
@@ -2363,8 +2879,9 @@ class MotorPanel(wx.Panel):
     def set_a(self, mtr, index, acceleration):
         try:
             acceleration = float(acceleration)
-            args = (self.name, mtr, index, acceleration)
-            self._send_cmd('set_acceleration', args)
+            args = (self.name, acceleration)
+            kwargs = {'positioner':  mtr, 'index': index}
+            self._send_cmd('set_acceleration', args, kwargs)
             self.answer_type_q.put('set_acceleration')
             self.answer_event.set()
 
@@ -2373,11 +2890,16 @@ class MotorPanel(wx.Panel):
             wx.CallAfter(wx.MessageBox, 'Setting acceleration failed', msg)
 
     def home(self, mtr):
-        if self.motor_params['group_type'] == 'XY':
-            mtr = self.motor_params['group']
-        self._send_cmd('home_positioner', (self.name, mtr))
-        self.answer_type_q.put('home_positioner')
-        self.answer_event.set()
+        if self.motor_params['type'] == 'Newport_XPS':
+            if self.motor_params['group_type'] == 'XY':
+                mtr = self.motor_params['group']
+            self._send_cmd('home_positioner', (self.name, mtr))
+            self.answer_type_q.put('home_positioner')
+            self.answer_event.set()
+        else:
+            self._send_cmd('home', (self.name,))
+            self.answer_type_q.put('home')
+            self.answer_event.set()
 
     def _on_np_group_type(self, evt):
         if self.np_group_type.GetStringSelection() == 'Single':
@@ -2402,6 +2924,7 @@ class MotorPanel(wx.Panel):
 
         if motor == 'Newport XPS':
             self.settings_sizer.Show(self.newport_xps_sizer, recursive=True)
+            self.settings_sizer.Hide(self.zaber_sizer, recursive=True)
 
             if self.np_group_type.GetStringSelection() == 'Single':
                 self.newport_xps_sizer.Hide(self.np_pos2_label)
@@ -2417,6 +2940,14 @@ class MotorPanel(wx.Panel):
                 self.control_sub_sizer.Show(self.control_mtr2_sizer, recursive=True)
                 self.control_sizer.Show(self.group_btn_sizer, recursive=True)
 
+        elif motor == 'Zaber':
+            self.settings_sizer.Hide(self.newport_xps_sizer, recursive=True)
+            self.settings_sizer.Show(self.zaber_sizer, recursive=True)
+
+        else:
+            self.settings_sizer.Hide(self.newport_xps_sizer, recursive=True)
+            self.settings_sizer.Hide(self.zaber_sizer, recursive=True)
+
         self.Parent.Layout()
         self.Parent.Fit()
 
@@ -2427,6 +2958,7 @@ class MotorPanel(wx.Panel):
     def _connect(self):
         """Initializes the pump in the PumpCommThread"""
         motor = self.type_ctrl.GetStringSelection().replace(' ', '_')
+        frame = wx.FindWindowByName('MotorFrame')
 
         if motor == 'Newport_XPS':
             ip = self.np_ip.GetValue()
@@ -2444,7 +2976,6 @@ class MotorPanel(wx.Panel):
             else:
                 num_axes = 2
 
-            frame = wx.FindWindowByName('MotorFrame')
             if frame.xps is None:
                 frame.xps = xps_drivers.XPS()
 
@@ -2498,6 +3029,74 @@ class MotorPanel(wx.Panel):
                 'num_axes': num_axes,
                 }
 
+        elif motor == 'Zaber':
+            port = self.zaber_port.GetStringSelection()
+            number = int(self.zaber_number.GetValue())
+            travel = float(self.zaber_travel.GetValue())
+
+            if port not in frame.zaber:
+                binary_serial = zaber.BinarySerial(str("/dev/tty.usbserial-A6023E9E"))
+                binary_serial.close()
+                lock = threading.Lock()
+                frame.zaber[port] = (binary_serial, lock)
+
+                binary_serial.lock.acquire()
+
+                try:
+                    binary_serial.open()
+                    while binary_serial.can_read():
+                        reply = binary_serial.read()
+                    # Device number 0, command number 2, renumber.
+                    command = zaber.BinaryCommand(0, 2)
+                    binary_serial.write(command)
+
+                    time.sleep(5)
+
+                    while binary_serial.can_read():
+                        reply = binary_serial.read()
+                        if ZaberMotor.check_command_succeeded(reply):
+                            logger.debug("Zaber device renumbered")
+                        else:
+                            logger.error("Zaber device renumbering failed")
+
+                except Exception:
+                    raise
+                finally:
+                    binary_serial.close()
+
+                binary_serial.lock.release()
+
+            else:
+                binary_serial, lock = frame.zaber[port]
+
+            self.motor = ZaberMotor(port, self.name, binary_serial, lock,
+                number, travel)
+
+            self.motor_params = {'type': 'Zaber',
+            'port': port,
+            'number': number,
+            'travel': travel,
+            }
+
+        if motor != 'Newport_XPS':
+            v = self.motor.get_velocity()
+            self.v_ctrl.SetValue(str(v))
+            self.v_ctrl.SetBackgroundColour(wx.NullColour)
+
+            a = self.motor.get_acceleration()
+            self.a_ctrl.SetValue(str(a))
+            self.a_ctrl.SetBackgroundColour(wx.NullColour)
+
+            low_lim = self.motor.get_low_limit()
+            self.low_limit.SetValue(str(low_lim))
+            self.low_limit.SetBackgroundColour(wx.NullColour)
+
+            high_lim = self.motor.get_high_limit()
+            self.high_limit.SetValue(str(high_lim))
+            self.high_limit.SetBackgroundColour(wx.NullColour)
+
+            self._set_status('Connected', '')
+
         logger.info('Connected to motor %s', self.name)
         self.connected = True
         self.connect_button.SetLabel('Reconnect')
@@ -2515,13 +3114,13 @@ class MotorPanel(wx.Panel):
 
         :param str status: The status to display.
         """
-        logger.debug('Setting pump %s status to %s - %s', self.name, status, descrip)
+        logger.debug('Setting motor %s status to %s - %s', self.name, status, descrip)
         self.status.SetLabel(str(status))
         self.status.SetToolTip(descrip)
         self.pos_sizer.Layout()
         self.pos_sizer2.Layout()
 
-    def _send_cmd(self, cmd, args=()):
+    def _send_cmd(self, cmd, args=(), kwargs={}):
         """
         Sends commands to the pump using the ``pump_cmd_q`` that was given
         to :py:class:`PumpCommThread`.
@@ -2529,36 +3128,42 @@ class MotorPanel(wx.Panel):
         :param str cmd: The command to send, matching the command in the
             :py:class:`PumpCommThread` ``_commands`` dictionary.
         """
-        logger.debug('Sending pump %s command %s', self.name, cmd)
+        logger.debug('Sending motor %s command %s', self.name, cmd)
         if cmd == 'move_positioner_absolute':
-            self.motor_cmd_q.append(('move_positioner_absolute', args, {}))
+            self.motor_cmd_q.append(('move_positioner_absolute', args, kwargs))
 
         elif cmd == 'move_positioner_relative':
-            self.motor_cmd_q.append(('move_positioner_relative', args, {}))
+            self.motor_cmd_q.append(('move_positioner_relative', args, kwargs))
 
         elif cmd == 'move_absolute':
-            self.motor_cmd_q.append(('move_absolute', args, {}))
+            self.motor_cmd_q.append(('move_absolute', args, kwargs))
+
+        elif cmd == 'move_relative':
+            self.motor_cmd_q.append(('move_relative', args, kwargs))
 
         elif cmd == 'set_positioner_position':
-            self.motor_cmd_q.append(('set_positioner_position', args, {}))
+            self.motor_cmd_q.append(('set_positioner_position', args, kwargs))
 
         elif cmd == 'set_low_limit':
-            self.motor_cmd_q.append(('set_low_limit', args, {}))
+            self.motor_cmd_q.append(('set_low_limit', args, kwargs))
 
         elif cmd == 'set_high_limit':
-            self.motor_cmd_q.append(('set_high_limit', args, {}))
+            self.motor_cmd_q.append(('set_high_limit', args, kwargs))
 
         elif cmd == 'set_velocity':
-            self.motor_cmd_q.append(('set_velocity', args, {}))
+            self.motor_cmd_q.append(('set_velocity', args, kwargs))
 
         elif cmd == 'set_acceleration':
-            self.motor_cmd_q.append(('set_acceleration', args, {}))
+            self.motor_cmd_q.append(('set_acceleration', args, kwargs))
 
         elif cmd == 'home_positioner':
-            self.motor_cmd_q.append(('home_positioner', args, {}))
+            self.motor_cmd_q.append(('home_positioner', args, kwargs))
+
+        elif cmd == 'home':
+            self.motor_cmd_q.append(('home', args, kwargs))
 
         elif cmd == 'add_motor':
-            self.motor_cmd_q.append(('add_motor', (self.motor, self.name), {}))
+            self.motor_cmd_q.append(('add_motor', (self.motor, self.name), kwargs))
 
     def _get_response(self):
         start_time = time.time()
@@ -2591,11 +3196,11 @@ class MotorPanel(wx.Panel):
                     if not response:
                         if (cmd == 'move_positioner_absolute'
                             or cmd == 'move_positioner_relative'
-                            or cmd == 'move_absolute'):
+                            or cmd == 'move_absolute' or cmd == 'move_relative'):
                             msg = ('Move failed, check motor status.')
                             wx.CallAfter(wx.MessageBox, 'Move failed', msg)
 
-                        elif cmd == 'set_positioner_position':
+                        elif cmd == 'set_positioner_position' or cmd == 'set_position':
                             msg = ('Set position failed, check motor status.')
                             wx.CallAfter(wx.MessageBox, 'Set position failed', msg)
 
@@ -2611,7 +3216,7 @@ class MotorPanel(wx.Panel):
                             msg = ('Setting acceleration failed, check motor status.')
                             wx.CallAfter(wx.MessageBox, 'Setting acceleration failed', msg)
 
-                        elif cmd == 'home_positioner':
+                        elif cmd == 'home_positioner' or cmd == 'home':
                             msg = ('Homing failed, check motor status.')
                             wx.CallAfter(wx.MessageBox, 'Homing failed', msg)
 
@@ -2637,6 +3242,15 @@ class MotorPanel(wx.Panel):
                     wx.CallAfter(self._set_status, status, descrip)
 
                     if int(status)>=43 and int(status)<=45:
+                        wx.CallAfter(self.moving.SetLabel, 'True')
+                    else:
+                        wx.CallAfter(self.moving.SetLabel, 'False')
+
+                else:
+                    mtr_position = self.motor.position
+                    wx.CallAfter(self.pos.SetLabel, str(mtr_position))
+
+                    if self.motor.is_moving():
                         wx.CallAfter(self.moving.SetLabel, 'True')
                     else:
                         wx.CallAfter(self.moving.SetLabel, 'False')
@@ -2682,6 +3296,9 @@ class MotorFrame(wx.Frame):
         self.motors =[]
 
         self.xps = None
+        self.zaber = {}
+
+        self._get_ports()
 
         top_sizer = self._create_layout()
 
@@ -2690,12 +3307,12 @@ class MotorFrame(wx.Frame):
         self.Fit()
         self.Raise()
 
-        self._initmotors()
+        # self._initmotors()
 
     def _create_layout(self):
         """Creates the layout"""
         motor_panel = MotorPanel(self, wx.ID_ANY, 'stand_in', self.motor_cmd_q,
-            self.motor_answer_q, self.motor_con.known_motors, 'stand_in')
+            self.motor_answer_q, self.motor_con.known_motors, 'stand_in', self.ports)
 
         self.motor_sizer = wx.BoxSizer(wx.HORIZONTAL)
         self.motor_sizer.Add(motor_panel, flag=wx.RESERVE_SPACE_EVEN_IF_HIDDEN)
@@ -2749,7 +3366,7 @@ class MotorFrame(wx.Frame):
 
         for motor in setup_motors:
             new_motor = MotorPanel(self, wx.ID_ANY, motor[0][0], self.motor_cmd_q,
-                self.motor_answer_q, self.motor_con.known_motors, motor[0][0],
+                self.motor_answer_q, self.motor_con.known_motors, motor[0][0], self.ports,
                 motor[0][1], motor[0], motor[1])
 
             self.motor_sizer.Add(new_motor, border=5, flag=wx.LEFT|wx.RIGHT)
@@ -2779,7 +3396,7 @@ class MotorFrame(wx.Frame):
                     return
 
             new_motor = MotorPanel(self, wx.ID_ANY, name, self.motor_cmd_q,
-                self.motor_answer_q, self.motor_con.known_motors, name)
+                self.motor_answer_q, self.motor_con.known_motors, name, self.ports)
             logger.info('Added new motor %s to the motor control panel.', name)
             self.motor_sizer.Add(new_motor, border=5, flag=wx.LEFT|wx.RIGHT)
             self.motors.append(new_motor)
@@ -2788,6 +3405,18 @@ class MotorFrame(wx.Frame):
             self.Fit()
 
         return
+
+    def _get_ports(self):
+        """
+        Gets a list of active comports.
+
+        .. note:: This doesn't update after the program is opened, so you need
+            to start the program after all pumps are connected to the computer.
+        """
+        port_info = list_ports.comports()
+        self.ports = [port.device for port in port_info]
+
+        logger.debug('Found the following comports for the ValveFrame: %s', ' '.join(self.ports))
 
     def _on_exit(self, evt):
         """Stops all current pump motions and then closes the frame."""
@@ -2848,8 +3477,8 @@ if __name__ == '__main__':
     # my_motor.get_high_limit('GROUP1.POSITIONER', 0)
     # my_motor.get_low_limit('GROUP1.POSITIONER', 0)
 
-    # my_motor.set_high_limit('GROUP1.POSITIONER', 0, 10)
-    # my_motor.set_low_limit('GROUP1.POSITIONER', 0, -10)
+    # my_motor.set_high_limit(10, 'GROUP1.POSITIONER', 0)
+    # my_motor.set_low_limit(-10, 'GROUP1.POSITIONER', 0)
 
     # velocity = my_motor.get_velocity('GROUP1.POSITIONER', 0)
     # print(velocity)
@@ -2858,13 +3487,13 @@ if __name__ == '__main__':
     # current_position = my_motor.position
     # print(current_position)
 
-    # my_motor.set_velocity('GROUP1.POSITIONER', 0, 25)
+    # my_motor.set_velocity(25, 'GROUP1.POSITIONER', 0)
 
     # my_motor.move_positioner_relative('GROUP1.POSITIONER', 0, 10)
     # current_position = my_motor.position
     # print(current_position)
 
-    # my_motor.set_velocity('GROUP1.POSITIONER', 0, 10)
+    # my_motor.set_velocity(10, 'GROUP1.POSITIONER', 0)
 
 
     # 2 axis xy group
@@ -2898,8 +3527,8 @@ if __name__ == '__main__':
     # my_motor.get_high_limit('XY.Y', 1)
     # my_motor.get_low_limit('XY.Y', 1)
 
-    # my_motor.set_high_limit('XY.Y', 1, 20)
-    # my_motor.set_low_limit('XY.Y', 1, -20)
+    # my_motor.set_high_limit(20, 'XY.Y', 1)
+    # my_motor.set_low_limit(-20, 'XY.Y', 1)
 
     # velocity = my_motor.get_velocity('XY.X', 0)
     # print(velocity)
@@ -2908,14 +3537,14 @@ if __name__ == '__main__':
     # current_position = my_motor.position
     # print(current_position)
 
-    # my_motor.set_velocity('XY.X', 0, 25)
+    # my_motor.set_velocity(25, 'XY.X', 0)
 
     # my_motor.move_positioner_relative('XY.X', 0, 10)
     # current_position = my_motor.position
     # print(current_position)
 
-    # my_motor.set_velocity('XY.X', 0, 0.1)
-    # my_motor.set_velocity('XY.Y', 1, 0.1)
+    # my_motor.set_velocity(0.1, 'XY.X', 0)
+    # my_motor.set_velocity(0.1, 'XY.Y', 1)
     # my_motor.stop_position_compare('XY.X')
     # my_motor.set_position_compare('XY.X', 0, 0., 10., 0.1)
     # my_motor.set_position_compare_pulse('XY.X', 10, 12)
@@ -2960,8 +3589,8 @@ if __name__ == '__main__':
     # # vy = velocity*np.sin(angle)
     # vy=20
 
-    # my_motor.set_velocity('XY.X', 0, vx)
-    # my_motor.set_velocity('XY.Y', 1, vy)
+    # my_motor.set_velocity(vx, 'XY.X', 0)
+    # my_motor.set_velocity(vy, 'XY.Y', 1)
 
     # my_motor.move_absolute([dx, dy])
 
@@ -2993,6 +3622,53 @@ if __name__ == '__main__':
     # time.sleep(5)
     # pmp_cmd_q.append(stop_cmd)
     # my_pumpcon.stop()
+
+
+    # #Testing Zaber
+
+    # binary_serial = zaber.BinarySerial(str("/dev/tty.usbserial-A6023E9E"))
+    # binary_serial.close()
+
+    # binary_serial.lock.acquire()
+
+    # try:
+    #     binary_serial.open()
+    #     while binary_serial.can_read():
+    #         reply = binary_serial.read()
+    #     # Device number 0, command number 2, renumber.
+    #     command = zaber.BinaryCommand(0, 2)
+    #     binary_serial.write(command)
+
+    #     time.sleep(5)
+
+    #     nmotors = 3
+
+    #     for i in range(nmotors):
+    #         reply = binary_serial.read()
+    #         if ZaberMotor.check_command_succeeded(reply):
+    #             print("Device renumbered")
+    #         else:
+    #             print("Device renumbering failed")
+
+    # except Exception:
+    #     raise
+    # finally:
+    #     binary_serial.close()
+
+    # binary_serial.lock.release()
+
+    # lock = threading.Lock()
+
+    # motor_x = ZaberMotor("/dev/tty.usbserial-A6023E9E", 'x', binary_serial,
+    # lock, 1, 150)
+    # motor_y = ZaberMotor("/dev/tty.usbserial-A6023E9E", 'y', binary_serial,
+    # lock, 2, 150)
+    # motor_z = ZaberMotor("/dev/tty.usbserial-A6023E9E", 'z', binary_serial,
+    # lock, 3, 75)
+
+
+
+
 
     app = wx.App()
     logger.debug('Setting up wx app')

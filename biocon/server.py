@@ -213,7 +213,7 @@ if __name__ == '__main__':
     print (info_dir)
     if not os.path.exists(info_dir):
         os.mkdir(info_dir)
-    h2 = handlers.RotatingFileHandler(os.path.join(info_dir, 'expcon.log'), maxBytes=10e6, backupCount=5, delay=True)
+    h2 = handlers.RotatingFileHandler(os.path.join(info_dir, 'biocon_server.log'), maxBytes=100e6, backupCount=20, delay=True)
     h2.setLevel(logging.DEBUG)
     formatter2 = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
     h2.setFormatter(formatter2)
@@ -237,7 +237,7 @@ if __name__ == '__main__':
 
 
     setup_pumps = [('sheath', 'VICI M50', 'COM2', ['626.2', '9.278'], {}, {}),
-                        ('outlet', 'VICI M50', 'COM1', ['627.32', '11.826'], {}, {})
+                        ('outlet', 'VICI M50', 'COM1', ['623.56', '12.222'], {}, {})
                         ]
 
     local_comm_locks = {'sheath'    : pump_comm_locks[setup_pumps[0][2]],
