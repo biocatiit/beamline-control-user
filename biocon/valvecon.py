@@ -200,7 +200,7 @@ class Valve(object):
     def stop(self):
         pass
 
-class Rheodyne(Valve):
+class RheodyneValve(Valve):
     """
     This class contains information for initializing and communicating with
     a Elveflow Bronkhurst FLow Sensor (BFS), communicating via the Elveflow SDK.
@@ -385,7 +385,7 @@ class ValveCommThread(threading.Thread):
 
         self._connected_valves = OrderedDict()
 
-        self.known_valves = {'Rheodyne' : Rheodyne,
+        self.known_valves = {'Rheodyne' : RheodyneValve,
                             }
 
     def run(self):
@@ -956,7 +956,7 @@ if __name__ == '__main__':
     h1.setFormatter(formatter)
     logger.addHandler(h1)
 
-    # my_rv67 = Rheodyne('/dev/cu.usbserial-AC01UZ8O', '6p7_1', 6)
+    # my_rv67 = RheodyneValve('/dev/cu.usbserial-AC01UZ8O', '6p7_1', 6)
     # my_rv67.get_position()
     # my_rv67.set_position(4)
 

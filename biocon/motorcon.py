@@ -1091,9 +1091,11 @@ class ZaberMotor(object):
         self.serial.lock.acquire()
         try:
             self.serial.open()
-            while self.serial.can_read():
-                self.serial.read()
+            if get_response:
+                while self.serial.can_read():
+                    self.serial.read()
 
+            logger.debug("Motor {} sending command {} with data {}".format(self.name, cmd_num, cmd_data))
             self.serial.write(cmd)
 
             if get_response:
@@ -1114,7 +1116,7 @@ class ZaberMotor(object):
         self.lock.release()
 
         if reply is not None and check_error:
-            success = self.check_command_succeeded(reply)
+            success = self.check_command_succeeded(reply, self.name)
             data = reply.data
         else:
             success = True
@@ -1124,7 +1126,7 @@ class ZaberMotor(object):
 
 
     @classmethod
-    def check_command_succeeded(cls, reply):
+    def check_command_succeeded(cls, reply, name=None):
         """
         Return true if command succeeded, print reason and return false if command
         rejected
@@ -1134,7 +1136,10 @@ class ZaberMotor(object):
         return: boolean
         """
         if reply.command_number == 255: # 255 is the binary error response code.
-            logger.error("Command rejected. Error code: " + str(reply.data))
+            if name is not None:
+                logger.error("Motor {} command rejected. Error code: {}".format(name, reply.data))
+            else:
+                logger.error("Motor command rejected. Error code: "+ str(reply.data))
             return False
         else: # Command was accepted
             return True
@@ -1161,14 +1166,18 @@ class ZaberMotor(object):
 
         return moving
 
-    def move_relative(self, displacement):
+    def move_relative(self, displacement, blocking=True):
         steps = (displacement-self._offset)/self._scale/self.step_conversion
         steps = int(round(steps))
 
         cur_pos = (self.position-self._offset)/self._scale/self.step_conversion
 
         if self._low_lim <= cur_pos+steps and cur_pos+steps <= self._high_lim:
-            _, success = self.send_cmd(21, steps)
+            if blocking:
+                _, success = self.send_cmd(21, steps)
+            else:
+                success = True
+                self.send_cmd(21, steps, get_response=False)
         else:
             if self._low_lim >= cur_pos+steps:
                 logger.error('Target position is <= the low limit')
@@ -1179,12 +1188,16 @@ class ZaberMotor(object):
 
         return success
 
-    def move_absolute(self, position):
+    def move_absolute(self, position, blocking=True):
         steps = (position-self._offset)/self._scale/self.step_conversion
         steps = int(round(steps))
 
         if self._low_lim <= steps and steps <= self._high_lim:
-            _, success = self.send_cmd(20, steps)
+            if blocking:
+                _, success = self.send_cmd(20, steps)
+            else:
+                success = True
+                self.send_cmd(20, steps, get_response=False)
         else:
             if self._low_lim >= steps:
                 logger.error('Target position is <= the low limit')
@@ -1195,8 +1208,12 @@ class ZaberMotor(object):
 
         return success
 
-    def home(self):
-        _, success = self.send_cmd(1)
+    def home(self, blocking=True):
+        if blocking:
+            _, success = self.send_cmd(1)
+        else:
+            success = True
+            self.send_cmd(1, get_response=False)
 
         return success
 
@@ -3054,7 +3071,7 @@ class MotorPanel(wx.Panel):
 
                     while binary_serial.can_read():
                         reply = binary_serial.read()
-                        if ZaberMotor.check_command_succeeded(reply):
+                        if ZaberMotor.check_command_succeeded(reply, self.name):
                             logger.debug("Zaber device renumbered")
                         else:
                             logger.error("Zaber device renumbering failed")
