@@ -45,16 +45,28 @@ class WellPlate(object):
     def __init__(self, plate_type):
 
         self.plate_params = {
+            'Abgene 96 well deepwell storage' : {
+                'max_volume'    : 200, # uL
+                'num_columns'   : 12,
+                'num_rows'      : 8,
+                'col_step'      : 9.00, # mm
+                'row_step'      : 9.00, # mm
+                'height'        : 4.2, # bottom of well above top of chiller base plate
+                },
+
             'Thermo-Fast 96 well PCR' : {
                 'max_volume'    : 200, # uL
                 'num_columns'   : 12,
                 'num_rows'      : 8,
                 'col_step'      : 9.00, # mm
                 'row_step'      : 9.00, # mm
-                'height'        : 0.5, # bottom of well above top of chiller base plate
+                'height'        : 0.8, # bottom of well above top of chiller base plate
                 }
-
         }
+
+        #Values for height depend on well. 0.8 for A1, 1.0 for H1, 0.8 for A12, 1.0 for H12
+        self.x_slope = 0
+        self.y_slope = 0.20/7.
 
         self.update_plate_type(plate_type)
 
@@ -80,10 +92,14 @@ class WellPlate(object):
         if isinstance(row, basestring):
             row = ord(row.lower()) - 96
 
+        if row > self.num_rows or column > self.num_columns or row < 1 or column < 1:
+            raise ValueError('Invalid row or column')
+
         column = int(column)-1
         row = int(row)-1
 
-        return np.array([column*self.col_step, row*self.row_step, self.height], dtype=np.float_)
+        return np.array([column*(self.col_step), row*(self.row_step),
+            -(self.height+column*self.x_slope+row*self.y_slope)], dtype=np.float_)
 
     def set_well_volume(self, volume, row, column):
         """
@@ -135,6 +151,7 @@ class Autosampler(object):
         # self._init_valves()
 
         self.set_well_plate(self.settings['plate_type'])
+        self.set_chiller_top_on(self.settings['chiller_top_on'])
         self.set_clean_sequence(self.settings['clean_buffer_seq'], 'buffer')
         self.set_clean_sequence(self.settings['clean_sample_seq'], 'sample')
 
@@ -515,7 +532,16 @@ class Autosampler(object):
 
         return well_volumes
 
+    def set_chiller_top_on(self, status):
+        self.chiller_top_on = status
+
     def move_to_load(self, row, column):
+        if self.chiller_top_on:
+            if isinstance(row, basestring):
+                row = ord(row.lower()) - 96
+
+            if row%2 != 0:
+                raise ValueError('Cannot access odd rows with chiller top plate on!')
         delta_position = self.well_plate.get_relative_well_position(row, column)
 
         well_position = self.base_position + delta_position
@@ -806,10 +832,12 @@ if __name__ == '__main__':
         'motor_home_velocity'   : {'x': 10, 'y': 10, 'z': 10},
         'motor_velocity'        : {'x': 75, 'y': 75, 'z': 75},
         'motor_acceleration'    : {'x': 500, 'y': 500, 'z': 500},
-        'base_position'         : {'x': 100, 'y': 100, 'z': 50},
-        'clean_position'        : {'x': 50, 'y': 50, 'z': 70},
+        'base_position'         : {'x': 7.2, 'y': 45.5, 'z': 75},
+        'clean_position'        : {'x': 143, 'y': 5, 'z': 52},
         'out_position'          : {'x': 0, 'y': 0, 'z': 0},
         'plate_type'            : 'Thermo-Fast 96 well PCR',
+        'chiller_top_on'        : True,
+        # 'plate_type'            : 'Abgene 96 well deepwell storage',
         'valves'                : 'rheodyne',
         'rheodyne_valves'       : {'injection': ("", 2),
                                    'sample': ("", 6),
