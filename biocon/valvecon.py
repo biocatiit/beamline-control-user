@@ -36,6 +36,7 @@ if __name__ != '__main__':
 import wx
 import serial
 import serial.tools.list_ports as list_ports
+from six import string_types
 
 print_lock = threading.RLock()
 
@@ -128,7 +129,7 @@ class SerialComm(object):
         :rtype: str
         """
         logger.debug("Sending '%s' to serial device on port %s", data, self.ser.port)
-        if isinstance(data, basestring):
+        if isinstance(data, string_types):
             if not data.endswith(send_term_char):
                 data += send_term_char
             data = data.encode()

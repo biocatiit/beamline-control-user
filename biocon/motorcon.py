@@ -3052,7 +3052,7 @@ class MotorPanel(wx.Panel):
             travel = float(self.zaber_travel.GetValue())
 
             if port not in frame.zaber:
-                binary_serial = zaber.BinarySerial(str("/dev/tty.usbserial-A6023E9E"))
+                binary_serial = zaber.BinarySerial(str(port))
                 binary_serial.close()
                 lock = threading.Lock()
                 frame.zaber[port] = (binary_serial, lock)

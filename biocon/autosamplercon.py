@@ -36,6 +36,7 @@ if __name__ != '__main__':
 import numpy as np
 import wx
 import zaber.serial as zaber
+from six import string_types
 
 import motorcon
 import valvecon
@@ -89,7 +90,7 @@ class WellPlate(object):
         """
         Expects column and row to be 1 indexed, like on a plate!
         """
-        if isinstance(row, basestring):
+        if isinstance(row, string_types):
             row = ord(row.lower()) - 96
 
         if row > self.num_rows or column > self.num_columns or row < 1 or column < 1:
@@ -105,7 +106,7 @@ class WellPlate(object):
         """
         Expects column and row to be 1 indexed, like on a plate!
         """
-        if isinstance(row, basestring):
+        if isinstance(row, string_types):
             row = ord(row.lower()) - 96
 
         column = int(column)-1
@@ -117,7 +118,7 @@ class WellPlate(object):
         """
         Expects column and row to be 1 indexed, like on a plate!
         """
-        if isinstance(row, basestring):
+        if isinstance(row, string_types):
             row = ord(row.lower()) - 96
 
         column = int(column)-1
@@ -148,7 +149,7 @@ class Autosampler(object):
         self.running_event.clear()
 
         self._init_motors()
-        # self._init_valves()
+        self._init_valves()
 
         self.set_well_plate(self.settings['plate_type'])
         self.set_chiller_top_on(self.settings['chiller_top_on'])
@@ -156,7 +157,7 @@ class Autosampler(object):
         self.set_clean_sequence(self.settings['clean_sample_seq'], 'sample')
 
     def _init_motors(self):
-
+        logger.info('Initializing autosampler motors')
         self.motor_lock = threading.Lock()
 
         if self.settings['motors'] == 'zaber':
@@ -168,7 +169,7 @@ class Autosampler(object):
                 travel = motor_settings[2]
 
                 if port not in self.zaber_ports:
-                    binary_serial = zaber.BinarySerial(str("/dev/tty.usbserial-A6023E9E"))
+                    binary_serial = zaber.BinarySerial(str(port))
                     binary_serial.close()
                     lock = threading.Lock()
                     self.zaber_ports[port] = (binary_serial, lock)
@@ -236,6 +237,7 @@ class Autosampler(object):
             self.settings['out_position']['y'], self.settings['out_position']['z'])
 
     def _init_valves(self):
+        logger.info('Initializing autosampler valves')
         if self.settings['valves'] == 'rheodyne':
             self.injection_valve = valvecon.RheodyneValve(
                 self.settings['rheodyne_valves']['injection'][0], 'injection',
@@ -256,6 +258,15 @@ class Autosampler(object):
             self.autosampler_valve = valvecon.RheodyneValve(
                 self.settings['rheodyne_valves']['autosampler'][0], 'autosampler',
                 self.settings['rheodyne_valves']['autosampler'][1])
+
+        valve_pos = [self.settings['valve_positions']['injection'],
+            self.settings['valve_positions']['sample'], 
+            self.settings['valve_positions']['buffer'],
+            self.settings['valve_positions']['bypass'],
+            self.settings['valve_positions']['autosampler']]
+
+        self.set_valve_positions(valve_pos)
+
 
     def home_motors(self, motor='all'):
         self.running_event.set()
@@ -537,7 +548,7 @@ class Autosampler(object):
 
     def move_to_load(self, row, column):
         if self.chiller_top_on:
-            if isinstance(row, basestring):
+            if isinstance(row, string_types):
                 row = ord(row.lower()) - 96
 
             if row%2 != 0:
@@ -647,15 +658,18 @@ class Autosampler(object):
 
     def clean_sample(self):
         self.move_to_clean()
-        self.set_valve_position(1, 'injection')
-        self.set_valve_position(2, 'bypass')
-        self.set_valve_position(4, 'autosampler')
+        self.set_valve_positions(1, 'injection')
+        self.set_valve_positions(2, 'bypass')
+        self.set_valve_positions(4, 'autosampler')
 
         for clean_step in self.clean_sample_seq:
-            self.set_valve_positions(clean_step[0], 'buffer')
+            self.set_valve_positions(clean_step[0], 'sample')
             self.running_event.set()
             self._sleep(clean_step[1])
             self.running_event.clear()
+
+        self.set_valve_positions(2, 'sample')
+        self.move_to_out()
 
     def clean_buffer(self):
         self.set_valve_positions(2, 'bypass')
@@ -665,6 +679,8 @@ class Autosampler(object):
             self.running_event.set()
             self._sleep(clean_step[1])
             self.running_event.clear()
+
+        self.set_valve_positions(2, 'buffer')
 
     def _sleep(self, sleep_time):
         start = time.time()
@@ -826,24 +842,24 @@ if __name__ == '__main__':
         'volume_units'          : 'uL',
         'components'            : ['autosampler'],
         'motors'                : 'zaber',
-        'zaber_motors'          : {'x': ("/dev/tty.usbserial-A6023E9E", 1, 150),
-                                   'y': ("/dev/tty.usbserial-A6023E9E", 2, 150),
-                                   'z': ("/dev/tty.usbserial-A6023E9E", 3, 75)},
+        'zaber_motors'          : {'x': ("/dev/ttyUSB0", 1, 150),
+                                   'y': ("/dev/ttyUSB0", 2, 150),
+                                   'z': ("/dev/ttyUSB0", 3, 75)},
         'motor_home_velocity'   : {'x': 10, 'y': 10, 'z': 10},
         'motor_velocity'        : {'x': 75, 'y': 75, 'z': 75},
         'motor_acceleration'    : {'x': 500, 'y': 500, 'z': 500},
         'base_position'         : {'x': 7.2, 'y': 45.5, 'z': 75},
-        'clean_position'        : {'x': 143, 'y': 5, 'z': 52},
+        'clean_position'        : {'x': 143, 'y': 3.5, 'z': 52},
         'out_position'          : {'x': 0, 'y': 0, 'z': 0},
         'plate_type'            : 'Thermo-Fast 96 well PCR',
-        'chiller_top_on'        : True,
+        'chiller_top_on'        : False,
         # 'plate_type'            : 'Abgene 96 well deepwell storage',
         'valves'                : 'rheodyne',
-        'rheodyne_valves'       : {'injection': ("", 2),
-                                   'sample': ("", 6),
-                                   'buffer': ("", 6),
-                                   'bypass': ("", 2),
-                                   'autosampler': ("", 6)},
+        'rheodyne_valves'       : {'injection': ("/dev/ttyUSB3", 2),
+                                   'sample': ("/dev/ttyUSB2", 6),
+                                   'buffer': ("/dev/ttyUSB4", 6),
+                                   'bypass': ("/dev/ttyUSB5", 2),
+                                   'autosampler': ("/dev/ttyUSB1", 6)},
         'valve_positions'       : {'injection': 1,
                                    'sample': 1,
                                    'buffer': 1,
@@ -854,6 +870,7 @@ if __name__ == '__main__':
         }
 
 
+    #Note, on linux to access serial ports must first sudo chmod 666 /dev/ttyUSB*
     my_autosampler = Autosampler(settings)
 
     # app = wx.App()
