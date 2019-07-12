@@ -148,21 +148,21 @@ if __name__ == '__main__':
         'nframes_max'           : 15000, # For Pilatus: 999999, for Struck: 15000 (set by maxChannels in the driver configuration)
         'nparams_max'           : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
         'exp_period_delta'      : 0.00095,
-        # 'shutter_speed_open'    : 0.004, #in s      Normal vacuum shutter
-        # 'shutter_speed_close'   : 0.004, # in s
-        # 'shutter_pad'           : 0.002, #padding for shutter related values
-        # 'shutter_cycle'         : 0.02, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
-        'shutter_speed_open'    : 0.001, #in s    Fast shutters
-        'shutter_speed_close'   : 0.001, # in s
-        'shutter_pad'           : 0.00, #padding for shutter related values
-        'shutter_cycle'         : 0.002, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
+        'shutter_speed_open'    : 0.004, #in s      Normal vacuum shutter
+        'shutter_speed_close'   : 0.004, # in s
+        'shutter_pad'           : 0.002, #padding for shutter related values
+        'shutter_cycle'         : 0.02, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
+        # 'shutter_speed_open'    : 0.001, #in s    Fast shutters
+        # 'shutter_speed_close'   : 0.001, # in s
+        # 'shutter_pad'           : 0.00, #padding for shutter related values
+        # 'shutter_cycle'         : 0.002, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
         'struck_measurement_time' : '0.001', #in s
-        'tr_muscle_exp'         : True,
+        'tr_muscle_exp'         : False,
         'slow_mode_thres'       : 0.1,
         'fast_mode_max_exp_time': 2000,
-        'wait_for_trig'         : True,
+        'wait_for_trig'         : False,
         'num_trig'              : '1',
-        'show_advanced_options' : True,
+        'show_advanced_options' : False,
         'fe_shutter_pv'         : 'FE:18:ID:FEshutter',
         'd_shutter_pv'          : 'PA:18ID:STA_D_SDS_OPEN_PL.VAL',
         'local_dir_root'        : '/nas_data/Pilatus1M',
@@ -179,12 +179,12 @@ if __name__ == '__main__':
             'scale': 5000, 'offset': 0.5, 'dark': False, 'norm_time': True},
             # {'mx_record': 'mcs12', 'channel': 11, 'name': 'Flow_rate',
             # 'scale': 10e6, 'offset': 0, 'dark': True, 'norm_time': True},
-            {'mx_record': 'mcs7', 'channel': 6, 'name': 'Pilatus_Enable',
-            'scale': 1e5, 'offset': 0, 'dark': True, 'norm_time': True},
-            {'mx_record': 'mcs12', 'channel': 11, 'name': 'Length',
-            'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
-            {'mx_record': 'mcs13', 'channel': 12, 'name': 'Force',
-            'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
+            # {'mx_record': 'mcs7', 'channel': 6, 'name': 'Pilatus_Enable',
+            # 'scale': 1e5, 'offset': 0, 'dark': True, 'norm_time': True},
+            # {'mx_record': 'mcs12', 'channel': 11, 'name': 'Length',
+            # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
+            # {'mx_record': 'mcs13', 'channel': 12, 'name': 'Force',
+            # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
             ],
         'joerger_log_vals'      : [{'mx_record': 'j3', 'name': 'I0',
             'scale': 1, 'offset': 0, 'norm_time': False}, #Format: (mx_record_name, struck_channel, header_name, scale, offset, use_dark_current, normalize_by_exp_time)
@@ -197,7 +197,7 @@ if __name__ == '__main__':
             {'mx_record': 'j11', 'name': 'Beam_current', 'scale': 5000,
             'offset': 0.5, 'norm_time': True}
             ],
-        'base_data_dir'         : '/nas_data/Pilatus1M/2019_0705_Chung', #CHANGE ME
+        'base_data_dir'         : '/nas_data/Pilatus1M/20190709Hopkins', #CHANGE ME
         }
 
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']
@@ -262,7 +262,7 @@ if __name__ == '__main__':
 
     components = OrderedDict([
         ('exposure', expcon.ExpPanel),
-        # ('coflow', coflowcon.CoflowPanel),
+        ('coflow', coflowcon.CoflowPanel),
         # ('trsaxs', trcon.TRPanel),
         ])
 
@@ -288,7 +288,8 @@ if __name__ == '__main__':
         os.mkdir(info_dir)
 
     h2 = handlers.RotatingFileHandler(os.path.join(info_dir, 'biocon.log'), maxBytes=10e6, backupCount=5, delay=True)
-    h2.setLevel(logging.INFO)
+    # h2.setLevel(logging.INFO)
+    h2.setLevel(logging.DEBUG)
     formatter2 = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
     h2.setFormatter(formatter2)
 
