@@ -36,6 +36,7 @@ if __name__ != '__main__':
 import wx
 import serial
 import serial.tools.list_ports as list_ports
+from six import string_types
 
 print_lock = threading.RLock()
 
@@ -128,7 +129,7 @@ class SerialComm(object):
         :rtype: str
         """
         logger.debug("Sending '%s' to serial device on port %s", data, self.ser.port)
-        if isinstance(data, basestring):
+        if isinstance(data, string_types):
             if not data.endswith(send_term_char):
                 data += send_term_char
             data = data.encode()
@@ -200,7 +201,7 @@ class Valve(object):
     def stop(self):
         pass
 
-class Rheodyne(Valve):
+class RheodyneValve(Valve):
     """
     This class contains information for initializing and communicating with
     a Elveflow Bronkhurst FLow Sensor (BFS), communicating via the Elveflow SDK.
@@ -385,7 +386,7 @@ class ValveCommThread(threading.Thread):
 
         self._connected_valves = OrderedDict()
 
-        self.known_valves = {'Rheodyne' : Rheodyne,
+        self.known_valves = {'Rheodyne' : RheodyneValve,
                             }
 
     def run(self):
@@ -956,7 +957,7 @@ if __name__ == '__main__':
     h1.setFormatter(formatter)
     logger.addHandler(h1)
 
-    # my_rv67 = Rheodyne('/dev/cu.usbserial-AC01UZ8O', '6p7_1', 6)
+    # my_rv67 = RheodyneValve('/dev/cu.usbserial-AC01UZ8O', '6p7_1', 6)
     # my_rv67.get_position()
     # my_rv67.set_position(4)
 
