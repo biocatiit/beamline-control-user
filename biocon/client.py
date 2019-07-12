@@ -125,7 +125,8 @@ class ControlClient(threading.Thread):
                     device = command['device']
                     device_cmd = command['command']
                     msg = ("Device %s failed to run command '%s' "
-                        "with args: %s and kwargs: %s." %(device, device_cmd[0],
+                        "with args: %s and kwargs: %s. Timeout or other ZMQ "
+                        "error." %(device, device_cmd[0],
                         ', '.join(['{}'.format(a) for a in device_cmd[1]]),
                         ', '.join(['{}:{}'.format(kw, item) for kw, item in device_cmd[2].items()])))
                     logger.error(msg)
