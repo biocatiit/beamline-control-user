@@ -163,6 +163,7 @@ class ControlServer(threading.Thread):
                     if answer == '':
                         logger.exception('No response received from device')
                     else:
+                        logger.debug('Sending command response: %s', answer)
                         self.socket.send_json(answer)
 
                 except Exception:
