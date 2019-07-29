@@ -40,6 +40,7 @@ from six import string_types
 
 import motorcon
 import valvecon
+import pumpcon
 
 class WellPlate(object):
 
@@ -47,7 +48,7 @@ class WellPlate(object):
 
         self.plate_params = {
             'Abgene 96 well deepwell storage' : {
-                'max_volume'    : 200, # uL
+                'max_volume'    : 800, # uL
                 'num_columns'   : 12,
                 'num_rows'      : 8,
                 'col_step'      : 9.00, # mm
@@ -147,9 +148,12 @@ class Autosampler(object):
         self.abort_event.clear()
         self.running_event = threading.Event()
         self.running_event.clear()
+        self.process_event = threading.Event()
+        self.process_event.clear()
 
         self._init_motors()
         self._init_valves()
+        self._init_pumps()
 
         self.set_well_plate(self.settings['plate_type'])
         self.set_chiller_top_on(self.settings['chiller_top_on'])
@@ -158,7 +162,6 @@ class Autosampler(object):
 
     def _init_motors(self):
         logger.info('Initializing autosampler motors')
-        self.motor_lock = threading.Lock()
 
         if self.settings['motors'] == 'zaber':
             self.zaber_ports = {}
@@ -260,16 +263,87 @@ class Autosampler(object):
                 self.settings['rheodyne_valves']['autosampler'][1])
 
         valve_pos = [self.settings['valve_positions']['injection'],
-            self.settings['valve_positions']['sample'], 
+            self.settings['valve_positions']['sample'],
             self.settings['valve_positions']['buffer'],
             self.settings['valve_positions']['bypass'],
             self.settings['valve_positions']['autosampler']]
 
         self.set_valve_positions(valve_pos)
 
+    def _init_pumps(self):
+        logger.info('Initializing autosampler pumps')
+
+        self.known_syringes = {'30 mL, EXEL': {'diameter': 23.5, 'max_volume': 30,
+            'max_rate': 70},
+            '3 mL, Medline P.C.': {'diameter': 9.1, 'max_volume': 3,
+            'max_rate': 11},
+            '6 mL, Medline P.C.': {'diameter': 12.8, 'max_volume': 6,
+            'max_rate': 23},
+            '10 mL, Medline P.C.': {'diameter': 16.4, 'max_volume': 10,
+            'max_rate': 31},
+            '20 mL, Medline P.C.': {'diameter': 20.4, 'max_volume': 20,
+            'max_rate': 55},
+            '0.25 mL, Hamilton Glass': {'diameter': 2.30, 'max_volume': 0.25,
+            'max_rate': 11},
+            '0.5 mL, Hamilton Glass': {'diameter': 3.26, 'max_volume': 0.5,
+            'max_rate': 11},
+            '1.0 mL, Hamilton Glass': {'diameter': 4.61, 'max_volume': 1.0,
+            'max_rate': 11},
+            }
+
+        if self.settings['pumps'] == 'harvard':
+            self.harvard_ports = {}
+
+            for pump_name, pump_settings in self.settings['harvard_pumps'].items():
+                port = pump_settings[0]
+                number = pump_settings[1]
+                syringe = pump_settings[2]
+
+                if port not in self.zaber_ports:
+                    lock = threading.Lock()
+                    self.harvard_ports[port] = lock
+                else:
+                    lock = self.harvard_ports[port]
+
+                if syringe in self.known_syringes:
+                    diam = self.known_syringes[syringe]['diameter']
+                    max_vol = self.known_syringes[syringe]['max_volume']
+                    max_rate = self.known_syringes[syringe]['max_rate']
+                else:
+                    logger.error(("Unknown syringe {} specified. No syringe "
+                        "set for pump.".format(syringe)))
+                    diam = 0
+                    max_vol = 0
+                    max_rate = 0
+
+                if pump_name == 'sample':
+                    self.pump_sample = pumpcon.PHD4400Pump(port, pump_name,
+                        number, diam, max_vol, max_rate, syringe, lock)
+
+                elif pump_name == 'buffer':
+                    self.pump_buffer = pumpcon.PHD4400Pump(port, pump_name,
+                        number, diam, max_vol, max_rate, syringe, lock)
+
+        self.set_pump_aspirate_rates([self.settings['pump_rates']['sample'][0],
+            self.settings['pump_rates']['buffer'][0]])
+
+        self.set_pump_dispense_rates([self.settings['pump_rates']['sample'][1],
+            self.settings['pump_rates']['buffer'][1]])
+
+        self.set_pump_offset_volumes([self.settings['swept_volumes']['sample'],
+            self.settings['swept_volumes']['buffer']])
+
+        self.set_loop_volume(self.settings['loop_volume'])
+        self.set_sample_overdraw(self.settings['sample_overdraw'])
+
+        self.buffer_flush_volume = self.settings['buffer_flush_volume']
+        self.buffer_reserve_volume = self.settings['buffer_reserve_volume']
+        self.buffer_delay_volume = self.settings['buffer_delay_volume']
 
     def home_motors(self, motor='all'):
         self.running_event.set()
+        abort = False
+
         if motor == 'all':
             old_velocities = [self.x_velocity, self.y_velocity, self.z_velocity]
             home_velocities = [self.settings['motor_home_velocity']['x'],
@@ -333,103 +407,117 @@ class Autosampler(object):
 
         self.running_event.clear()
 
+        return not abort
+
     def move_motors_absolute(self, position, motor='all'):
         self.running_event.set()
+        abort = False
 
-        if motor == 'all':
-            self.motor_z.move_absolute(position[2], blocking=False)
-            time.sleep(0.05)
-            self.motor_x.move_absolute(position[0], blocking=False)
-            time.sleep(0.05)
-            self.motor_y.move_absolute(position[1], blocking=False)
-            time.sleep(0.05)
+        abort = self._check_abort()
 
-            while self.motor_x.is_moving() or self.motor_y.is_moving() or self.motor_z.is_moving():
+        if not abort:
+            if motor == 'all':
+                self.motor_z.move_absolute(position[2], blocking=False)
                 time.sleep(0.05)
-                abort = self._check_abort()
-                if abort:
-                    break
+                self.motor_x.move_absolute(position[0], blocking=False)
+                time.sleep(0.05)
+                self.motor_y.move_absolute(position[1], blocking=False)
+                time.sleep(0.05)
 
-        elif motor == 'x':
-            self.motor_x.move_absolute(position, False)
-            time.sleep(0.05)
+                while self.motor_x.is_moving() or self.motor_y.is_moving() or self.motor_z.is_moving():
+                    time.sleep(0.05)
+                    abort = self._check_abort()
+                    if abort:
+                        break
 
-            while self.motor_x.is_moving():
-                time.sleep(0.01)
-                abort = self._check_abort()
-                if abort:
-                    break
+            elif motor == 'x':
+                self.motor_x.move_absolute(position, False)
+                time.sleep(0.05)
 
-        elif motor == 'y':
-            self.motor_y.move_absolute(position, False)
-            time.sleep(0.05)
+                while self.motor_x.is_moving():
+                    time.sleep(0.01)
+                    abort = self._check_abort()
+                    if abort:
+                        break
 
-            while self.motor_y.is_moving():
-                time.sleep(0.01)
-                abort = self._check_abort()
-                if abort:
-                    break
+            elif motor == 'y':
+                self.motor_y.move_absolute(position, False)
+                time.sleep(0.05)
 
-        elif motor == 'z':
-            self.motor_z.move_absolute(position, False)
-            time.sleep(0.05)
+                while self.motor_y.is_moving():
+                    time.sleep(0.01)
+                    abort = self._check_abort()
+                    if abort:
+                        break
 
-            while self.motor_z.is_moving():
-                time.sleep(0.01)
-                abort = self._check_abort()
-                if abort:
-                    break
+            elif motor == 'z':
+                self.motor_z.move_absolute(position, False)
+                time.sleep(0.05)
+
+                while self.motor_z.is_moving():
+                    time.sleep(0.01)
+                    abort = self._check_abort()
+                    if abort:
+                        break
 
         self.running_event.clear()
+
+        return not abort
 
     def move_motors_relative(self, position, motor='all'):
         self.running_event.set()
+        abort = False
 
-        if motor == 'all':
-            self.motor_z.move_relative(position[2], blocking=False)
-            time.sleep(0.05)
-            self.motor_x.move_relative(position[0], blocking=False)
-            time.sleep(0.05)
-            self.motor_y.move_relative(position[1], blocking=False)
-            time.sleep(0.05)
+        abort = self._check_abort()
 
-            while self.motor_x.is_moving() or self.motor_y.is_moving() or self.motor_z.is_moving():
+        if not abort:
+            if motor == 'all':
+                self.motor_z.move_relative(position[2], blocking=False)
                 time.sleep(0.05)
-                abort = self._check_abort()
-                if abort:
-                    break
+                self.motor_x.move_relative(position[0], blocking=False)
+                time.sleep(0.05)
+                self.motor_y.move_relative(position[1], blocking=False)
+                time.sleep(0.05)
 
-        elif motor == 'x':
-            self.motor_x.move_relative(position, False)
-            time.sleep(0.05)
+                while self.motor_x.is_moving() or self.motor_y.is_moving() or self.motor_z.is_moving():
+                    time.sleep(0.05)
+                    abort = self._check_abort()
+                    if abort:
+                        break
 
-            while self.motor_x.is_moving():
-                time.sleep(0.01)
-                abort = self._check_abort()
-                if abort:
-                    break
+            elif motor == 'x':
+                self.motor_x.move_relative(position, False)
+                time.sleep(0.05)
 
-        elif motor == 'y':
-            self.motor_y.move_relative(position, False)
-            time.sleep(0.05)
+                while self.motor_x.is_moving():
+                    time.sleep(0.01)
+                    abort = self._check_abort()
+                    if abort:
+                        break
 
-            while self.motor_y.is_moving():
-                time.sleep(0.01)
-                abort = self._check_abort()
-                if abort:
-                    break
+            elif motor == 'y':
+                self.motor_y.move_relative(position, False)
+                time.sleep(0.05)
 
-        elif motor == 'z':
-            self.motor_z.move_relative(position, False)
-            time.sleep(0.05)
+                while self.motor_y.is_moving():
+                    time.sleep(0.01)
+                    abort = self._check_abort()
+                    if abort:
+                        break
 
-            while self.motor_z.is_moving():
-                time.sleep(0.01)
-                abort = self._check_abort()
-                if abort:
-                    break
+            elif motor == 'z':
+                self.motor_z.move_relative(position, False)
+                time.sleep(0.05)
+
+                while self.motor_z.is_moving():
+                    time.sleep(0.01)
+                    abort = self._check_abort()
+                    if abort:
+                        break
 
         self.running_event.clear()
+
+        return not abort
 
     def set_motor_velocity(self, velocity, motor='all'):
         if motor == 'all':
@@ -482,10 +570,14 @@ class Autosampler(object):
             self.motor_y.stop()
             self.motor_z.stop()
 
+            self.pump_sample.stop()
+            self.pump_buffer.stop()
+
             self.set_valve_positions(1, 'injection')
-            self.set_valve_positions(2, 'bypass')
+            self.set_valve_positions(1, 'bypass')
             self.set_valve_position(2, 'sample')
             self.set_valve_position(1, 'buffer')
+            self.set_valve_position(1, 'autosampler')
 
             self.abort_event.clear()
 
@@ -497,7 +589,7 @@ class Autosampler(object):
         return abort
 
     def stop(self):
-        if self.running_event.is_set():
+        if self.running_event.is_set() or self.process_event.is_set():
             self.abort_event.set()
 
     def set_base_position(self, x, y, z):
@@ -553,24 +645,57 @@ class Autosampler(object):
 
             if row%2 != 0:
                 raise ValueError('Cannot access odd rows with chiller top plate on!')
-        delta_position = self.well_plate.get_relative_well_position(row, column)
 
+        delta_position = self.well_plate.get_relative_well_position(row, column)
         well_position = self.base_position + delta_position
 
-        self.move_motors_absolute(self.out_position[2], 'z')
-        self.move_motors_absolute([well_position[0], well_position[1],
-            self.out_position[2]])
-        self.move_motors_absolute(well_position[2], 'z')
+        success = self.move_motors_absolute(self.out_position[2], 'z')
+        if success:
+            self._check_abort()
+            success = self.move_motors_absolute([well_position[0], well_position[1],
+                self.out_position[2]])
+        if success:
+            self._sleep(2)
+            success = self.move_motors_absolute(well_position[2], 'z')
+
+        return success
 
     def move_to_clean(self):
-        self.move_motors_absolute(self.out_position[2], 'z')
-        self.move_motors_absolute([self.clean_position[0], self.clean_position[1],
-            self.out_position[2]])
-        self.move_motors_absolute(self.clean_position[2], 'z')
+        self.process_event.set()
+
+        success = self.move_motors_absolute(self.out_position[2], 'z')
+        if success:
+            self._sleep(2)
+            success = self.move_motors_absolute([self.clean_position[0],
+                self.clean_position[1], self.out_position[2]])
+        if success:
+            self._sleep(2)
+            success = self.move_motors_absolute(self.clean_position[2], 'z')
+
+        self.process_event.clear()
+
+        return success
 
     def move_to_out(self):
-        self.move_motors_absolute(self.out_position[2], 'z')
-        self.move_motors_absolute(self.out_position)
+        self.process_event.set()
+
+        success = self.move_motors_absolute(self.out_position[2], 'z')
+        if success:
+            self._sleep(2)
+            success = self.move_motors_absolute(self.out_position)
+
+        self.process_event.clear()
+
+        return success
+
+    def move_to_z_out(self):
+        self.process_event.set()
+
+        success = self.move_motors_absolute(self.out_position[2], 'z')
+
+        self.process_event.clear()
+
+        return success
 
     def set_valve_positions(self, positions, valve='all'):
         self.running_event.set()
@@ -610,45 +735,263 @@ class Autosampler(object):
 
         self.running_event.clear()
 
+    def set_pump_aspirate_rates(self, rates, pump='all'):
+        if pump == 'all':
+            self.pump_sample.refill_rate = rates[0]
+            self.pump_buffer.refill_rate = rates[1]
+        elif pump == 'sample':
+            self.pump_sample.refill_rate == rates
+        elif pump == 'buffer':
+            self.pump_buffer.refill_rate = rates
+
+    def set_pump_dispense_rates(self, rates, pump='all'):
+        if pump == 'all':
+            self.pump_sample.flow_rate = rates[0]
+            self.pump_buffer.flow_rate = rates[1]
+        elif pump == 'sample':
+            self.pump_sample.flow_rate == rates
+        elif pump == 'buffer':
+            self.pump_buffer.flow_rate = rates
+
+    def set_pump_volumes(self, volumes, pump='all'):
+        if pump == 'all':
+            self.pump_sample.volume = volumes[0]
+            self.pump_buffer.volume = volumes[1]
+        elif pump == 'sample':
+            self.pump_sample.volume = volumes
+        elif pump == 'buffer':
+            self.pump_buffer.volume = volumes
+
+    def set_pump_offset_volumes(self, volumes, pump='all'):
+        if pump == 'all':
+            self.sample_offset_volume = volumes[0]
+            self.buffer_offset_volume = volumes[1]
+        elif pump == 'sample':
+            self.sample_offset_volume = volumes
+        elif pump == 'buffer':
+            self.buffer_offset_volume = volumes
+
+    def set_loop_volume(self, volume):
+        self.loop_volume = volume
+
+    def set_sample_overdraw(self, volume):
+        self.sample_overdraw = volume
+       
+
+    def aspirate(self, volume, pump, blocking=True):
+        self.running_event.set()
+        abort = False
+
+        if pump == 'sample':
+            selected_pump = self.pump_sample
+        elif pump == 'buffer':
+            selected_pump = self.pump_buffer
+
+        initial_volume = selected_pump.volume
+
+        selected_pump.aspirate(volume)
+
+        if blocking:
+            while selected_pump.is_moving():
+                time.sleep(0.05)
+                abort = self._check_abort()
+                if abort:
+                    break
+
+            self.running_event.clear()
+
+            final_volume = selected_pump.volume
+
+            if round(initial_volume + volume, 4) != round(final_volume, 4):
+                logger.error('Pump %s failed to aspirate requested '
+                    'volume! Volume requested: %f, volume '
+                    'aspirated: %f', pump, volume, 
+                    final_volume-initial_volume)
+                raise Exception('Pump aspirate failed!')
+
+        else:
+            abort = False
+
+        
+
+        return not abort
+
+    def aspirate_all(self, pump, blocking=True):
+        self.running_event.set()
+        abort = False
+
+        if pump == 'sample':
+            selected_pump = self.pump_sample
+        elif pump == 'buffer':
+            selected_pump = self.pump_buffer
+
+        selected_pump.aspirate_all()
+
+        if blocking:
+            while selected_pump.is_moving():
+                time.sleep(0.05)
+                abort = self._check_abort()
+                if abort:
+                    break
+
+            self.running_event.clear()
+
+        else:
+            abort = False
+
+        return not abort
+
+    def dispense(self, volume, pump, blocking=True):
+        self.running_event.set()
+        abort = False
+
+        if pump == 'sample':
+            selected_pump = self.pump_sample
+        elif pump == 'buffer':
+            selected_pump = self.pump_buffer
+
+        initial_volume = selected_pump.volume
+
+        selected_pump.dispense(volume)
+
+        if blocking:
+            while selected_pump.is_moving():
+                time.sleep(0.05)
+                abort = self._check_abort()
+                if abort:
+                    break
+
+            self.running_event.clear()
+
+            final_volume = selected_pump.volume
+
+            if round(initial_volume - final_volume, 4) != round(volume, 4):
+                logger.error('Pump %s failed to dispense requested '
+                    'volume! Volume requested: %f, volume dispensed: %f', 
+                    pump, volume, initial_volume - final_volume)
+                raise Exception('Pump dispense failed!')
+
+        else:
+            abort = False
+
+
+
+        return not abort
+
+    def dispense_all(self, pump, blocking=True):
+        self.running_event.set()
+        abort = False
+
+        if pump == 'sample':
+            selected_pump = self.pump_sample
+        elif pump == 'buffer':
+            selected_pump = self.pump_buffer
+
+        selected_pump.dispense_all()
+
+        if blocking:
+            while selected_pump.is_moving():
+                time.sleep(0.05)
+                abort = self._check_abort()
+                if abort:
+                    break
+
+            self.running_event.clear()
+
+        else:
+            abort = False
+
+        return not abort
+
     def load_buffer(self, volume, row, column):
-        self.move_to_load(row, column)
+        self.process_event.set()
 
-        self.set_valve_positions(1, 'bypass')
-        self.set_valve_positions(2, 'buffer')
-        self.set_valve_positions(5, 'autosampler')
+        self.buffer_volume = volume
 
-        #Aspirate buffer
+        success = self.move_to_load(row, column)
 
-        self.set_valve_positions(1, 'injection')
-        self.set_valve_positions(1, 'buffer')
+        if success:
+            self.set_valve_positions(2, 'bypass')
+            self.set_valve_positions(1, 'buffer')
+            self.set_valve_positions(2, 'autosampler')
 
-        #Push enough buffer to flush coflow needle (20 uL or ~3x volume from buffer valve to needle)
+            success = self.aspirate(volume, 'buffer')
 
+        if success:
+            self._sleep(3)
+            success = self.move_to_z_out()
+            if success:
+                success = self.aspirate(self.buffer_offset_volume, 'buffer')
+
+        if success:
+            self.set_valve_positions(1, 'bypass')
+            success = self.dispense(self.buffer_offset_volume, 'buffer')
+            self._sleep(3)
+            self.set_valve_positions(2, 'bypass')
+
+        if success:
+            self.set_valve_positions(2, 'injection')
+            self.set_valve_positions(2, 'buffer')
+
+            #Push enough buffer to flush coflow needle (20 uL or ~3x volume from buffer valve to needle)
+            success = self.dispense(self.buffer_flush_volume, 'buffer')
         #Clean lines running to autosampler (by cleaning sample loop)?
 
+        self.buffer_volume = self.buffer_volume - self.buffer_flush_volume
+        self.process_event.clear()
+
+        return success
+
     def load_sample(self, volume, row, column):
-        self.move_to_load(row, column)
+        self.process_event.set()
+        success = self.move_to_load(row, column)
 
-        self.set_valve_positions(1, 'injection')
-        self.set_valve_positions(1, 'sample')
-        self.set_valve_positions(4, 'autosampler')
+        if success:
+            self.set_valve_positions(2, 'injection')
+            self.set_valve_positions(1, 'sample')
+            self.set_valve_positions(3, 'autosampler')
 
-        #Aspirate sample
+            success = self.aspirate(volume, 'sample')
 
-    def make_measurement(self, row, column):
-        self.set_valve_positions(1, 'injection')
-        self.set_valve_positions(1, 'sample')
-        self.set_valve_positions(1, 'buffer')
-        self.set_valve_positions(1, 'bypass')
+        if success:
+            self._sleep(3)
+            success = self.move_to_z_out()
+            if success:
+                offset_volume = self.sample_offset_volume + self.sample_overdraw
+                success = self.aspirate(offset_volume, 'sample')
 
-        # Start buffer flow and exposure
+        self.process_event.clear()
 
-        # After ~10 uL, of buffer flow
-        self.set_valve_positions(2, 'injection')
+        return success
 
-        #Continue flow until almost out of buffer, then stop before running out
-
+    def make_measurement(self):
         #Flow rates ideally 100-200 uL/min?
+        self.process_event.set()
+        self.set_valve_positions(2, 'injection')
+        self.set_valve_positions(1, 'sample')
+        self.set_valve_positions(2, 'buffer')
+        self.set_valve_positions(2, 'bypass')
+
+        start_time = self.buffer_delay_volume/self.pump_buffer.refill_rate
+        start_time = start_time*60 #pump refill rate is in ml/min
+        # Start buffer flow and exposure
+        self.dispense(self.buffer_volume - self.buffer_reserve_volume, 'buffer', blocking=False)
+        abort = self._sleep(start_time)
+
+        if not abort:
+            # After ~10 uL, of buffer flow
+            self.set_valve_positions(1, 'injection')
+            # Continue flow until almost out of buffer, then stop before running out
+            self.running_event.set()
+            while self.pump_buffer.is_moving():
+                time.sleep(0.01)
+                abort = self._check_abort()
+                if abort:
+                    break
+
+            self.running_event.clear()
+
+        self.process_event.clear()
 
     def set_clean_sequence(self, seq, loop):
         if loop == 'sample':
@@ -657,30 +1000,72 @@ class Autosampler(object):
             self.clean_buffer_seq = seq
 
     def clean_sample(self):
-        self.move_to_clean()
-        self.set_valve_positions(1, 'injection')
-        self.set_valve_positions(2, 'bypass')
-        self.set_valve_positions(4, 'autosampler')
+        self.process_event.set()
 
-        for clean_step in self.clean_sample_seq:
-            self.set_valve_positions(clean_step[0], 'sample')
-            self.running_event.set()
-            self._sleep(clean_step[1])
-            self.running_event.clear()
+        success = self.move_to_clean()
 
-        self.set_valve_positions(2, 'sample')
-        self.move_to_out()
+        if success:
+            self.set_valve_positions(2, 'injection')
+            self.set_valve_positions(3, 'autosampler')
+
+            self.set_valve_positions(1, 'sample')
+            if self.pump_sample.volume > 0:
+                success = self.dispense_all('sample')
+
+            if success:
+                for clean_step in self.clean_sample_seq:
+                    self.set_valve_positions(clean_step[0], 'sample')
+                    self.running_event.set()
+                    abort = self._sleep(clean_step[1])
+                    self.running_event.clear()
+                    if abort:
+                        break
+
+                success = not abort
+
+            self.set_valve_positions(2, 'sample')
+
+        self.move_to_z_out()
+
+        self.process_event.clear()
+
+        return success
 
     def clean_buffer(self):
-        self.set_valve_positions(2, 'bypass')
+        self.process_event.set()
+
+        self.set_valve_positions(1, 'bypass')
+
+        if self.pump_buffer.volume > 0:
+            self.dispense_all('buffer', False)
 
         for clean_step in self.clean_buffer_seq:
             self.set_valve_positions(clean_step[0], 'buffer')
             self.running_event.set()
-            self._sleep(clean_step[1])
+            abort = self._sleep(clean_step[1])
+            self.running_event.clear()
+            if abort:
+                break
+
+        if not abort:
+            self.running_event.set()
+            while self.pump_buffer.is_moving():
+                time.sleep(0.01)
+                abort = self._check_abort()
+                if abort:
+                    break
+
             self.running_event.clear()
 
+        # HAVE TO THINK ABOUT HOW TO CLEAN LINE FROM AUTOSAMPLER
+        # TO BUFFER VALVE! COULD DRAW WATER INTO IT, THEN PUSH IT
+        # OUT WITH THE BUFFER PUMP TO MOSTLY CLEAN IT.
+
         self.set_valve_positions(2, 'buffer')
+
+        self.process_event.clear()
+
+        return not abort
 
     def _sleep(self, sleep_time):
         start = time.time()
@@ -848,12 +1233,13 @@ if __name__ == '__main__':
         'motor_home_velocity'   : {'x': 10, 'y': 10, 'z': 10},
         'motor_velocity'        : {'x': 75, 'y': 75, 'z': 75},
         'motor_acceleration'    : {'x': 500, 'y': 500, 'z': 500},
-        'base_position'         : {'x': 7.2, 'y': 45.5, 'z': 75},
-        'clean_position'        : {'x': 143, 'y': 3.5, 'z': 52},
+        'base_position'         : {'x': 6.5, 'y': 86.3, 'z': 74.5}, # With coflow needle
+        # 'base_position'         : {'x': 8, 'y': 82.5, 'z': 74.5}, #With Osman needle
+        'clean_position'        : {'x': 142.6, 'y': 44.3, 'z': 52},
         'out_position'          : {'x': 0, 'y': 0, 'z': 0},
-        'plate_type'            : 'Thermo-Fast 96 well PCR',
+        # 'plate_type'            : 'Thermo-Fast 96 well PCR',
+        'plate_type'            : 'Abgene 96 well deepwell storage',
         'chiller_top_on'        : False,
-        # 'plate_type'            : 'Abgene 96 well deepwell storage',
         'valves'                : 'rheodyne',
         'rheodyne_valves'       : {'injection': ("/dev/ttyUSB3", 2),
                                    'sample': ("/dev/ttyUSB2", 6),
@@ -865,8 +1251,20 @@ if __name__ == '__main__':
                                    'buffer': 1,
                                    'bypass': 1,
                                    'autosampler': 1},
-        'clean_buffer_seq'      : [(3, 10), (4, 10), (3, 10), (5, 10), (6, 30)], #A set of (x, y) where x is valve position and y is time on that position
-        'clean_sample_seq'      : [(3, 10), (4, 10), (3, 10), (5, 10), (6, 30)], #A set of (x, y) where x is valve position and y is time on that position
+        'clean_buffer_seq'      : [(3, 30), (4, 30), (3, 30), (5, 30), (6, 60)], #A set of (x, y) where x is valve position and y is time on that position
+        'clean_sample_seq'      : [(3, 30), (4, 30), (3, 30), (5, 30), (6, 60)], #A set of (x, y) where x is valve position and y is time on that position
+        'pumps'                 : 'harvard',
+        'harvard_pumps'         : {'sample': ("/dev/ttyUSB6", '1', '0.5 mL, Hamilton Glass'),
+                                   # 'buffer': ("/dev/ttyUSB6", '2', '3 mL, Medline P.C.'),
+                                   'buffer': ("/dev/ttyUSB6", '2', '1.0 mL, Hamilton Glass'),
+                                   },
+        'pump_rates'            : {'sample': (0.1, 0.5), 'buffer': (0.1, 0.1)}, # (refill, infuse) rates in ml/min
+        'swept_volumes'         : {'sample': 0.210, 'buffer': 0.219},  #Swept volumes/volume offset to be used when loading.
+        'loop_volume'           : 0.1,
+        'sample_overdraw'       : 0.01,
+        'buffer_flush_volume'   : 0.05, #Volume flushed through the valves/lines/coflow needle at the end of a buffer load step
+        'buffer_reserve_volume' : 0.025, #Volume reserved from flow when making a measurement
+        'buffer_delay_volume'   : 0.05, #Volume run before flipping loop into line during measurement.
         }
 
 

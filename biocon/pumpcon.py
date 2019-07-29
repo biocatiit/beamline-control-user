@@ -708,6 +708,19 @@ class PHD4400Pump(Pump):
 
         self._flow_rate = self.round(rate)
 
+        #Have to do this or can lose aspirate/dispense volume
+        volume = self._volume
+
+        if self._is_dispensing:
+            vol = self.get_delivered_volume()
+
+            if self._flow_dir > 0:
+                volume = volume - vol
+            elif self._flow_dir < 0:
+                volume = volume + vol
+
+        self._volume = volume
+        
         self.send_cmd("RAT {} MM".format(self._flow_rate))
 
     @property
@@ -749,6 +762,20 @@ class PHD4400Pump(Pump):
             rate = rate*60.
 
         self._refill_rate = self.round(rate)
+        logger.info('Checking volume')
+        
+        #Have to do this or can lose aspirate/dispense volume
+        volume = self._volume
+
+        if self._is_dispensing:
+            vol = self.get_delivered_volume()
+
+            if self._flow_dir > 0:
+                volume = volume - vol
+            elif self._flow_dir < 0:
+                volume = volume + vol
+
+        self._volume = volume
 
         self.send_cmd("RFR {} MM".format(self._refill_rate))
 
@@ -822,14 +849,14 @@ class PHD4400Pump(Pump):
 
         return vol
 
-    def dispense_all(self):
+    def dispense_all(self, blocking=True):
         if self._is_flowing or self._is_dispensing:
             logger.debug("Stopping pump %s current motion before infusing", self.name)
             self.stop()
 
-        self.dispense(self.volume)
+        self.dispense(self.volume, blocking=blocking)
 
-    def dispense(self, vol, units='mL'):
+    def dispense(self, vol, units='mL', blocking=True):
         """
         Dispenses a fixed volume.
 
@@ -917,7 +944,7 @@ class PHD4400Pump(Pump):
         if cont:
             vol = self.round(vol)
 
-            logger.info("Pump %s refilling %f %s at %f %s", self.name, vol, units, self.flow_rate, self.units)
+            logger.info("Pump %s refilling %f %s at %f %s", self.name, vol, units, self.refill_rate, self.units)
 
             self.send_cmd("DIR REF")
             self.send_cmd("CLD")
@@ -2302,17 +2329,18 @@ class PumpFrame(wx.Frame):
             self.pump_sizer.Remove(0)
 
         if setup_pumps is None:
-            setup_pumps = [('2', 'VICI M50', 'COM2', ['626.2', '9.278'], {}, {}),
-                        ('1', 'VICI M50', 'COM1', ['623.56', '12.222'], {}, {})
-                        ]
-
-            # setup_pumps = [('1', 'PHD 4400', 'COM4', ['30 mL, EXEL', '1'], {},
-            #         {'flow_rate' : '30', 'refill_rate' : '30'}),
-            #             ('2', 'PHD 4400', 'COM4', ['30 mL, EXEL', '2'], {},
-            #         {'flow_rate' : '30', 'refill_rate' : '30'}),
-            #             ('3', 'PHD 4400', 'COM4', ['30 mL, EXEL', '3'], {},
-            #         {'flow_rate' : '30', 'refill_rate' : '30'}),
+            # setup_pumps = [('2', 'VICI M50', 'COM2', ['626.2', '9.278'], {}, {}),
+            #             ('1', 'VICI M50', 'COM1', ['623.56', '12.222'], {}, {})
             #             ]
+
+            setup_pumps = [
+                    # ('Sample', 'PHD 4400', '/dev/ttyUSB6', ['30 mL, EXEL', '2'], {},
+                    # {'flow_rate' : '30', 'refill_rate' : '30'}),
+                    ('Buffer', 'PHD 4400', '/dev/ttyUSB6', ['30 mL, EXEL', '1'], {},
+                    {'flow_rate' : '30', 'refill_rate' : '30'}),
+                    # ('3', 'PHD 4400', 'COM4', ['30 mL, EXEL', '3'], {},
+                    # {'flow_rate' : '30', 'refill_rate' : '30'}),
+                        ]
 
         logger.info('Initializing %s pumps on startup', str(len(setup_pumps)))
 
