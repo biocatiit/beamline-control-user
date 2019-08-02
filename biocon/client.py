@@ -132,6 +132,8 @@ class ControlClient(threading.Thread):
                     logger.error(msg)
                     self.connect_error[device] += 1
                     self._ping()
+                    if not self.timeout_event.set():
+                        self.answer_queue.append(None)
 
                 except Exception:
                     device = command['device']
@@ -148,6 +150,7 @@ class ControlClient(threading.Thread):
                     msg = ('5 consecutive failures to run a command on device'
                         '%s.'.format(device))
                     logger.error(msg)
+                    logger.error("Connection timed out")
                     self.timeout_event.set()
             else:
                 time.sleep(0.01)
@@ -167,22 +170,30 @@ class ControlClient(threading.Thread):
         logger.debug("Checking if server is active")
         cmd = {'device': 'server', 'command': ('ping', (), {}), 'response': False}
 
-        self.socket.send_json(cmd)
+        connect_tries = 0
 
-        start_time = time.time()
-        while self.socket.poll(10) == 0 and time.time()-start_time < 2:
-            pass
+        while connect_tries < 5:
+            self.socket.send_json(cmd)
 
-        if self.socket.poll(10) > 0:
-            answer = self.socket.recv_json()
-        else:
-            answer = ''
+            start_time = time.time()
+            while self.socket.poll(10) == 0 and time.time()-start_time < 6:
+                pass
 
-        if answer == 'ping received':
-            logger.info("Connection to server verified")
-        else:
-            logger.error("Could not get a response from the server")
-            self.timeout_event.set()
+            if self.socket.poll(10) > 0:
+                answer = self.socket.recv_json()
+            else:
+                answer = ''
+
+            if answer == 'ping received':
+                logger.info("Connection to server verified")
+                connect_tries = 5
+            else:
+                logger.error("Could not get a response from the server")
+                connect_tries = connect_tries+1
+
+                if connect_tries == 5:
+                    logger.error("Connection timed out")
+                    self.timeout_event.set()
 
     def _abort(self):
         """Clears the ``command_queue`` and aborts all current pump motions."""

@@ -777,7 +777,7 @@ class ExpCommThread(threading.Thread):
 
             dark_counts = []
             for i in range(len(s_counters)):
-                if log_vals['dark']:
+                if log_vals[i]['dark']:
                     dark_counts.append(s_counters[i].get_dark_current())
                 else:
                     dark_counts.append(0)
