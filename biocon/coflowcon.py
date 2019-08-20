@@ -674,9 +674,20 @@ class CoflowPanel(wx.Panel):
 
         while not self.stop_get_fr_event.is_set():
             if not self.stop_get_fr_event.is_set():
-                s_type, sheath_fr = self._send_fmcmd(sheath_fr_cmd, True)
+                ret_val = self._send_fmcmd(sheath_fr_cmd, True)
+                if ret_val is not None:
+                    s_type, sheath_fr = ret_val
+                else:
+                    s_type = None
+                    sheath_fr = None
+
             if not self.stop_get_fr_event.is_set():
-                o_type, outlet_fr = self._send_fmcmd(outlet_fr_cmd, True)
+                ret_val = self._send_fmcmd(outlet_fr_cmd, True)
+                if ret_val is not None:
+                    o_type, outlet_fr = ret_val
+                else:
+                    o_type = None
+                    outlet_fr = None
 
             if s_type == 'flow_rate' and o_type == 'flow_rate':
                 self.get_plot_data_lock.acquire()
@@ -699,14 +710,36 @@ class CoflowPanel(wx.Panel):
 
             if time.time() - cycle_time > 0.25:
                 if not self.stop_get_fr_event.is_set():
-                    s1_type, sheath_density = self._send_fmcmd(sheath_density_cmd, True)
-                if not self.stop_get_fr_event.is_set():
-                    o1_type, outlet_density = self._send_fmcmd(outlet_density_cmd, True)
+                    ret_val = self._send_fmcmd(sheath_density_cmd, True)
+                    if ret_val is not None:
+                        s1_type, sheath_density = ret_val
+                    else:
+                        s1_type = None
+                        sheath_density = None
 
                 if not self.stop_get_fr_event.is_set():
-                    s2_type, sheath_t = self._send_fmcmd(sheath_t_cmd, True)
+                    ret_val = self._send_fmcmd(outlet_density_cmd, True)
+                    if ret_val is not None:
+                        o1_type, outlet_density = ret_val
+                    else:
+                        o1_type = None
+                        outlet_density = None
+
                 if not self.stop_get_fr_event.is_set():
-                    o2_type, outlet_t = self._send_fmcmd(outlet_t_cmd, True)
+                    ret_val = self._send_fmcmd(sheath_t_cmd, True)
+                    if ret_val is not None:
+                        s2_type, sheath_t = ret_val
+                    else:
+                        s2_type = None
+                        sheath_t = None
+
+                if not self.stop_get_fr_event.is_set():
+                    ret_val = self._send_fmcmd(outlet_t_cmd, True)
+                    if ret_val is not None:
+                        o2_type, outlet_t = ret_val
+                    else:
+                        o2_type = None
+                        outlet_t = None
 
                 if s1_type == o1_type and s1_type == 'density' and s2_type == o2_type and s2_type == 'temperature':
                     self.get_plot_data_lock.acquire()
@@ -847,6 +880,7 @@ class CoflowPanel(wx.Panel):
 
                 if not self.timeout_event.is_set():
                     ret_val = self.coflow_fm_return_q.popleft()
+
                 else:
                     msg = ('Lost connection to the coflow control server. '
                         'Contact your beamline scientist.')

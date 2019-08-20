@@ -197,7 +197,7 @@ if __name__ == '__main__':
             {'mx_record': 'j11', 'name': 'Beam_current', 'scale': 5000,
             'offset': 0.5, 'norm_time': True}
             ],
-        'base_data_dir'         : '/nas_data/Pilatus1M/20190709Hopkins', #CHANGE ME
+        'base_data_dir'         : '/nas_data/Pilatus1M/20190723Srinivas', #CHANGE ME
         }
 
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']
@@ -241,7 +241,7 @@ if __name__ == '__main__':
         'scan_start_offset_dist': 0,
         'scan_end_offset_dist'  : 0,
         'motor_type'            : 'Newport_XPS',
-        'motor_ip'              : '164.54.204.65',
+        'motor_ip'              : '164.54.204.74',
         'motor_port'            : '5001',
         'motor_group_name'      : 'XY',
         'motor_x_name'          : 'XY.X',

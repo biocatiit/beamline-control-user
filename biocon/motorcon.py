@@ -3324,7 +3324,7 @@ class MotorFrame(wx.Frame):
         self.Fit()
         self.Raise()
 
-        # self._initmotors()
+        self._initmotors()
 
     def _create_layout(self):
         """Creates the layout"""
@@ -3375,7 +3375,7 @@ class MotorFrame(wx.Frame):
         #     'Single', 'GROUP1.POSITIONER', ''], {}),
         #             ]
 
-        setup_motors = [(['XY', 'Newport XPS', '164.54.204.65', '5001',
+        setup_motors = [(['XY', 'Newport XPS', '164.54.204.74', '5001',
             'XY', 'XY.X', 'XY.Y'], {}),
                     ]
 
