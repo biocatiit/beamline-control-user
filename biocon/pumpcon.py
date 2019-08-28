@@ -720,7 +720,7 @@ class PHD4400Pump(Pump):
                 volume = volume + vol
 
         self._volume = volume
-        
+
         self.send_cmd("RAT {} MM".format(self._flow_rate))
 
     @property
@@ -763,7 +763,7 @@ class PHD4400Pump(Pump):
 
         self._refill_rate = self.round(rate)
         logger.info('Checking volume')
-        
+
         #Have to do this or can lose aspirate/dispense volume
         volume = self._volume
 
@@ -2329,18 +2329,18 @@ class PumpFrame(wx.Frame):
             self.pump_sizer.Remove(0)
 
         if setup_pumps is None:
-            # setup_pumps = [('2', 'VICI M50', 'COM2', ['626.2', '9.278'], {}, {}),
-            #             ('1', 'VICI M50', 'COM1', ['623.56', '12.222'], {}, {})
-            #             ]
-
-            setup_pumps = [
-                    # ('Sample', 'PHD 4400', '/dev/ttyUSB6', ['30 mL, EXEL', '2'], {},
-                    # {'flow_rate' : '30', 'refill_rate' : '30'}),
-                    ('Buffer', 'PHD 4400', '/dev/ttyUSB6', ['30 mL, EXEL', '1'], {},
-                    {'flow_rate' : '30', 'refill_rate' : '30'}),
-                    # ('3', 'PHD 4400', 'COM4', ['30 mL, EXEL', '3'], {},
-                    # {'flow_rate' : '30', 'refill_rate' : '30'}),
+            setup_pumps = [('2', 'VICI M50', 'COM2', ['626.2', '9.278'], {}, {}),
+                        ('1', 'VICI M50', 'COM1', ['623.56', '12.222'], {}, {})
                         ]
+
+            # setup_pumps = [
+            #         # ('Sample', 'PHD 4400', '/dev/ttyUSB6', ['30 mL, EXEL', '2'], {},
+            #         # {'flow_rate' : '30', 'refill_rate' : '30'}),
+            #         ('Buffer', 'PHD 4400', '/dev/ttyUSB6', ['30 mL, EXEL', '1'], {},
+            #         {'flow_rate' : '30', 'refill_rate' : '30'}),
+            #         # ('3', 'PHD 4400', 'COM4', ['30 mL, EXEL', '3'], {},
+            #         # {'flow_rate' : '30', 'refill_rate' : '30'}),
+            #             ]
 
         logger.info('Initializing %s pumps on startup', str(len(setup_pumps)))
 
