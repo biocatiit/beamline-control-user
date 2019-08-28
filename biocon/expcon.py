@@ -162,8 +162,8 @@ class ExpCommThread(threading.Thread):
         server_record = mx_database.get_record(server_record_name)
         det_datadir_name = '{}.datafile_directory'.format(remote_det_name)
         det_datafile_name = '{}.datafile_pattern'.format(remote_det_name)
-        det_exp_time_name = '{}.ext_enable_time'.format(remote_det_name)
-        det_exp_period_name = '{}.ext_enable_period'.format(remote_det_name)
+        # det_exp_time_name = '{}.ext_enable_time'.format(remote_det_name)
+        # det_exp_period_name = '{}.ext_enable_period'.format(remote_det_name)
 
         det_datadir = mp.Net(server_record, det_datadir_name)
         det_filename = mp.Net(server_record, det_datafile_name)
@@ -1267,7 +1267,7 @@ class ExpCommThread(threading.Thread):
         header = self._get_header(metadata, log_vals)
 
         if extra_vals is not None:
-            header.rstrip('\n')
+            header = header.rstrip('\n')
             for ev in extra_vals:
                 header = header + '\t{}'.format(ev[0])
             header = header + '\n'

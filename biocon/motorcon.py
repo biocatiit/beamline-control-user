@@ -365,6 +365,8 @@ class NewportXPSMotor(Motor):
 
     def get_positioner_position(self, positioner, index):
 
+        print (self.sockets)
+
         logger.debug('Getting %s position', positioner)
         error, positions = self.xps.GroupPositionCurrentGet(self.sockets['status'],
             positioner, 1)

@@ -139,8 +139,8 @@ if __name__ == '__main__':
         'filename'              : '',
         'run_num'               : 1,
         'exp_time'              : '0.5',
-        'exp_period'            : '2',
-        'exp_num'               : '5',
+        'exp_period'            : '1',
+        'exp_num'               : '2',
         'exp_time_min'          : 0.00105,
         'exp_time_max'          : 5184000,
         'exp_period_min'        : 0.002,
@@ -197,7 +197,7 @@ if __name__ == '__main__':
             {'mx_record': 'j11', 'name': 'Beam_current', 'scale': 5000,
             'offset': 0.5, 'norm_time': True}
             ],
-        'base_data_dir'         : '/nas_data/Pilatus1M/20190723Srinivas', #CHANGE ME
+        'base_data_dir'         : '/nas_data/Pilatus1M/20190823Hopkins', #CHANGE ME
         }
 
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']
@@ -262,7 +262,7 @@ if __name__ == '__main__':
 
     components = OrderedDict([
         ('exposure', expcon.ExpPanel),
-        ('coflow', coflowcon.CoflowPanel),
+        # ('coflow', coflowcon.CoflowPanel),
         # ('trsaxs', trcon.TRPanel),
         ])
 
