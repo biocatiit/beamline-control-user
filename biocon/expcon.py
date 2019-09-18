@@ -1899,6 +1899,11 @@ class ExpPanel(wx.Panel):
         if not exp_valid:
             return
 
+        overwrite_valid = self._check_overwrite(exp_values)
+
+        if not overwrite_valid:
+            return
+
         comp_valid, comp_settings = self._check_components()
 
         if not comp_valid:
@@ -2232,6 +2237,13 @@ class ExpPanel(wx.Panel):
         valid = coflow_started and trsaxs_valid
 
         return valid, comp_settings
+
+    def _check_overwrite(self, exp_settings):
+        data_dir = exp_settings['data_dir']
+        fprefix = exp_settings['fprefix']
+
+        print(data_dir)
+        print(fprefix)
 
     def _get_metadata(self):
 
