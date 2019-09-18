@@ -2241,9 +2241,41 @@ class ExpPanel(wx.Panel):
     def _check_overwrite(self, exp_settings):
         data_dir = exp_settings['data_dir']
         fprefix = exp_settings['fprefix']
+        num_frames = exp_settings['num_frames']
 
-        print(data_dir)
-        print(fprefix)
+        data_dir = data_dir.replace(self.settings['remote_dir_root'], self.settings['local_dir_root'], 1)
+
+        log_file = os.path.join(data_dir, '{}.log'.format(fprefix))
+
+        img_check_step = int(num_frames/10)
+        if img_check_step == 0:
+            img_check_step = 1
+
+        img_nums = range(1, num_frames+1, img_check_step)
+        img_files = [os.path.join(data_dir, '{}_{:04d}.tif'.format(fprefix, img_num))
+            for img_num in img_nums]
+
+        check_files = [log_file]+img_files
+
+        cont = True
+
+        for f in check_files:
+            if os.path.exists(f):
+                cont = False
+                break
+
+        if not cont:
+            msg = ("Warning: data collection will overwrite existing files "
+                "with the same name. Do you want to proceed?")
+            dlg = wx.MessageDialog(None, msg, "Confirm data overwrite",
+                wx.YES_NO|wx.ICON_EXCLAMATION|wx.NO_DEFAULT)
+            result = dlg.ShowModal()
+
+            if result == wx.ID_YES:
+                cont = True
+
+        return cont
+
 
     def _get_metadata(self):
 
