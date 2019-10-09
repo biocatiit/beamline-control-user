@@ -2329,8 +2329,8 @@ class PumpFrame(wx.Frame):
             self.pump_sizer.Remove(0)
 
         if setup_pumps is None:
-            setup_pumps = [('2', 'VICI M50', 'COM2', ['626.2', '9.278'], {}, {}),
-                        ('1', 'VICI M50', 'COM1', ['623.56', '12.222'], {}, {})
+            setup_pumps = [('Sheath', 'VICI M50', 'COM3', ['626.2', '9.278'], {}, {}),
+                        ('Outlet', 'VICI M50', 'COM4', ['623.56', '12.222'], {}, {})
                         ]
 
             # setup_pumps = [
@@ -2469,8 +2469,8 @@ if __name__ == '__main__':
     #     }
 
     #Use this with M50s
-    comm_locks = {'2' : threading.Lock(),
-        '1' : threading.Lock(),
+    comm_locks = {'Sheath' : threading.Lock(),
+        'Outlet' : threading.Lock(),
         }
 
     # #Otherwise use this:
