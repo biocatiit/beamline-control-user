@@ -46,7 +46,12 @@ the MX control system to talk to the devices. It scans two motors, then creates 
 
 ### BioCON
 
-wx, pyserial, Mp
+wxpython, pyserial, numpy, six, zaber.serial, pyzmq, matplotlib, future, Mp
+
+Sample commands:
+conda install wxpython pyserial numpy six pyzmq matplotlib future
+pip install zaber.serial
+
 
 ### mxmap
 
