@@ -68,7 +68,7 @@ conda install wxpython pyserial numpy six pyzmq matplotlib future
 
 pip install zaber.serial
 
-Update the path to the SDK in fmcon.py appropriately. Note that as of the last time I tested, only the 32bit python stuff worked.
+Update the path to the SDK in fmcon.py appropriately. Note that as of the last time I tested, only the 32bit python stuff worked. Update the path to the Elveflow DLL in the sdk/python_xx/ElveflowXX.py file.
 
 ### mxmap
 
