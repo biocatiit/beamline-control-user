@@ -148,14 +148,18 @@ if __name__ == '__main__':
         'nframes_max'           : 15000, # For Pilatus: 999999, for Struck: 15000 (set by maxChannels in the driver configuration)
         'nparams_max'           : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
         'exp_period_delta'      : 0.00095,
-        'shutter_speed_open'    : 0.004, #in s      Normal vacuum shutter
-        'shutter_speed_close'   : 0.004, # in s
-        'shutter_pad'           : 0.002, #padding for shutter related values
-        'shutter_cycle'         : 0.02, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
+        # 'shutter_speed_open'    : 0.004, #in s      Normal vacuum shutter
+        # 'shutter_speed_close'   : 0.004, # in s
+        # 'shutter_pad'           : 0.002, #padding for shutter related values
+        # 'shutter_cycle'         : 0.02, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
         # 'shutter_speed_open'    : 0.001, #in s    Fast shutters
         # 'shutter_speed_close'   : 0.001, # in s
         # 'shutter_pad'           : 0.00, #padding for shutter related values
         # 'shutter_cycle'         : 0.002, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
+        'shutter_speed_open'    : 0.075, #in s      Normal vacuum shutter
+        'shutter_speed_close'   : 0.075, # in s
+        'shutter_pad'           : 0.01, #padding for shutter related values
+        'shutter_cycle'         : 0.2, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
         'struck_measurement_time' : '0.001', #in s
         'tr_muscle_exp'         : False,
         'slow_mode_thres'       : 0.1,
@@ -197,7 +201,7 @@ if __name__ == '__main__':
             {'mx_record': 'j11', 'name': 'Beam_current', 'scale': 5000,
             'offset': 0.5, 'norm_time': True}
             ],
-        'base_data_dir'         : '/nas_data/Pilatus1M/2019_Run3/20190918Hopkins', #CHANGE ME
+        'base_data_dir'         : '/nas_data/Pilatus1M/2019_Run3/20191015Hopkins', #CHANGE ME
         }
 
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']
