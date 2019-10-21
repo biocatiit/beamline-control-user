@@ -156,7 +156,7 @@ if __name__ == '__main__':
         # 'shutter_speed_close'   : 0.001, # in s
         # 'shutter_pad'           : 0.00, #padding for shutter related values
         # 'shutter_cycle'         : 0.002, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
-        'shutter_speed_open'    : 0.075, #in s      Normal vacuum shutter
+        'shutter_speed_open'    : 0.075, #in s      Slow vacuum shutter
         'shutter_speed_close'   : 0.075, # in s
         'shutter_pad'           : 0.01, #padding for shutter related values
         'shutter_cycle'         : 0.2, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
@@ -266,7 +266,7 @@ if __name__ == '__main__':
 
     components = OrderedDict([
         ('exposure', expcon.ExpPanel),
-        ('coflow', coflowcon.CoflowPanel),
+        # ('coflow', coflowcon.CoflowPanel),
         # ('trsaxs', trcon.TRPanel),
         ])
 

@@ -162,11 +162,11 @@ class ExpCommThread(threading.Thread):
         server_record = mx_database.get_record(server_record_name)
         det_datadir_name = '{}.datafile_directory'.format(remote_det_name)
         det_datafile_name = '{}.datafile_pattern'.format(remote_det_name)
-        # det_exp_time_name = '{}.ext_enable_time'.format(remote_det_name)
-        # det_exp_period_name = '{}.ext_enable_period'.format(remote_det_name)
+        det_exp_time_name = '{}.ext_enable_time'.format(remote_det_name)
+        det_exp_period_name = '{}.ext_enable_period'.format(remote_det_name)
 
-        det_exp_time_name = ''
-        det_exp_period_name = ''
+        # det_exp_time_name = ''
+        # det_exp_period_name = ''
 
         det_datadir = mp.Net(server_record, det_datadir_name)
         det_filename = mp.Net(server_record, det_datafile_name)
@@ -399,13 +399,39 @@ class ExpCommThread(threading.Thread):
 
             det.set_duration_mode(num_frames)
             det.set_trigger_mode(2)
-            # det_exp_time.put(exp_time)
-            # det_exp_period.put(exp_period)
+            det_exp_time.put(exp_time)
+            det_exp_period.put(exp_period)
 
             struck_mode_pv.caput(1)
             struck.set_measurement_time(struck_meas_time)   #Ignored for external LNE of Struck
             struck.set_num_measurements(struck_num_meas)
             struck.set_trigger_mode(0x2)    #Sets external mode, i.e. counting on first LNE
+
+            dg645_trigger_source.put(1)
+            dg645_trigger_source2.put(1)
+
+            if cur_trig == 1:
+                ab_burst.setup(0.000001, 0.000000, 1, 0, 1, -1)
+                cd_burst.setup(0.000001, 0.000000, 1, 0, 1, -1)
+                ef_burst.setup(0.000001, 0.000000, 1, 0, 1, -1)
+                gh_burst.setup(0.000001, 0.000000, 1, 0, 1, -1)
+
+                ab_burst_2.setup(0.000001, 0.000000, 1, 0, 1, -1)
+                cd_burst_2.setup(0.000001, 0.000000, 1, 0, 1, -1)
+                ef_burst_2.setup(0.000001, 0.000000, 1, 0, 1, -1)
+                gh_burst_2.setup(0.000001, 0.000000, 1, 0, 1, -1)
+
+                ab_burst.arm()
+                ab_burst_2.arm()
+
+                dio_out10.write( 1 )
+                time.sleep(0.01)
+                dio_out10.write( 0 )
+
+                status = ab_burst.get_status()
+
+                while (status & 0x1) != 0:
+                    time.sleep(0.01)
 
             if exp_period > exp_time+total_shutter_speed and exp_period >= shutter_cycle:
                 #Shutter opens and closes, Takes 4 ms for open and close
@@ -421,14 +447,14 @@ class ExpCommThread(threading.Thread):
                 ef_burst.setup(exp_period, exp_time, num_frames, offset, 1, -1)
                 gh_burst.setup(exp_period, exp_time, num_frames, offset, 1, -1) #Irrelevant
 
-            dg645_trigger_source.put(1)
+
 
             ab_burst_2.setup(struck_meas_time, struck_meas_time*(1-1/1000.), struck_num_meas+1, 0, 1, -1)
             cd_burst_2.setup(struck_meas_time, struck_meas_time/2., struck_num_meas+1, 0, 1, -1)
             ef_burst_2.setup(struck_meas_time, struck_meas_time/2., struck_num_meas+1, 0, 1, -1) #Irrelevant
             gh_burst_2.setup(struck_meas_time, struck_meas_time/2., struck_num_meas+1, 0, 1, -1) #Irrelevant
 
-            dg645_trigger_source2.put(1)
+
 
             dio_out6.write(0) #Open the slow normally closed xia shutter
 
@@ -641,13 +667,32 @@ class ExpCommThread(threading.Thread):
 
         det.set_duration_mode(num_frames)
         det.set_trigger_mode(2)
-        # det_exp_time.put(exp_time)
-        # det_exp_period.put(exp_period)
+        det_exp_time.put(exp_time)
+        det_exp_period.put(exp_period)
 
         struck_mode_pv.caput(1)
         struck.set_measurement_time(exp_time)   #Ignored for external LNE of Struck
         struck.set_num_measurements(num_frames)
         struck.set_trigger_mode(0x8)    #Sets 'autotrigger' mode, i.e. counting as soon as armed
+
+        dg645_trigger_source.put(1) #Change this to 2 for external falling edges
+
+        #Need to clear srs possibly?
+        ab_burst.setup(0.000001, 0.000000, 1, 0, 1, -1)
+        cd_burst.setup(0.000001, 0.000000, 1, 0, 1, -1)
+        ef_burst.setup(0.000001, 0.000000, 1, 0, 1, -1)
+        gh_burst.setup(0.000001, 0.000000, 1, 0, 1, -1)
+
+        ab_burst.arm()
+
+        dio_out10.write( 1 )
+        time.sleep(0.01)
+        dio_out10.write( 0 )
+
+        status = ab_burst.get_status()
+
+        while (status & 0x1) != 0:
+            time.sleep(0.01)
 
         if exp_period > exp_time+0.01 and exp_period >= 0.02:
             #Shutter opens and closes, Takes 4 ms for open and close
@@ -662,7 +707,7 @@ class ExpCommThread(threading.Thread):
             ef_burst.setup(exp_time+0.001, exp_time, 1, 0, 1, -1)
             gh_burst.setup(exp_time+0.001, exp_time, 1, 0, 1, -1)
 
-        dg645_trigger_source.put(1) #Change this to 2 for external falling edges
+
 
         for current_run in range(1,num_runs+1):
             self.return_queue.append(['scan', current_run])
@@ -917,13 +962,33 @@ class ExpCommThread(threading.Thread):
 
             det.set_duration_mode(num_frames)
             det.set_trigger_mode(2)
-            # det_exp_time.put(exp_time)
-            # det_exp_period.put(exp_period)
+            det_exp_time.put(exp_time)
+            det_exp_period.put(exp_period)
 
             struck_mode_pv.caput(1)
             struck.set_measurement_time(exp_time)   #Ignored for external LNE of Struck
             struck.set_num_measurements(num_frames)
             struck.set_trigger_mode(0x8)    #Sets 'autotrigger' mode, i.e. counting as soon as armed
+
+            dg645_trigger_source.put(1)
+
+            if cur_trig ==1 :
+                #Need to clear srs possibly?
+                ab_burst.setup(0.000001, 0.000000, 1, 0, 1, -1)
+                cd_burst.setup(0.000001, 0.000000, 1, 0, 1, -1)
+                ef_burst.setup(0.000001, 0.000000, 1, 0, 1, -1)
+                gh_burst.setup(0.000001, 0.000000, 1, 0, 1, -1)
+
+                ab_burst.arm()
+
+                dio_out10.write( 1 )
+                time.sleep(0.01)
+                dio_out10.write( 0 )
+
+                status = ab_burst.get_status()
+
+                while (status & 0x1) != 0:
+                    time.sleep(0.01)
 
             if exp_period > exp_time+total_shutter_speed and exp_period >= shutter_cycle:
                 #Shutter opens and closes, Takes 4 ms for open and close
@@ -937,8 +1002,6 @@ class ExpCommThread(threading.Thread):
                 cd_burst.setup(exp_period, 0.0001, num_frames, exp_time+0.00015, 1, -1)
                 ef_burst.setup(exp_period, exp_time, num_frames, 0, 1, -1)
                 gh_burst.setup(exp_period, exp_time, num_frames, 0, 1, -1)
-
-            dg645_trigger_source.put(1)
 
             dio_out6.write(0) #Open the slow normally closed xia shutter
 
@@ -1088,7 +1151,6 @@ class ExpCommThread(threading.Thread):
         # logger.info('here')
         # logger.info(det.get_status())
         if det.get_status() & 0x1 !=0:
-            logger.info('aborting')
             try:
                 det.abort()
             except (mp.Device_Action_Failed_Error, mp.Unparseable_String_Error):
@@ -1110,8 +1172,8 @@ class ExpCommThread(threading.Thread):
 
         det.set_duration_mode(num_frames)
         det.set_trigger_mode(2)
-        # det_exp_time.put(exp_time)
-        # det_exp_period.put(exp_period)
+        det_exp_time.put(exp_time)
+        det_exp_period.put(exp_period)
 
         #Start writing counter file
         extra_vals = None
@@ -1133,14 +1195,31 @@ class ExpCommThread(threading.Thread):
         for scaler in scl_list:
             scaler.read()
 
+        logger.debug('Before dg645 trigger')
+        dg645_trigger_source.put(1)
+        logger.debug('After dg645 trigger')
+
+        #Need to clear srs possibly?
+        ab_burst.setup(0.000001, 0.000000, 1, 0, 1, -1)
+        cd_burst.setup(0.000001, 0.000000, 1, 0, 1, -1)
+        ef_burst.setup(0.000001, 0.000000, 1, 0, 1, -1)
+        gh_burst.setup(0.000001, 0.000000, 1, 0, 1, -1)
+
+        ab_burst.arm()
+
+        dio_out10.write( 1 )
+        time.sleep(0.01)
+        dio_out10.write( 0 )
+
+        status = ab_burst.get_status()
+
+        while (status & 0x1) != 0:
+            time.sleep(0.01)
+
         ab_burst.setup(exp_time+total_shutter_speed*1.5, exp_time+s_offset, 1, 0, 1, -1)
         cd_burst.setup(exp_time+total_shutter_speed*1.5, exp_time+s_offset, 1, 0, 1, -1)
         ef_burst.setup(exp_time+total_shutter_speed*1.5, exp_time, 1, s_offset_half, 1, -1)
         gh_burst.setup(exp_time+total_shutter_speed*1.5, exp_time, 1, 0, 1, -1)
-
-        logger.debug('Before dg645 trigger')
-        dg645_trigger_source.put(1)
-        logger.debug('After dg645 trigger')
 
         time.sleep(0.1)
 
@@ -1631,7 +1710,7 @@ class ExpCommThread(threading.Thread):
 
     def tr_abort_cleanup(self, det, struck, ab_burst, dio_out9, dio_out6,
         tr_settings, exp_time):
-        logger.info("Aborting fast exposure")
+        logger.info("Aborting trsaxs exposure")
 
         if exp_time < 60:
             # try:
@@ -2073,10 +2152,15 @@ class ExpPanel(wx.Panel):
 
     def stop_exp(self):
         self.abort_event.set()
-        self._on_exp_finish()
+        self.set_status('Aborting')
+        wx.CallAfter(self._on_exp_finish)
 
     def _on_exp_finish(self):
         self.tr_timer.Stop()
+
+        while self.exp_event.is_set():
+                time.sleep(0.001)
+
         self.start_exp_btn.Enable()
         self.stop_exp_btn.Disable()
         self.set_status('Ready')
