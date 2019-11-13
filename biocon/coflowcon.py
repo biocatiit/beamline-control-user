@@ -142,7 +142,7 @@ class CoflowPanel(wx.Panel):
             fm_port = self.settings['remote_fm_port']
             self.coflow_fm_con = client.ControlClient(fm_ip, fm_port,
                 self.coflow_fm_cmd_q, self.coflow_fm_return_q,
-                self.coflow_fm_abort_event, self.timeout_event, name='PumpControlClient')
+                self.coflow_fm_abort_event, self.timeout_event, name='FMControlClient')
 
         self.coflow_pump_con.start()
         self.coflow_fm_con.start()

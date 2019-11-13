@@ -39,6 +39,7 @@ import wx
 
 import pumpcon
 import fmcon
+import valvecon
 
 
 class ControlServer(threading.Thread):
@@ -106,6 +107,20 @@ class ControlServer(threading.Thread):
             }
 
         self._device_control['fm'] = fm_ctrl
+
+        valve_cmd_q = deque()
+        valve_return_q = deque()
+        valve_abort_event = threading.Event()
+        valve_con = valvecon.ValveCommThread(valve_cmd_q, valve_return_q, valve_abort_event, 'ValveCon')
+        valve_con.start()
+
+        valve_ctrl = {'queue': valve_cmd_q,
+            'abort': valve_abort_event,
+            'thread': valve_con,
+            'answer_q': valve_return_q
+            }
+
+        self._device_control['valve'] = valve_ctrl
 
     def run(self):
         """
@@ -223,6 +238,7 @@ if __name__ == '__main__':
 
     port1 = '5556'
     port2 = '5557'
+    port3 = '5558'
     ip = '164.54.204.53'
 
     pump_comm_locks = {'COM3'   : threading.Lock(),
@@ -236,6 +252,8 @@ if __name__ == '__main__':
     control_server2 = ControlServer(ip, port2, name='FMControlServer')
     control_server2.start()
 
+    # control_server3 = ControlServer(ip, port3, name='ValveControlServer')
+    # control_server3.start()
 
     setup_pumps = [('sheath', 'VICI M50', 'COM3', ['626.2', '9.278'], {}, {}),
                         ('outlet', 'VICI M50', 'COM4', ['623.56', '12.222'], {}, {})
@@ -257,5 +275,8 @@ if __name__ == '__main__':
 
         control_server2.stop()
         control_server2.join()
+
+        # control_server3.stop()
+        # control_server3.join()
 
     logger.info("Quitting server")
