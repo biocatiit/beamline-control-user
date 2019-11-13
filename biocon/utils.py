@@ -28,6 +28,7 @@ import os
 import sys
 import six
 from six.moves import StringIO as bytesio
+import platform
 
 logger = logging.getLogger(__name__)
 
@@ -233,3 +234,179 @@ if six.PY3:
             return str(s, FTP_ENCODING)
         else:
             return str(s)
+
+class FloatSpinEvent(wx.PyCommandEvent):
+
+    def __init__(self, evtType, id, object):
+
+        wx.PyCommandEvent.__init__(self, evtType, id)
+        self.value = 0
+        self.object = object
+
+    def GetValue(self):
+        return self.value
+
+    def SetValue(self, value):
+        self.value = value
+
+    def GetEventObject(self):
+        return self.object
+
+myEVT_MY_SPIN = wx.NewEventType()
+EVT_MY_SPIN = wx.PyEventBinder(myEVT_MY_SPIN, 1)
+
+class IntSpinCtrl(wx.Panel):
+
+    def __init__(self, parent, id=wx.ID_ANY, min = None, max = None, TextLength = 40, **kwargs):
+
+        wx.Panel.__init__(self, parent, id, **kwargs)
+
+        if platform.system() != 'Windows':
+            self.ScalerButton = wx.SpinButton(self, -1, style = wx.SP_VERTICAL)
+        else:
+            self.ScalerButton = wx.SpinButton(self, -1, size=(-1,22), style = wx.SP_VERTICAL)
+
+        self.ScalerButton.Bind(wx.EVT_SET_FOCUS, self.OnScaleChange)
+        self.ScalerButton.Bind(wx.EVT_SPIN_UP, self.OnSpinUpScale)
+        self.ScalerButton.Bind(wx.EVT_SPIN_DOWN, self.OnSpinDownScale)
+        self.ScalerButton.SetRange(-99999, 99999)
+        self.max = max
+        self.min = min
+
+        if platform.system() != 'Windows':
+            self.Scale = wx.TextCtrl(self, -1, str(min), size = (TextLength,-1), style = wx.TE_PROCESS_ENTER)
+        else:
+            self.Scale = wx.TextCtrl(self, -1, str(min), size = (TextLength,22), style = wx.TE_PROCESS_ENTER)
+
+        self.Scale.Bind(wx.EVT_KILL_FOCUS, self.OnScaleChange)
+        self.Scale.Bind(wx.EVT_TEXT_ENTER, self.OnScaleChange)
+
+        sizer = wx.BoxSizer()
+
+        sizer.Add(self.Scale, 0, wx.RIGHT, 1)
+        sizer.Add(self.ScalerButton, 0)
+
+        self.oldValue = 0
+
+        self.SetSizer(sizer)
+
+        self.ScalerButton.SetValue(0)
+
+    def CastFloatSpinEvent(self):
+        event = FloatSpinEvent(myEVT_MY_SPIN, self.GetId(), self)
+        event.SetValue( self.Scale.GetValue() )
+        self.GetEventHandler().ProcessEvent(event)
+
+    def OnScaleChange(self, event):
+        self.ScalerButton.SetValue(0) # Resit spinbutton position for button to work in linux
+
+        val = self.Scale.GetValue()
+
+        try:
+            float(val)
+        except ValueError:
+            return
+
+        if self.max is not None:
+            if float(val) > self.max:
+                self.Scale.SetValue(str(self.max))
+        if self.min is not None:
+            if float(val) < self.min:
+                self.Scale.SetValue(str(self.min))
+
+        #if val != self.oldValue:
+        self.oldValue = val
+        self.CastFloatSpinEvent()
+
+        event.Skip()
+
+    def OnSpinUpScale(self, event):
+        self.ScalerButton.SetFocus()    # Just to remove focus from the bgscaler to throw kill_focus event and update
+
+        val = self.Scale.GetValue()
+        try:
+            float(val)
+        except ValueError:
+            if self.min is not None:
+                val = self.min -1
+            elif self.max is not None:
+                val = self.max -1
+            else:
+                return
+
+        newval = int(val) + 1
+
+        # Reset spinbutton counter. Fixes bug on MAC
+        if self.ScalerButton.GetValue() > 90000:
+            self.ScalerButton.SetValue(0)
+
+        #print self.min, self.max, val, self.ScalerButton.GetMax(), self.ScalerButton.GetValue()
+
+        if self.max is not None:
+            if newval > self.max:
+                self.Scale.SetValue(str(self.max))
+            else:
+                self.Scale.SetValue(str(newval))
+        else:
+            self.Scale.SetValue(str(newval))
+
+        self.oldValue = newval
+        wx.CallAfter(self.CastFloatSpinEvent)
+
+    def OnSpinDownScale(self, event):
+        #self.ScalerButton.SetValue(80)   # This breaks the spinbutton on Linux
+        self.ScalerButton.SetFocus()    # Just to remove focus from the bgscaler to throw kill_focus event and update
+
+        val = self.Scale.GetValue()
+
+        try:
+            float(val)
+        except ValueError:
+            if self.max is not None:
+                val = self.max +1
+            elif self.min is not None:
+                val = self.min +1
+            else:
+                return
+
+        newval = int(val) - 1
+
+        # Reset spinbutton counter. Fixes bug on MAC
+        if self.ScalerButton.GetValue() < -90000:
+            self.ScalerButton.SetValue(0)
+
+        if self.min is not None:
+            if newval < self.min:
+                self.Scale.SetValue(str(self.min))
+            else:
+                self.Scale.SetValue(str(newval))
+        else:
+            self.Scale.SetValue(str(newval))
+
+        self.oldValue = newval
+        wx.CallAfter(self.CastFloatSpinEvent)
+
+
+    def GetValue(self):
+        value = self.Scale.GetValue()
+
+        try:
+            return int(value)
+        except ValueError:
+            return value
+
+    def SetValue(self, value):
+        self.Scale.SetValue(str(value))
+
+    def SetRange(self, minmax):
+        self.max = minmax[1]
+        self.min = minmax[0]
+
+    def GetRange(self):
+        return (self.min, self.max)
+
+    def SetMin(self, value):
+        self.min = value
+
+    def SetMax(self, value):
+        self.max = value

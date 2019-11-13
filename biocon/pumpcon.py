@@ -254,7 +254,8 @@ class PHD4400SerialComm(SerialComm):
                         time.sleep(.001)
         except ValueError:
             logger.exception("Failed to write '%s' to serial device on port %s", data, self.ser.port)
-
+        except Exception:
+            logger.error("Failed to write to serial port!")
         logger.debug("Recived '%s' after writing to serial device on port %s", out, self.ser.port)
 
         return out
@@ -712,7 +713,7 @@ class PHD4400Pump(Pump):
         #Have to do this or can lose aspirate/dispense volume
         volume = self._volume
 
-        if self._is_dispensing:
+        if self._is_dispensing and not self.is_moving():
             vol = self.get_delivered_volume()
 
             if self._flow_dir > 0:
@@ -768,7 +769,7 @@ class PHD4400Pump(Pump):
         #Have to do this or can lose aspirate/dispense volume
         volume = self._volume
 
-        if self._is_dispensing:
+        if self._is_dispensing and not self.is_moving():
             vol = self.get_delivered_volume()
 
             if self._flow_dir > 0:
@@ -821,6 +822,7 @@ class PHD4400Pump(Pump):
         ret = self.pump_comm.write("{}{}".format(self._pump_address, cmd),
             self._pump_address, get_response=True, send_term_char='\r')
 
+        time.sleep(0.01)
         self.comm_lock.release()
 
         logger.debug("Pump %s returned %r", self.name, ret)
@@ -1893,11 +1895,15 @@ class PumpPanel(wx.Panel):
             'max_rate': 11},
             '6 mL, Medline P.C.': {'diameter': 12.8, 'max_volume': 6,
             'max_rate': 23},
-            '10 mL, Medline P.C.': {'diameter': 16.4, 'max_volume': 10,
+            '10 mL, Medline P.C.': {'diameter': 16.564, 'max_volume': 10,
             'max_rate': 31},
-            '20 mL, Medline P.C.': {'diameter': 20.4, 'max_volume': 20,
+            '20 mL, Medline P.C.': {'diameter': 20.3, 'max_volume': 20,
             'max_rate': 55},
-            '0.5 mL, Hamilton Glass.': {'diameter': 3.26, 'max_volume': 10,
+            '0.25 mL, Hamilton Glass': {'diameter': 2.30, 'max_volume': 0.25,
+            'max_rate': 11},
+            '0.5 mL, Hamilton Glass': {'diameter': 3.26, 'max_volume': 0.5,
+            'max_rate': 11},
+            '1.0 mL, Hamilton Glass': {'diameter': 4.61, 'max_volume': 1.0,
             'max_rate': 11},
             }
 
@@ -2453,7 +2459,9 @@ class PumpPanel(wx.Panel):
 
     def _get_volume(self):
         """Initializes the pump in the PumpCommThread"""
+        # self.comm_lock.acquire()
         volume = self.pump.volume
+        # self.comm_lock.release()
 
         wx.CallAfter(self._set_status_volume, volume)
         wx.CallAfter(self.syringe_vol_gauge.SetValue,
@@ -2544,7 +2552,9 @@ class PumpPanel(wx.Panel):
         while True:
             self.monitor_flow_evt.wait()
 
+            # self.comm_lock.acquire()
             is_moving = self.pump.is_moving()
+            # self.comm_lock.release()
 
             if not is_moving:
                 wx.CallAfter(self.run_button.SetLabel, 'Start')
@@ -2745,17 +2755,25 @@ class PumpFrame(wx.Frame):
             #             ]
 
             setup_pumps = [
-                        # ('Sample', 'NE 500', '/dev/tty.usbserial-AK06V22M',
-                        #     ['30 mL, EXEL', '00'], {},
-                        # {'flow_rate' : '5', 'refill_rate' : '5'}),
-                        # ('Sample', 'NE 500', '/dev/cu.usbserial-AK06V22M', ['30 mL, EXEL', '02'], {},
-                        #     {'flow_rate' : '30', 'refill_rate' : '30'}),
-                        # ('Sheath', 'NE 500', '/dev/cu.usbserial-AK06V22M', ['30 mL, EXEL', '01'], {},
-                        #     {'flow_rate' : '30', 'refill_rate' : '30'}),
-                        ('Buffer', 'NE 500', '/dev/cu.usbserial-AK06V22M', ['30 mL, EXEL', '00'], {},
-                            {'flow_rate' : '30', 'refill_rate' : '30'}),
-                            ]
+                ('Sample', 'PHD 4400', 'COM3', ['10 mL, Medline P.C.', '1'], {},
+                    {'flow_rate' : '10', 'refill_rate' : '10'}),
+                ('Buffer 1', 'PHD 4400', 'COM3', ['20 mL, Medline P.C.', '2'], {},
+                    {'flow_rate' : '10', 'refill_rate' : '10'}),
+                ('Buffer 2', 'PHD 4400', 'COM3', ['20 mL, Medline P.C.', '3'], {},
+                    {'flow_rate' : '10', 'refill_rate' : '10'}),
+                ]
 
+            # setup_pumps = [
+            #     # ('Sample', 'NE 500', '/dev/tty.usbserial-AK06V22M',
+            #     #     ['30 mL, EXEL', '00'], {},
+            #     # {'flow_rate' : '5', 'refill_rate' : '5'}),
+            #     # ('Sample', 'NE 500', '/dev/cu.usbserial-AK06V22M', ['30 mL, EXEL', '02'], {},
+            #     #     {'flow_rate' : '30', 'refill_rate' : '30'}),
+            #     # ('Sheath', 'NE 500', '/dev/cu.usbserial-AK06V22M', ['30 mL, EXEL', '01'], {},
+            #     #     {'flow_rate' : '30', 'refill_rate' : '30'}),
+            #     ('Buffer', 'NE 500', '/dev/cu.usbserial-AK06V22M', ['30 mL, EXEL', '00'], {},
+            #         {'flow_rate' : '30', 'refill_rate' : '30'}),
+            #     ]
         logger.info('Initializing %s pumps on startup', str(len(setup_pumps)))
 
         for pump in setup_pumps:
@@ -2800,9 +2818,11 @@ class PumpFrame(wx.Frame):
                 self.pump_answer_q, self.pump_con.known_pumps, pump[0], pump[1],
                 pump[2], pump[3], pump[4], comm_lock, **pump[5])
         else:
+            comm_lock = threading.Lock()
+            self.comm_locks[pump[0]] = comm_lock
             new_pump = PumpPanel(self.top_panel, wx.ID_ANY, pump[0], self.ports, self.pump_cmd_q,
                 self.pump_answer_q, self.pump_con.known_pumps, pump[0], pump[1],
-                pump[2], pump[3], pump[4], **pump[5])
+                pump[2], pump[3], pump[4], comm_lock, **pump[5])
 
         self.pump_sizer.Add(new_pump, border=5, flag=wx.LEFT|wx.RIGHT)
         self.pumps.append(new_pump)
@@ -2882,26 +2902,24 @@ if __name__ == '__main__':
     # pmp_cmd_q.append(stop_cmd)
     # my_pumpcon.stop()
 
-    # #Use this with PHD 4400
-    # comm_lock = threading.Lock()
+    #Use this with PHD 4400
+    comm_lock = threading.Lock()
 
-    # comm_locks = {'1'   : comm_lock,
-    #     '2' : comm_lock,
-    #     '3' : comm_lock,
-    #     }
+    comm_locks = {'Sample'   : comm_lock,
+        'Buffer 1' : comm_lock,
+        'Buffer 2' : comm_lock,
 
     # #Use this with M50s
     # comm_locks = {'Sheath' : threading.Lock(),
     #     'Outlet' : threading.Lock(),
     #     }
 
-    #Use this with NE 500
-    comm_lock = threading.Lock()
+    # #Use this with NE 500
+    # comm_lock = threading.Lock()
 
-    comm_locks = {'Sample'   : comm_lock,
-        'Sheath' : comm_lock,
-        'Buffer' : comm_lock,
-        }
+    # comm_locks = {'Sample'   : comm_lock,
+    #     'Sheath' : comm_lock,
+    #     'Buffer' : comm_lock,
 
     # #Otherwise use this:
     # comm_locks = {}
