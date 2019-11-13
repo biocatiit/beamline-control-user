@@ -1086,18 +1086,8 @@ class NE500Pump(Pump):
 
         self._flow_rate = self.round(rate)
 
-        #Have to do this or can lose aspirate/dispense volume
-        volume = self._volume
+        self.send_cmd("RAT{}".format(self._flow_rate))
 
-        if self._is_dispensing:
-            vol = self.get_delivered_volume()
-
-            if self._flow_dir > 0:
-                volume = volume - vol
-            elif self._flow_dir < 0:
-                volume = volume + vol
-
-        self._volume = volume
 
     @property
     def refill_rate(self):
@@ -1138,20 +1128,9 @@ class NE500Pump(Pump):
             rate = rate*60.
 
         self._refill_rate = self.round(rate)
-        logger.info('Checking volume')
 
-        #Have to do this or can lose aspirate/dispense volume
-        volume = self._volume
+        self.send_cmd("RAT{}".format(self._refill_rate))
 
-        if self._is_dispensing:
-            vol = self.get_delivered_volume()
-
-            if self._flow_dir > 0:
-                volume = volume - vol
-            elif self._flow_dir < 0:
-                volume = volume + vol
-
-        self._volume = volume
 
     @property
     def volume(self):
@@ -2504,28 +2483,55 @@ class PumpPanel(wx.Panel):
         :rtype: bool
         """
         self._send_cmd('set_units')
-        try:
-            fr = float(self.flow_rate_ctrl.GetValue())
-            self._send_cmd('set_flow_rate')
-            success = True
-            logger.debug('Set pump %s flow rate to %s', self.name, str(fr))
-        except Exception:
-            msg = "Flow rate must be a number."
-            wx.MessageBox(msg, "Error setting flow rate")
-            success = False
-            logger.debug('Failed to set pump %s flow rate', self.name)
 
-        if success and self.pump_mode == 'syringe':
+        if self.type_ctrl.GetStringSelection() == 'NE 500':
+            if self.direction_ctrl.GetStringSelection() == 'Dispense':
+                try:
+                    fr = float(self.flow_rate_ctrl.GetValue())
+                    self._send_cmd('set_flow_rate')
+                    success = True
+                    logger.debug('Set pump %s flow rate to %s', self.name, str(fr))
+                except Exception:
+                    msg = "Flow rate must be a number."
+                    wx.MessageBox(msg, "Error setting flow rate")
+                    success = False
+                    logger.debug('Failed to set pump %s flow rate', self.name)
+
+            else:
+                try:
+                    fr = float(self.refill_rate_ctrl.GetValue())
+                    self._send_cmd('set_refill_rate')
+                    success = True
+                    logger.debug('Set pump %s flow rate to %s', self.name, str(fr))
+                except Exception:
+                    msg = "Refill rate must be a number."
+                    wx.MessageBox(msg, "Error setting refill rate")
+                    success = False
+                    logger.debug('Failed to set pump %s refill rate', self.name)
+
+        else:
             try:
-                fr = float(self.refill_rate_ctrl.GetValue())
-                self._send_cmd('set_refill_rate')
+                fr = float(self.flow_rate_ctrl.GetValue())
+                self._send_cmd('set_flow_rate')
                 success = True
                 logger.debug('Set pump %s flow rate to %s', self.name, str(fr))
             except Exception:
-                msg = "Refill rate must be a number."
-                wx.MessageBox(msg, "Error setting refill rate")
+                msg = "Flow rate must be a number."
+                wx.MessageBox(msg, "Error setting flow rate")
                 success = False
-                logger.debug('Failed to set pump %s refill rate', self.name)
+                logger.debug('Failed to set pump %s flow rate', self.name)
+
+            if success and self.pump_mode == 'syringe':
+                try:
+                    fr = float(self.refill_rate_ctrl.GetValue())
+                    self._send_cmd('set_refill_rate')
+                    success = True
+                    logger.debug('Set pump %s flow rate to %s', self.name, str(fr))
+                except Exception:
+                    msg = "Refill rate must be a number."
+                    wx.MessageBox(msg, "Error setting refill rate")
+                    success = False
+                    logger.debug('Failed to set pump %s refill rate', self.name)
 
         return success
 
@@ -2742,8 +2748,12 @@ class PumpFrame(wx.Frame):
                         # ('Sample', 'NE 500', '/dev/tty.usbserial-AK06V22M',
                         #     ['30 mL, EXEL', '00'], {},
                         # {'flow_rate' : '5', 'refill_rate' : '5'}),
-                        ('Sample', 'NE 500', '/dev/cu.usbserial-AK06V22M', ['30 mL, EXEL', '00'], {},
-                        {'flow_rate' : '30', 'refill_rate' : '30'}),
+                        # ('Sample', 'NE 500', '/dev/cu.usbserial-AK06V22M', ['30 mL, EXEL', '02'], {},
+                        #     {'flow_rate' : '30', 'refill_rate' : '30'}),
+                        # ('Sheath', 'NE 500', '/dev/cu.usbserial-AK06V22M', ['30 mL, EXEL', '01'], {},
+                        #     {'flow_rate' : '30', 'refill_rate' : '30'}),
+                        ('Buffer', 'NE 500', '/dev/cu.usbserial-AK06V22M', ['30 mL, EXEL', '00'], {},
+                            {'flow_rate' : '30', 'refill_rate' : '30'}),
                             ]
 
         logger.info('Initializing %s pumps on startup', str(len(setup_pumps)))
@@ -2826,7 +2836,7 @@ if __name__ == '__main__':
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
     h1 = logging.StreamHandler(sys.stdout)
-    # h1.setLevel(logging.DEBUG)
+    h1.setLevel(logging.DEBUG)
     h1.setLevel(logging.INFO)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
     h1.setFormatter(formatter)
@@ -2889,12 +2899,12 @@ if __name__ == '__main__':
     comm_lock = threading.Lock()
 
     comm_locks = {'Sample'   : comm_lock,
-        '2' : comm_lock,
-        '3' : comm_lock,
+        'Sheath' : comm_lock,
+        'Buffer' : comm_lock,
         }
 
-    # # #Otherwise use this:
-    # # comm_locks = {}
+    # #Otherwise use this:
+    # comm_locks = {}
 
     app = wx.App()
     logger.debug('Setting up wx app')
