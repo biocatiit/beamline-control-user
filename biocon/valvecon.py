@@ -391,9 +391,13 @@ class ValveCommThread(threading.Thread):
                         'get_status'        : self._get_status,
                         'add_valve'         : self._add_valve,
                         'disconnect'        : self._disconnect,
+                        'add_comlocks'      : self._add_comlocks,
+                        'connect_remote'    : self._connect_valve_remote,
                         }
 
         self._connected_valves = OrderedDict()
+
+        self.comm_locks = {}
 
         self.known_valves = {'Rheodyne' : RheodyneValve,
                             }
@@ -470,6 +474,33 @@ class ValveCommThread(threading.Thread):
 
         self.return_queue.append(('connected', name, True))
 
+    def _connect_valve_remote(self, device, name, valve_type, **kwargs):
+        """
+        This method connects to a flow meter by creating a new :py:class:`FlowMeter`
+        subclass object (e.g. a new :py:class:`BFS` object). This pump is saved
+        in the thread and can be called later to do stuff. All pumps must be
+        connected before they can be used.
+
+        :param str device: The device comport
+
+        :param str name: A unique identifier for the pump
+
+        :param str pump_type: A pump type in the ``known_fms`` dictionary.
+
+        :param kwargs: This function accepts arbitrary keyword args that
+            are passed directly to the :py:class:`FlowMeter` subclass that is
+            called. For example, for a :py:class:`BFS` you could pass ``bfs_filter``.
+        """
+        logger.info("Connecting valve %s", name)
+        if device in self.comm_locks:
+            kwargs['comm_lock'] = self.comm_locks[device]
+
+        new_valve = self.known_valves[valve_type](device, name, **kwargs)
+        self._connected_valves[name] = new_valve
+        self.return_queue.append(('connected', name, True))
+
+        logger.debug("Valve %s connected", name)
+
     def _add_valve(self, valve, name, **kwargs):
         logger.info('Adding valve %s', name)
         self._connected_valves[name] = valve
@@ -534,6 +565,9 @@ class ValveCommThread(threading.Thread):
             logger.info("Failed setting valve %s position to %i", name, position)
 
         self.return_queue.append(('set_position', name, success))
+
+    def _add_comlocks(self, comm_locks):
+        self.comm_locks.update(comm_locks)
 
     def _abort(self):
         """
@@ -797,8 +831,11 @@ class ValvePanel(wx.Panel):
             pass
 
     def _on_position_change(self, evt):
+        self._position_timer.Stop()
         self._send_cmd('set_position')
         self.position = int(self.valve_position.GetValue())
+
+        wx.CallLater(2000, self._position_timer.Start, 1000)
 
     def _send_cmd(self, cmd):
         """
@@ -1070,7 +1107,7 @@ if __name__ == '__main__':
 
     app = wx.App()
     logger.debug('Setting up wx app')
-    frame = ValveFrame(comm_locks, None, title='Valve Control')
+    frame = ValveFrame(comm_locks, None, None, title='Valve Control')
     frame.Show()
     app.MainLoop()
 

@@ -47,7 +47,8 @@ class ControlServer(threading.Thread):
 
     """
 
-    def __init__(self, ip, port, name='ControlServer', pump_comm_locks = None):
+    def __init__(self, ip, port, name='ControlServer', pump_comm_locks = None,
+        valve_comm_locks=None):
         """
         Initializes the custom thread. Important parameters here are the
         list of known commands ``_commands`` and known pumps ``known_pumps``.
@@ -76,6 +77,7 @@ class ControlServer(threading.Thread):
         self.socket.bind("tcp://{}:{}".format(self.ip, self.port))
 
         self.pump_comm_locks = pump_comm_locks
+        self.valve_comm_locks = valve_comm_locks
 
         pump_cmd_q = deque()
         pump_return_q = deque()
@@ -113,6 +115,9 @@ class ControlServer(threading.Thread):
         valve_abort_event = threading.Event()
         valve_con = valvecon.ValveCommThread(valve_cmd_q, valve_return_q, valve_abort_event, 'ValveCon')
         valve_con.start()
+
+        if self.valve_comm_locks is not None:
+            valve_cmd_q.append(('add_comlocks', (self.valve_comm_locks,), {}))
 
         valve_ctrl = {'queue': valve_cmd_q,
             'abort': valve_abort_event,
@@ -239,10 +244,23 @@ if __name__ == '__main__':
     port1 = '5556'
     port2 = '5557'
     port3 = '5558'
+
+    # Coflow
     ip = '164.54.204.53'
+
+    # TR SAXS
+    ip = '164.54.204.53'
+
+    # Both
 
     pump_comm_locks = {'COM3'   : threading.Lock(),
         'COM4'  : threading.Lock(),
+        }
+
+    valve_comm_locks = {'COM6'   : threading.Lock(),
+        'COM7'  : threading.Lock(),
+        'COM8'  : threading.Lock(),
+        'COM9'  : threading.Lock(),
         }
 
     control_server1 = ControlServer(ip, port1, name='PumpControlServer',
@@ -252,18 +270,56 @@ if __name__ == '__main__':
     control_server2 = ControlServer(ip, port2, name='FMControlServer')
     control_server2.start()
 
-    # control_server3 = ControlServer(ip, port3, name='ValveControlServer')
+    # TR SAXS
+
+    # control_server3 = ControlServer(ip, port3, name='ValveControlServer',
+    #     valve_comm_locks = valve_comm_locks)
     # control_server3.start()
 
-    setup_pumps = [('sheath', 'VICI M50', 'COM3', ['626.2', '9.278'], {}, {}),
-                        ('outlet', 'VICI M50', 'COM4', ['623.56', '12.222'], {}, {})
-                        ]
+    # Coflow
 
-    local_comm_locks = {'sheath'    : pump_comm_locks[setup_pumps[0][2]],
+    setup_pumps = [('sheath', 'VICI M50', 'COM3', ['626.2', '9.278'], {}, {}),
+        ('outlet', 'VICI M50', 'COM4', ['623.56', '12.222'], {}, {})
+        ]
+
+    # TR SAXS
+
+    # setup_pumps = [
+    #     ('Sample', 'PHD 4400', 'COM3', ['10 mL, Medline P.C.', '1'], {},
+    #         {'flow_rate' : '10', 'refill_rate' : '10'}),
+    #     ('Buffer 1', 'PHD 4400', 'COM3', ['20 mL, Medline P.C.', '2'], {},
+    #         {'flow_rate' : '10', 'refill_rate' : '10'}),
+    #     ('Buffer 2', 'PHD 4400', 'COM3', ['20 mL, Medline P.C.', '3'], {},
+    #         {'flow_rate' : '10', 'refill_rate' : '10'}),
+    #     ]
+
+    # Both
+
+    pump_local_comm_locks = {'sheath'    : pump_comm_locks[setup_pumps[0][2]],
         'outlet'    : pump_comm_locks[setup_pumps[1][2]]
         }
-    frame = pumpcon.PumpFrame(local_comm_locks, setup_pumps, None, title='Pump Control')
-    frame.Show()
+    pump_frame = pumpcon.PumpFrame(pump_local_comm_locks, setup_pumps, None,
+        title='Pump Control')
+    pump_frame.Show()
+
+    #TR SAXS
+
+    # setup_valves = [('Injection', 'Rheodyne', 'COM6', [], {'positions' : 2}),
+    #         ('Sample', 'Rheodyne', 'COM7', [], {'positions' : 6}),
+    #         ('Buffer 1', 'Rheodyne', 'COM8', [], {'positions' : 6}),
+    #         ('Buffer 2', 'Rheodyne', 'COM9', [], {'positions' : 6}),
+    #                 ]
+
+    # valve_local_comm_locks = {'Injection'    : valve_comm_locks[setup_valves[0][2]],
+    #     'Sample'    : valve_comm_locks[setup_valves[1][2]],
+    #     'Buffer 1'    : valve_comm_locks[setup_valves[2][2]],
+    #     'Buffer 2'    : valve_comm_locks[setup_valves[3][2]],
+
+    #     }
+    # valve_frame = valvecon.ValveFrame(valve_local_comm_locks, setup_valves, None,
+    #     title='Valve Control')
+    # valve_frame.Show()
+
     app.MainLoop()
 
     try:
