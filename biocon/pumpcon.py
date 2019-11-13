@@ -2720,7 +2720,7 @@ class PumpFrame(wx.Frame):
         self.top_panel.SetSizer(top_panel_sizer)
 
         top_sizer = wx.BoxSizer(wx.VERTICAL)
-        top_sizer.Add(self.top_panel)
+        top_sizer.Add(self.top_panel, flag=wx.EXPAND, proportion=1)
 
         return top_sizer
 

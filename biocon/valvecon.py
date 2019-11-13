@@ -166,17 +166,20 @@ class Valve(object):
     documentation contains an example.
     """
 
-    def __init__(self, device, name):
+    def __init__(self, device, name, comm_lock=None):
         """
         :param str device: The device comport
 
         :param str name: A unique identifier for the device
         """
 
-
         self.device = device
         self.name = name
-        self.comm_lock = threading.Semaphore()
+
+        if comm_lock is None:
+            self.comm_lock = threading.Lock()
+        else:
+            self.comm_lock = comm_lock
 
         self._position = None
 
@@ -214,7 +217,7 @@ class RheodyneValve(Valve):
         >>> print(my_bfs.flow_rate)
     """
 
-    def __init__(self, device, name, positions):
+    def __init__(self, device, name, positions, comm_lock=None):
         """
         This makes the initial serial connection, and then sets the MForce
         controller parameters to the correct values.
@@ -226,7 +229,7 @@ class RheodyneValve(Valve):
         :param float bfs_filter: Smoothing factor for measurement. 1 = minimum
             filter, 0.00001 = maximum filter. Defaults to 1
         """
-        Valve.__init__(self, device, name)
+        Valve.__init__(self, device, name, comm_lock=comm_lock)
 
         logstr = ("Initializing valve {} on port {}".format(self.name,
             self.device))
@@ -562,7 +565,7 @@ class ValvePanel(wx.Panel):
     """
     def __init__(self, parent, panel_id, panel_name, all_comports, valve_cmd_q,
         valve_return_q, known_valves, valve_name, valve_type=None, comport=None, valve_args=[],
-        valve_kwargs={}):
+        valve_kwargs={}, comm_lock=None):
         """
         Initializes the custom thread. Important parameters here are the
         list of known commands ``_commands`` and known pumps ``known_valves``.
@@ -617,6 +620,8 @@ class ValvePanel(wx.Panel):
         self.answer_q = valve_return_q
         self.connected = False
         self.position = None
+
+        self.comm_lock = comm_lock
 
         self.top_sizer = self._create_layout()
 
@@ -737,8 +742,9 @@ class ValvePanel(wx.Panel):
         com = self.com_ctrl.GetStringSelection()
         valve = self.type_ctrl.GetStringSelection().replace(' ', '_')
 
-        args = (com, self.name, valve)
-        kwargs = {'positions': int(self.positions_ctrl.GetValue())}
+        args = (com, self.name)
+        kwargs = {'positions': int(self.positions_ctrl.GetValue()),
+            'comm_lock' : self.comm_lock}
 
         logger.info('Connected to valve %s', self.name)
         self.connected = True
@@ -751,7 +757,7 @@ class ValvePanel(wx.Panel):
             self.valve_position.SetMax(int(self.positions_ctrl.GetValue()))
 
         try:
-            self.valve = self.known_valves[valve](com, self.name, **kwargs)
+            self.valve = self.known_valves[valve](*args, **kwargs)
             self._set_status('Connected')
             self._send_cmd('add_valve')
         except Exception as e:
@@ -851,7 +857,7 @@ class ValveFrame(wx.Frame):
     Only meant to be used when the fscon module is run directly,
     rather than when it is imported into another program.
     """
-    def __init__(self, *args, **kwargs):
+    def __init__(self, comm_locks, *args, **kwargs):
         """
         Initializes the valve frame. Takes args and kwargs for the wx.Frame class.
         """
@@ -864,15 +870,15 @@ class ValveFrame(wx.Frame):
             self.abort_event, 'ValveCon')
         self.valve_con.start()
 
+        self.comm_locks = comm_locks
+
         self.Bind(wx.EVT_CLOSE, self._on_exit)
 
         self._get_ports()
 
         self.valves =[]
 
-        top_sizer = self._create_layout()
-
-        self.SetSizer(top_sizer)
+        self._create_layout()
 
         self.Fit()
         self.Raise()
@@ -881,7 +887,10 @@ class ValveFrame(wx.Frame):
 
     def _create_layout(self):
         """Creates the layout"""
-        valve_panel = ValvePanel(self, wx.ID_ANY, 'stand_in', self.ports,
+
+        self.top_panel = wx.Panel(self)
+
+        valve_panel = ValvePanel(self.top_panel, wx.ID_ANY, 'stand_in', self.ports,
             self.valve_cmd_q, self.valve_return_q, self.valve_con.known_valves, 'stand_in')
 
         self.valve_sizer = wx.BoxSizer(wx.HORIZONTAL)
@@ -889,7 +898,7 @@ class ValveFrame(wx.Frame):
 
         self.valve_sizer.Hide(valve_panel, recursive=True)
 
-        button_panel = wx.Panel(self)
+        button_panel = wx.Panel(self.top_panel)
 
         add_valve = wx.Button(button_panel, label='Add valve')
         add_valve.Bind(wx.EVT_BUTTON, self._on_addvalve)
@@ -903,11 +912,16 @@ class ValveFrame(wx.Frame):
 
         button_panel.SetSizer(button_panel_sizer)
 
-        top_sizer = wx.BoxSizer(wx.VERTICAL)
-        top_sizer.Add(self.valve_sizer, flag=wx.EXPAND)
-        top_sizer.Add(button_panel, flag=wx.EXPAND)
+        top_panel_sizer = wx.BoxSizer(wx.VERTICAL)
+        top_panel_sizer.Add(self.valve_sizer, flag=wx.EXPAND)
+        top_panel_sizer.Add(button_panel, flag=wx.EXPAND)
 
-        return top_sizer
+        self.top_panel.SetSizer(top_panel_sizer)
+
+        top_sizer = wx.BoxSizer(wx.VERTICAL)
+        top_sizer.Add(self.top_panel, flag=wx.EXPAND, proportion=1)
+
+        self.SetSizer(top_sizer)
 
     def _initvalves(self):
         """
@@ -933,11 +947,13 @@ class ValveFrame(wx.Frame):
         logger.info('Initializing %s valves on startup', str(len(setup_valves)))
 
         for valve in setup_valves:
-            new_valve = ValvePanel(self, wx.ID_ANY, valve[0], self.ports, self.valve_cmd_q,
-                self.valve_return_q, self.valve_con.known_valves, valve[0], valve[1], valve[2], valve[3], valve[4])
+            self._add_valve(valve)
 
-            self.valve_sizer.Add(new_valve)
-            self.valves.append(new_valve)
+            # new_valve = ValvePanel(self, wx.ID_ANY, valve[0], self.ports, self.valve_cmd_q,
+            #     self.valve_return_q, self.valve_con.known_valves, valve[0], valve[1], valve[2], valve[3], valve[4])
+
+            # self.valve_sizer.Add(new_valve)
+            # self.valves.append(new_valve)
 
         self.Layout()
         self.Fit()
@@ -962,16 +978,29 @@ class ValveFrame(wx.Frame):
                     logger.debug('Attempted to add a valve with the same name (%s) as another pump.', name)
                     return
 
-            new_valve = ValvePanel(self, wx.ID_ANY, name, self.ports, self.valve_cmd_q,
-                self.valve_return_q, self.valve_con.known_valves, name)
+
+            valve_vals = (name, None, None, [], {})
+            self._add_valve(valve_vals)
+
             logger.info('Added new valve %s to the flow meter control panel.', name)
-            self.valve_sizer.Add(new_valve)
-            self.valves.append(new_valve)
 
             self.Layout()
             self.Fit()
 
         return
+
+    def _add_valve(self, valve):
+        if valve[0] in self.comm_locks:
+            comm_lock = self.comm_locks[valve[0]]
+        else:
+            comm_lock = threading.Lock()
+
+        new_valve = ValvePanel(self, wx.ID_ANY, valve[0], self.ports,
+            self.valve_cmd_q, self.valve_return_q, self.valve_con.known_valves,
+            valve[0], valve[1], valve[2], valve[3], valve[4], comm_lock)
+
+        self.valve_sizer.Add(new_valve)
+        self.valves.append(new_valve)
 
     def _get_ports(self):
         """
@@ -1030,9 +1059,17 @@ if __name__ == '__main__':
     # time.sleep(5)
     # my_valvecon.stop()
 
+    threading.Lock()
+
+    comm_locks = {'Injection'   : threading.Lock(),
+        'Sample'    : threading.Lock(),
+        'Buffer 1'  : threading.Lock(),
+        'Buffer 2'  : threading.Lock(),
+        }
+
     app = wx.App()
     logger.debug('Setting up wx app')
-    frame = ValveFrame(None, title='Valve Control')
+    frame = ValveFrame(comm_locks, title='Valve Control')
     frame.Show()
     app.MainLoop()
 
