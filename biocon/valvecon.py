@@ -857,7 +857,7 @@ class ValveFrame(wx.Frame):
     Only meant to be used when the fscon module is run directly,
     rather than when it is imported into another program.
     """
-    def __init__(self, comm_locks, *args, **kwargs):
+    def __init__(self, comm_locks, setup_valves, *args, **kwargs):
         """
         Initializes the valve frame. Takes args and kwargs for the wx.Frame class.
         """
@@ -883,7 +883,7 @@ class ValveFrame(wx.Frame):
         self.Fit()
         self.Raise()
 
-        self._initvalves()
+        self._initvalves(setup_valves)
 
     def _create_layout(self):
         """Creates the layout"""
@@ -923,7 +923,7 @@ class ValveFrame(wx.Frame):
 
         self.SetSizer(top_sizer)
 
-    def _initvalves(self):
+    def _initvalves(self, setup_valves):
         """
         This is a convenience function for initalizing flow meters on startup, if you
         already know what flow meters you want to add. You can comment it out in
@@ -938,11 +938,12 @@ class ValveFrame(wx.Frame):
         if not self.valves:
             self.valve_sizer.Remove(0)
 
-        setup_valves = [('Injection', 'Rheodyne', 'COM6', [], {'positions' : 2}),
-            ('Sample', 'Rheodyne', 'COM7', [], {'positions' : 6}),
-            ('Buffer 1', 'Rheodyne', 'COM8', [], {'positions' : 6}),
-            ('Buffer 2', 'Rheodyne', 'COM9', [], {'positions' : 6}),
-                    ]
+        if setup_valves is None:
+            setup_valves = [('Injection', 'Rheodyne', 'COM6', [], {'positions' : 2}),
+                ('Sample', 'Rheodyne', 'COM7', [], {'positions' : 6}),
+                ('Buffer 1', 'Rheodyne', 'COM8', [], {'positions' : 6}),
+                ('Buffer 2', 'Rheodyne', 'COM9', [], {'positions' : 6}),
+                        ]
 
         logger.info('Initializing %s valves on startup', str(len(setup_valves)))
 
@@ -1069,7 +1070,7 @@ if __name__ == '__main__':
 
     app = wx.App()
     logger.debug('Setting up wx app')
-    frame = ValveFrame(comm_locks, title='Valve Control')
+    frame = ValveFrame(comm_locks, None, title='Valve Control')
     frame.Show()
     app.MainLoop()
 
