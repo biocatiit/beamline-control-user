@@ -995,7 +995,7 @@ class ValveFrame(wx.Frame):
         else:
             comm_lock = threading.Lock()
 
-        new_valve = ValvePanel(self, wx.ID_ANY, valve[0], self.ports,
+        new_valve = ValvePanel(self.top_panel, wx.ID_ANY, valve[0], self.ports,
             self.valve_cmd_q, self.valve_return_q, self.valve_con.known_valves,
             valve[0], valve[1], valve[2], valve[3], valve[4], comm_lock)
 
@@ -1069,7 +1069,7 @@ if __name__ == '__main__':
 
     app = wx.App()
     logger.debug('Setting up wx app')
-    frame = ValveFrame(comm_locks, title='Valve Control')
+    frame = ValveFrame(comm_locks, None, title='Valve Control')
     frame.Show()
     app.MainLoop()
 
