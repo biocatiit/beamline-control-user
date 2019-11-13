@@ -46,7 +46,10 @@ the MX control system to talk to the devices. It scans two motors, then creates 
 
 ### BioCON
 
-wx, pyserial, Mp
+wxpython, pyserial, numpy, six, zaber.serial, pyzmq, matplotlib, future, Mp
+
+Elveflow SDK: https://www.elveflow.com/microfluidic-flow-control-products/flow-control-system/elveflow-software/
+Unpack and install to c:\Users\biocat\Elvefow_SDK_Vx_xx_xx
 
 ### mxmap
 
@@ -58,6 +61,20 @@ numpy, pandas, wx, matplotlib, Mp
 ### BioCON
 
 Clone the git, then run any of the files in the biocon folder as appropriate.
+
+Sample commands:
+
+conda install wxpython pyserial numpy six pyzmq matplotlib future
+
+pip install zaber.serial
+
+Update the path to the SDK in fmcon.py appropriately. Update the path to the
+Elveflow DLL in the sdk/python_xx/ElveflowXX.py file.
+
+The Elveflow SDK now seems to require that the Labview 2015 runtime be installed.
+Install the appropriate version based on if you installed 32bit or 64bit SDK.
+http://www.ni.com/en-us/support/downloads/software-products/download.labview.html#329059
+
 
 ### mxmap
 

@@ -139,8 +139,8 @@ if __name__ == '__main__':
         'filename'              : '',
         'run_num'               : 1,
         'exp_time'              : '0.5',
-        'exp_period'            : '2',
-        'exp_num'               : '5',
+        'exp_period'            : '1',
+        'exp_num'               : '2',
         'exp_time_min'          : 0.00105,
         'exp_time_max'          : 5184000,
         'exp_period_min'        : 0.002,
@@ -148,14 +148,18 @@ if __name__ == '__main__':
         'nframes_max'           : 15000, # For Pilatus: 999999, for Struck: 15000 (set by maxChannels in the driver configuration)
         'nparams_max'           : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
         'exp_period_delta'      : 0.00095,
-        'shutter_speed_open'    : 0.004, #in s      Normal vacuum shutter
-        'shutter_speed_close'   : 0.004, # in s
-        'shutter_pad'           : 0.002, #padding for shutter related values
-        'shutter_cycle'         : 0.02, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
+        # 'shutter_speed_open'    : 0.004, #in s      Normal vacuum shutter
+        # 'shutter_speed_close'   : 0.004, # in s
+        # 'shutter_pad'           : 0.002, #padding for shutter related values
+        # 'shutter_cycle'         : 0.02, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
         # 'shutter_speed_open'    : 0.001, #in s    Fast shutters
         # 'shutter_speed_close'   : 0.001, # in s
         # 'shutter_pad'           : 0.00, #padding for shutter related values
         # 'shutter_cycle'         : 0.002, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
+        'shutter_speed_open'    : 0.075, #in s      Slow vacuum shutter
+        'shutter_speed_close'   : 0.075, # in s
+        'shutter_pad'           : 0.01, #padding for shutter related values
+        'shutter_cycle'         : 0.2, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
         'struck_measurement_time' : '0.001', #in s
         'tr_muscle_exp'         : False,
         'slow_mode_thres'       : 0.1,
@@ -197,7 +201,7 @@ if __name__ == '__main__':
             {'mx_record': 'j11', 'name': 'Beam_current', 'scale': 5000,
             'offset': 0.5, 'norm_time': True}
             ],
-        'base_data_dir'         : '/nas_data/Pilatus1M/20190723Srinivas', #CHANGE ME
+        'base_data_dir'         : '/nas_data/Pilatus1M/2019_Run3/20191015Hopkins', #CHANGE ME
         }
 
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']
@@ -205,15 +209,15 @@ if __name__ == '__main__':
     coflow_settings = {
         'show_advanced_options' : False,
         'device_communication'  : 'remote',
-        'remote_pump_ip'        : '164.54.204.37',
+        'remote_pump_ip'        : '164.54.204.53',
         'remote_pump_port'      : '5556',
-        'remote_fm_ip'          : '164.54.204.37',
+        'remote_fm_ip'          : '164.54.204.53',
         'remote_fm_port'        : '5557',
         'flow_units'            : 'mL/min',
-        'sheath_pump'           : ('VICI_M50', 'COM2', [626.2, 9.278], {}),
-        'outlet_pump'           : ('VICI_M50', 'COM1', [623.56, 12.222], {}),
-        'sheath_fm'             : ('BFS', 'COM4', [], {}),
-        'outlet_fm'             : ('BFS', 'COM3', [], {}),
+        'sheath_pump'           : ('VICI_M50', 'COM3', [626.2, 9.278], {}),
+        'outlet_pump'           : ('VICI_M50', 'COM4', [623.56, 12.222], {}),
+        'sheath_fm'             : ('BFS', 'COM5', [], {}),
+        'outlet_fm'             : ('BFS', 'COM6', [], {}),
         'sheath_ratio'          : 0.5,
         'sheath_excess'         : 2.1,
         'warning_threshold_low' : 0.8,
@@ -262,7 +266,7 @@ if __name__ == '__main__':
 
     components = OrderedDict([
         ('exposure', expcon.ExpPanel),
-        ('coflow', coflowcon.CoflowPanel),
+        # ('coflow', coflowcon.CoflowPanel),
         # ('trsaxs', trcon.TRPanel),
         ])
 

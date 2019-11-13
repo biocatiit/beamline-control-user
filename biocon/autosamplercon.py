@@ -646,6 +646,9 @@ class Autosampler(object):
             if row%2 != 0:
                 raise ValueError('Cannot access odd rows with chiller top plate on!')
 
+        logger.info('Moving to load position for row: %s column: %s', row,
+            column)
+
         delta_position = self.well_plate.get_relative_well_position(row, column)
         well_position = self.base_position + delta_position
 
@@ -663,6 +666,8 @@ class Autosampler(object):
     def move_to_clean(self):
         self.process_event.set()
 
+        logger.info('Moving to clean position')
+
         success = self.move_motors_absolute(self.out_position[2], 'z')
         if success:
             self._sleep(2)
@@ -679,6 +684,8 @@ class Autosampler(object):
     def move_to_out(self):
         self.process_event.set()
 
+        logger.info('Moving to out position')
+
         success = self.move_motors_absolute(self.out_position[2], 'z')
         if success:
             self._sleep(2)
@@ -691,6 +698,8 @@ class Autosampler(object):
     def move_to_z_out(self):
         self.process_event.set()
 
+        logger.info('Moving to z out position')
+
         success = self.move_motors_absolute(self.out_position[2], 'z')
 
         self.process_event.clear()
@@ -701,6 +710,16 @@ class Autosampler(object):
         self.running_event.set()
 
         if valve == 'all':
+            logger.info('Setting injection valve position to %s',
+                positions[0])
+            logger.info('Setting sample valve position to %s',
+                positions[1])
+            logger.info('Setting buffer valve position to %s',
+                positions[2])
+            logger.info('Setting bypass valve position to %s',
+                positions[3])
+            logger.info('Setting autosampler valve position to %s',
+                positions[4])
             self.injectionv_position = int(positions[0])
             self.samplev_position = int(positions[1])
             self.bufferv_position = int(positions[2])
@@ -714,22 +733,32 @@ class Autosampler(object):
             self.autosampler_valve.set_position(self.autosamplerv_position)
 
         elif valve == 'injection':
+            logger.info('Setting injection valve position to %s',
+                positions)
             self.injectionv_position = int(positions)
             self.injection_valve.set_position(self.injectionv_position)
 
         elif valve == 'sample':
+            logger.info('Setting sample valve position to %s',
+                positions)
             self.samplev_position = int(positions)
             self.sample_valve.set_position(self.samplev_position)
 
         elif valve == 'buffer':
+            logger.info('Setting buffer valve position to %s',
+                positions)
             self.bufferv_position = int(positions)
             self.buffer_valve.set_position(self.bufferv_position)
 
         elif valve == 'bypass':
+            logger.info('Setting bypass valve position to %s',
+                positions)
             self.bypassv_position = int(positions)
             self.bypass_valve.set_position(self.bypassv_position)
 
         elif valve == 'autosampler':
+            logger.info('Setting autosampler valve position to %s',
+                positions)
             self.autosamplerv_position = int(positions)
             self.autosampler_valve.set_position(self.autosamplerv_position)
 
@@ -776,7 +805,7 @@ class Autosampler(object):
 
     def set_sample_overdraw(self, volume):
         self.sample_overdraw = volume
-       
+
 
     def aspirate(self, volume, pump, blocking=True):
         self.running_event.set()
@@ -805,14 +834,12 @@ class Autosampler(object):
             if round(initial_volume + volume, 4) != round(final_volume, 4):
                 logger.error('Pump %s failed to aspirate requested '
                     'volume! Volume requested: %f, volume '
-                    'aspirated: %f', pump, volume, 
+                    'aspirated: %f', pump, volume,
                     final_volume-initial_volume)
                 raise Exception('Pump aspirate failed!')
 
         else:
             abort = False
-
-        
 
         return not abort
 
@@ -867,7 +894,7 @@ class Autosampler(object):
 
             if round(initial_volume - final_volume, 4) != round(volume, 4):
                 logger.error('Pump %s failed to dispense requested '
-                    'volume! Volume requested: %f, volume dispensed: %f', 
+                    'volume! Volume requested: %f, volume dispensed: %f',
                     pump, volume, initial_volume - final_volume)
                 raise Exception('Pump dispense failed!')
 
@@ -906,11 +933,15 @@ class Autosampler(object):
     def load_buffer(self, volume, row, column):
         self.process_event.set()
 
+        logger.info("Starting buffer load")
+
         self.buffer_volume = volume
 
         success = self.move_to_load(row, column)
 
         if success:
+            logger.info("Loading buffer")
+
             self.set_valve_positions(2, 'bypass')
             self.set_valve_positions(1, 'buffer')
             self.set_valve_positions(2, 'autosampler')
@@ -921,15 +952,23 @@ class Autosampler(object):
             self._sleep(3)
             success = self.move_to_z_out()
             if success:
+                logger.info("Pulling buffer into loop")
                 success = self.aspirate(self.buffer_offset_volume, 'buffer')
 
         if success:
+            logger.info("Expelling extra air")
+
             self.set_valve_positions(1, 'bypass')
+            self.set_pump_dispense_rates(0.5, 'buffer')
             success = self.dispense(self.buffer_offset_volume, 'buffer')
+            self.set_pump_dispense_rates(self.settings['pump_rates']['buffer'][1],
+                'buffer')
             self._sleep(3)
             self.set_valve_positions(2, 'bypass')
 
         if success:
+            logger.info("Flushing line to needle")
+
             self.set_valve_positions(2, 'injection')
             self.set_valve_positions(2, 'buffer')
 
@@ -944,6 +983,9 @@ class Autosampler(object):
 
     def load_sample(self, volume, row, column):
         self.process_event.set()
+
+        logger.info("Starting sample load")
+
         success = self.move_to_load(row, column)
 
         if success:
@@ -962,6 +1004,8 @@ class Autosampler(object):
 
         self.process_event.clear()
 
+        logger.info("Sample load finished")
+
         return success
 
     def make_measurement(self):
@@ -975,11 +1019,14 @@ class Autosampler(object):
         start_time = self.buffer_delay_volume/self.pump_buffer.refill_rate
         start_time = start_time*60 #pump refill rate is in ml/min
         # Start buffer flow and exposure
+        logger.info('Starting measurement dispense')
+
         self.dispense(self.buffer_volume - self.buffer_reserve_volume, 'buffer', blocking=False)
         abort = self._sleep(start_time)
 
         if not abort:
             # After ~10 uL, of buffer flow
+            logger.info('Switching injection valve to inject')
             self.set_valve_positions(1, 'injection')
             # Continue flow until almost out of buffer, then stop before running out
             self.running_event.set()
@@ -993,6 +1040,8 @@ class Autosampler(object):
 
         self.process_event.clear()
 
+        logger.info('Measurement finished')
+
     def set_clean_sequence(self, seq, loop):
         if loop == 'sample':
             self.clean_sample_seq = seq
@@ -1001,6 +1050,7 @@ class Autosampler(object):
 
     def clean_sample(self):
         self.process_event.set()
+        logger.info('Starting sample cleaning sequence')
 
         success = self.move_to_clean()
 
@@ -1033,10 +1083,10 @@ class Autosampler(object):
 
     def clean_buffer(self):
         self.process_event.set()
-
+        logger.info("Starting buffer cleaning sequence")
         self.set_valve_positions(1, 'bypass')
 
-        if self.pump_buffer.volume > 0:
+        if round(self.pump_buffer.volume, 4) > 0:
             self.dispense_all('buffer', False)
 
         for clean_step in self.clean_buffer_seq:
@@ -1227,36 +1277,36 @@ if __name__ == '__main__':
         'volume_units'          : 'uL',
         'components'            : ['autosampler'],
         'motors'                : 'zaber',
-        'zaber_motors'          : {'x': ("/dev/ttyUSB0", 1, 150),
-                                   'y': ("/dev/ttyUSB0", 2, 150),
-                                   'z': ("/dev/ttyUSB0", 3, 75)},
+        'zaber_motors'          : {'x': ("COM5", 1, 150),
+                                   'y': ("COM5", 2, 150),
+                                   'z': ("COM5", 3, 75)},
         'motor_home_velocity'   : {'x': 10, 'y': 10, 'z': 10},
         'motor_velocity'        : {'x': 75, 'y': 75, 'z': 75},
         'motor_acceleration'    : {'x': 500, 'y': 500, 'z': 500},
-        'base_position'         : {'x': 6.5, 'y': 86.3, 'z': 74.5}, # With coflow needle
+        'base_position'         : {'x': 5.5, 'y': 86.3, 'z': 74.5}, # With coflow needle
         # 'base_position'         : {'x': 8, 'y': 82.5, 'z': 74.5}, #With Osman needle
-        'clean_position'        : {'x': 142.6, 'y': 44.3, 'z': 52},
+        'clean_position'        : {'x': 139.5, 'y': 43.3, 'z': 52},
         'out_position'          : {'x': 0, 'y': 0, 'z': 0},
         # 'plate_type'            : 'Thermo-Fast 96 well PCR',
         'plate_type'            : 'Abgene 96 well deepwell storage',
         'chiller_top_on'        : False,
         'valves'                : 'rheodyne',
-        'rheodyne_valves'       : {'injection': ("/dev/ttyUSB3", 2),
-                                   'sample': ("/dev/ttyUSB2", 6),
-                                   'buffer': ("/dev/ttyUSB4", 6),
-                                   'bypass': ("/dev/ttyUSB5", 2),
-                                   'autosampler': ("/dev/ttyUSB1", 6)},
+        'rheodyne_valves'       : {'injection': ("COM8", 2),
+                                   'sample': ("COM9", 6),
+                                   'buffer': ("COM11", 6),
+                                   'bypass': ("COM10", 2),
+                                   'autosampler': ("COM7", 6)},
         'valve_positions'       : {'injection': 1,
                                    'sample': 1,
                                    'buffer': 1,
                                    'bypass': 1,
                                    'autosampler': 1},
-        'clean_buffer_seq'      : [(3, 30), (4, 30), (3, 30), (5, 30), (6, 60)], #A set of (x, y) where x is valve position and y is time on that position
-        'clean_sample_seq'      : [(3, 30), (4, 30), (3, 30), (5, 30), (6, 60)], #A set of (x, y) where x is valve position and y is time on that position
+        'clean_buffer_seq'      : [(3, 15), (4, 15), (3, 15), (5, 15), (6, 60)], #A set of (x, y) where x is valve position and y is time on that position
+        'clean_sample_seq'      : [(3, 15), (4, 15), (3, 15), (5, 15), (6, 60)], #A set of (x, y) where x is valve position and y is time on that position
         'pumps'                 : 'harvard',
-        'harvard_pumps'         : {'sample': ("/dev/ttyUSB6", '1', '0.5 mL, Hamilton Glass'),
-                                   # 'buffer': ("/dev/ttyUSB6", '2', '3 mL, Medline P.C.'),
-                                   'buffer': ("/dev/ttyUSB6", '2', '1.0 mL, Hamilton Glass'),
+        'harvard_pumps'         : {'sample': ("COM6", '1', '0.5 mL, Hamilton Glass'),
+                                   # 'buffer': ("COM6", '2', '3 mL, Medline P.C.'),
+                                   'buffer': ("COM6", '2', '1.0 mL, Hamilton Glass'),
                                    },
         'pump_rates'            : {'sample': (0.1, 0.5), 'buffer': (0.1, 0.1)}, # (refill, infuse) rates in ml/min
         'swept_volumes'         : {'sample': 0.210, 'buffer': 0.219},  #Swept volumes/volume offset to be used when loading.

@@ -223,10 +223,10 @@ if __name__ == '__main__':
 
     port1 = '5556'
     port2 = '5557'
-    ip = '164.54.204.37'
+    ip = '164.54.204.53'
 
-    pump_comm_locks = {'COM1'   : threading.Lock(),
-        'COM2'  : threading.Lock(),
+    pump_comm_locks = {'COM3'   : threading.Lock(),
+        'COM4'  : threading.Lock(),
         }
 
     control_server1 = ControlServer(ip, port1, name='PumpControlServer',
@@ -237,8 +237,8 @@ if __name__ == '__main__':
     control_server2.start()
 
 
-    setup_pumps = [('sheath', 'VICI M50', 'COM2', ['626.2', '9.278'], {}, {}),
-                        ('outlet', 'VICI M50', 'COM1', ['623.56', '12.222'], {}, {})
+    setup_pumps = [('sheath', 'VICI M50', 'COM3', ['626.2', '9.278'], {}, {}),
+                        ('outlet', 'VICI M50', 'COM4', ['623.56', '12.222'], {}, {})
                         ]
 
     local_comm_locks = {'sheath'    : pump_comm_locks[setup_pumps[0][2]],

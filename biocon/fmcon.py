@@ -37,11 +37,15 @@ import wx
 import serial.tools.list_ports as list_ports
 
 #NOTE: RIGHT NOW, ONLY WORKS WITH 32bit elveflow stuff. The 64bit stuff seems to be broken.
-sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_02_01\\DLL32\\Elveflow32DLL') #add the path of the library here
-sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_02_01\\python_32')#add the path of the LoadElveflow.py
+sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_03_00\\DLL64\\Elveflow64DLL') #add the path of the library here
+sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_03_00\\python_64')#add the path of the LoadElveflow.py
+sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_03_00\\DLL32\\Elveflow32DLL') #add the path of the library here
+sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_03_00\\python_32')#add the path of the LoadElveflow.py
 
-# import Elveflow64 as Elveflow
-import Elveflow32 as Elveflow
+try:
+    import Elveflow64 as Elveflow
+except Exception:
+    import Elveflow32 as Elveflow
 
 print_lock = threading.RLock()
 
@@ -702,9 +706,9 @@ class FlowMeterPanel(wx.Panel):
         self.connected = True
         self.connect_button.SetLabel('Reconnect')
         self._send_cmd('connect')
-        self._send_cmd('get_flow_rate')
         self._send_cmd('get_density')
         self._send_cmd('get_temperature')
+        self._send_cmd('get_flow_rate')
         self._set_status('Connected')
 
         self._flow_timer.Start(200)
@@ -861,8 +865,8 @@ class FlowMeterFrame(wx.Frame):
         if not self.fms:
             self.fm_sizer.Remove(0)
 
-        setup_fms = [('3', 'BFS', 'COM3', [], {}),
-            ('4', 'BFS', 'COM4', [], {}),
+        setup_fms = [('3', 'BFS', 'COM5', [], {}),
+            ('4', 'BFS', 'COM6', [], {}),
                     ]
 
         logger.info('Initializing %s flow meters on startup', str(len(setup_fms)))
@@ -930,9 +934,10 @@ class FlowMeterFrame(wx.Frame):
 
 if __name__ == '__main__':
     logger = logging.getLogger()
-    logger.setLevel(logging.INFO)
+    logger.setLevel(logging.DEBUG)
     h1 = logging.StreamHandler(sys.stdout)
     h1.setLevel(logging.INFO)
+    # h1.setLevel(logging.DEBUG)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
     h1.setFormatter(formatter)
     logger.addHandler(h1)
