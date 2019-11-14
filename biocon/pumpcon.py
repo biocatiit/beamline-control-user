@@ -2908,6 +2908,7 @@ if __name__ == '__main__':
     comm_locks = {'Sample'   : comm_lock,
         'Buffer 1' : comm_lock,
         'Buffer 2' : comm_lock,
+        }
 
     # #Use this with M50s
     # comm_locks = {'Sheath' : threading.Lock(),

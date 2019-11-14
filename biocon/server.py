@@ -246,10 +246,10 @@ if __name__ == '__main__':
     port3 = '5558'
 
     # Coflow
-    ip = '164.54.204.53'
+    # ip = '164.54.204.53'
 
     # TR SAXS
-    ip = '164.54.204.53'
+    ip = '164.54.204.8'
 
     # Both
 
@@ -272,53 +272,59 @@ if __name__ == '__main__':
 
     # TR SAXS
 
-    # control_server3 = ControlServer(ip, port3, name='ValveControlServer',
-    #     valve_comm_locks = valve_comm_locks)
-    # control_server3.start()
+    control_server3 = ControlServer(ip, port3, name='ValveControlServer',
+        valve_comm_locks = valve_comm_locks)
+    control_server3.start()
 
     # Coflow
 
-    setup_pumps = [('sheath', 'VICI M50', 'COM3', ['626.2', '9.278'], {}, {}),
-        ('outlet', 'VICI M50', 'COM4', ['623.56', '12.222'], {}, {})
-        ]
+    # setup_pumps = [('sheath', 'VICI M50', 'COM3', ['626.2', '9.278'], {}, {}),
+    #     ('outlet', 'VICI M50', 'COM4', ['623.56', '12.222'], {}, {})
+    #     ]
+
+    # pump_local_comm_locks = {'sheath'    : pump_comm_locks[setup_pumps[0][2]],
+    #     'outlet'    : pump_comm_locks[setup_pumps[1][2]]
+    #     }
 
     # TR SAXS
 
-    # setup_pumps = [
-    #     ('Sample', 'PHD 4400', 'COM3', ['10 mL, Medline P.C.', '1'], {},
-    #         {'flow_rate' : '10', 'refill_rate' : '10'}),
-    #     ('Buffer 1', 'PHD 4400', 'COM3', ['20 mL, Medline P.C.', '2'], {},
-    #         {'flow_rate' : '10', 'refill_rate' : '10'}),
-    #     ('Buffer 2', 'PHD 4400', 'COM3', ['20 mL, Medline P.C.', '3'], {},
-    #         {'flow_rate' : '10', 'refill_rate' : '10'}),
-    #     ]
+    setup_pumps = [
+        ('Sample', 'PHD 4400', 'COM4', ['10 mL, Medline P.C.', '1'], {},
+            {'flow_rate' : '10', 'refill_rate' : '10'}),
+        ('Buffer 1', 'PHD 4400', 'COM4', ['20 mL, Medline P.C.', '2'], {},
+            {'flow_rate' : '10', 'refill_rate' : '10'}),
+        ('Buffer 2', 'PHD 4400', 'COM4', ['20 mL, Medline P.C.', '3'], {},
+            {'flow_rate' : '10', 'refill_rate' : '10'}),
+        ]
+
+    pump_local_comm_locks = {'Sample'    : pump_comm_locks[setup_pumps[0][2]],
+        'Buffer 1'    : pump_comm_locks[setup_pumps[1][2]],
+        'Buffer 2'    : pump_comm_locks[setup_pumps[1][2]]
+        }
 
     # Both
 
-    pump_local_comm_locks = {'sheath'    : pump_comm_locks[setup_pumps[0][2]],
-        'outlet'    : pump_comm_locks[setup_pumps[1][2]]
-        }
     pump_frame = pumpcon.PumpFrame(pump_local_comm_locks, setup_pumps, None,
         title='Pump Control')
     pump_frame.Show()
 
     #TR SAXS
 
-    # setup_valves = [('Injection', 'Rheodyne', 'COM6', [], {'positions' : 2}),
-    #         ('Sample', 'Rheodyne', 'COM7', [], {'positions' : 6}),
-    #         ('Buffer 1', 'Rheodyne', 'COM8', [], {'positions' : 6}),
-    #         ('Buffer 2', 'Rheodyne', 'COM9', [], {'positions' : 6}),
-    #                 ]
+    setup_valves = [('Injection', 'Rheodyne', 'COM6', [], {'positions' : 2}),
+            ('Sample', 'Rheodyne', 'COM7', [], {'positions' : 6}),
+            ('Buffer 1', 'Rheodyne', 'COM8', [], {'positions' : 6}),
+            ('Buffer 2', 'Rheodyne', 'COM9', [], {'positions' : 6}),
+                    ]
 
-    # valve_local_comm_locks = {'Injection'    : valve_comm_locks[setup_valves[0][2]],
-    #     'Sample'    : valve_comm_locks[setup_valves[1][2]],
-    #     'Buffer 1'    : valve_comm_locks[setup_valves[2][2]],
-    #     'Buffer 2'    : valve_comm_locks[setup_valves[3][2]],
+    valve_local_comm_locks = {'Injection'    : valve_comm_locks[setup_valves[0][2]],
+        'Sample'    : valve_comm_locks[setup_valves[1][2]],
+        'Buffer 1'    : valve_comm_locks[setup_valves[2][2]],
+        'Buffer 2'    : valve_comm_locks[setup_valves[3][2]],
 
-    #     }
-    # valve_frame = valvecon.ValveFrame(valve_local_comm_locks, setup_valves, None,
-    #     title='Valve Control')
-    # valve_frame.Show()
+        }
+    valve_frame = valvecon.ValveFrame(valve_local_comm_locks, setup_valves, None,
+        title='Valve Control')
+    valve_frame.Show()
 
     app.MainLoop()
 
