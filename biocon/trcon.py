@@ -1255,7 +1255,7 @@ class TRFlowPanel(wx.Panel):
             args = (com, name, vtype)
             kwargs = {'positions'   : int(valve[1][3]['positions'])}
 
-            cmd = ('connect', args, kwargs)
+            cmd = ('connect_remote', args, kwargs)
 
             init = self._send_valvecmd(cmd, response=True)
 
@@ -1317,22 +1317,24 @@ class TRFlowPanel(wx.Panel):
     def _on_position_change(self, evt):
         position = int(evt.GetEventObject().GetValue())
         if evt.GetEventObject() == self.inj_valve_position:
-            cmd = ('set_position', ('injection_valve', position), {})
+            name = 'injection_valve'
         elif evt.GetEventObject() == self.sample_valve_position:
-            cmd = ('set_position', ('sample_valve', position), {})
+            name = 'sample_valve'
         elif evt.GetEventObject() == self.buffer1_valve_position:
-            cmd = ('set_position', ('buffer1_valve', position), {})
+            name = 'buffer1_valve'
         elif evt.GetEventObject() == self.buffer2_valve_position:
-            cmd = ('set_position', ('buffer2_valve', position), {})
+            name = 'buffer2_valve'
+
+        cmd = ('set_position', (name, position), {})
 
         ret = self._send_valvecmd(cmd, True)
 
         if ret is not None and ret[0] == 'set_position':
             if ret[2]:
-                logger.info('Set {} position to {}'.format(ret[1].replace('_', ' '), position))
+                logger.info('Set {} position to {}'.format(name.replace('_', ' '), position))
             else:
-                logger.error('Failed to set {} position'.format(ret[1].replace('_', ' ')))
-                msg = ('Failed to set {} position'.format(ret[1].replace('_', ' ')))
+                logger.error('Failed to set {} position'.format(name.replace('_', ' ')))
+                msg = ('Failed to set {} position'.format(name.replace('_', ' ')))
 
                 dialog = wx.MessageDialog(self, msg, 'Set position failed',
                     style=wx.OK|wx.ICON_ERROR)
@@ -1356,12 +1358,16 @@ class TRFlowPanel(wx.Panel):
             self._set_valve_status(position[1], position[2])
 
     def get_all_valve_positions(self):
-        cmd = ('get_position_multi', ([valve[0] for valve in self.valves]), {})
+        cmd = ('get_position_multi', ([valve[0] for valve in self.valves],), {})
 
         ret = self._send_valvecmd(cmd, True)
 
+        print(ret)
+
         if ret is not None and ret[0] == 'multi_positions':
             for i in range(len(ret[1])):
+                print(ret[1][i])
+                print(ret[2][i])
                 self._set_valve_status(ret[1][i], ret[2][i])
 
     def _set_valve_status(self, valve_name, position):
@@ -1369,13 +1375,13 @@ class TRFlowPanel(wx.Panel):
             position = str(int(position))
 
             if valve_name == 'injection_valve':
-                self.inj_valve_position.ChangeValue(position)
+                self.inj_valve_position.SetValue(position)
             elif valve_name == 'sample_valve':
-                self.sample_valve_position.ChangeValue(position)
+                self.sample_valve_position.SetValue(position)
             elif valve_name == 'buffer1_valve':
-                self.buffer1_valve_position.ChangeValue(position)
+                self.buffer1_valve_position.SetValue(position)
             elif valve_name == 'buffer2_valve':
-                self.buffer2_valve_position.ChangeValue(position)
+                self.buffer2_valve_position.SetValue(position)
 
         except Exception:
             pass

@@ -444,9 +444,12 @@ class M50Pump(Pump):
             self.device, flow_cal, backlash_cal))
         logger.info(logstr)
 
-        self.pump_comm = MForceSerialComm(device)
-
         self.comm_lock = comm_lock
+
+        self.comm_lock.acquire()
+        self.pump_comm = MForceSerialComm(device)
+        self.comm_lock.release()
+
 
         #Make sure parameters are set right
         self.send_cmd('EM 0') #Echo mode to full duplex
@@ -642,10 +645,12 @@ class PHD4400Pump(Pump):
         logstr = ("Initializing PHD4400 pump {} on serial port {}".format(name, device))
         logger.info(logstr)
 
+        self.comm_lock = comm_lock
+
+        self.comm_lock.acquire()
         self.pump_comm = PHD4400SerialComm(device, stopbits=serial.STOPBITS_TWO,
             baudrate=19200)
-
-        self.comm_lock = comm_lock
+        self.comm_lock.release()
 
         self._is_flowing = False
         self._is_dispensing = False
@@ -1023,9 +1028,11 @@ class NE500Pump(Pump):
         logstr = ("Initializing NE500 pump {} on serial port {}".format(name, device))
         logger.info(logstr)
 
-        self.pump_comm = SerialComm(device, baudrate=19200)
-
         self.comm_lock = comm_lock
+
+        self.comm_lock.acquire()
+        self.pump_comm = SerialComm(device, baudrate=19200)
+        self.comm_lock.release()
 
         self._is_flowing = False
         self._is_dispensing = False
