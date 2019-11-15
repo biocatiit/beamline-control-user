@@ -45,7 +45,10 @@ sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_03_00\\python_32')#add the p
 try:
     import Elveflow64 as Elveflow
 except Exception:
-    import Elveflow32 as Elveflow
+    try:
+        import Elveflow32 as Elveflow
+    except Exception:
+        pass
 
 print_lock = threading.RLock()
 

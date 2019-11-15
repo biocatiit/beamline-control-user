@@ -1230,6 +1230,8 @@ class TRFlowPanel(wx.Panel):
     def _init_values(self):
         self.valves = []
 
+        self.error_dialog = None
+
     def _init_valves(self):
         self.inj_valve_position.SetMin(1)
         self.inj_valve_position.SetMax(int(self.settings['injection_valve'][3]['positions']))
@@ -1282,7 +1284,7 @@ class TRFlowPanel(wx.Panel):
     def _create_layout(self):
 
 
-        valve_sizer = wx.FlexGridSizer(rows=2, columns=4, vgap=2, hgap=2)
+        valve_sizer = wx.FlexGridSizer(rows=2, cols=4, vgap=2, hgap=2)
 
         self.inj_valve_position = utils.IntSpinCtrl(self)
         self.inj_valve_position.Bind(utils.EVT_MY_SPIN, self._on_position_change)
@@ -1300,7 +1302,7 @@ class TRFlowPanel(wx.Panel):
         valve_sizer.Add(wx.StaticText(self, label='Buffer 1'))
         valve_sizer.Add(wx.StaticText(self, label='Buffer 2'))
         valve_sizer.Add(self.inj_valve_position)
-        valve_sizer.Add(self.samplej_valve_position)
+        valve_sizer.Add(self.sample_valve_position)
         valve_sizer.Add(self.buffer1_valve_position)
         valve_sizer.Add(self.buffer2_valve_position)
 
@@ -1309,6 +1311,8 @@ class TRFlowPanel(wx.Panel):
 
         top_sizer = wx.BoxSizer(wx.VERTICAL)
         top_sizer.Add(valve_sizer)
+
+        self.SetSizer(top_sizer)
 
     def _on_position_change(self, evt):
         position = int(evt.GetEventObject().GetValue())
@@ -1480,6 +1484,11 @@ class TRFlowPanel(wx.Panel):
             self.stop_get_fr_event.set()
 
         return ret_val
+
+    def _show_error_dialog(self, msg, title):
+        if self.error_dialog is None:
+            self.error_dialog = utils.WarningMessage(self, msg, title)
+            self.error_dialog.Show()
 
     def on_exit(self):
         logger.debug('Closing all device connections')

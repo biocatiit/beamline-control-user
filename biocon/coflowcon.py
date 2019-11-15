@@ -809,12 +809,12 @@ class CoflowPanel(wx.Panel):
             msg = ('The {} flow rate is unstable. Contact your beamline '
                 'scientist.'.format(flow))
 
-            self.warning_dialog = CoflowWarningMessage(self, msg, 'Coflow flow is unstable')
+            self.warning_dialog = utils.WarningMessage(self, msg, 'Coflow flow is unstable')
             self.warning_dialog.Show()
 
     def _show_error_dialog(self, msg, title):
         if self.error_dialog is None:
-            self.error_dialog = CoflowWarningMessage(self, msg, title)
+            self.error_dialog = utils.WarningMessage(self, msg, title)
             self.error_dialog.Show()
 
     def metadata(self):
@@ -940,54 +940,6 @@ class CoflowPanel(wx.Panel):
             self.coflow_pump_con.join()
             self.coflow_fm_con.join()
 
-class CoflowWarningMessage(wx.Frame):
-    def __init__(self, parent, msg, title, *args, **kwargs):
-        """
-        Initializes the pump frame. Takes args and kwargs for the wx.Frame class.
-        """
-        super(CoflowWarningMessage, self).__init__(parent, *args, title=title, **kwargs)
-        logger.debug('Setting up the CoflowWarningMessage')
-
-        self.Bind(wx.EVT_CLOSE, self._on_exit)
-
-        self._create_layout(msg)
-
-        self.Layout()
-        self.SendSizeEvent()
-        self.Fit()
-        self.Raise()
-
-    def _create_layout(self, msg):
-        msg_panel = wx.Panel(self)
-
-        msg_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        msg_sizer.Add(wx.StaticBitmap(msg_panel, bitmap=wx.ArtProvider.GetBitmap(wx.ART_WARNING)),
-         border=5, flag=wx.RIGHT)
-        msg_sizer.Add(utils.AutoWrapStaticText(msg_panel, msg), flag=wx.EXPAND, proportion=1)
-
-        ok_button = wx.Button(msg_panel, label='OK')
-        ok_button.Bind(wx.EVT_BUTTON, self._on_exit)
-
-        button_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        button_sizer.Add(ok_button, flag=wx.ALIGN_CENTER_HORIZONTAL)
-
-
-        panel_sizer = wx.BoxSizer(wx.VERTICAL)
-        panel_sizer.Add(msg_sizer, proportion=1, border=5, flag=wx.LEFT|wx.RIGHT|wx.TOP|wx.EXPAND)
-        panel_sizer.Add(button_sizer, border=5, flag=wx.ALL|wx.ALIGN_CENTER_HORIZONTAL)
-
-        msg_panel.SetSizer(panel_sizer)
-
-        top_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        top_sizer.Add(msg_panel, flag=wx.EXPAND, proportion=1)
-
-        self.SetSizer(top_sizer)
-
-    def _on_exit(self, evt):
-        parent=self.GetParent()
-        parent.warning_dialog = None
-
-        self.Destroy()
 
 class CoflowPlotFrame(wx.Frame):
     def __init__(self, sheath_flow_rate, outlet_flow_rate, t_flow_rate, sheath_density,
