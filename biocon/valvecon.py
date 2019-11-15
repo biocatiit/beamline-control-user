@@ -393,6 +393,7 @@ class ValveCommThread(threading.Thread):
                         'disconnect'        : self._disconnect,
                         'add_comlocks'      : self._add_comlocks,
                         'connect_remote'    : self._connect_valve_remote,
+                        'get_position_multi': self._get_position_multiple,
                         }
 
         self._connected_valves = OrderedDict()
@@ -529,6 +530,17 @@ class ValveCommThread(threading.Thread):
         logger.debug("Valve %s position: %s", name, position)
 
         self.return_queue.append(('position', name, position))
+
+    def _get_position_multiple(self, names):
+        logger.debug("Getting multiple valve positions")
+        positions = []
+        for name in names:
+            valve = self._connected_valves[name]
+            position = valve.get_position()
+
+            positions.append(position)
+
+        self.return_queue.append(('multi_positions', names, positions))
 
     def _get_status(self, name):
         """
