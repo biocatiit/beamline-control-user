@@ -235,7 +235,9 @@ class RheodyneValve(Valve):
             self.device))
         logger.info(logstr)
 
+        self.comm_lock.acquire()
         self.valve_comm = SerialComm(device, 19200)
+        self.comm_lock.release()
 
         self.send_command('M', False) #Homes valve
 
