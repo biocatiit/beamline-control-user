@@ -206,7 +206,6 @@ class ControlClient(threading.Thread):
         """Stops the thread cleanly."""
         logger.info("Starting to clean up and shut down remote client thread: %s", self.name)
 
-
         self._stop_event.set()
 
 if __name__ == '__main__':

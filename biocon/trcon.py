@@ -1228,9 +1228,15 @@ class TRFlowPanel(wx.Panel):
         self.valve_con.start()
 
     def _init_values(self):
-        self.valves = []
+        self.valves = {}
+        self.pumps = {}
 
         self.error_dialog = None
+
+        self.stop_valve_monitor = threading.Event()
+        self.pause_valve_monitor = threading.Event()
+        self.valve_monitor_thread = threading.Thread(target=self._monitor_valve_position)
+        self.valve_monitor_thread.daemon = True
 
     def _init_valves(self):
         self.inj_valve_position.SetMin(1)
@@ -1269,14 +1275,50 @@ class TRFlowPanel(wx.Panel):
                     style=wx.OK|wx.ICON_ERROR)
                 dialog.ShowModal()
 
-            self.valves.append((name, vtype, com))
+            self.valves[name] = (name, vtype, com)
 
         self.get_all_valve_positions()
 
         logger.info('Valve initializiation successful.')
 
+        self.valve_monitor_thread.start()
+
     def _init_pumps(self):
-        pass
+        pumps = [('sample_pump', self.settings['sample_pump']),
+            ('buffer1_pump', self.settings['buffer1_pump']),
+            ('buffer2_pump', self.settings['buffer2_pump']),
+            ]
+
+        for pump in pumps:
+            name = pump[0]
+            ptype = pump[1][1].replace(' ', '_')
+            com = pump[1][2]
+            syringe = pump[1][3][0]
+            address = pump[1][3][1]
+
+            args = (com, name, ptype)
+            kwargs = copy.deepcopy(self.sample_pump_panel.known_syringes[syringe])
+            kwargs['syringe_id'] = syringe
+            kwargs['pump_address'] = address
+
+            cmd = ('connect_remote', args, kwargs)
+
+            init = self._send_pumpcmd(cmd, response=True)
+
+            if not init and not self.timeout_event.is_set():
+                logger.error('Failed to connect to the {}.'.format(name.replace('_', ' ')))
+
+                msg = ('Could not connect to the {}. Contact your beamline '
+                    'scientist.'.format(name.replace('_', ' ')))
+
+                dialog = wx.MessageDialog(self, msg, 'Connection error',
+                    style=wx.OK|wx.ICON_ERROR)
+                dialog.ShowModal()
+
+            self.pumps[name] = (name, ptype, com, address)
+
+            # Need to set pump connection status
+
 
     def _init_flowmeters(self):
         pass
@@ -1295,8 +1337,6 @@ class TRFlowPanel(wx.Panel):
         self.buffer2_valve_position = utils.IntSpinCtrl(self)
         self.buffer2_valve_position.Bind(utils.EVT_MY_SPIN, self._on_position_change)
 
-
-
         valve_sizer.Add(wx.StaticText(self, label='Injection'))
         valve_sizer.Add(wx.StaticText(self, label='Sample'))
         valve_sizer.Add(wx.StaticText(self, label='Buffer 1'))
@@ -1307,10 +1347,31 @@ class TRFlowPanel(wx.Panel):
         valve_sizer.Add(self.buffer2_valve_position)
 
 
+        self.sample_pump_panel = TRPumpPanel(self, self.settings['sample_pump'][0],
+            self.settings['sample_pump'][0],
+            flow_rate=self.settings['sample_pump'][5]['flow_rate'],
+            refill_rate=self.settings['sample_pump'][5]['refill_rate'],
+            syringe=self.settings['sample_pump'][3][0])
+        self.buffer1_pump_panel = TRPumpPanel(self, self.settings['buffer1_pump'][0],
+            self.settings['buffer1_pump'][0],
+            flow_rate=self.settings['buffer1_pump'][5]['flow_rate'],
+            refill_rate=self.settings['buffer1_pump'][5]['refill_rate'],
+            syringe=self.settings['buffer1_pump'][3][0])
+        self.buffer2_pump_panel = TRPumpPanel(self, self.settings['buffer2_pump'][0],
+            self.settings['buffer2_pump'][0],
+            flow_rate=self.settings['buffer2_pump'][5]['flow_rate'],
+            refill_rate=self.settings['buffer2_pump'][5]['refill_rate'],
+            syringe=self.settings['buffer1_pump'][3][0])
+
+        pump_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        pump_sizer.Add(self.sample_pump_panel)
+        pump_sizer.Add(self.buffer1_pump_panel)
+        pump_sizer.Add(self.buffer2_pump_panel)
 
 
         top_sizer = wx.BoxSizer(wx.VERTICAL)
         top_sizer.Add(valve_sizer)
+        top_sizer.Add(pump_sizer)
 
         self.SetSizer(top_sizer)
 
@@ -1324,6 +1385,11 @@ class TRFlowPanel(wx.Panel):
             name = 'buffer1_valve'
         elif evt.GetEventObject() == self.buffer2_valve_position:
             name = 'buffer2_valve'
+
+        self.change_valve_position(name, position)
+
+    def change_valve_position(self, name, position):
+        self.pause_valve_monitor.set()
 
         cmd = ('set_position', (name, position), {})
 
@@ -1349,6 +1415,8 @@ class TRFlowPanel(wx.Panel):
                 style=wx.OK|wx.ICON_ERROR)
             wx.CallAfter(dialog.ShowModal)
 
+        wx.CallLater(2000, self.pause_valve_monitor.clear)
+
     def get_valve_position(self, valve_name):
         cmd = ('get_position', (valve_name,), {})
 
@@ -1358,17 +1426,24 @@ class TRFlowPanel(wx.Panel):
             self._set_valve_status(position[1], position[2])
 
     def get_all_valve_positions(self):
-        cmd = ('get_position_multi', ([valve[0] for valve in self.valves],), {})
+        cmd = ('get_position_multi', ([valve for valve in self.valves],), {})
 
         ret = self._send_valvecmd(cmd, True)
 
-        print(ret)
-
         if ret is not None and ret[0] == 'multi_positions':
             for i in range(len(ret[1])):
-                print(ret[1][i])
-                print(ret[2][i])
                 self._set_valve_status(ret[1][i], ret[2][i])
+
+    def set_multiple_valve_positions(self, valve_names, positions):
+        cmd = ('set_position_multi', (valve_names, positions), {})
+        ret = self._send_valvecmd(cmd, True)
+
+        if ret is not None and ret[0] == 'multi_set':
+            success = ret[1]
+        else:
+            success = False
+
+        return success
 
     def _set_valve_status(self, valve_name, position):
         try:
@@ -1383,8 +1458,47 @@ class TRFlowPanel(wx.Panel):
             elif valve_name == 'buffer2_valve':
                 self.buffer2_valve_position.SetValue(position)
 
+            logger.info('{} position changed to {}'.format(valve_name).replace('_', ' ').capitalize(),
+                position)
+
         except Exception:
             pass
+
+    def _monitor_valve_position(self):
+        logger.info('Starting continuous monitoring of valve positions')
+
+        monitor_cmd = ('get_position_multi', ([valve for valve in self.valves],), {})
+
+        interval = 2
+
+        while not self.stop_valve_monitor.is_set():
+            start_time = time.time()
+            if (not self.stop_valve_monitor.is_set() and
+                not self.pause_valve_monitor.is_set()):
+                ret = self._send_valvecmd(monitor_cmd, True)
+
+                if (ret is not None and ret[0] == 'multi_positions'
+                    and not self.pause_valve_monitor.is_set()):
+                    for i, name in enumerate(ret[1]):
+                        if name == 'injection_valve':
+                            pos = self.inj_valve_position.GetValue()
+                        elif name == 'sample_valve':
+                            pos = self.sample_valve_position.GetValue()
+                        elif name == 'buffer1_valve':
+                            pos = self.buffer1_valve_position.GetValue()
+                        elif name == 'buffer2_valve':
+                            pos = self.buffer2_valve_position.GetValue()
+
+                        if int(pos) != int(ret[2][i]):
+                            self._set_valve_status(name, ret[2][i])
+
+            while time.time() - start_time < interval:
+                time.sleep(0.1)
+
+                if self.stop_valve_monitor.is_set():
+                    break
+
+        logger.info('Stopping continuous monitoring of valve positions')
 
     def start_pump(self, pump_name, start, fixed, dispense, vol):
         pass
@@ -1427,14 +1541,14 @@ class TRFlowPanel(wx.Panel):
 
         if not self.timeout_event.is_set():
             full_cmd = {'device': 'pump', 'command': cmd, 'response': response}
-            self.coflow_pump_cmd_q.append(full_cmd)
+            self.pump_cmd_q.append(full_cmd)
 
             if response:
-                while len(self.coflow_pump_return_q) == 0 and not self.timeout_event.is_set():
+                while len(self.pump_return_q) == 0 and not self.timeout_event.is_set():
                     time.sleep(0.01)
 
                 if not self.timeout_event.is_set():
-                    ret_val = self.coflow_pump_return_q.popleft()
+                    ret_val = self.pump_return_q.popleft()
                 else:
                     msg = ('Lost connection to the coflow control server. '
                         'Contact your beamline scientist.')
@@ -1460,14 +1574,14 @@ class TRFlowPanel(wx.Panel):
         ret_val = (None, None)
         if not self.timeout_event.is_set():
             full_cmd = {'device': 'fm', 'command': cmd, 'response': response}
-            self.coflow_fm_cmd_q.append(full_cmd)
+            self.fm_cmd_q.append(full_cmd)
 
             if response:
-                while len(self.coflow_fm_return_q) == 0 and not self.timeout_event.is_set():
+                while len(self.fm_return_q) == 0 and not self.timeout_event.is_set():
                     time.sleep(0.01)
 
                 if not self.timeout_event.is_set():
-                    ret_val = self.coflow_fm_return_q.popleft()
+                    ret_val = self.fm_return_q.popleft()
 
                 else:
                     msg = ('Lost connection to the coflow control server. '
@@ -1499,18 +1613,25 @@ class TRFlowPanel(wx.Panel):
     def on_exit(self):
         logger.debug('Closing all device connections')
 
+        self.stop_valve_monitor.set()
+
         if not self.timeout_event.is_set():
             for valve in self.valves:
-                self._send_valvecmd(('disconnect', (valve[0],), {}), True)
+                self._send_valvecmd(('disconnect', (valve,), {}), True)
+            for pump in self.pumps:
+                self._send_pumpcmd(('disconnect', (pump,), {}), True)
 
         self.valve_con.stop()
         self.pump_con.stop()
         self.fm_con.stop()
 
         if not self.timeout_event.is_set():
-            self.valve_con.join()
-            self.pump_con.join()
-            self.fm_con.join()
+            try:
+                self.valve_con.join(5)
+                self.pump_con.join(5)
+                self.fm_con.join(5)
+            except Exception:
+                pass
 
 
 class TRPumpPanel(wx.Panel):
@@ -1526,8 +1647,8 @@ class TRPumpPanel(wx.Panel):
     :py:func:`_create_layout` function, and then add in type switching in the
     :py:func:`_on_type` function.
     """
-    def __init__(self, parent, panel_id, panel_name, pump_name, flow_rate='',
-        refill_rate=''):
+    def __init__(self, parent, panel_name, pump_name, flow_rate='',
+        refill_rate='', syringe=None):
         """
         Initializes the custom thread. Important parameters here are the
         list of known commands ``_commands`` and known pumps ``known_pumps``.
@@ -1575,7 +1696,7 @@ class TRPumpPanel(wx.Panel):
 
         """
 
-        wx.Panel.__init__(self, parent, panel_id, name=panel_name)
+        wx.Panel.__init__(self, parent, name=panel_name)
         logger.debug('Initializing PumpPanel for pump %s', pump_name)
 
         self.tr_flow_panel = parent
@@ -1600,21 +1721,24 @@ class TRPumpPanel(wx.Panel):
             'max_rate': 11},
             }
 
-        self._create_layout(flow_rate, refill_rate)
+        self._create_layout(flow_rate, refill_rate, syringe)
 
-    def _create_layout(self, flow_rate='', refill_rate=''):
+    def _create_layout(self, flow_rate='', refill_rate='', syringe=None):
         """Creates the layout for the panel."""
-        self.status = wx.StaticText(self, label='Not connected')
-        self.syringe_volume = wx.StaticText(self, label='0', size=(40,-1),
+        top_sizer = wx.StaticBoxSizer(wx.VERTICAL, self, self.name)
+        parent = top_sizer.GetStaticBox()
+
+        self.status = wx.StaticText(parent, label='Not connected')
+        self.syringe_volume = wx.StaticText(parent, label='0', size=(40,-1),
             style=wx.ST_NO_AUTORESIZE)
-        self.syringe_volume_label = wx.StaticText(self, label='Current volume:')
-        self.syringe_volume_units = wx.StaticText(self, label='mL')
-        self.set_syringe_volume = wx.Button(self, label='Set Current Volume')
+        self.syringe_volume_label = wx.StaticText(parent, label='Current volume:')
+        self.syringe_volume_units = wx.StaticText(parent, label='mL')
+        self.set_syringe_volume = wx.Button(parent, label='Set Current Volume')
         self.set_syringe_volume.Bind(wx.EVT_BUTTON, self._on_set_volume)
-        self.syringe_vol_gauge = wx.Gauge(self, size=(40, -1),
+        self.syringe_vol_gauge = wx.Gauge(parent, size=(40, -1),
             style=wx.GA_HORIZONTAL|wx.GA_SMOOTH)
-        self.syringe_vol_gauge_low = wx.StaticText(self, label='0')
-        self.syringe_vol_gauge_high = wx.StaticText(self, label='')
+        self.syringe_vol_gauge_low = wx.StaticText(parent, label='0')
+        self.syringe_vol_gauge_high = wx.StaticText(parent, label='')
 
         self.vol_gauge = wx.BoxSizer(wx.HORIZONTAL)
         self.vol_gauge.Add(self.syringe_vol_gauge_low,
@@ -1625,11 +1749,11 @@ class TRPumpPanel(wx.Panel):
             flag=wx.LEFT|wx.ALIGN_CENTER_VERTICAL)
 
         status_grid = wx.GridBagSizer(vgap=5, hgap=5)
-        status_grid.Add(wx.StaticText(self, label='Pump name:'), (0,0),
+        status_grid.Add(wx.StaticText(parent, label='Pump: '), (0,0),
             flag=wx.ALIGN_CENTER_VERTICAL)
-        status_grid.Add(wx.StaticText(self, label=self.name), (0,1), span=(1,2),
-            flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
-        status_grid.Add(wx.StaticText(self, label='Status: '), (1,0),
+        status_grid.Add(wx.StaticText(parent, label=self.name), (0,1), span=(1,2),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        status_grid.Add(wx.StaticText(parent, label='Status: '), (1,0),
             flag=wx.ALIGN_CENTER_VERTICAL)
         status_grid.Add(self.status, (1,1), span=(1,2),
             flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
@@ -1644,58 +1768,71 @@ class TRPumpPanel(wx.Panel):
         status_grid.Add(self.set_syringe_volume, (4,1), span=(1,2),
             flag=wx.LEFT|wx.ALIGN_RIGHT|wx.ALIGN_CENTER_VERTICAL)
 
-        self.status_sizer = wx.StaticBoxSizer(wx.StaticBox(self, label='Info'),
+        self.status_sizer = wx.StaticBoxSizer(wx.StaticBox(parent, label='Info'),
             wx.VERTICAL)
         self.status_sizer.Add(status_grid, 1, wx.EXPAND)
 
-        self.mode_ctrl = wx.Choice(self, choices=['Continuous flow', 'Fixed volume'])
+        self.mode_ctrl = wx.Choice(parent, choices=['Continuous flow', 'Fixed volume'])
         self.mode_ctrl.SetSelection(0)
-        self.direction_ctrl = wx.Choice(self, choices=['Dispense', 'Aspirate'])
+        self.direction_ctrl = wx.Choice(parent, choices=['Dispense', 'Aspirate'])
         self.direction_ctrl.SetSelection(0)
-        self.flow_rate_ctrl = wx.TextCtrl(self, value=flow_rate, size=(60,-1))
-        self.flow_units_lbl = wx.StaticText(self, label='mL/min')
-        self.refill_rate_lbl = wx.StaticText(self, label='Refill rate:')
-        self.refill_rate_ctrl = wx.TextCtrl(self, value=refill_rate, size=(60,-1))
-        self.refill_rate_units = wx.StaticText(self, label='mL')
-        self.volume_lbl = wx.StaticText(self, label='Volume:')
-        self.volume_ctrl = wx.TextCtrl(self, size=(60,-1))
-        self.vol_units_lbl = wx.StaticText(self, label='mL')
+        self.flow_rate_ctrl = wx.TextCtrl(parent, value=flow_rate, size=(60,-1))
+        self.flow_units_lbl = wx.StaticText(parent, label='mL/min')
+        self.refill_rate_lbl = wx.StaticText(parent, label='Refill rate:')
+        self.refill_rate_ctrl = wx.TextCtrl(parent, value=refill_rate, size=(60,-1))
+        self.refill_rate_units = wx.StaticText(parent, label='mL')
+        self.volume_lbl = wx.StaticText(parent, label='Volume:')
+        self.volume_ctrl = wx.TextCtrl(parent, size=(60,-1))
+        self.vol_units_lbl = wx.StaticText(parent, label='mL')
+
+        syr_types = sorted(self.known_syringes.keys(), key=lambda x: float(x.split()[0]))
+        self.syringe_type = wx.Choice(parent, choices=syr_types)
+
+        if syringe is not None and syringe in syr_types:
+            self.syringe_type.SetStringSelection(syringe)
+        else:
+            self.syringe_type.SetSelection(0)
+        self.syringe_type.Bind(wx.EVT_CHOICE, self._on_syringe_type)
 
         self.mode_ctrl.Bind(wx.EVT_CHOICE, self._on_mode)
 
         basic_ctrl_sizer = wx.GridBagSizer(vgap=2, hgap=2)
-        basic_ctrl_sizer.Add(wx.StaticText(self, label='Mode:'), (0,0),
+        basic_ctrl_sizer.Add(wx.StaticText(parent, label='Syringe:'), (0,0),
             flag=wx.ALIGN_CENTER_VERTICAL)
-        basic_ctrl_sizer.Add(self.mode_ctrl, (0,1), span=(1,2),
+        basic_ctrl_sizer.Add(self.syringe_type, (0,1), span=(1,2),
             flag=wx.ALIGN_CENTER_VERTICAL)
-        basic_ctrl_sizer.Add(wx.StaticText(self, label='Direction:'), (1,0),
+        basic_ctrl_sizer.Add(wx.StaticText(parent, label='Mode:'), (1,0),
             flag=wx.ALIGN_CENTER_VERTICAL)
-        basic_ctrl_sizer.Add(self.direction_ctrl, (1,1), span=(1,2),
+        basic_ctrl_sizer.Add(self.mode_ctrl, (1,1), span=(1,2),
             flag=wx.ALIGN_CENTER_VERTICAL)
-        basic_ctrl_sizer.Add(wx.StaticText(self, label='Flow rate:'), (2,0),
+        basic_ctrl_sizer.Add(wx.StaticText(parent, label='Direction:'), (2,0),
             flag=wx.ALIGN_CENTER_VERTICAL)
-        basic_ctrl_sizer.Add(self.flow_rate_ctrl, (2,1),
+        basic_ctrl_sizer.Add(self.direction_ctrl, (2,1), span=(1,2),
             flag=wx.ALIGN_CENTER_VERTICAL)
-        basic_ctrl_sizer.Add(self.flow_units_lbl, (2,2),
+        basic_ctrl_sizer.Add(wx.StaticText(parent, label='Flow rate:'), (3,0),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        basic_ctrl_sizer.Add(self.flow_rate_ctrl, (3,1),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        basic_ctrl_sizer.Add(self.flow_units_lbl, (3,2),
             flag=wx.ALIGN_CENTER_VERTICAL|wx.ALIGN_LEFT)
-        basic_ctrl_sizer.Add(self.refill_rate_lbl, (3,0),
+        basic_ctrl_sizer.Add(self.refill_rate_lbl, (4,0),
             flag=wx.ALIGN_CENTER_VERTICAL)
-        basic_ctrl_sizer.Add(self.refill_rate_ctrl, (3,1),
+        basic_ctrl_sizer.Add(self.refill_rate_ctrl, (4,1),
             flag=wx.ALIGN_CENTER_VERTICAL)
-        basic_ctrl_sizer.Add(self.refill_rate_units, (3,2),
+        basic_ctrl_sizer.Add(self.refill_rate_units, (4,2),
             flag=wx.ALIGN_CENTER_VERTICAL|wx.ALIGN_LEFT)
-        basic_ctrl_sizer.Add(self.volume_lbl, (4,0),
+        basic_ctrl_sizer.Add(self.volume_lbl, (5,0),
             flag=wx.RESERVE_SPACE_EVEN_IF_HIDDEN|wx.ALIGN_CENTER_VERTICAL)
-        basic_ctrl_sizer.Add(self.volume_ctrl, (4,1),
+        basic_ctrl_sizer.Add(self.volume_ctrl, (5,1),
             flag=wx.RESERVE_SPACE_EVEN_IF_HIDDEN|wx.ALIGN_CENTER_VERTICAL)
-        basic_ctrl_sizer.Add(self.vol_units_lbl, (4,2),
+        basic_ctrl_sizer.Add(self.vol_units_lbl, (5,2),
             flag=wx.RESERVE_SPACE_EVEN_IF_HIDDEN|wx.ALIGN_CENTER_VERTICAL|wx.ALIGN_LEFT)
         basic_ctrl_sizer.AddGrowableCol(1)
         basic_ctrl_sizer.SetEmptyCellSize((0,0))
 
 
-        self.run_button = wx.Button(self, label='Start')
-        self.fr_button = wx.Button(self, label='Change flow rate')
+        self.run_button = wx.Button(parent, label='Start')
+        self.fr_button = wx.Button(parent, label='Change flow rate')
 
         self.run_button.Bind(wx.EVT_BUTTON, self._on_run)
         self.fr_button.Bind(wx.EVT_BUTTON, self._on_fr_change)
@@ -1704,24 +1841,11 @@ class TRPumpPanel(wx.Panel):
         button_ctrl_sizer.Add(self.run_button, 0, wx.ALIGN_CENTER_VERTICAL)
         button_ctrl_sizer.Add(self.fr_button, 0, wx.ALIGN_CENTER_VERTICAL|wx.RESERVE_SPACE_EVEN_IF_HIDDEN)
 
-        syr_types = sorted(self.known_syringes.keys(), key=lambda x: float(x.split()[0]))
-        self.syringe_type = wx.Choice(self, choices=syr_types)
-        self.syringe_type.SetSelection(0)
-        self.syringe_type.Bind(wx.EVT_CHOICE, self._on_syringe_type)
-
-        self.phd4400_settings_sizer = wx.FlexGridSizer(rows=2, cols=2, vgap=2, hgap=2)
-        self.phd4400_settings_sizer.Add(wx.StaticText(self, label='Syringe type:'),
-            flag=wx.ALIGN_CENTER_VERTICAL)
-        self.phd4400_settings_sizer.Add(self.syringe_type, border=2,
-            flag=wx.LEFT|wx.ALIGN_CENTER_VERTICAL)
-
-        self.control_box_sizer = wx.StaticBoxSizer(wx.StaticBox(self, label='Controls'),
+        self.control_box_sizer = wx.StaticBoxSizer(wx.StaticBox(parent, label='Controls'),
             wx.VERTICAL)
         self.control_box_sizer.Add(basic_ctrl_sizer, flag=wx.EXPAND)
         self.control_box_sizer.Add(button_ctrl_sizer, flag=wx.ALIGN_CENTER_HORIZONTAL|wx.TOP, border=2)
-        self.control_box_sizer.Add(self.phd4400_settings_sizer, flag=wx.TOP, border=2)
 
-        top_sizer = wx.BoxSizer(wx.VERTICAL)
         top_sizer.Add(self.status_sizer, flag=wx.EXPAND)
         top_sizer.Add(self.control_box_sizer, border=5, flag=wx.EXPAND|wx.TOP)
 
@@ -2064,7 +2188,7 @@ if __name__ == '__main__':
     # logger.addHandler(h2)
 
     logger.debug('Setting up wx app')
-    frame = TRFrame(settings, 'flow', None, title='Coflow Control')
+    frame = TRFrame(settings, 'flow', None, title='TRSAXS Control')
     frame.Show()
     app.MainLoop()
 

@@ -396,6 +396,7 @@ class ValveCommThread(threading.Thread):
                         'add_comlocks'      : self._add_comlocks,
                         'connect_remote'    : self._connect_valve_remote,
                         'get_position_multi': self._get_position_multiple,
+                        'set_position_multi': self._set_position_multiple,
                         }
 
         self._connected_valves = OrderedDict()
@@ -579,6 +580,25 @@ class ValveCommThread(threading.Thread):
             logger.info("Failed setting valve %s position to %i", name, position)
 
         self.return_queue.append(('set_position', name, success))
+
+    def _set_position_multiple(self, names, positions):
+        logger.debug('Setting multiple valve positions')
+        success = []
+        for i, name in enumerate(names):
+            logger.debug("Setting valve %s position", name)
+            valve = self._connected_valves[name]
+            t_success = valve.set_position(positions[i])
+            if t_success:
+                logger.info("Valve %s position set to %i", name, positions[i])
+            else:
+                logger.info("Failed setting valve %s position to %i", name, positions[i])
+            success.append(t_success)
+
+        if all(success):
+            logger.info('Set all valve positions successfully')
+
+        self.return_queue.append(('set_position_multi', names, success))
+
 
     def _add_comlocks(self, comm_locks):
         self.comm_locks.update(comm_locks)
