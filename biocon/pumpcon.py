@@ -825,7 +825,7 @@ class PHD4400Pump(Pump):
         self.comm_lock.acquire()
 
         ret = self.pump_comm.write("{}{}".format(self._pump_address, cmd),
-            self._pump_address, get_response=True, send_term_char='\r')
+            self._pump_address, get_response=get_response, send_term_char='\r')
 
         time.sleep(0.01)
         self.comm_lock.release()
@@ -1180,16 +1180,20 @@ class NE500Pump(Pump):
         self.comm_lock.acquire()
 
         ret = self.pump_comm.write("{}{}".format(self._pump_address, cmd),
-            get_response=True, send_term_char='\r', term_char='\x03')
+            get_response=get_response, send_term_char='\r', term_char='\x03')
 
         self.comm_lock.release()
 
-        ret = ret.lstrip('\x02').rstrip('\x03').lstrip(self._pump_address)
+        if get_response:
+            ret = ret.lstrip('\x02').rstrip('\x03').lstrip(self._pump_address)
 
-        status = ret[0]
-        ret = ret[1:]
+            status = ret[0]
+            ret = ret[1:]
 
-        logger.debug("Pump %s returned %r", self.name, ret)
+            logger.debug("Pump %s returned %r", self.name, ret)
+        else:
+            ret = None
+            status = None
 
         return ret, status
 
@@ -1446,6 +1450,8 @@ class PumpCommThread(threading.Thread):
                         'add_pump'      : self._add_pump,
                         'add_comlocks'  : self._add_comlocks,
                         'connect_remote': self._connect_pump_remote,
+                        'get_status'    : self._get_status,
+                        'get_status_multi': self._get_status_multiple,
                         }
 
         self._connected_pumps = OrderedDict()
@@ -1783,6 +1789,23 @@ class PumpCommThread(threading.Thread):
         pump = self._connected_pumps[name]
         pump.set_pump_cal(diameter, max_volume, max_rate, syringe_id)
         logger.debug("Pump %s calibration parameters set", name)
+
+    def _get_status(self, name):
+        logger.debug("Getting pump status")
+        pump = self._connected_pumps[name]
+        is_moving = pump.is_moving()
+        volume = pump.volume
+        self.return_queue.append(name, 'status', (is_moving, volume))
+
+    def _get_status_multiple(self, names):
+        status = []
+        for name in names:
+            pump = self._connected_pumps[name]
+            is_moving = pump.is_moving()
+            volume = pump.volume
+            status.append(is_moving, volume)
+
+        self.return_queue.append(names, 'multi_status', status)
 
     def _send_cmd(self, name, cmd, get_response=True):
         """
@@ -2176,7 +2199,8 @@ class PumpPanel(wx.Panel):
             self._on_type(None)
 
         if comport in self.all_comports:
-            self.com_ctrl.SetStringSelection(comport)
+            self.com_ctrl.SetSelection(self.com_ctrl.GetStrings().index(comport))
+            # self.com_ctrl.SetStringSelection(comport)
 
         if pump_type == 'VICI M50':
             if 'flow_cal' in pump_kwargs.keys():
@@ -2761,26 +2785,23 @@ class PumpFrame(wx.Frame):
             #         # {'flow_rate' : '30', 'refill_rate' : '30'}),
             #             ]
 
-            setup_pumps = [
-                ('Sample', 'PHD 4400', 'COM3', ['10 mL, Medline P.C.', '1'], {},
-                    {'flow_rate' : '10', 'refill_rate' : '10'}),
-                ('Buffer 1', 'PHD 4400', 'COM3', ['20 mL, Medline P.C.', '2'], {},
-                    {'flow_rate' : '10', 'refill_rate' : '10'}),
-                ('Buffer 2', 'PHD 4400', 'COM3', ['20 mL, Medline P.C.', '3'], {},
-                    {'flow_rate' : '10', 'refill_rate' : '10'}),
-                ]
-
             # setup_pumps = [
-            #     # ('Sample', 'NE 500', '/dev/tty.usbserial-AK06V22M',
-            #     #     ['30 mL, EXEL', '00'], {},
-            #     # {'flow_rate' : '5', 'refill_rate' : '5'}),
-            #     # ('Sample', 'NE 500', '/dev/cu.usbserial-AK06V22M', ['30 mL, EXEL', '02'], {},
-            #     #     {'flow_rate' : '30', 'refill_rate' : '30'}),
-            #     # ('Sheath', 'NE 500', '/dev/cu.usbserial-AK06V22M', ['30 mL, EXEL', '01'], {},
-            #     #     {'flow_rate' : '30', 'refill_rate' : '30'}),
-            #     ('Buffer', 'NE 500', '/dev/cu.usbserial-AK06V22M', ['30 mL, EXEL', '00'], {},
-            #         {'flow_rate' : '30', 'refill_rate' : '30'}),
+            #     ('Sample', 'PHD 4400', 'COM3', ['10 mL, Medline P.C.', '1'], {},
+            #         {'flow_rate' : '10', 'refill_rate' : '10'}),
+            #     ('Buffer 1', 'PHD 4400', 'COM3', ['20 mL, Medline P.C.', '2'], {},
+            #         {'flow_rate' : '10', 'refill_rate' : '10'}),
+            #     ('Buffer 2', 'PHD 4400', 'COM3', ['20 mL, Medline P.C.', '3'], {},
+            #         {'flow_rate' : '10', 'refill_rate' : '10'}),
             #     ]
+
+            setup_pumps = [
+                ('Sample', 'NE 500', '/dev/cu.usbserial-AK06V22M', ['30 mL, EXEL', '02'], {},
+                    {'flow_rate' : '30', 'refill_rate' : '30'}),
+                ('Sheath', 'NE 500', '/dev/cu.usbserial-A6022U62', ['30 mL, EXEL', '01'], {},
+                    {'flow_rate' : '30', 'refill_rate' : '30'}),
+                ('Buffer', 'NE 500', '/dev/cu.usbserial-A6022U22', ['30 mL, EXEL', '00'], {},
+                    {'flow_rate' : '30', 'refill_rate' : '30'}),
+                ]
         logger.info('Initializing %s pumps on startup', str(len(setup_pumps)))
 
         for pump in setup_pumps:
@@ -2870,7 +2891,7 @@ if __name__ == '__main__':
     logger.addHandler(h1)
 
     # my_pump = M50Pump('COM6', '2', 626.2, 9.278)
-    # comm_lock = threading.Lock()
+    comm_lock = threading.Lock()
 
     # my_pump = PHD4400Pump('COM4', 'H1', '1', 23.5, 30, 30, '30 mL', comm_lock)
     # my_pump.flow_rate = 10
@@ -2880,9 +2901,9 @@ if __name__ == '__main__':
     # my_pump2.flow_rate = 10
     # my_pump2.refill_rate = 10
 
-    # my_pump = NE500Pump('/dev/tty.usbserial-AK06V22M', 'Pump2', '00', 23.5, 30, 30, '30 mL', comm_lock)
-    # my_pump.flow_rate = 10
-    # my_pump.refill_rate = 10
+    my_pump = NE500Pump('/dev/cu.usbserial-A6022U22', 'Pump2', '00', 23.5, 30, 30, '30 mL', comm_lock)
+    my_pump.flow_rate = 10
+    my_pump.refill_rate = 10
 
     # pmp_cmd_q = deque()
     # return_q = queue.Queue()
@@ -2910,32 +2931,33 @@ if __name__ == '__main__':
     # my_pumpcon.stop()
 
     #Use this with PHD 4400
-    comm_lock = threading.Lock()
-
-    comm_locks = {'Sample'   : comm_lock,
-        'Buffer 1' : comm_lock,
-        'Buffer 2' : comm_lock,
-        }
-
-    # #Use this with M50s
-    # comm_locks = {'Sheath' : threading.Lock(),
-    #     'Outlet' : threading.Lock(),
-    #     }
-
-    # #Use this with NE 500
     # comm_lock = threading.Lock()
 
     # comm_locks = {'Sample'   : comm_lock,
-    #     'Sheath' : comm_lock,
-    #     'Buffer' : comm_lock,
+    #     'Buffer 1' : comm_lock,
+    #     'Buffer 2' : comm_lock,
+    #     }
 
-    # #Otherwise use this:
-    # comm_locks = {}
+    # # #Use this with M50s
+    # # comm_locks = {'Sheath' : threading.Lock(),
+    # #     'Outlet' : threading.Lock(),
+    # #     }
 
-    app = wx.App()
-    logger.debug('Setting up wx app')
-    frame = PumpFrame(comm_locks, None, None, title='Pump Control')
-    frame.Show()
-    app.MainLoop()
+    # #Use this with NE 500
+    # # comm_lock = threading.Lock()
+
+    # comm_locks = {'Sample'   : threading.Lock(),
+    #     'Sheath' : threading.Lock(),
+    #     'Buffer' : threading.Lock(),
+    #     }
+
+    # # # #Otherwise use this:
+    # # # comm_locks = {}
+
+    # app = wx.App()
+    # logger.debug('Setting up wx app')
+    # frame = PumpFrame(comm_locks, None, None, title='Pump Control')
+    # frame.Show()
+    # app.MainLoop()
 
 

@@ -1238,6 +1238,11 @@ class TRFlowPanel(wx.Panel):
         self.valve_monitor_thread = threading.Thread(target=self._monitor_valve_position)
         self.valve_monitor_thread.daemon = True
 
+        self.stop_pump_monitor = threading.Event()
+        self.pause_pump_monitor = threading.Event()
+        self.pump_monitor_thread = threading.Thread(target=self._monitor_pump_status)
+        self.pump_monitor_thread.daemon = True
+
     def _init_valves(self):
         self.inj_valve_position.SetMin(1)
         self.inj_valve_position.SetMax(int(self.settings['injection_valve'][3]['positions']))
@@ -1281,7 +1286,7 @@ class TRFlowPanel(wx.Panel):
 
         logger.info('Valve initializiation successful.')
 
-        self.valve_monitor_thread.start()
+        # self.valve_monitor_thread.start()
 
     def _init_pumps(self):
         pumps = [('sample_pump', self.settings['sample_pump']),
@@ -1290,7 +1295,7 @@ class TRFlowPanel(wx.Panel):
             ]
 
         for pump in pumps:
-            name = pump[0]
+            name = pump[1][0]
             ptype = pump[1][1].replace(' ', '_')
             com = pump[1][2]
             syringe = pump[1][3][0]
@@ -1317,8 +1322,12 @@ class TRFlowPanel(wx.Panel):
 
             self.pumps[name] = (name, ptype, com, address)
 
-            # Need to set pump connection status
+            self.set_units(name, self.settings['flow_units'])
 
+            self.set_pump_status(name, 'Connected')
+            self.pump_panels[name].connected = True
+
+        self.pump_monitor_thread.start()
 
     def _init_flowmeters(self):
         pass
@@ -1348,20 +1357,25 @@ class TRFlowPanel(wx.Panel):
 
 
         self.sample_pump_panel = TRPumpPanel(self, self.settings['sample_pump'][0],
-            self.settings['sample_pump'][0],
+            self.settings['sample_pump'][0], self.settings['sample_pump'][1],
             flow_rate=self.settings['sample_pump'][5]['flow_rate'],
             refill_rate=self.settings['sample_pump'][5]['refill_rate'],
             syringe=self.settings['sample_pump'][3][0])
         self.buffer1_pump_panel = TRPumpPanel(self, self.settings['buffer1_pump'][0],
-            self.settings['buffer1_pump'][0],
+            self.settings['buffer1_pump'][0], self.settings['buffer1_pump'][1],
             flow_rate=self.settings['buffer1_pump'][5]['flow_rate'],
             refill_rate=self.settings['buffer1_pump'][5]['refill_rate'],
             syringe=self.settings['buffer1_pump'][3][0])
         self.buffer2_pump_panel = TRPumpPanel(self, self.settings['buffer2_pump'][0],
-            self.settings['buffer2_pump'][0],
+            self.settings['buffer2_pump'][0], self.settings['buffer2_pump'][1],
             flow_rate=self.settings['buffer2_pump'][5]['flow_rate'],
             refill_rate=self.settings['buffer2_pump'][5]['refill_rate'],
             syringe=self.settings['buffer1_pump'][3][0])
+
+        self.pump_panels = {}
+        self.pump_panels[self.settings['sample_pump'][0]] = self.sample_pump_panel
+        self.pump_panels[self.settings['buffer1_pump'][0]] = self.buffer1_pump_panel
+        self.pump_panels[self.settings['buffer2_pump'][0]] = self.buffer2_pump_panel
 
         pump_sizer = wx.BoxSizer(wx.HORIZONTAL)
         pump_sizer.Add(self.sample_pump_panel)
@@ -1490,7 +1504,7 @@ class TRFlowPanel(wx.Panel):
                             pos = self.buffer2_valve_position.GetValue()
 
                         if int(pos) != int(ret[2][i]):
-                            self._set_valve_status(name, ret[2][i])
+                            wx.CallAfter(self._set_valve_status, name, ret[2][i])
 
             while time.time() - start_time < interval:
                 time.sleep(0.1)
@@ -1500,14 +1514,140 @@ class TRFlowPanel(wx.Panel):
 
         logger.info('Stopping continuous monitoring of valve positions')
 
-    def start_pump(self, pump_name, start, fixed, dispense, vol):
-        pass
+    def start_pump(self, pump_name, start, fixed, dispense, vol, pump_mode,
+            units, pump_panel):
+        if start:
+            if dispense:
+                cmd_name = 'dispense'
+            else:
+                cmd_name = 'aspirate'
 
-    def change_flow_rate(self, pump_name, flow_rate, refill_rate):
-        pass
+            if pump_mode == 'continuous':
+                if not fixed:
+                    cmd = ('start_flow', (pump_name,), {})
+                else:
+                    cmd = (cmd_name, (pump_name, vol), {'units':units})
+            else:
+                if not fixed:
+                    cmd = ('{}_all'.format(cmd_name), (pump_name,), {})
+                else:
+                    cmd = (cmd_name, (pump_name, vol,), {'units':units})
 
-    def set_pump_cal(pump_name, vals):
-        pass
+            ret = self._send_pumpcmd(cmd, True)
+
+            if ret is not None and ret[0] == pump_name and ret[1] == 'start':
+                success = ret[1]
+            else:
+                success = False
+
+        else:
+            cmd = ('stop', (pump_name,), {})
+            ret = self._send_pumpcmd(cmd, True)
+
+            if (ret is not None and ret[0] == pump_name and ret[1] == 'stop'):
+                success = ret[1]
+            else:
+                success = False
+
+        if success:
+            pump_panel.on_pump_run()
+
+    def set_flow_rate(self, pump_name, flow_rate, pump_mode,
+        dispense):
+        if pump_mode == 'continuous':
+            if dispense:
+                mult = 1
+            else:
+                mult = -1
+        else:
+            mult = 1
+
+        fr = float(flow_rate)*mult
+
+        cmd = ('set_flow_rate', (pump_name, fr), {})
+
+        self._send_pumpcmd(cmd)
+
+        return True
+
+    def set_refill_rate(self, pump_name, flow_rate, pump_mode,
+        dispense):
+
+        fr = float(flow_rate)
+
+        cmd = ('set_refill_rate', (pump_name, fr), {})
+
+        self._send_pumpcmd(cmd)
+
+        return True
+
+    def set_units(self, pump_name, units):
+        cmd = ('set_units', (pump_name, units), {})
+        self._send_pumpcmd(cmd)
+
+
+    def set_pump_cal(self, pump_name, vals):
+        cmd = ('set_pump_cal', (pump_name,), vals)
+        self._send_pumpcmd(cmd)
+
+    def get_pump_status(self, pump_name):
+        cmd = ('get_status', (pump_name,), {})
+
+        ret = self._send_pumpcmd(cmd, True)
+
+        if ret is not None and ret[0] == pump_name and ret[1] == 'status':
+            self.set_pump_status(pump_name, ret[2][0])
+            self.set_pump_status_volume(pump_name, ret[2][1])
+
+    def get_all_pump_status(self, names):
+        cmd = ('get_status_multi', (names,), {})
+
+        ret = self._send_pumpcmd(cmd, True)
+
+        if ret is not None and ret[1] == 'multi_status':
+            for i, pump_name in enumerate(ret[0]):
+                self.set_pump_status(pump_name, ret[2][i][0])
+                self.set_pump_status_volume(pump_name, ret[2][i][1])
+
+    def _monitor_pump_status(self):
+        logger.info('Starting continuous monitoring of pump status')
+
+        monitor_cmd = ('get_status_multi', ([pump for pump in self.pumps],), {})
+
+        interval = 2
+
+        while not self.stop_pump_monitor.is_set():
+            start_time = time.time()
+            if (not self.stop_pump_monitor.is_set() and
+                not self.pause_pump_monitor.is_set()):
+                ret = self._send_pumpcmd(monitor_cmd, True)
+
+                if (ret is not None and ret[1] == 'multi_status'
+                    and not self.pause_pump_monitor.is_set()):
+                    for i, name in enumerate(ret[0]):
+                        pump_panel = self.pump_panel[name]
+
+                        status = ret[2][i][0]
+                        vol = ret[2][i][1]
+
+                        if status != pump_panel.get_status():
+                            wx.CallAfter(self.set_pump_status, name, status)
+                        if round(float(vol), 3) != float(pump_panel.get_status_volume()):
+                            wx.CallAfter(self.set_pump_status_volume, name, vol)
+
+            while time.time() - start_time < interval:
+                time.sleep(0.1)
+
+                if self.stop_pump_monitor.is_set():
+                    break
+
+        logger.info('Stopping continuous monitoring of valve positions')
+
+    def set_pump_status(self, pump_name, status):
+       self.pump_panels[pump_name].set_status(status)
+
+    def set_pump_status_volume(self, pump_name, vol):
+        self.pump_panels[pump_name].set_status_volume(vol)
 
     def _send_valvecmd(self, cmd, response=False):
         ret_val = None
@@ -1550,12 +1690,12 @@ class TRFlowPanel(wx.Panel):
                 if not self.timeout_event.is_set():
                     ret_val = self.pump_return_q.popleft()
                 else:
-                    msg = ('Lost connection to the coflow control server. '
+                    msg = ('Lost connection to the flow control server. '
                         'Contact your beamline scientist.')
                     wx.CallAfter(self._show_error_dialog, msg, 'Connection error')
 
         else:
-            msg = ('No connection to the coflow control server. '
+            msg = ('No connection to the flow control server. '
                 'Contact your beamline scientist.')
 
             wx.CallAfter(self._show_error_dialog, msg, 'Connection error')
@@ -1584,7 +1724,7 @@ class TRFlowPanel(wx.Panel):
                     ret_val = self.fm_return_q.popleft()
 
                 else:
-                    msg = ('Lost connection to the coflow control server. '
+                    msg = ('Lost connection to the flow control server. '
                         'Contact your beamline scientist.')
 
                     dialog = wx.MessageDialog(self, msg, 'Connection error',
@@ -1594,7 +1734,7 @@ class TRFlowPanel(wx.Panel):
                     self.stop_get_fr_event.set()
 
         else:
-            msg = ('No connection to the coflow control server. '
+            msg = ('No connection to the flow control server. '
                 'Contact your beamline scientist.')
 
             dialog = wx.MessageDialog(self, msg, 'Connection error',
@@ -1647,7 +1787,7 @@ class TRPumpPanel(wx.Panel):
     :py:func:`_create_layout` function, and then add in type switching in the
     :py:func:`_on_type` function.
     """
-    def __init__(self, parent, panel_name, pump_name, flow_rate='',
+    def __init__(self, parent, panel_name, pump_name, pump_type, flow_rate='',
         refill_rate='', syringe=None):
         """
         Initializes the custom thread. Important parameters here are the
@@ -1701,6 +1841,7 @@ class TRPumpPanel(wx.Panel):
 
         self.tr_flow_panel = parent
         self.name = pump_name
+        self.pump_type = pump_type
         self.connected = False
 
         self.known_syringes = {'30 mL, EXEL': {'diameter': 23.5, 'max_volume': 30,
@@ -1777,13 +1918,13 @@ class TRPumpPanel(wx.Panel):
         self.direction_ctrl = wx.Choice(parent, choices=['Dispense', 'Aspirate'])
         self.direction_ctrl.SetSelection(0)
         self.flow_rate_ctrl = wx.TextCtrl(parent, value=flow_rate, size=(60,-1))
-        self.flow_units_lbl = wx.StaticText(parent, label='mL/min')
+        self.flow_units_lbl = wx.StaticText(parent, label=self.tr_flow_panel.settings['flow_units'])
         self.refill_rate_lbl = wx.StaticText(parent, label='Refill rate:')
         self.refill_rate_ctrl = wx.TextCtrl(parent, value=refill_rate, size=(60,-1))
-        self.refill_rate_units = wx.StaticText(parent, label='mL')
+        self.refill_rate_units = wx.StaticText(parent, label=self.tr_flow_panel.settings['flow_units'][:2])
         self.volume_lbl = wx.StaticText(parent, label='Volume:')
         self.volume_ctrl = wx.TextCtrl(parent, size=(60,-1))
-        self.vol_units_lbl = wx.StaticText(parent, label='mL')
+        self.vol_units_lbl = wx.StaticText(parent, label=self.tr_flow_panel.settings['flow_units'][:2])
 
         syr_types = sorted(self.known_syringes.keys(), key=lambda x: float(x.split()[0]))
         self.syringe_type = wx.Choice(parent, choices=syr_types)
@@ -1880,34 +2021,37 @@ class TRPumpPanel(wx.Panel):
     def _on_fr_change(self, evt):
         self._set_flowrate()
 
-    def on_pump_run(self, start):
+    def on_pump_run(self):
         """
         Called from parent to set visual status updates
         """
+        print('in on_pump_run')
+        print(self.run_button.GetLabel())
         if self.run_button.GetLabel() == 'Start':
             mode = self.mode_ctrl.GetStringSelection()
 
             if self.pump_mode == 'continuous':
                 if mode == 'Fixed volume':
                     cmd = self.direction_ctrl.GetStringSelection().lower()
-                    self._set_status(cmd.capitalize())
+                    self.set_status(cmd.capitalize())
                 else:
-                    self._set_status('Flowing')
+                    self.set_status('Flowing')
             else:
                 if mode == 'Fixed volume':
                     cmd = self.direction_ctrl.GetStringSelection().lower()
-                    self._set_status(cmd.capitalize())
+                    self.set_status(cmd.capitalize())
                 else:
                     direction = self.direction_ctrl.GetStringSelection().lower()
-                    self._set_status(direction.capitalize())
+                    self.set_status(direction.capitalize())
 
             self.fr_button.Show()
             self.run_button.SetLabel('Stop')
 
         else:
+            print('here')
             self.run_button.SetLabel('Start')
             self.fr_button.Hide()
-            self._set_status('Done')
+            self.set_status('Done')
 
     def run_pump(self):
         """
@@ -1932,8 +2076,29 @@ class TRPumpPanel(wx.Panel):
             wx.MessageBox(msg, "Error setting refill rate")
             cont = False
 
+        if self.direction_ctrl.GetStringSelection().lower() == 'dispense':
+            dispense = True
+        else:
+            dispense = False
+
         if cont:
-            success = self.tr_flow_panel.change_flow_rate(self.name, flowr, refillr)
+            if self.pump_mode == 'continuous':
+                success = self.tr_flow_panel.set_flow_rate(self.name, flowr,
+                    self.pump_mode, dispense)
+            else:
+                if self.pump_type == 'NE 500':
+                    if dispense:
+                        success = self.tr_flow_panel.set_flow_rate(self.name, flowr,
+                            self.pump_mode, dispense)
+                    else:
+                        success = self.tr_flow_panel.set_refill_rate(self.name, refillr,
+                            self.pump_mode, dispense)
+
+                else:
+                    success = self.tr_flow_panel.set_flow_rate(self.name, flowr,
+                            self.pump_mode, dispense)
+                    success = self.tr_flow_panel.set_refill_rate(self.name, refillr,
+                            self.pump_mode, dispense)
         else:
             success = False
             logger.debug('Failed to set pump %s flow rate', self.name)
@@ -1969,9 +2134,8 @@ class TRPumpPanel(wx.Panel):
         Gathers all the necessary data and sends the start/stop command
         to the parent to send the pump.
         """
-        if self.pump is not None:
+        if self.connected:
             if self.run_button.GetLabel() == 'Start':
-
                 start = True
 
                 fr_set = self._set_flowrate()
@@ -1988,9 +2152,10 @@ class TRPumpPanel(wx.Panel):
                         logger.debug('Failed to set dispense/aspirate volume to %s for pump %s', vol, self.name)
                         return
 
-                if mode == 'Fixed volume':
                     fixed = True
+
                 else:
+                    vol = None
                     fixed = False
 
                 if self.direction_ctrl.GetStringSelection().lower() == 'dispense':
@@ -2004,7 +2169,10 @@ class TRPumpPanel(wx.Panel):
                 dispense = False
                 vol = None
 
-            self.tr_flow_panel.start_pump(self.name, start, fixed, dispense, vol)
+            units = self.flow_units_lbl.GetLabel()
+
+            self.tr_flow_panel.start_pump(self.name, start, fixed, dispense, vol,
+                self.pump_mode, units, self)
 
         else:
             msg = "Cannot start pump flow before the pump is connected."
@@ -2026,7 +2194,7 @@ class TRPumpPanel(wx.Panel):
             if vol != -1:
                 self.tr_flow_panel.set_pump_volume(self.name, vol)
 
-                wx.CallAfter(self._set_status_volume, vol)
+                wx.CallAfter(self.set_status_volume, vol)
                 wx.CallAfter(self.syringe_vol_gauge.SetValue,
                     int(round(float(vol)*1000)))
 
@@ -2034,7 +2202,7 @@ class TRPumpPanel(wx.Panel):
             msg = "Volume must be a number."
             wx.MessageBox(msg, "Error setting volume")
 
-    def _set_status(self, status):
+    def set_status(self, status):
         """
         Changes the status in the GUI.
 
@@ -2043,7 +2211,13 @@ class TRPumpPanel(wx.Panel):
         logger.debug('Setting pump %s status to %s', self.name, status)
         self.status.SetLabel(status)
 
-    def _set_status_volume(self, volume):
+    def get_status(self):
+        return self.status.GetLabel()
+
+    def get_status_volume(self):
+        return self.syringe_volume.GetLabel()
+
+    def set_status_volume(self, volume):
         logger.debug("Setting pump %s volume to %s", self.name, volume)
         self.syringe_volume.SetLabel('{}'.format(round(float(volume), 3)))
 
