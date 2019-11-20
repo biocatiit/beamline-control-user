@@ -1795,7 +1795,7 @@ class PumpCommThread(threading.Thread):
         pump = self._connected_pumps[name]
         is_moving = pump.is_moving()
         volume = pump.volume
-        self.return_queue.append(name, 'status', (is_moving, volume))
+        self.return_queue.append((name, 'status', (is_moving, volume)))
 
     def _get_status_multiple(self, names):
         status = []
@@ -1803,9 +1803,9 @@ class PumpCommThread(threading.Thread):
             pump = self._connected_pumps[name]
             is_moving = pump.is_moving()
             volume = pump.volume
-            status.append(is_moving, volume)
+            status.append((is_moving, volume))
 
-        self.return_queue.append(names, 'multi_status', status)
+        self.return_queue.append((names, 'multi_status', status))
 
     def _send_cmd(self, name, cmd, get_response=True):
         """
