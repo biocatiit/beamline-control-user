@@ -1286,7 +1286,7 @@ class TRFlowPanel(wx.Panel):
 
         logger.info('Valve initializiation successful.')
 
-        # self.valve_monitor_thread.start()
+        self.valve_monitor_thread.start()
 
     def _init_pumps(self):
         pumps = [('sample_pump', self.settings['sample_pump']),
@@ -1516,6 +1516,7 @@ class TRFlowPanel(wx.Panel):
 
     def start_pump(self, pump_name, start, fixed, dispense, vol, pump_mode,
             units, pump_panel):
+        self.pause_pump_monitor.set()
         if start:
             if dispense:
                 cmd_name = 'dispense'
@@ -1550,7 +1551,9 @@ class TRFlowPanel(wx.Panel):
                 success = False
 
         if success:
-            pump_panel.on_pump_run()
+            self.get_pump_status(pump_name)
+
+        self.pause_pump_monitor.clear()
 
     def set_flow_rate(self, pump_name, flow_rate, pump_mode,
         dispense):
@@ -1590,13 +1593,17 @@ class TRFlowPanel(wx.Panel):
         cmd = ('set_pump_cal', (pump_name,), vals)
         self._send_pumpcmd(cmd)
 
+    def set_pump_volume(self, pump_name, volume):
+        cmd = ('set_volume', (pump_name, volume), {})
+        self._send_pumpcmd(cmd)
+
     def get_pump_status(self, pump_name):
         cmd = ('get_status', (pump_name,), {})
 
         ret = self._send_pumpcmd(cmd, True)
 
         if ret is not None and ret[0] == pump_name and ret[1] == 'status':
-            self.set_pump_status(pump_name, ret[2][0])
+            self.set_pump_moving(pump_name, ret[2][0])
             self.set_pump_status_volume(pump_name, ret[2][1])
 
     def get_all_pump_status(self, names):
@@ -1606,7 +1613,7 @@ class TRFlowPanel(wx.Panel):
 
         if ret is not None and ret[1] == 'multi_status':
             for i, pump_name in enumerate(ret[0]):
-                self.set_pump_status(pump_name, ret[2][i][0])
+                self.set_pump_moving(pump_name, ret[2][i][0])
                 self.set_pump_status_volume(pump_name, ret[2][i][1])
 
     def _monitor_pump_status(self):
@@ -1625,13 +1632,13 @@ class TRFlowPanel(wx.Panel):
                 if (ret is not None and ret[1] == 'multi_status'
                     and not self.pause_pump_monitor.is_set()):
                     for i, name in enumerate(ret[0]):
-                        pump_panel = self.pump_panel[name]
+                        pump_panel = self.pump_panels[name]
 
-                        status = ret[2][i][0]
+                        moving = ret[2][i][0]
                         vol = ret[2][i][1]
 
-                        if status != pump_panel.get_status():
-                            wx.CallAfter(self.set_pump_status, name, status)
+                        if moving != pump_panel.moving:
+                            wx.CallAfter(self.set_pump_moving, name, moving)
                         if round(float(vol), 3) != float(pump_panel.get_status_volume()):
                             wx.CallAfter(self.set_pump_status_volume, name, vol)
 
@@ -1648,6 +1655,9 @@ class TRFlowPanel(wx.Panel):
 
     def set_pump_status_volume(self, pump_name, vol):
         self.pump_panels[pump_name].set_status_volume(vol)
+
+    def set_pump_moving(self, pump_name, moving):
+        self.pump_panels[pump_name].set_moving(moving)
 
     def _send_valvecmd(self, cmd, response=False):
         ret_val = None
@@ -1754,6 +1764,10 @@ class TRFlowPanel(wx.Panel):
         logger.debug('Closing all device connections')
 
         self.stop_valve_monitor.set()
+        self.stop_pump_monitor.set()
+
+        self.valve_monitor_thread.join()
+        self.pump_monitor_thread.join()
 
         if not self.timeout_event.is_set():
             for valve in self.valves:
@@ -1843,6 +1857,7 @@ class TRPumpPanel(wx.Panel):
         self.name = pump_name
         self.pump_type = pump_type
         self.connected = False
+        self.moving = False
 
         self.known_syringes = {'30 mL, EXEL': {'diameter': 23.5, 'max_volume': 30,
             'max_rate': 70},
@@ -1995,6 +2010,10 @@ class TRPumpPanel(wx.Panel):
         self.vol_units_lbl.Hide()
         self.fr_button.Hide()
 
+        max_vol = self.known_syringes[self.syringe_type.GetStringSelection()]['max_volume']
+        self.syringe_vol_gauge_high.SetLabel(str(max_vol))
+        self.syringe_vol_gauge.SetRange(int(round(float(max_vol)*1000)))
+
         self.pump_mode = 'syringe'
 
         self.Refresh()
@@ -2025,9 +2044,7 @@ class TRPumpPanel(wx.Panel):
         """
         Called from parent to set visual status updates
         """
-        print('in on_pump_run')
-        print(self.run_button.GetLabel())
-        if self.run_button.GetLabel() == 'Start':
+        if self.moving:
             mode = self.mode_ctrl.GetStringSelection()
 
             if self.pump_mode == 'continuous':
@@ -2048,7 +2065,6 @@ class TRPumpPanel(wx.Panel):
             self.run_button.SetLabel('Stop')
 
         else:
-            print('here')
             self.run_button.SetLabel('Start')
             self.fr_button.Hide()
             self.set_status('Done')
@@ -2194,7 +2210,7 @@ class TRPumpPanel(wx.Panel):
             if vol != -1:
                 self.tr_flow_panel.set_pump_volume(self.name, vol)
 
-                wx.CallAfter(self.set_status_volume, vol)
+                wx.CallAfter(self._set_status_volume, vol)
                 wx.CallAfter(self.syringe_vol_gauge.SetValue,
                     int(round(float(vol)*1000)))
 
@@ -2217,9 +2233,24 @@ class TRPumpPanel(wx.Panel):
     def get_status_volume(self):
         return self.syringe_volume.GetLabel()
 
-    def set_status_volume(self, volume):
+    def set_status_volume(self, vol):
+        try:
+            vol = float(vol)
+            if vol != -1:
+                self._set_status_volume(vol)
+                self.syringe_vol_gauge.SetValue(int(round(float(vol)*1000)))
+
+        except ValueError:
+            pass
+
+    def _set_status_volume(self, volume):
         logger.debug("Setting pump %s volume to %s", self.name, volume)
         self.syringe_volume.SetLabel('{}'.format(round(float(volume), 3)))
+
+    def set_moving(self, moving):
+        if moving != self.moving:
+            self.moving = moving
+            self.on_pump_run()
 
     def _on_syringe_type(self, evt):
         vals = copy.deepcopy(self.known_syringes[self.syringe_type.GetStringSelection()])
