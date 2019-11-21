@@ -1252,6 +1252,7 @@ class TRFlowPanel(wx.Panel):
         self.valve_monitor_interval = 2
         self.pump_monitor_interval = 2
         self.fm_monitor_interval = 2
+        self.fm_monitor_all_interval = 10
 
     def _init_valves(self):
         self.inj_valve_position.SetMin(1)
@@ -1734,18 +1735,36 @@ class TRFlowPanel(wx.Panel):
         flow_cmd = ('get_fr_multi', ([fm for fm in self.fms],), {})
         all_cmd = ('get_all_multi', ([fm for fm in self.fms]), {})
 
+        monitor_all_time = time.time()
+
         while not self.stop_fm_monitor.is_set():
             start_time = time.time()
             if (not self.stop_fm_monitor.is_set() and
                 not self.pause_fm_monitor.is_set()):
-                ret = self._send_fmcmd(flow_cmd, True)
 
-                if (ret is not None and ret[0] == 'multi_flow'
-                    and not self.pause_fm_monitor.is_set()):
-                    for i, name in enumerate(ret[1]):
-                        flow_rate = ret[2][i]
+                if time.time()-monitor_all_time < self.fm_monitor_all_interval:
+                    ret = self._send_fmcmd(flow_cmd, True)
 
-                        wx.CallAfter(self._set_fm_values, name, flow_rate=flow_rate)
+                    if (ret is not None and ret[0] == 'multi_flow'
+                        and not self.pause_fm_monitor.is_set()):
+
+                        for i, name in enumerate(ret[1]):
+                            flow_rate = ret[2][i]
+                            wx.CallAfter(self._set_fm_values, name, flow_rate=flow_rate)
+                else:
+                    ret = self._send_fmcmd(all_cmd, True)
+
+                    if (ret is not None and ret[0] == 'multi_all'
+                        and not self.pause_fm_monitor.is_set()):
+
+                        for i, name in enumerate(ret[1]):
+                            flow_rate = ret[2][i][0]
+                            density = ret[2][i][1]
+                            T = ret[2][i][2]
+                            wx.CallAfter(self._set_fm_values, name,
+                                flow_rate=flow_rate, density=density, T=T)
+
+                    monitor_all_time = time.time()
 
             while time.time() - start_time < self.fm_monitor_interval:
                 time.sleep(0.1)

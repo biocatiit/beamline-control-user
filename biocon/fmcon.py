@@ -450,6 +450,24 @@ class FlowMeterCommThread(threading.Thread):
 
         self.return_queue.append(('multi_flow', names, flow_rates))
 
+    def _get_all_multiple(self, names):
+        """
+        This method gets the flow rate measured by a flow meter.
+
+        :param str name: The unique identifier for a flow meter that was used
+            in the :py:func:`_connect_fm` method.
+        """
+        logger.debug("Getting multiple flow rates")
+        vals = []
+        for name in names:
+            fm = self._connected_fms[name]
+            density = fm.density
+            temperature = fm.temperature
+            flow_rate = fm.flow_rate
+            vals.append((flow_rate, density, temperature))
+
+        self.return_queue.append(('multi_flow', names, vals))
+
     def _abort(self):
         """
         Clears the ``command_queue`` and the ``return_queue``.
