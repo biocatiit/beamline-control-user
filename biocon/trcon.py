@@ -1230,6 +1230,7 @@ class TRFlowPanel(wx.Panel):
     def _init_values(self):
         self.valves = {}
         self.pumps = {}
+        self.fms = {}
 
         self.error_dialog = None
 
@@ -1242,6 +1243,15 @@ class TRFlowPanel(wx.Panel):
         self.pause_pump_monitor = threading.Event()
         self.pump_monitor_thread = threading.Thread(target=self._monitor_pump_status)
         self.pump_monitor_thread.daemon = True
+
+        self.stop_fm_monitor = threading.Event()
+        self.pause_fm_monitor = threading.Event()
+        self.fm_monitor_thread = threading.Thread(target=self._monitor_fm_status)
+        self.fm_monitor_thread.daemon = True
+
+        self.valve_monitor_interval = 2
+        self.pump_monitor_interval = 2
+        self.fm_monitor_interval = 2
 
     def _init_valves(self):
         self.inj_valve_position.SetMin(1)
@@ -1289,6 +1299,7 @@ class TRFlowPanel(wx.Panel):
         self.valve_monitor_thread.start()
 
     def _init_pumps(self):
+        logger.info('Initializing pumps on startup')
         pumps = [('sample_pump', self.settings['sample_pump']),
             ('buffer1_pump', self.settings['buffer1_pump']),
             ('buffer2_pump', self.settings['buffer2_pump']),
@@ -1329,8 +1340,54 @@ class TRFlowPanel(wx.Panel):
 
         self.pump_monitor_thread.start()
 
+        logger.info('Pump initializiation successful')
+
     def _init_flowmeters(self):
-        pass
+        outlet_fm = self.settings['outlet_fm']
+
+        logger.info('Initializing  flow meters on startup')
+
+        outlet_args = (outlet_fm[1], 'outlet_fm', outlet_fm[0])
+        outlet_init_cmd = ('connect', outlet_args, {})
+
+        self.fms['outlet_fm'] = ('outlet_fm', outlet_fm[0], outlet_fm[1])
+
+        try:
+            _, outlet_init = self._send_fmcmd(outlet_init_cmd, response=True)
+        except Exception:
+            outlet_init = False
+
+        if not outlet_init and not self.timeout_event.is_set():
+            logger.error('Failed to connect to the outlet flow meter.')
+
+            msg = ('Could not connect to the coflow outlet flow meter. '
+                'Contact your beamline scientist.')
+
+            dialog = wx.MessageDialog(self, msg, 'Connection error',
+                style=wx.OK|wx.ICON_ERROR)
+            dialog.ShowModal()
+
+        if outlet_init:
+            self._send_fmcmd(('set_units', ('outlet_fm', self.settings['flow_units']), {}))
+
+            ret = self._send_fmcmd(('get_density', ('outlet_fm',), {}), True)
+            if ret is not None and ret[0] == 'density':
+                self._set_fm_values('outlet_fm', density=ret[1])
+
+            ret = self._send_fmcmd(('get_temperature', ('outlet_fm',), {}), True)
+            if ret is not None and ret[0] == 'temperature':
+                self._set_fm_values('outlet_fm', T=ret[1])
+
+            ret = self._send_fmcmd(('get_flow_rate', ('outlet_fm',), {}), True)
+            if ret is not None and ret[0] == 'flow_rate':
+                self._set_fm_values('outlet_fm', flow_rate=ret[1])
+
+            logger.info('Coflow flow meters initialization successful')
+
+        else:
+            self.stop_fm_monitor.set()
+
+        self.fm_monitor_thread.start()
 
     def _create_layout(self):
 
@@ -1383,8 +1440,24 @@ class TRFlowPanel(wx.Panel):
         pump_sizer.Add(self.buffer2_pump_panel)
 
 
+        self.outlet_flow = wx.StaticText(self)
+        self.outlet_density = wx.StaticText(self)
+        self.outlet_T = wx.StaticText(self)
+
+        fm_sizer = wx.FlexGridSizer(cols=3, vgap=2, hgap=2)
+        fm_sizer.Add(wx.StaticText(self, label='Flow rate:'))
+        fm_sizer.Add(self.outlet_flow)
+        fm_sizer.Add(wx.StaticText(self, label=self.settings['flow_units']))
+        fm_sizer.Add(wx.StaticText(self, label='Density:'))
+        fm_sizer.Add(self.outlet_density)
+        fm_sizer.Add(wx.StaticText(self, label='g/L'))
+        fm_sizer.Add(wx.StaticText(self, label='Temperature:'))
+        fm_sizer.Add(self.outlet_T)
+        fm_sizer.Add(wx.StaticText(self, label='°C'))
+
         top_sizer = wx.BoxSizer(wx.VERTICAL)
         top_sizer.Add(valve_sizer)
+        top_sizer.Add(fm_sizer)
         top_sizer.Add(pump_sizer)
 
         self.SetSizer(top_sizer)
@@ -1483,8 +1556,6 @@ class TRFlowPanel(wx.Panel):
 
         monitor_cmd = ('get_position_multi', ([valve for valve in self.valves],), {})
 
-        interval = 2
-
         while not self.stop_valve_monitor.is_set():
             start_time = time.time()
             if (not self.stop_valve_monitor.is_set() and
@@ -1506,7 +1577,7 @@ class TRFlowPanel(wx.Panel):
                         if int(pos) != int(ret[2][i]):
                             wx.CallAfter(self._set_valve_status, name, ret[2][i])
 
-            while time.time() - start_time < interval:
+            while time.time() - start_time < self.valve_monitor_interval:
                 time.sleep(0.1)
 
                 if self.stop_valve_monitor.is_set():
@@ -1621,8 +1692,6 @@ class TRFlowPanel(wx.Panel):
 
         monitor_cmd = ('get_status_multi', ([pump for pump in self.pumps],), {})
 
-        interval = 2
-
         while not self.stop_pump_monitor.is_set():
             start_time = time.time()
             if (not self.stop_pump_monitor.is_set() and
@@ -1642,13 +1711,13 @@ class TRFlowPanel(wx.Panel):
                         if round(float(vol), 3) != float(pump_panel.get_status_volume()):
                             wx.CallAfter(self.set_pump_status_volume, name, vol)
 
-            while time.time() - start_time < interval:
+            while time.time() - start_time < self.pump_monitor_interval:
                 time.sleep(0.1)
 
                 if self.stop_pump_monitor.is_set():
                     break
 
-        logger.info('Stopping continuous monitoring of valve positions')
+        logger.info('Stopping continuous monitoring of pump status')
 
     def set_pump_status(self, pump_name, status):
        self.pump_panels[pump_name].set_status(status)
@@ -1658,6 +1727,63 @@ class TRFlowPanel(wx.Panel):
 
     def set_pump_moving(self, pump_name, moving):
         self.pump_panels[pump_name].set_moving(moving)
+
+    def _monitor_fm_status(self):
+        logger.info('Starting continuous monitoring of flow rate')
+
+        flow_cmd = ('get_fr_multi', ([fm for fm in self.fms],), {})
+        all_cmd = ('get_all_multi', ([fm for fm in self.fms]), {})
+
+        while not self.stop_fm_monitor.is_set():
+            start_time = time.time()
+            if (not self.stop_fm_monitor.is_set() and
+                not self.pause_fm_monitor.is_set()):
+                ret = self._send_fmcmd(flow_cmd, True)
+
+                if (ret is not None and ret[0] == 'multi_flow'
+                    and not self.pause_fm_monitor.is_set()):
+                    for i, name in enumerate(ret[1]):
+                        flow_rate = ret[2][i]
+
+                        wx.CallAfter(self._set_fm_values, name, flow_rate=flow_rate)
+
+            while time.time() - start_time < self.fm_monitor_interval:
+                time.sleep(0.1)
+
+                if self.stop_fm_monitor.is_set():
+                    break
+
+        logger.info('Stopping continuous monitoring of flow rate')
+
+    def _set_fm_values(self, fm_name, flow_rate=None, density=None, T=None):
+        if fm_name == 'outlet_fm':
+            rate_ctrl = self.outlet_flow
+            density_ctrl = self.outlet_density
+            T_ctrl = self.outlet_T
+
+        if flow_rate is not None:
+            try:
+                flow_rate = round(float(flow_rate), 2)
+                if float(rate_ctrl.GetLabel()) != flow_rate:
+                    rate_ctrl.SetLabel('{}'.format(flow_rate))
+            except Exception:
+                rate_ctrl.SetLabel('{}'.format(flow_rate))
+
+        if density is not None:
+            try:
+                density = round(float(density), 2)
+                if float(density_ctrl.GetLabel()) != density:
+                    density_ctrl.SetLabel('{}'.format(density))
+            except Exception:
+                density_ctrl.SetLabel('{}'.format(density))
+
+        if T is not None:
+            try:
+                T = round(float(T), 2)
+                if float(T_ctrl).GetLabel() != T:
+                    T_ctrl.SetLabel('{}'.format(T))
+            except Exception:
+                T_ctrl.SetLabel('{}'.format(T))
 
     def _send_valvecmd(self, cmd, response=False):
         ret_val = None
@@ -1677,11 +1803,15 @@ class TRFlowPanel(wx.Panel):
                         'Contact your beamline scientist.')
                     wx.CallAfter(self._show_error_dialog, msg, 'Connection error')
 
+                    self.stop_valve_monitor.set()
+
         else:
             msg = ('No connection to the flow control server. '
                 'Contact your beamline scientist.')
 
             wx.CallAfter(self._show_error_dialog, msg, 'Connection error')
+
+            self.stop_valve_monitor.set()
 
 
         return ret_val
@@ -1704,11 +1834,15 @@ class TRFlowPanel(wx.Panel):
                         'Contact your beamline scientist.')
                     wx.CallAfter(self._show_error_dialog, msg, 'Connection error')
 
+                    self.stop_pump_monitor.set()
+
         else:
             msg = ('No connection to the flow control server. '
                 'Contact your beamline scientist.')
 
             wx.CallAfter(self._show_error_dialog, msg, 'Connection error')
+
+            self.stop_pump_monitor.set()
 
 
         return ret_val
@@ -1741,7 +1875,7 @@ class TRFlowPanel(wx.Panel):
                         style=wx.OK|wx.ICON_ERROR)
                     wx.CallAfter(dialog.ShowModal)
 
-                    self.stop_get_fr_event.set()
+                    self.stop_fm_monitor.set()
 
         else:
             msg = ('No connection to the flow control server. '
@@ -1751,7 +1885,7 @@ class TRFlowPanel(wx.Panel):
                 style=wx.OK|wx.ICON_ERROR)
             wx.CallAfter(dialog.ShowModal)
 
-            self.stop_get_fr_event.set()
+            self.stop_fm_monitor.set()
 
         return ret_val
 
@@ -1765,15 +1899,22 @@ class TRFlowPanel(wx.Panel):
 
         self.stop_valve_monitor.set()
         self.stop_pump_monitor.set()
+        self.stop_fm_monitor.set()
 
-        self.valve_monitor_thread.join()
-        self.pump_monitor_thread.join()
+        try:
+            self.valve_monitor_thread.join(5)
+            self.pump_monitor_thread.join(5)
+            self.fm_monitor_thread.join(5)
+        except Exception:
+            pass
 
         if not self.timeout_event.is_set():
             for valve in self.valves:
                 self._send_valvecmd(('disconnect', (valve,), {}), True)
             for pump in self.pumps:
                 self._send_pumpcmd(('disconnect', (pump,), {}), True)
+            for fm in self.fms:
+                self._send_fmcmd(('disconnect', (fm,), {}), True)
 
         self.valve_con.stop()
         self.pump_con.stop()
@@ -2373,6 +2514,7 @@ if __name__ == '__main__':
         'buffer2_pump'          : ('Buffer 2', 'PHD 4400', 'COM4',
             ['20 mL, Medline P.C.', '3'], {}, {'flow_rate' : '10',
             'refill_rate' : '10'}),
+        'outlet_fm'             : ('BFS', 'COM5', [], {}),
         'flow_units'            : 'mL/min',
         }
 
