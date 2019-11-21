@@ -285,6 +285,7 @@ class FlowMeterCommThread(threading.Thread):
                         'get_temperature'   : self._get_temperature,
                         'disconnect'        : self._disconnect,
                         'get_fr_multi'      : self._get_flow_rate_multiple,
+                        'get_all_multi'     : self._get_all_multiple,
                         }
 
         self._connected_fms = OrderedDict()
