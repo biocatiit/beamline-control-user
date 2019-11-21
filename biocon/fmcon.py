@@ -467,7 +467,7 @@ class FlowMeterCommThread(threading.Thread):
             flow_rate = fm.flow_rate
             vals.append((flow_rate, density, temperature))
 
-        self.return_queue.append(('multi_flow', names, vals))
+        self.return_queue.append(('multi_all', names, vals))
 
     def _abort(self):
         """

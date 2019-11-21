@@ -1733,7 +1733,7 @@ class TRFlowPanel(wx.Panel):
         logger.info('Starting continuous monitoring of flow rate')
 
         flow_cmd = ('get_fr_multi', ([fm for fm in self.fms],), {})
-        all_cmd = ('get_all_multi', ([fm for fm in self.fms]), {})
+        all_cmd = ('get_all_multi', ([fm for fm in self.fms],), {})
 
         monitor_all_time = time.time()
 
