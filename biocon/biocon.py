@@ -71,10 +71,13 @@ class BioFrame(wx.Frame):
 
         for key in self.settings['components']:
             logger.info('Setting up %s panel', key)
-            if key == 'trsaxs':
-                label = 'TRSAXS'
+            if key == 'trsaxs_scan':
+                label = 'TRSAXS Scan'
+            elif key == 'trsaxs_flow':
+                label='TRSAXS Flow'
             else:
                 label = key.capitalize()
+
             box = wx.StaticBox(top_panel, label=label)
             box.SetOwnForegroundColour(wx.Colour('firebrick'))
             component_panel = self.settings['components'][key](self.settings[key], box, name=key)
@@ -87,10 +90,17 @@ class BioFrame(wx.Frame):
             self.component_panels[key] = component_panel
 
         if ('exposure' in self.component_sizers or 'coflow' in self.component_sizers
-            or 'trsaxs' in self.component_sizers):
+            or 'trsaxs_scan' in self.component_sizers):
             exp_sizer = wx.BoxSizer(wx.HORIZONTAL)
 
-            if 'exposure' in self.component_sizers:
+            if 'exposure' in self.component_sizers and 'trsaxs_flow' in self.component_sizers:
+                sub_sizer = wx.BoxSizer(wx.VERTICAL)
+                sub_sizer.Add(self.component_sizers['exposure'], proportion=1,
+                    border=10, flag=wx.EXPAND|wx.ALL)
+                sub_sizer.Add(self.component_sizers['trsaxs_flow'], proportion=1,
+                    border=10, flag=wx.EXPAND|wx.ALL)
+
+            elif 'exposure' in self.component_sizers:
                 exp_sizer.Add(self.component_sizers['exposure'], proportion=1,
                     border=10, flag=wx.EXPAND|wx.ALL)
 
@@ -98,8 +108,8 @@ class BioFrame(wx.Frame):
                 exp_sizer.Add(self.component_sizers['coflow'], border=10,
                     flag=wx.EXPAND|wx.ALL)
 
-            if 'trsaxs' in self.component_sizers:
-                exp_sizer.Add(self.component_sizers['trsaxs'], border=10,
+            if 'trsaxs_scan' in self.component_sizers:
+                exp_sizer.Add(self.component_sizers['trsaxs_scan'], border=10,
                     flag=wx.EXPAND|wx.ALL)
 
             panel_sizer.Add(exp_sizer, flag=wx.EXPAND)
@@ -267,7 +277,8 @@ if __name__ == '__main__':
     components = OrderedDict([
         ('exposure', expcon.ExpPanel),
         # ('coflow', coflowcon.CoflowPanel),
-        # ('trsaxs', trcon.TRPanel),
+        ('trsaxs_scan', trcon.TRScanPanel),
+        ('trsaxs_flow', trcon.TRFlowPanel)
         ])
 
     settings = {

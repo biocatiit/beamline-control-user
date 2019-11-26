@@ -297,7 +297,7 @@ class ExpCommThread(threading.Thread):
 
     def _start_tr_exp(self, exp_settings, comp_settings):
         exp_settings['metadata'] = self._add_metadata(exp_settings['metadata'])
-        self.tr_exposure(exp_settings, comp_settings['trsaxs'])
+        self.tr_exposure(exp_settings, comp_settings)
 
     def _start_muscle_exp(self, data_dir, fprefix, num_frames, exp_time, exp_period,
         **kwargs):
@@ -557,7 +557,19 @@ class ExpCommThread(threading.Thread):
 
         self._exp_event.clear()
 
-    def tr_exposure(self, exp_settings, tr_settings):
+    def tr_exposure(self, exp_settings, comp_settings):
+        if 'trsaxs_scan' in comp_settings:
+            tr_scan_settings = comp_settings['trsaxs_scan']
+            tr_scan = True
+        else:
+            tr_scan = False
+
+        if 'trsaxs_flow' in comp_settings:
+            tr_flow_settings = comp_settings['trsaxs_flow']
+            tr_flow = True
+        else:
+            tr_flow = False
+
         logger.debug('Setting up trsaxs exposure')
         det = self._mx_data['det']          #Detector
 
@@ -605,33 +617,41 @@ class ExpCommThread(threading.Thread):
 
         log_vals = exp_settings['struck_log_vals']
 
-        num_runs = tr_settings['num_scans']
-        x_start = tr_settings['scan_x_start']
-        x_end = tr_settings['scan_x_end']
-        y_start = tr_settings['scan_y_start']
-        y_end = tr_settings['scan_y_end']
-        motor_type = tr_settings['motor_type']
-        motor = tr_settings['motor']
-        vect_scan_speed = tr_settings['vect_scan_speed']
-        vect_scan_accel = tr_settings['vect_scan_accel']
-        vect_return_speed = tr_settings['vect_return_speed']
-        vect_return_accel = tr_settings['vect_return_accel']
-        return_speed = tr_settings['return_speed']
-        return_accel = tr_settings['return_accel']
+        num_runs = tr_scan_settings['num_scans']
+        x_start = tr_scan_settings['scan_x_start']
+        x_end = tr_scan_settings['scan_x_end']
+        y_start = tr_scan_settings['scan_y_start']
+        y_end = tr_scan_settings['scan_y_end']
+        motor_type = tr_scan_settings['motor_type']
+        motor = tr_scan_settings['motor']
+        vect_scan_speed = tr_scan_settings['vect_scan_speed']
+        vect_scan_accel = tr_scan_settings['vect_scan_accel']
+        vect_return_speed = tr_scan_settings['vect_return_speed']
+        vect_return_accel = tr_scan_settings['vect_return_accel']
+        return_speed = tr_scan_settings['return_speed']
+        return_accel = tr_scan_settings['return_accel']
 
         if motor_type == 'Newport_XPS':
-            pco_start = tr_settings['pco_start']
-            pco_end = tr_settings['pco_end']
-            pco_step = tr_settings['pco_step']
-            pco_direction = tr_settings['pco_direction']
-            pco_pulse_width = tr_settings['pco_pulse_width']
-            pco_encoder_settle_t = tr_settings['pco_encoder_settle_t']
-            x_motor = str(tr_settings['motor_x_name'])
-            y_motor = str(tr_settings['motor_y_name'])
-            x_positions = [i*tr_settings['x_pco_step']+tr_settings['x_pco_start']
+            pco_start = tr_scan_settings['pco_start']
+            pco_end = tr_scan_settings['pco_end']
+            pco_step = tr_scan_settings['pco_step']
+            pco_direction = tr_scan_settings['pco_direction']
+            pco_pulse_width = tr_scan_settings['pco_pulse_width']
+            pco_encoder_settle_t = tr_scan_settings['pco_encoder_settle_t']
+            x_motor = str(tr_scan_settings['motor_x_name'])
+            y_motor = str(tr_scan_settings['motor_y_name'])
+            x_positions = [i*tr_scan_settings['x_pco_step']+tr_scan_settings['x_pco_start']
                 for i in range(num_frames)]
-            y_positions = [i*tr_settings['y_pco_step']+tr_settings['y_pco_start']
+            y_positions = [i*tr_scan_settings['y_pco_step']+tr_scan_settings['y_pco_start']
                 for i in range(num_frames)]
+
+        if tr_flow:
+            start_condition = tr_flow_settings['start_condition']
+            start_flow_event = tr_flow_settings['start_flow_event']
+            start_exposure_event = tr_flow_settings['start_exposure_event']
+            start_autoinject_event = tr_flow_settings['autoinject_event']
+            autoinject = tr_flow_settings['autoinject']
+            autoinject_scan = tr_flow_settings['autoinject_scan']
 
         motor_cmd_q = deque()
         motor_answer_q = deque()
@@ -693,6 +713,7 @@ class ExpCommThread(threading.Thread):
 
         while (status & 0x1) != 0:
             time.sleep(0.01)
+            status = ab_burst.get_status()
 
         if exp_period > exp_time+0.01 and exp_period >= 0.02:
             #Shutter opens and closes, Takes 4 ms for open and close
@@ -707,6 +728,17 @@ class ExpCommThread(threading.Thread):
             ef_burst.setup(exp_time+0.001, exp_time, 1, 0, 1, -1)
             gh_burst.setup(exp_time+0.001, exp_time, 1, 0, 1, -1)
 
+        # Flow stuff goes here
+        if tr_flow:
+            if start_condition != 'none':
+                start_flow_event.set()
+
+            while not start_exposure_event.is_set():
+                if self._abort_event.is_set():
+                    self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6,
+                        comp_settings, exp_time)
+                    break
+                time.sleep(0.001)
 
 
         for current_run in range(1,num_runs+1):
@@ -763,13 +795,13 @@ class ExpCommThread(threading.Thread):
             while motor.is_moving():
                 if self._abort_event.is_set():
                     self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6,
-                        tr_settings, exp_time)
+                        comp_settings, exp_time)
                     break
                 time.sleep(0.001)
 
             if self._abort_event.is_set():
                 self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6,
-                    tr_settings, exp_time)
+                    comp_settings, exp_time)
                 break
 
             if motor_type == 'Newport_XPS':
@@ -789,6 +821,11 @@ class ExpCommThread(threading.Thread):
                 if vect_scan_accel[1] != 0:
                     motor.set_acceleration(vect_scan_accel[1], y_motor, 1)
 
+            if tr_flow:
+                if autoinject == 'after_scan':
+                    if current_run == int(autoinject_scan)+1:
+                        start_autoinject_event.set()
+
             motor_cmd_q.append(('move_absolute', ('TR_motor', (x_end, y_end)), {}))
 
             logger.info('Scan %s started', current_run)
@@ -804,7 +841,7 @@ class ExpCommThread(threading.Thread):
             while motor.is_moving():
                 if self._abort_event.is_set():
                     self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6,
-                        tr_settings, exp_time)
+                        comp_settings, exp_time)
                     break
 
                 time.sleep(0.001)
@@ -847,14 +884,14 @@ class ExpCommThread(threading.Thread):
                 time.sleep(0.001)
                 if self._abort_event.is_set():
                     self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6,
-                        tr_settings, exp_time)
+                        comp_settings, exp_time)
                     break
 
             logger.info('Scan %s done', current_run)
 
             if self._abort_event.is_set():
                 self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6,
-                    tr_settings, exp_time)
+                    comp_settings, exp_time)
                 break
 
         start = time.time()
@@ -867,7 +904,7 @@ class ExpCommThread(threading.Thread):
         while motor.is_moving():
             if self._abort_event.is_set():
                 self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6,
-                    tr_settings, exp_time)
+                    comp_settings, exp_time)
                 break
 
             time.sleep(0.001)
@@ -1709,7 +1746,7 @@ class ExpCommThread(threading.Thread):
         ab_burst_2.stop()
 
     def tr_abort_cleanup(self, det, struck, ab_burst, dio_out9, dio_out6,
-        tr_settings, exp_time):
+        comp_settings, exp_time):
         logger.info("Aborting trsaxs exposure")
 
         if exp_time < 60:
@@ -1740,13 +1777,22 @@ class ExpCommThread(threading.Thread):
         dio_out9.write(0) #Close the fast shutter
         dio_out6.write(1) #Close the slow normally closed xia shutter
 
-        motor_type = tr_settings['motor_type']
-        motor = tr_settings['motor']
+        if 'tr_scan' in comp_settings:
+            tr_scan_settings = comp_settings['tr_scan']
+
+        if 'tr_flow' in comp_settings:
+            tr_flow_settings = comp_settings['tr_flow']
+            tr_flow = True
+        else:
+            tr_flow = False
+
+        motor_type = tr_scan_settings['motor_type']
+        motor = tr_scan_settings['motor']
 
         if motor_type == 'Newport_XPS':
-            pco_direction = tr_settings['pco_direction']
-            x_motor = str(tr_settings['motor_x_name'])
-            y_motor = str(tr_settings['motor_y_name'])
+            pco_direction = tr_scan_settings['pco_direction']
+            x_motor = str(tr_scan_settings['motor_x_name'])
+            y_motor = str(tr_scan_settings['motor_y_name'])
 
         motor.stop()
 
@@ -1757,6 +1803,10 @@ class ExpCommThread(threading.Thread):
             else:
                 logger.debug('starting x pco')
                 motor.start_position_compare(y_motor)
+
+        if tr_flow:
+            stop_flow_event = tr_flow_settings['stop_flow_event']
+            stop_flow_event.set()
 
     def abort_all(self):
         logger.info("Aborting exposure due to unexpected error")
@@ -1915,7 +1965,7 @@ class ExpPanel(wx.Panel):
         self.muscle_sampling = wx.TextCtrl(self, value=self.settings['struck_measurement_time'],
             size=(60,-1), validator=utils.CharValidator('float'))
 
-        if 'trsaxs' in self.settings['components']:
+        if 'trsaxs_scan' in self.settings['components']:
             self.num_frames.SetValue('')
             self.num_frames.Disable()
             self.exp_time.Bind(wx.EVT_TEXT, self._on_change_exp_param)
@@ -2070,8 +2120,8 @@ class ExpPanel(wx.Panel):
         return
 
     def _on_change_exp_param(self, evt):
-        if 'trsaxs' in self.settings['components']:
-            trsaxs_panel = wx.FindWindowByName('trsaxs')
+        if 'trsaxs_scan' in self.settings['components']:
+            trsaxs_panel = wx.FindWindowByName('trsaxs_scan')
             trsaxs_panel.update_params()
 
     def _on_start_exp(self, evt):
@@ -2111,8 +2161,8 @@ class ExpPanel(wx.Panel):
         self.stop_exp_btn.Enable()
         self.total_time = exp_values['num_frames']*exp_values['exp_period']
 
-        if 'trsaxs' in self.settings['components']:
-            self.total_time = comp_settings['trsaxs']['total_time']+1*comp_settings['trsaxs']['num_scans']
+        if 'trsaxs_scan' in self.settings['components']:
+            self.total_time = comp_settings['trsaxs_scan']['total_time']+1*comp_settings['trsaxs_scan']['num_scans']
             self.exp_cmd_q.append(('start_tr_exp', (exp_values, comp_settings), {}))
         elif self.settings['tr_muscle_exp']:
             self.exp_cmd_q.append(('start_ms_exp', (), exp_values))
@@ -2125,11 +2175,15 @@ class ExpPanel(wx.Panel):
 
         self.set_time_remaining(self.total_time)
 
-        if 'trsaxs' in self.settings['components'] or exp_values['wait_for_trig']:
+        if 'trsaxs_scan' in self.settings['components'] or exp_values['wait_for_trig']:
             self.exp_status_sizer.Show(self.scan_num_sizer, recursive=True)
             self.scan_number.SetLabel('1')
         else:
             self.exp_status_sizer.Hide(self.scan_num_sizer, recursive=True)
+
+        if 'trsaxs_flow' in self.settings['components']:
+            trsaxs_flow_panel = wx.FindWindowByName('trsaxs_flow')
+            trsaxs_flow_panel.prepare_for_exposure(comp_settings['trsaxs_flow'])
 
         start_thread = threading.Thread(target=self._wait_for_exp_start)
         start_thread.daemon = True
@@ -2420,12 +2474,19 @@ class ExpPanel(wx.Panel):
         else:
             coflow_started = True
 
-        if 'trsaxs' in self.settings['components']:
-            trsaxs_panel = wx.FindWindowByName('trsaxs')
-            trsaxs_values, trsaxs_valid = trsaxs_panel.get_scan_values()
-            comp_settings['trsaxs'] = trsaxs_values
+        if 'trsaxs_scan' in self.settings['components']:
+            trsaxs_panel = wx.FindWindowByName('trsaxs_scan')
+            trsaxs_values, trsaxs_scan_valid = trsaxs_panel.get_scan_values()
+            comp_settings['trsaxs_scan'] = trsaxs_values
         else:
-            trsaxs_valid = True
+            trsaxs_scan_valid = True
+
+        if 'trsaxs_flow' in self.settings['components']:
+            trsaxs_panel = wx.FindWindowByName('trsaxs_flow')
+            trsaxs_values, trsaxs_flow_valid = trsaxs_panel.get_flow_values()
+            comp_settings['trsaxs_flow'] = trsaxs_values
+        else:
+            trsaxs_flow_valid = True
 
         if not coflow_started:
             msg = ('Coflow failed to start, so exposure has been canceled. '
@@ -2434,7 +2495,7 @@ class ExpPanel(wx.Panel):
             wx.CallAfter(wx.MessageBox, msg, 'Error starting coflow',
                 style=wx.OK|wx.ICON_ERROR)
 
-        valid = coflow_started and trsaxs_valid
+        valid = coflow_started and trsaxs_scan_valid and trsaxs_flow_valid
 
         return valid, comp_settings
 
@@ -2488,8 +2549,15 @@ class ExpPanel(wx.Panel):
             for key, value in coflow_metadata.items():
                 metadata[key] = value
 
-        if 'trsaxs' in self.settings['components']:
-            trsaxs_panel = wx.FindWindowByName('trsaxs')
+        if 'trsaxs_scan' in self.settings['components']:
+            trsaxs_panel = wx.FindWindowByName('trsaxs_scan')
+            trsaxs_metadata = trsaxs_panel.metadata()
+
+            for key, value in trsaxs_metadata.items():
+                metadata[key] = value
+
+        if 'trsaxs_flow' in self.settings['components']:
+            trsaxs_panel = wx.FindWindowByName('trsaxs_flow')
             trsaxs_metadata = trsaxs_panel.metadata()
 
             for key, value in trsaxs_metadata.items():
