@@ -90,7 +90,7 @@ class BioFrame(wx.Frame):
             self.component_panels[key] = component_panel
 
         if ('exposure' in self.component_sizers or 'coflow' in self.component_sizers
-            or 'trsaxs_scan' in self.component_sizers):
+            or 'trsaxs_scan' in self.component_sizers or 'scan' in self.component_sizers):
             exp_sizer = wx.BoxSizer(wx.HORIZONTAL)
 
             if 'exposure' in self.component_sizers and 'trsaxs_flow' in self.component_sizers:
@@ -110,6 +110,10 @@ class BioFrame(wx.Frame):
 
             if 'trsaxs_scan' in self.component_sizers:
                 exp_sizer.Add(self.component_sizers['trsaxs_scan'], border=10,
+                    flag=wx.EXPAND|wx.ALL)
+
+            if 'scan' in self.component_sizers:
+                exp_sizer.Add(self.component_sizers['scan'], border=5,
                     flag=wx.EXPAND|wx.ALL)
 
             panel_sizer.Add(exp_sizer, flag=wx.EXPAND)
@@ -278,7 +282,8 @@ if __name__ == '__main__':
         ('exposure', expcon.ExpPanel),
         # ('coflow', coflowcon.CoflowPanel),
         ('trsaxs_scan', trcon.TRScanPanel),
-        ('trsaxs_flow', trcon.TRFlowPanel)
+        ('trsaxs_flow', trcon.TRFlowPanel),
+        # ('scan',    scancon.ScanPanel),
         ])
 
     settings = {
@@ -286,7 +291,7 @@ if __name__ == '__main__':
         'exposure'      : exposure_settings,
         'trsaxs'        : trsaxs_settings,
         'components'    : components,
-        'biocon'        : biocon_settings
+        'biocon'        : biocon_settings,
         }
 
 

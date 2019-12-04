@@ -75,18 +75,29 @@ class ScanPanel(wx.Panel):
         self.ctrl_parent = self
 
         add_button = wx.Button(self.ctrl_parent, label='Add scan motor')
-
         add_button.Bind(wx.EVT_BUTTON, self._on_add_button)
 
+        button_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        button_sizer.Add(add_button)
+
+        self.num_scans = wx.TextCtrl(self.ctrl_parent, size=(60, -1), value='1',
+            validator=utils.CharValidator('int'))
+        num_sizer = wx.FlexGridSizer(cols=2, vgap=5, hgap=5)
+        num_sizer.Add(wx.StaticText(self.ctrl_parent, label='Number of scans:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        num_sizer.Add(self.num_scans, flag=wx.ALIGN_CENTER_VERTICAL)
+
         if 'exposure' in self.settings['components']:
-            self.test_scan = wx.Button(self.ctrl_parent, label='Run test')
-            self.test_scan.Bind(wx.EVT_BUTTON, self._on_test_scan)
+            test_scan_button = wx.Button(self.ctrl_parent, label='Run test')
+            test_scan_button.Bind(wx.EVT_BUTTON, self._on_test_scan)
+            button_sizer.Add(test_scan_button, flag=wx.LEFT, border=5)
 
         self.motor_sizer = wx.GridBagSizer(vgap=5, hgap=5)
 
         self.top_sizer = wx.BoxSizer(wx.VERTICAL)
-        self.top_sizer.Add(add_button, flag=wx.ALL|wx.ALIGN_CENTER_HORIZONTAL,
+        self.top_sizer.Add(button_sizer, flag=wx.ALL|wx.ALIGN_CENTER_HORIZONTAL,
             border=5)
+        self.top_sizer.Add(num_sizer, flag=wx.ALL, border=5)
         self.top_sizer.Add(self.motor_sizer, flag=wx.ALL, border=5)
 
         self.SetSizer(self.top_sizer)
@@ -104,6 +115,100 @@ class ScanPanel(wx.Panel):
 
     def _on_test_scan(self):
         pass
+
+    def get_scan_values(self):
+        motor_params = OrderedDict()
+        for num, motor_panel in self.scan_motor_panels.items():
+            params = motor_panel.get_motor_params()
+            motor_params[num] = params
+
+        scan_values = {'motors' : motor_params,
+            'num_scans' : self.num_scans.GetValue()}
+
+        valid = self.validate_scan_values(scan_values)
+
+        return scan_values, valid
+
+    def validate_scan_values(self, scan_params):
+        all_errors = []
+        num_motors = 0
+
+        for num, params in scan_params['motors']:
+            if params['use']:
+                num_motors = num_motors + 1
+                start_valid = True
+                stop_valid = True
+                step_valid = True
+                error_list = []
+
+                try:
+                    params['start'] = float(params['start'])
+                except Exception:
+                    start_valid = False
+                    error_list.append('start')
+
+                try:
+                    params['stop'] = float(params['stop'])
+                except Exception:
+                    stop_valid = False
+                    error_list.append('stop')
+
+                try:
+                    params['step'] = float(params['step'])
+                except Exception:
+                    step_valid = False
+                    error_list.append('step')
+
+            if not start_valid or not stop_valid or not step_valid:
+                error_msg = ('Motor {} had invalid {} parameters.'.format(num,
+                    ', '.join(error_list)))
+
+                all_errors.append(error_msg)
+
+        try:
+            scan_params['num_scans'] = int(scan_params['num_scans'])
+        except Exception:
+            all_errors.append(('Invalid number of scans (>=1)'))
+
+        if isinstance(scan_params['num_scans'], int):
+            if scan_params['num_scans'] <= 0:
+                all_errors.append(('Invalid number of scans (>=1)'))
+
+        if num_motors == 0:
+            all_errors.append(('No motors selected for scan.'))
+
+        if all_errors:
+            all_valid = False
+
+            msg = ('The following errors were found in the scan values:\n')
+            errors = ''
+            for error in all_errors:
+                errors = errors + '- {}\n'.format(error)
+
+            msg = msg + errors
+
+            dialog = wx.MessageDialog(self, msg, 'Error in scan parameters',
+                style=wx.OK|wx.ICON_ERROR)
+            wx.CallAfter(dialog.ShowModal)
+
+        else:
+            all_valid = True
+
+        return all_valid
+
+    def metadata(self):
+        metadata = OrderedDict()
+
+        try:
+            metadata['Number of scans:'] = self.num_scans.GetValue()
+            for num, motor_panel in self.scan_motor_panels.items():
+                params = motor_panel.get_motor_params()
+                if params['use']:
+                    metadata['Motor {}:'.format(num)] = params['motor']
+                    metadata['Motor {} start:'.format(num)] = params['start']
+                    metadata['Motor {} stop:'.format(num)] = params['stop']
+                    metadata['Motor {} step:'.format(num)] = params['step']
+                    metadata['Motor {} # steps:'.format(num)] = params['motor']
 
 class MotorPanel(wx.Panel):
 
@@ -129,8 +234,6 @@ class MotorPanel(wx.Panel):
             style=wx.TE_PROCESS_ENTER, validator=utils.CharValidator('float_te'))
         self.num_steps = wx.TextCtrl(ctrl_parent, size=(60, -1),
             style=wx.TE_PROCESS_ENTER, validator=utils.CharValidator('int_te'))
-        self.num_scans = wx.TextCtrl(ctrl_parent, size=(60, -1), value='1',
-            validator=utils.CharValidator('int'))
 
         self.start.Bind(wx.EVT_KILL_FOCUS, self._on_scan_range_change)
         self.start.Bind(wx.EVT_TEXT_ENTER, self._on_scan_range_change)
@@ -166,9 +269,6 @@ class MotorPanel(wx.Panel):
         num_sizer.Add(wx.StaticText(ctrl_parent, label='Number of steps:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
         num_sizer.Add(self.num_steps, flag=wx.ALIGN_CENTER_VERTICAL)
-        num_sizer.Add(wx.StaticText(ctrl_parent, label='Number of scans:'),
-            flag=wx.ALIGN_CENTER_VERTICAL)
-        num_sizer.Add(self.num_scans, flag=wx.ALIGN_CENTER_VERTICAL)
 
         top_sizer.Add(motor_sizer, flag=wx.LEFT|wx.RIGHT|wx.TOP|wx.EXPAND, border=5)
         top_sizer.Add(scan_sizer, flag=wx.LEFT|wx.RIGHT|wx.TOP|wx.EXPAND, border=5)
@@ -220,8 +320,6 @@ class MotorPanel(wx.Panel):
 
                 self.num_steps.ChangeValue('{}'.format(num_steps))
 
-                print(mtr_positions)
-
             else:
                 if start < stop:
                     mtr_positions, step_size = np.linspace(start, stop, num_step, retstep=True)
@@ -229,10 +327,25 @@ class MotorPanel(wx.Panel):
                     mtr_positions, step_size = np.linspace(stop, start, num_step, retstep=True)
                     mtr_positions = mtr_positions[::-1]
 
-                print(mtr_positions)
-
                 self.step.ChangeValue('{}'.format(step_size))
 
+    def get_motor_params(self):
+        motor = self.motor.GetValue()
+        start = self.start.GetValue()
+        stop = self.stop.GetValue()
+        step = self.step.GetValue()
+        num_steps = self.num_steps.GetValue()
+        use_in_scan = self.use_in_scan.GetValue()
+
+        motor_params = {'motor' : motor,
+            'start'     : start,
+            'stop'      : stop,
+            'step'      : step,
+            'num_steps' : num_steps,
+            'use'       : use_in_scan,
+            }
+
+        return motor_params
 
 
 class ScanFrame(wx.Frame):
