@@ -1255,7 +1255,7 @@ class ExpCommThread(threading.Thread):
                         waiting = True
 
                         while waiting:
-                            logger.info(ab_burst.get_status())
+                            # logger.info(ab_burst.get_status())
                             waiting = np.any([ab_burst.get_status() == 16777216 for j in range(5)])
                             time.sleep(0.01)
 
@@ -1628,12 +1628,8 @@ class ExpCommThread(threading.Thread):
         i=0, scl_list=[], metadata={}, log_vals=[], exp_time=1):
         logger.info("Aborting slow exposure")
         if exp_time < 60:
-            # try:
-            #     det.stop()
-            # except (mp.Device_Action_Failed_Error, mp.Unparseable_String_Error):
-            #     pass
             try:
-                det.abort()
+                det.stop()
             except (mp.Device_Action_Failed_Error, mp.Unparseable_String_Error):
                 pass
             try:
@@ -1675,12 +1671,8 @@ class ExpCommThread(threading.Thread):
             exp_time):
         logger.info("Aborting fast exposure")
         if exp_time < 60:
-            # try:
-            #     det.stop()
-            # except (mp.Device_Action_Failed_Error, mp.Unparseable_String_Error):
-            #     pass
             try:
-                det.abort()
+                det.stop()
             except (mp.Device_Action_Failed_Error, mp.Unparseable_String_Error):
                 pass
             try:
@@ -1713,12 +1705,8 @@ class ExpCommThread(threading.Thread):
         logger.info("Aborting trsaxs exposure")
 
         if exp_time < 60:
-            # try:
-            #     det.stop()
-            # except (mp.Device_Action_Failed_Error, mp.Unparseable_String_Error):
-            #     pass
             try:
-                det.abort()
+                det.stop()
             except (mp.Device_Action_Failed_Error, mp.Unparseable_String_Error):
                 pass
             try:
