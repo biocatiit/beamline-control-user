@@ -45,7 +45,10 @@ sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_03_00\\python_32')#add the p
 try:
     import Elveflow64 as Elveflow
 except Exception:
-    import Elveflow32 as Elveflow
+    try:
+        import Elveflow32 as Elveflow
+    except Exception:
+        pass
 
 print_lock = threading.RLock()
 
@@ -281,6 +284,8 @@ class FlowMeterCommThread(threading.Thread):
                         'get_density'       : self._get_density,
                         'get_temperature'   : self._get_temperature,
                         'disconnect'        : self._disconnect,
+                        'get_fr_multi'      : self._get_flow_rate_multiple,
+                        'get_all_multi'     : self._get_all_multiple,
                         }
 
         self._connected_fms = OrderedDict()
@@ -429,6 +434,40 @@ class FlowMeterCommThread(threading.Thread):
         fm = self._connected_fms[name]
         fm.units = units
         logger.debug("Flow meter %s units set", name)
+
+    def _get_flow_rate_multiple(self, names):
+        """
+        This method gets the flow rate measured by a flow meter.
+
+        :param str name: The unique identifier for a flow meter that was used
+            in the :py:func:`_connect_fm` method.
+        """
+        logger.debug("Getting multiple flow rates")
+        flow_rates = []
+        for name in names:
+            fm = self._connected_fms[name]
+            flow_rate = fm.flow_rate
+            flow_rates.append(flow_rate)
+
+        self.return_queue.append(('multi_flow', names, flow_rates))
+
+    def _get_all_multiple(self, names):
+        """
+        This method gets the flow rate measured by a flow meter.
+
+        :param str name: The unique identifier for a flow meter that was used
+            in the :py:func:`_connect_fm` method.
+        """
+        logger.debug("Getting multiple flow rates")
+        vals = []
+        for name in names:
+            fm = self._connected_fms[name]
+            density = fm.density
+            temperature = fm.temperature
+            flow_rate = fm.flow_rate
+            vals.append((flow_rate, density, temperature))
+
+        self.return_queue.append(('multi_all', names, vals))
 
     def _abort(self):
         """
