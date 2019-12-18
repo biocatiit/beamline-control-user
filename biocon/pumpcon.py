@@ -1921,7 +1921,7 @@ class PumpPanel(wx.Panel):
 
         self.known_syringes = {'30 mL, EXEL': {'diameter': 23.5, 'max_volume': 30,
             'max_rate': 70},
-            '3 mL, Medline P.C.': {'diameter': 9.1, 'max_volume': 3,
+            '3 mL, Medline P.C.': {'diameter': 9.1, 'max_volume': 3.0,
             'max_rate': 11},
             '6 mL, Medline P.C.': {'diameter': 12.8, 'max_volume': 6,
             'max_rate': 23},

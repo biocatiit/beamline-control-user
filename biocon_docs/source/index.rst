@@ -12,6 +12,7 @@ Welcome to BioCON's documentation!
 
    pumps
    flow_meters
+   trsaxs
 
 
 Indices and tables

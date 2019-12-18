@@ -95,10 +95,12 @@ class BioFrame(wx.Frame):
 
             if 'exposure' in self.component_sizers and 'trsaxs_flow' in self.component_sizers:
                 sub_sizer = wx.BoxSizer(wx.VERTICAL)
-                sub_sizer.Add(self.component_sizers['exposure'], proportion=1,
+                sub_sizer.Add(self.component_sizers['exposure'],
                     border=10, flag=wx.EXPAND|wx.ALL)
                 sub_sizer.Add(self.component_sizers['trsaxs_flow'], proportion=1,
                     border=10, flag=wx.EXPAND|wx.ALL)
+
+                exp_sizer.Add(sub_sizer, flag=wx.EXPAND, proportion=1)
 
             elif 'exposure' in self.component_sizers:
                 exp_sizer.Add(self.component_sizers['exposure'], proportion=1,
@@ -162,25 +164,29 @@ if __name__ == '__main__':
         'nframes_max'           : 15000, # For Pilatus: 999999, for Struck: 15000 (set by maxChannels in the driver configuration)
         'nparams_max'           : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
         'exp_period_delta'      : 0.00095,
-        # 'shutter_speed_open'    : 0.004, #in s      Normal vacuum shutter
+        # 'shutter_speed_open'    : 0.004, #in s      NM vacuum shutter, broken
         # 'shutter_speed_close'   : 0.004, # in s
         # 'shutter_pad'           : 0.002, #padding for shutter related values
         # 'shutter_cycle'         : 0.02, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
-        'shutter_speed_open'    : 0.001, #in s    Fast shutters
-        'shutter_speed_close'   : 0.001, # in s
-        'shutter_pad'           : 0.00, #padding for shutter related values
-        'shutter_cycle'         : 0.002, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
+        # 'shutter_speed_open'    : 0.001, #in s    Fast shutters
+        # 'shutter_speed_close'   : 0.001, # in s
+        # 'shutter_pad'           : 0.00, #padding for shutter related values
+        # 'shutter_cycle'         : 0.002, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
         # 'shutter_speed_open'    : 0.075, #in s      Slow vacuum shutter
         # 'shutter_speed_close'   : 0.075, # in s
         # 'shutter_pad'           : 0.01, #padding for shutter related values
         # 'shutter_cycle'         : 0.2, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
+        'shutter_speed_open'    : 0.0045, #in s      Normal vacuum shutter
+        'shutter_speed_close'   : 0.004, # in s
+        'shutter_pad'           : 0.002, #padding for shutter related values
+        'shutter_cycle'         : 0.1, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
         'struck_measurement_time' : '0.001', #in s
-        'tr_muscle_exp'         : True,
+        'tr_muscle_exp'         : False,
         'slow_mode_thres'       : 0.1,
         'fast_mode_max_exp_time': 2000,
-        'wait_for_trig'         : True,
+        'wait_for_trig'         : False,
         'num_trig'              : '1',
-        'show_advanced_options' : True,
+        'show_advanced_options' : False,
         'fe_shutter_pv'         : 'FE:18:ID:FEshutter',
         'd_shutter_pv'          : 'PA:18ID:STA_D_SDS_OPEN_PL.VAL',
         'local_dir_root'        : '/nas_data/Pilatus1M',
@@ -197,12 +203,12 @@ if __name__ == '__main__':
             'scale': 5000, 'offset': 0.5, 'dark': False, 'norm_time': True},
             # {'mx_record': 'mcs12', 'channel': 11, 'name': 'Flow_rate',
             # 'scale': 10e6, 'offset': 0, 'dark': True, 'norm_time': True},
-            {'mx_record': 'mcs7', 'channel': 6, 'name': 'Pilatus_Enable',
-            'scale': 1e5, 'offset': 0, 'dark': True, 'norm_time': True},
-            {'mx_record': 'mcs12', 'channel': 11, 'name': 'Length',
-            'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
-            {'mx_record': 'mcs13', 'channel': 12, 'name': 'Force',
-            'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
+            # {'mx_record': 'mcs7', 'channel': 6, 'name': 'Pilatus_Enable',
+            # 'scale': 1e5, 'offset': 0, 'dark': True, 'norm_time': True},
+            # {'mx_record': 'mcs12', 'channel': 11, 'name': 'Length',
+            # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
+            # {'mx_record': 'mcs13', 'channel': 12, 'name': 'Force',
+            # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
             ],
         'joerger_log_vals'      : [{'mx_record': 'j3', 'name': 'I0',
             'scale': 1, 'offset': 0, 'norm_time': False}, #Format: (mx_record_name, struck_channel, header_name, scale, offset, use_dark_current, normalize_by_exp_time)
@@ -215,7 +221,7 @@ if __name__ == '__main__':
             {'mx_record': 'j11', 'name': 'Beam_current', 'scale': 5000,
             'offset': 0.5, 'norm_time': True}
             ],
-        'base_data_dir'         : '/nas_data/Pilatus1M/2019_Run3/20191128Ma', #CHANGE ME
+        'base_data_dir'         : '/nas_data/Pilatus1M/2019_Run3/20191205Hopkins', #CHANGE ME
         }
 
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']
@@ -259,21 +265,68 @@ if __name__ == '__main__':
         'scan_start_offset_dist': 0,
         'scan_end_offset_dist'  : 0,
         'motor_type'            : 'Newport_XPS',
-        'motor_ip'              : '164.54.204.74',
+        'motor_ip'              : '164.54.204.76',
         'motor_port'            : '5001',
         'motor_group_name'      : 'XY',
         'motor_x_name'          : 'XY.X',
         'motor_y_name'          : 'XY.Y',
         'pco_direction'         : 'x',
         'pco_pulse_width'       : D('10'), #In microseconds, opt: 0.2, 1, 2.5, 10
-        'pco_encoder_settle_t'  : D('12'), #In microseconds, opt: 0.075, 1, 4, 12
-        'encoder_resolution'    : D('0.0005'), #for ILS50PP, in mm
-        'encoder_precision'     : 4, #Number of significant decimals in encoder value
+        'pco_encoder_settle_t'  : D('0.075'), #In microseconds, opt: 0.075, 1, 4, 12
+        # 'encoder_resolution'    : D('0.000001'), #for XMS160, in mm
+        # 'encoder_precision'     : 6, #Number of significant decimals in encoder value
+        'encoder_resolution'    : D('0.00001'), #for GS30V, in mm
+        'encoder_precision'     : 5, #Number of significant decimals in encoder value
         'min_off_time'          : D('0.001'),
-        'x_range'               : (-25, 25),
-        'y_range'               : (-25, 25),
-        'speed_lim'             : (0, 50),
-        'acceleration_lim'      : (0, 200),
+        'x_range'               : (-80, 80),
+        'y_range'               : (-5, 25),
+        'speed_lim'             : (0, 300),
+        'acceleration_lim'      : (0, 2500),
+        'remote_pump_ip'        : '164.54.204.8',
+        'remote_pump_port'      : '5556',
+        'remote_fm_ip'          : '164.54.204.8',
+        'remote_fm_port'        : '5557',
+        'remote_valve_ip'       : '164.54.204.8',
+        'remote_valve_port'     : '5558',
+        'device_communication'  : 'remote',
+        'injection_valve'       : ('Rheodyne', 'COM6', [], {'positions' : 2}),
+        'sample_valve'          : ('Rheodyne', 'COM7', [], {'positions' : 6}),
+        'buffer1_valve'         : ('Rheodyne', 'COM8', [], {'positions' : 6}),
+        'buffer2_valve'         : ('Rheodyne', 'COM9', [], {'positions' : 6}),
+        'sample_pump'           : ('Sample', 'NE 500', 'COM10',
+            ['3 mL, Medline P.C.', '1'], {}, {'flow_rate' : '0.6',
+            'refill_rate' : '2'}),
+        'buffer1_pump'           : ('Buffer 1', 'PHD 4400', 'COM4',
+            ['10 mL, Medline P.C.', '2'], {}, {'flow_rate' : '2.4',
+            'refill_rate' : '5'}),
+        'buffer2_pump'          : ('Buffer 2', 'PHD 4400', 'COM4',
+            ['10 mL, Medline P.C.', '3'], {}, {'flow_rate' : '2.4',
+            'refill_rate' : '5'}),
+        'outlet_fm'             : ('BFS', 'COM5', [], {}),
+        'flow_units'            : 'mL/min',
+        'total_flow_rate'       : '6',
+        'dilution_ratio'        : '10',
+        'max_flow'              : 8,
+        'max_dilution'          : 50,
+        'auto_set_valves'       : True,
+        'valve_start_positions' : {'sample_valve' : 1, 'buffer1_valve': 1,
+            'buffer2_valve' : 1, 'injection_valve' : 1},
+        'valve_refill_positions': {'sample_valve' : 2, 'buffer1_valve': 2,
+            'buffer2_valve' : 2, 'injection_valve' : 1},
+        'autostart'             : 'At flow rate',
+        'autostart_flow'        : '4.5',
+        'autostart_delay'       : '0',
+        'autoinject'            : 'After scan',
+        'autoinject_scan'       : '5',
+        'autoinject_valve_pos'  : 2,
+        }
+
+    scan_settings = {
+        'components'            : ['scan'],
+        'newport_ip'            : '164.54.204.76',
+        'newport_port'          : '5001',
+        'show_advanced_options' : True,
+        'motor_group_name'      : 'XY',
         }
 
     biocon_settings = {}
@@ -281,7 +334,7 @@ if __name__ == '__main__':
     components = OrderedDict([
         ('exposure', expcon.ExpPanel),
         # ('coflow', coflowcon.CoflowPanel),
-        # ('trsaxs_scan', trcon.TRScanPanel),
+        ('trsaxs_scan', trcon.TRScanPanel),
         # ('trsaxs_flow', trcon.TRFlowPanel),
         # ('scan',    scancon.ScanPanel),
         ])
@@ -289,7 +342,8 @@ if __name__ == '__main__':
     settings = {
         'coflow'        : coflow_settings,
         'exposure'      : exposure_settings,
-        'trsaxs'        : trsaxs_settings,
+        'trsaxs_scan'   : trsaxs_settings,
+        'trsaxs_flow'   : trsaxs_settings,
         'components'    : components,
         'biocon'        : biocon_settings,
         }

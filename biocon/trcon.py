@@ -30,11 +30,14 @@ from decimal import Decimal as D
 import time
 import threading
 import copy
+import traceback
+import os
 
 if __name__ != '__main__':
     logger = logging.getLogger(__name__)
 
 import wx
+import numpy as np
 
 import motorcon
 import pumpcon
@@ -122,34 +125,44 @@ class TRScanPanel(wx.Panel):
         accel_units = self.settings['accel_units']
         time_units = self.settings['time_units']
 
-        self.x_start = wx.TextCtrl(self, size=(60, -1),
+        self.x_start = wx.TextCtrl(self, size=(70, -1),
             validator=utils.CharValidator('float_neg'))
-        self.x_end = wx.TextCtrl(self, size=(60, -1),
+        self.x_end = wx.TextCtrl(self, size=(70, -1),
             validator=utils.CharValidator('float_neg'))
-        self.y_start = wx.TextCtrl(self, size=(60, -1),
+        self.y_start = wx.TextCtrl(self, size=(70, -1),
             validator=utils.CharValidator('float_neg'))
-        self.y_end = wx.TextCtrl(self, size=(60, -1),
+        self.y_end = wx.TextCtrl(self, size=(70, -1),
             validator=utils.CharValidator('float_neg'))
+        self.x_step = wx.TextCtrl(self, size=(60, -1),
+            validator=utils.CharValidator('float'))
+        self.y_step = wx.TextCtrl(self, size=(60, -1),
+            validator=utils.CharValidator('float'))
 
         self.x_start.Bind(wx.EVT_TEXT, self._on_param_change)
         self.x_end.Bind(wx.EVT_TEXT, self._on_param_change)
+        self.x_step.Bind(wx.EVT_TEXT, self._on_param_change)
         self.y_start.Bind(wx.EVT_TEXT, self._on_param_change)
         self.y_end.Bind(wx.EVT_TEXT, self._on_param_change)
+        self.y_step.Bind(wx.EVT_TEXT, self._on_param_change)
 
-        scan_sizer = wx.FlexGridSizer(rows=3, cols=3, vgap=5, hgap=10)
+        scan_sizer = wx.FlexGridSizer(rows=3, cols=4, vgap=5, hgap=10)
         scan_sizer.AddSpacer(1)
         scan_sizer.Add(wx.StaticText(self, label='Start [{}]'.format(pos_units)),
             flag=wx.ALIGN_CENTER_HORIZONTAL)
         scan_sizer.Add(wx.StaticText(self, label='End [{}]'.format(pos_units)),
             flag=wx.ALIGN_CENTER_HORIZONTAL)
+        scan_sizer.Add(wx.StaticText(self, label='Step [{}]'.format(pos_units)),
+            flag=wx.ALIGN_CENTER_HORIZONTAL)
         scan_sizer.Add(wx.StaticText(self, label='X'),
             flag=wx.ALIGN_CENTER_VERTICAL)
         scan_sizer.Add(self.x_start, flag=wx.ALIGN_CENTER_VERTICAL)
         scan_sizer.Add(self.x_end, flag=wx.ALIGN_CENTER_VERTICAL)
+        scan_sizer.Add(self.x_step, flag=wx.ALIGN_CENTER_VERTICAL)
         scan_sizer.Add(wx.StaticText(self, label='Y'),
             flag=wx.ALIGN_CENTER_VERTICAL)
         scan_sizer.Add(self.y_start, flag=wx.ALIGN_CENTER_VERTICAL)
         scan_sizer.Add(self.y_end, flag=wx.ALIGN_CENTER_VERTICAL)
+        scan_sizer.Add(self.y_step, flag=wx.ALIGN_CENTER_VERTICAL)
 
         self.scan_speed = wx.TextCtrl(self, size=(60, -1),
             validator=utils.CharValidator('float'))
@@ -184,12 +197,32 @@ class TRScanPanel(wx.Panel):
             validator=utils.CharValidator('float'))
         self.constant_scan_speed = wx.CheckBox(adv_win, label='Constant scan speed')
 
+        self.scan_type =wx.Choice(adv_win, choices=['Vector', 'Grid'])
+        self.step_axis = wx.Choice(adv_win, choices=['X', 'Y', 'None'])
+        self.step_speed = wx.TextCtrl(adv_win, size=(60, -1),
+            validator=utils.CharValidator('float'))
+        self.step_acceleration = wx.TextCtrl(adv_win, size=(60, -1),
+            validator=utils.CharValidator('float'))
+
+        self.gridpoints_from_file = wx.CheckBox(adv_win, label='Use steps from file')
+        self.pick_file = wx.Button(adv_win, label='Select steps')
+        self.step_filename = wx.TextCtrl(adv_win)
+
+
         self.return_speed.Bind(wx.EVT_TEXT, self._on_param_change)
         self.scan_acceleration.Bind(wx.EVT_TEXT, self._on_param_change)
         self.return_acceleration.Bind(wx.EVT_TEXT, self._on_param_change)
         self.scan_start_offset_dist.Bind(wx.EVT_TEXT, self._on_param_change)
         self.scan_end_offset_dist.Bind(wx.EVT_TEXT, self._on_param_change)
         self.constant_scan_speed.Bind(wx.EVT_CHECKBOX, self._on_param_change)
+        self.scan_type.Bind(wx.EVT_CHOICE, self._on_param_change)
+        self.step_axis.Bind(wx.EVT_CHOICE, self._on_param_change)
+        self.step_speed.Bind(wx.EVT_TEXT, self._on_param_change)
+        self.step_acceleration.Bind(wx.EVT_TEXT, self._on_param_change)
+        self.gridpoints_from_file.Bind(wx.EVT_TEXT, self._on_param_change)
+
+        self.pick_file.Bind(wx.EVT_BUTTON, self._on_pick_file)
+
 
         if 'exposure' in self.settings['components']:
             self.test_scan = wx.Button(adv_win, label='Run test')
@@ -219,6 +252,24 @@ class TRScanPanel(wx.Panel):
             label='End offset [{}]:'.format(pos_units)), (5,0),
             flag=wx.ALIGN_CENTER_VERTICAL)
         adv_settings_sizer.Add(self.scan_end_offset_dist, (5,1),)
+        adv_settings_sizer.Add(wx.StaticText(adv_win, label='Scan type:'), (6,0),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        adv_settings_sizer.Add(self.scan_type, (6,1), flag=wx.ALIGN_CENTER_VERTICAL)
+        adv_settings_sizer.Add(wx.StaticText(adv_win, label='Step axis:'), (7,0),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        adv_settings_sizer.Add(self.step_axis, (7,1), flag=wx.ALIGN_CENTER_VERTICAL)
+        adv_settings_sizer.Add(wx.StaticText(adv_win,
+            label='Step speed [{}]:'.format(speed_units)), (8,0),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        adv_settings_sizer.Add(self.step_speed, (8,1),)
+        adv_settings_sizer.Add(wx.StaticText(adv_win,
+            label='Step accel. [{}]:'.format(accel_units)), (9,0),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        adv_settings_sizer.Add(self.step_acceleration, (9,1),)
+        adv_settings_sizer.Add(self.gridpoints_from_file, (10,0), span=(0,2))
+        adv_settings_sizer.Add(self.step_filename, (11,0),
+            flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
+        adv_settings_sizer.Add(self.pick_file, (11,1), flag=wx.ALIGN_CENTER_VERTICAL)
 
         adv_sizer.Add(adv_settings_sizer)
 
@@ -286,6 +337,13 @@ class TRScanPanel(wx.Panel):
         self.scan_start_offset_dist.ChangeValue(str(self.settings['scan_start_offset_dist']))
         self.scan_end_offset_dist.SetValue(str(self.settings['scan_end_offset_dist']))
 
+        self.step_speed.SetValue('1')
+        self.step_acceleration.SetValue('1')
+        self.scan_type.SetStringSelection('Vector')
+        self.step_axis.SetStringSelection('None')
+
+        self.gridpoints = None
+
         if self.constant_scan_speed.IsChecked():
             self.scan_start_offset_dist.Disable()
             self.scan_end_offset_dist.Disable()
@@ -304,6 +362,25 @@ class TRScanPanel(wx.Panel):
     def _on_collapse(self, evt):
         self.Layout()
         self.SendSizeEvent()
+
+    def _on_pick_file(self, evt):
+        dialog = wx.FileDialog(self, "Select grid points file", style=wx.FD_OPEN|wx.FD_FILE_MUST_EXIST)
+
+        if dialog.ShowModal() == wx.ID_OK:
+            fname = dialog.GetPath()
+
+            self.step_filename.SetValue(os.path.split(fname)[1])
+            self.gridpoints_file = fname
+
+            try:
+                self.gridpoints = np.loadtxt(fname, unpack=True)
+
+            except Exception:
+                msg = ('The file {} does not have a readable format for gridpoints.')
+                dialog = wx.MessageDialog(self, msg, 'File format error',
+                    style=wx.OK|wx.ICON_ERROR)
+                dialog.ShowModal()
+
 
     def _on_param_change(self, evt):
         if evt.GetEventObject() == self.constant_scan_speed:
@@ -347,6 +424,14 @@ class TRScanPanel(wx.Panel):
             return_speed = scan_settings['return_speed']
             return_accel = scan_settings['return_accel']
 
+            scan_type = scan_settings['scan_type']
+            step_axis = scan_settings['step_axis']
+            step_size = scan_settings['step_size']
+            step_speed = scan_settings['step_speed']
+            step_accel = scan_settings['step_acceleration']
+            use_gridpoints = scan_settings['use_gridpoints']
+            gridpoints = scan_settings['gridpoints']
+
             if motor_type == 'Newport_XPS':
                 pco_start = scan_settings['pco_start']
                 pco_end = scan_settings['pco_end']
@@ -373,7 +458,7 @@ class TRScanPanel(wx.Panel):
                 else:
                     motor.stop_position_compare(y_motor)
                     motor.set_position_compare(y_motor, 1, pco_start, pco_end, pco_step)
-                    motor.set_position_compare_pulse(x_motor, pco_pulse_width, pco_encoder_settle_t)
+                    motor.set_position_compare_pulse(y_motor, pco_pulse_width, pco_encoder_settle_t)
 
                 motor.set_velocity(return_speed, x_motor, 0)
                 motor.set_velocity(return_speed, y_motor, 1)
@@ -382,77 +467,183 @@ class TRScanPanel(wx.Panel):
 
             motor_cmd_q.append(('move_absolute', ('TR_motor', (x_start, y_start)), {}))
 
-            for current_run in range(1,num_runs+1):
-                start = time.time()
-                timeout = False
-                while not motor.is_moving() and not timeout:
-                    time.sleep(0.001) #Waits for motion to start
-                    if time.time()-start>0.1:
-                        timeout = True
+            if scan_type == 'vector':
+                for current_run in range(1,num_runs+1):
+                    logger.info('Scan %s started', current_run)
 
-                while motor.is_moving():
+                    self._run_test_inner(motor, motor_type, motor_cmd_q,
+                        vect_scan_speed, vect_scan_accel, vect_return_speed,
+                        vect_return_accel, x_motor, y_motor, x_start, x_end,
+                        y_start, y_end, current_run, pco_direction)
+
+                    motor_cmd_q.append(('move_absolute', ('TR_motor', (x_start, y_start)), {}))
+
                     if self._abort_event.is_set():
                         break
-                    time.sleep(0.001)
 
-                if self._abort_event.is_set():
-                    break
-
-                if motor_type == 'Newport_XPS':
-                    if pco_direction == 'x':
-                        logger.debug('starting x pco')
-                        motor.start_position_compare(x_motor)
+            else:
+                if not use_gridpoints:
+                    if step_axis == 'x':
+                        step_start = x_start
+                        step_end = x_end
                     else:
-                        logger.debug('starting x pco')
-                        motor.start_position_compare(y_motor)
+                        step_start = y_start
+                        step_end = y_end
 
-                    if vect_scan_speed[0] != 0:
-                        motor.set_velocity(vect_scan_speed[0], x_motor, 0)
-                    if vect_scan_speed[1] != 0:
-                        motor.set_velocity(vect_scan_speed[1], y_motor, 1)
-                    if vect_scan_accel[0] != 0:
-                        motor.set_acceleration(vect_scan_accel[0], x_motor, 0)
-                    if vect_scan_accel[1] != 0:
-                        motor.set_acceleration(vect_scan_accel[1], y_motor, 1)
 
-                motor_cmd_q.append(('move_absolute', ('TR_motor', (x_end, y_end)), {}))
+                    if step_start < step_end:
+                        mtr_positions = np.arange(step_start, step_end+step_size, step_size)
 
-                logger.info('Scan %s started', current_run)
+                        if mtr_positions[-1] > step_end:
+                            mtr_positions = mtr_positions[:-1]
 
-                start = time.time()
-                timeout = False
-                while not motor.is_moving() and not timeout:
-                    time.sleep(0.001) #Waits for motion to start
-                    if time.time()-start>0.5:
-                        timeout = True
+                    else:
+                        mtr_positions = np.arange(step_end, step_start+step_size, step_size)
+                        if mtr_positions[-1] > step_start:
+                            mtr_positions = mtr_positions[:-1]
+                        mtr_positions = mtr_positions[::-1]
+                else:
+                    mtr_positions = gridpoints
 
-                while motor.is_moving():
+                for current_run in range(1, num_runs+1):
+                    start = time.time()
+                    timeout = False
+                    while not motor.is_moving() and not timeout:
+                        time.sleep(0.001) #Waits for motion to start
+                        if time.time()-start>0.1:
+                            timeout = True
+
+                    while motor.is_moving():
+                        if self._abort_event.is_set():
+                            break
+                        time.sleep(0.001)
+
                     if self._abort_event.is_set():
                         break
-                    time.sleep(0.001)
 
-                if motor_type == 'Newport_XPS':
-                    if pco_direction == 'x':
-                        motor.stop_position_compare(x_motor)
+                    logger.info('Scan %s started', current_run)
+
+                    for pos in mtr_positions:
+                        if step_axis == 'x':
+                            step_x_start = pos
+                            step_x_end = pos
+                            step_y_start = y_start
+                            step_y_end = y_end
+                            motor.set_velocity(step_speed, x_motor, 0)
+                            motor.set_acceleration(step_accel, x_motor, 0)
+                        else:
+                            step_x_start = x_start
+                            step_x_end = x_end
+                            step_y_start = pos
+                            step_y_end = pos
+                            motor.set_velocity(step_speed, y_motor, 1)
+                            motor.set_acceleration(step_accel, y_motor, 1)
+
+                        motor_cmd_q.append(('move_absolute', ('TR_motor',
+                            (step_x_start, step_y_start)), {}))
+
+                        self._run_test_inner(motor, motor_type, motor_cmd_q,
+                            vect_scan_speed, vect_scan_accel, vect_return_speed,
+                            vect_return_accel, x_motor, y_motor, step_x_start,
+                            step_x_end, step_y_start, step_y_end, current_run,
+                            pco_direction)
+
+                    if self._abort_event.is_set():
+                        break
+
+                    if step_axis == 'x':
+                        motor.set_velocity(return_speed, x_motor, 0)
+                        motor.set_acceleration(return_accel, x_motor, 0)
                     else:
-                        motor.stop_position_compare(y_motor)
+                        motor.set_velocity(return_speed, y_motor, 1)
+                        motor.set_acceleration(return_accel, y_motor, 1)
 
-                    if vect_return_speed[0] != 0:
-                        motor.set_velocity(vect_return_speed[0], x_motor, 0)
-                    if vect_return_speed[1] != 0:
-                        motor.set_velocity(vect_return_speed[1], y_motor, 1)
-                    if vect_return_accel[0] != 0:
-                        motor.set_acceleration(vect_return_accel[0], x_motor, 0)
-                    if vect_return_accel[1] != 0:
-                        motor.set_acceleration(vect_return_accel[1], y_motor, 1)
+                    motor_cmd_q.append(('move_absolute', ('TR_motor', (x_start, y_start)), {}))
 
-                motor_cmd_q.append(('move_absolute', ('TR_motor', (x_start, y_start)), {}))
+                    if self._abort_event.is_set():
+                        break
 
         self.test_scan.SetLabel('Run test')
+
+        start = time.time()
+        timeout = False
+        while not motor.is_moving() and not timeout:
+            time.sleep(0.001) #Waits for motion to start
+            if time.time()-start>0.5:
+                timeout = True
+
+        while motor.is_moving():
+            if self._abort_event.is_set():
+                break
+
+            time.sleep(0.001)
 
         motor_con.stop()
         motor_con.join()
 
+    def _run_test_inner(self, motor, motor_type, motor_cmd_q, vect_scan_speed,
+        vect_scan_accel, vect_return_speed, vect_return_accel, x_motor, y_motor,
+        x_start, x_end, y_start, y_end, current_run, pco_direction):
+        start = time.time()
+        timeout = False
+        while not motor.is_moving() and not timeout:
+            time.sleep(0.001) #Waits for motion to start
+            if time.time()-start>0.1:
+                timeout = True
+
+        while motor.is_moving():
+            if self._abort_event.is_set():
+                return
+            time.sleep(0.001)
+
+        if self._abort_event.is_set():
+            return
+
+        if motor_type == 'Newport_XPS':
+            if pco_direction == 'x':
+                logger.debug('starting x pco')
+                motor.start_position_compare(x_motor)
+            else:
+                logger.debug('starting y pco')
+                motor.start_position_compare(y_motor)
+
+            if vect_scan_speed[0] != 0:
+                motor.set_velocity(vect_scan_speed[0], x_motor, 0)
+            if vect_scan_speed[1] != 0:
+                motor.set_velocity(vect_scan_speed[1], y_motor, 1)
+            if vect_scan_accel[0] != 0:
+                motor.set_acceleration(vect_scan_accel[0], x_motor, 0)
+            if vect_scan_accel[1] != 0:
+                motor.set_acceleration(vect_scan_accel[1], y_motor, 1)
+
+        motor_cmd_q.append(('move_absolute', ('TR_motor', (x_end, y_end)), {}))
+
+        start = time.time()
+        timeout = False
+        while not motor.is_moving() and not timeout:
+            time.sleep(0.001) #Waits for motion to start
+            if time.time()-start>0.5:
+                timeout = True
+
+        while motor.is_moving():
+            if self._abort_event.is_set():
+                break
+            time.sleep(0.001)
+
+        if motor_type == 'Newport_XPS':
+            if pco_direction == 'x':
+                motor.stop_position_compare(x_motor)
+            else:
+                motor.stop_position_compare(y_motor)
+
+            if vect_return_speed[0] != 0:
+                motor.set_velocity(vect_return_speed[0], x_motor, 0)
+            if vect_return_speed[1] != 0:
+                motor.set_velocity(vect_return_speed[1], y_motor, 1)
+            if vect_return_accel[0] != 0:
+                motor.set_acceleration(vect_return_accel[0], x_motor, 0)
+            if vect_return_accel[1] != 0:
+                motor.set_acceleration(vect_return_accel[1], y_motor, 1)
 
     def _param_change(self):
         calc = True
@@ -477,6 +668,12 @@ class TRScanPanel(wx.Panel):
                 scan_start_offset_dist = 0.5*scan_acceleration*(accel_time)**2
                 scan_end_offset_dist = scan_start_offset_dist
 
+                if round(scan_start_offset_dist, 3) <= 0.003:
+                    scan_start_offset_dist = 0.004
+
+                if round(scan_end_offset_dist, 3) <= 0.003:
+                    scan_end_offset_dist = 0.004
+
                 wx.CallAfter(self.scan_start_offset_dist.ChangeValue, str(round(scan_start_offset_dist, 3)))
                 wx.CallAfter(self.scan_end_offset_dist.ChangeValue, str(round(scan_end_offset_dist, 3)))
 
@@ -489,8 +686,15 @@ class TRScanPanel(wx.Panel):
                     accel_time = scan_speed/scan_acceleration
                     scan_start_offset_dist = 0.5*scan_acceleration*(accel_time)**2
                     scan_end_offset_dist = scan_start_offset_dist
-                    self.scan_start_offset_dist.ChangeValue(str(round(scan_start_offset_dist, 3)))
-                    self.scan_end_offset_dist.ChangeValue(str(round(scan_end_offset_dist, 3)))
+
+                    if round(scan_start_offset_dist, 3) <= 0.003:
+                        scan_start_offset_dist = 0.004
+
+                    if round(scan_end_offset_dist, 3) <= 0.003:
+                        scan_end_offset_dist = 0.004
+
+                    wx.CallAfter(self.scan_start_offset_dist.ChangeValue, str(round(scan_start_offset_dist, 3)))
+                    wx.CallAfter(self.scan_end_offset_dist.ChangeValue, str(round(scan_end_offset_dist, 3)))
             except ValueError:
                 calc = False
 
@@ -498,62 +702,205 @@ class TRScanPanel(wx.Panel):
             try:
                 scan_start_offset_dist = float(self.scan_start_offset_dist.GetValue())
                 scan_end_offset_dist = float(self.scan_end_offset_dist.GetValue())
+
+                if round(scan_start_offset_dist, 3) <= 0.003:
+                    scan_start_offset_dist = 0.004
+                    wx.CallAfter(self.scan_start_offset_dist.ChangeValue, str(round(scan_start_offset_dist, 3)))
+
+                if round(scan_end_offset_dist, 3) <= 0.003:
+                    scan_end_offset_dist = 0.004
+                    wx.CallAfter(self.scan_end_offset_dist.ChangeValue, str(round(scan_end_offset_dist, 3)))
+
             except ValueError:
                 calc = False
 
         if (calc and scan_speed != 0 and return_speed !=0 and
             scan_acceleration != 0 and return_acceleration !=0):
-            (scan_length, total_length, time_per_scan, return_time,
-                total_time) = self._calc_scan_params(x_start, x_end, y_start,
-                y_end, scan_speed, return_speed, scan_acceleration,
-                return_acceleration, scan_start_offset_dist, scan_end_offset_dist,
-                num_scans)
 
-            self.scan_length.SetLabel(str(round(scan_length, 3)))
-            self.total_length.SetLabel(str(round(total_length, 3)))
-            self.scan_time.SetLabel(str(round(time_per_scan, 3)))
-            self.return_time.SetLabel(str(round(return_time, 3)))
-            self.total_scan_time.SetLabel(str(round(total_time, 3)))
+            scan_type = self.scan_type.GetStringSelection()
+            step_axis = self.step_axis.GetStringSelection()
+            x_step = self.x_step.GetValue()
+            y_step = self.y_step.GetValue()
+            step_speed = self.step_speed.GetValue()
+            step_acceleration = self.step_acceleration.GetValue()
 
-            try:
-                return_vals = self._calc_exposure_params()
-            except Exception:
-                return_vals=[['calc_exposure_params_error'],]
+            use_grid_from_file = self.gridpoints_from_file.GetValue()
 
-            if len(return_vals[0]) == 0:
-                num_images = return_vals[1]
-                self.num_images.SetLabel(str(num_images))
+            if scan_type.lower() == 'grid' and not use_grid_from_file:
+                if step_axis.lower() != 'none':
+                    try:
+                        if step_axis.lower() == 'x':
+                            step = float(x_step)
+                        else:
+                            step = float(y_step)
+                        step_speed = float(step_speed)
+                        step_acceleration = float(step_acceleration)
+                    except ValueError:
+                        calc = False
+                else:
+                    calc = False
+                    step = None
 
-                if 'exposure' in self.settings['components']:
-                    exp_panel = wx.FindWindowByName('exposure')
-                    exp_panel.set_exp_settings({'num_frames': num_images})
+                gridpoints = None
+
+            elif scan_type.lower() == 'grid' and use_grid_from_file:
+                gridpoints = self.gridpoints
+
+            else:
+                step = None
+                gridpoints = None
+
+            if calc:
+                try:
+                    (scan_length, total_length, time_per_scan, return_time,
+                        total_time) = self._calc_scan_params(x_start, x_end, y_start,
+                        y_end, scan_speed, return_speed, scan_acceleration,
+                        return_acceleration, scan_start_offset_dist, scan_end_offset_dist,
+                        num_scans, scan_type, step_axis, step, step_speed,
+                        step_acceleration, gridpoints)
+
+                    self.scan_length.SetLabel(str(round(scan_length, 3)))
+                    self.total_length.SetLabel(str(round(total_length, 3)))
+                    self.scan_time.SetLabel(str(round(time_per_scan, 3)))
+                    self.return_time.SetLabel(str(round(return_time, 3)))
+                    self.total_scan_time.SetLabel(str(round(total_time, 3)))
+                except Exception:
+                    pass
+
+                try:
+                    return_vals = self._calc_exposure_params()
+                except Exception:
+                    # print(traceback.print_exc())
+                    return_vals=[['calc_exposure_params_error'],]
+
+                if return_vals and len(return_vals[0]) == 0:
+                    num_images = return_vals[1]
+                    self.num_images.SetLabel(str(num_images))
+
+                    if 'exposure' in self.settings['components']:
+                        exp_panel = wx.FindWindowByName('exposure')
+                        exp_panel.set_exp_settings({'num_frames': num_images})
 
     def _calc_scan_params(self, x_start, x_end, y_start, y_end, scan_speed,
         return_speed, scan_acceleration, return_acceleration,
-        scan_start_offset_dist, scan_end_offset_dist, num_scans):
+        scan_start_offset_dist, scan_end_offset_dist, num_scans, scan_type,
+        step_axis, step_size, step_speed, step_acceleration, gridpoints):
 
-        scan_length = math.sqrt((x_end - x_start)**2+(y_end-y_start)**2)
-        total_length = scan_length + scan_start_offset_dist + scan_end_offset_dist
+        if scan_type.lower() == 'vector':
 
-        accel_time = scan_speed/scan_acceleration
-        accel_dist = 0.5*scan_acceleration*(accel_time)**2
+            scan_length = math.sqrt((x_end - x_start)**2+(y_end-y_start)**2)
+            total_length = scan_length + scan_start_offset_dist + scan_end_offset_dist
 
-        if accel_dist > total_length/2.:
-            accel_time = math.sqrt(total_length/scan_acceleration)
-            time_per_scan = 2*accel_time
+            accel_time = scan_speed/scan_acceleration
+            accel_dist = 0.5*scan_acceleration*(accel_time)**2
+
+            if accel_dist > total_length/2.:
+                accel_time = math.sqrt(total_length/scan_acceleration)
+                time_per_scan = 2*accel_time
+            else:
+                time_per_scan = (total_length - accel_dist*2)/scan_speed + accel_time*2
+
+            return_accel_time = return_speed/return_acceleration
+            return_accel_dist = 0.5*return_acceleration*(return_accel_time)**2
+
+            if return_accel_dist > total_length/2.:
+                return_accel_time = math.sqrt(total_length/return_acceleration)
+                return_time = 2*return_accel_time
+            else:
+                return_time = (total_length-return_accel_dist*2)/return_speed + return_accel_time*2
+
+            total_time = (time_per_scan + return_time)*num_scans
+
         else:
-            time_per_scan = (total_length - accel_dist*2)/scan_speed + accel_time*2
 
-        return_accel_time = return_speed/return_acceleration
-        return_accel_dist = 0.5*return_acceleration*(return_accel_time)**2
+            if step_axis.lower() == 'x':
+                scan_length = abs(y_end - y_start)
+                step_start = x_start
+                step_end = x_end
 
-        if return_accel_dist > total_length/2.:
-            return_accel_time = math.sqrt(total_length/return_acceleration)
-            return_time = 2*return_accel_time
-        else:
-            return_time = (total_length-return_accel_dist*2)/return_speed + return_accel_time*2
+            else:
+                scan_length = abs(x_end - x_start)
+                step_start = y_start
+                step_end = y_end
 
-        total_time = (time_per_scan + return_time)*num_scans
+            total_length = scan_length + scan_start_offset_dist + scan_end_offset_dist
+
+            accel_time = scan_speed/scan_acceleration
+            accel_dist = 0.5*scan_acceleration*(accel_time)**2
+
+            if accel_dist > total_length/2.:
+                accel_time = math.sqrt(total_length/scan_acceleration)
+                time_per_scan = 2*accel_time
+            else:
+                time_per_scan = (total_length - accel_dist*2)/scan_speed + accel_time*2
+
+            return_accel_time = return_speed/return_acceleration
+            return_accel_dist = 0.5*return_acceleration*(return_accel_time)**2
+
+            if return_accel_dist > total_length/2.:
+                return_accel_time = math.sqrt(total_length/return_acceleration)
+                return_time = 2*return_accel_time
+            else:
+                return_time = (total_length-return_accel_dist*2)/return_speed + return_accel_time*2
+
+            total_vector_time = (time_per_scan + return_time)
+
+
+            if gridpoints is None:
+                if step_start < step_end:
+                    mtr_positions = np.arange(step_start, step_end+step_size, step_size)
+                else:
+                    mtr_positions = np.arange(step_end, step_start+step_size, step_size)
+                    mtr_positions = mtr_positions[::-1]
+
+                num_steps = mtr_positions.size
+
+                total_step_length = abs(step_start - step_end)
+
+                accel_time = step_speed/step_acceleration
+                accel_dist = 0.5*step_acceleration*(accel_time)**2
+
+                if accel_dist > step_size/2.:
+                    accel_time = math.sqrt(step_size/step_acceleration)
+                    time_per_step = 2*accel_time
+                else:
+                    time_per_step = (step_size - accel_dist*2)/step_speed + accel_time*2
+
+            else:
+                delta_step = np.diff(gridpoints)
+
+                total_step_length = abs(gridpoints[0]-gridpoints[-1])
+
+                step_times = []
+
+                for step_size in delta_step:
+                    accel_time = step_speed/step_acceleration
+                    accel_dist = 0.5*step_acceleration*(accel_time)**2
+
+                    if accel_dist > step_size/2.:
+                        accel_time = math.sqrt(step_size/step_acceleration)
+                        time_per_step = 2*accel_time
+                    else:
+                        time_per_step = (step_size - accel_dist*2)/step_speed + accel_time*2
+
+                    step_times.append(time_per_step)
+
+                time_per_step - np.mean(step_times)
+
+                num_steps = len(gridpoints)
+
+
+            return_accel_time = return_speed/return_acceleration
+            return_accel_dist = 0.5*return_acceleration*(return_accel_time)**2
+
+            if return_accel_dist > total_step_length/2.:
+                return_accel_time = math.sqrt(total_step_length/return_acceleration)
+                scan_return_time = 2*return_accel_time
+            else:
+                scan_return_time = (total_step_length-return_accel_dist*2)/return_speed + return_accel_time*2
+
+            total_time = (total_vector_time + time_per_step)*num_steps + scan_return_time
+            total_time = total_time*num_scans
 
         return scan_length, total_length, time_per_scan, return_time, total_time
 
@@ -578,6 +925,8 @@ class TRScanPanel(wx.Panel):
                     return_speed = D(self.return_speed.GetValue())
                     scan_acceleration = D(self.scan_acceleration.GetValue())
                     return_acceleration = D(self.return_acceleration.GetValue())
+                    scan_type = self.scan_type.GetStringSelection().lower()
+                    step_axis = self.step_axis.GetStringSelection().lower()
 
                     (x_pco_step,
                         y_pco_step,
@@ -586,17 +935,26 @@ class TRScanPanel(wx.Panel):
                         vect_return_speed,
                         vect_return_accel) = self._calc_pco_params(x_start,
                         x_end, y_start, y_end, scan_speed, return_speed,
-                        scan_acceleration, return_acceleration, delta_t)
+                        scan_acceleration, return_acceleration, delta_t,
+                        scan_type, step_axis)
 
                     if self.settings['pco_direction'] == 'x':
                         pco_step = x_pco_step
-                        pco_start = x_start
-                        pco_end = x_end
+                        if x_start < x_end:
+                            pco_start = x_start
+                            pco_end = x_end
+                        else:
+                            pco_start = x_start
+                            pco_end = x_end
                         pco_speed = vect_scan_speed[0]
                     else:
                         pco_step = y_pco_step
-                        pco_start = y_start
-                        pco_end = y_end
+                        if y_start < y_end:
+                            pco_start = y_start
+                            pco_end = y_end
+                        else:
+                            pco_start = y_start
+                            pco_end = y_end
                         pco_speed = vect_scan_speed[1]
 
                     if pco_start % self.settings['encoder_resolution'] != 0:
@@ -664,29 +1022,83 @@ class TRScanPanel(wx.Panel):
             scan_start_offset_dist = float(self.scan_start_offset_dist.GetValue())
             scan_end_offset_dist = float(self.scan_end_offset_dist.GetValue())
 
+            scan_type = self.scan_type.GetStringSelection()
+            step_axis = self.step_axis.GetStringSelection()
+
+            if step_axis.lower() == 'x':
+                x_step = float(self.x_step.GetValue())
+            elif step_axis.lower() == 'y':
+                y_step = float(self.y_step.GetValue())
+            step_speed = float(self.step_speed.GetValue())
+            step_acceleration = float(self.step_acceleration.GetValue())
+
+            use_grid_from_file = self.gridpoints_from_file.GetValue()
+
+            if scan_type.lower() == 'grid' and not use_grid_from_file:
+                if step_axis.lower() == 'x':
+                    step_size = x_step
+                elif step_axis.lower() == 'y':
+                    step_size = y_step
+                else:
+                    step_size = None
+
+                gridpoints = None
+
+            elif scan_type.lower() == 'grid' and use_grid_from_file:
+                gridpoints = self.gridpoints
+                step_size = None
+
+            else:
+                step_size = None
+                gridpoints = None
+
+
             (scan_length, total_length, time_per_scan, return_time,
                 total_time) = self._calc_scan_params(x_start, x_end, y_start,
                 y_end, scan_speed, return_speed, scan_acceleration,
                 return_acceleration, scan_start_offset_dist, scan_end_offset_dist,
-                num_scans)
+                num_scans, scan_type, step_axis, step_size, step_speed,
+                step_acceleration, gridpoints)
 
-            metadata['Scan length [{}]:'.format(pos_units)] = scan_length
+            metadata['Scan type:'] = scan_type
+            if scan_type.lower() == 'grid':
+                metadata['Vector scan length [{}]:'.format(pos_units)] = scan_length
+                metadata['Step axis:'] = step_axis
+
+                if use_grid_from_file:
+                    metadata['Using gridpoints from:'] = self.gridpoints_file
+            else:
+                metadata['Scan length [{}]:'.format(pos_units)] = scan_length
             metadata['Number of scans:'] = num_scans
             metadata['Time per scan [{}]:'.format(time_units)] = time_per_scan
             metadata['Return time [{}]:'.format(time_units)] = return_time
             metadata['Total time [{}]:'.format(time_units)] = total_time
             metadata['X scan start [{}]:'.format(pos_units)] = x_start
             metadata['X scan end [{}]:'.format(pos_units)] = x_end
-            metadata['Y scan start:'.format(pos_units)] = y_start
+
+            if scan_type.lower() == 'grid' and step_axis.lower() == 'x' and not use_grid_from_file:
+                metadata['X scan step [{}]:'.format(pos_units)] = x_step
+
+            metadata['Y scan start [{}]:'.format(pos_units)] = y_start
             metadata['Y scan end [{}]:'.format(pos_units)] = y_end
+
+            if scan_type.lower() == 'grid' and step_axis.lower() == 'y' and not use_grid_from_file:
+                metadata['Y scan step [{}]:'.format(pos_units)] = y_step
+
             metadata['Scan speed [{}]:'.format(speed_units)] = scan_speed
             metadata['Return speed [{}]:'.format(speed_units)] = return_speed
             metadata['Scan acceleration [{}]:'.format(accel_units)] = scan_acceleration
             metadata['Return acceleration [{}]:'.format(accel_units)] = return_acceleration
+
+            if scan_type.lower() == 'grid':
+                metadata['Step speed [{}]:'.format(speed_units)] = step_speed
+                metadata['Step acceleration [{}]:'.format(accel_units)] = step_acceleration
+
             metadata['Scan start offset [{}]:'.format(pos_units)] = scan_start_offset_dist
             metadata['Scan end offset [{}]:'.format(pos_units)] = scan_end_offset_dist
+
         except (ValueError, ZeroDivisionError):
-            pass
+            print(traceback.print_exc())
 
         return metadata
 
@@ -695,8 +1107,10 @@ class TRScanPanel(wx.Panel):
 
         x_start = self.x_start.GetValue()
         x_end = self.x_end.GetValue()
+        x_step = self.x_step.GetValue()
         y_start = self.y_start.GetValue()
         y_end = self.y_end.GetValue()
+        y_step = self.y_step.GetValue()
         scan_speed = self.scan_speed.GetValue()
         num_scans = self.num_scans.GetValue()
         return_speed = self.return_speed.GetValue()
@@ -704,6 +1118,12 @@ class TRScanPanel(wx.Panel):
         return_acceleration = self.return_acceleration.GetValue()
         scan_start_offset_dist = self.scan_start_offset_dist.GetValue()
         scan_end_offset_dist = self.scan_end_offset_dist.GetValue()
+        scan_type = self.scan_type.GetStringSelection().lower()
+        step_axis = self.step_axis.GetStringSelection().lower()
+        step_speed = self.step_speed.GetValue()
+        step_acceleration = self.step_acceleration.GetValue()
+        use_grid_from_file = self.gridpoints_from_file.GetValue()
+
 
         errors = []
 
@@ -790,6 +1210,69 @@ class TRScanPanel(wx.Panel):
                 errors.append('Scan length (greater than 0 {})'.format(
                 pos_units))
 
+        if scan_type == 'grid':
+            if step_axis == 'none':
+                errors.append('For a grid scan you must specify the step axis (X or Y).')
+            else:
+                if step_axis != self.settings['pco_direction'].lower():
+                    if not use_grid_from_file:
+                        if step_axis == 'x':
+                            try:
+                                step_size = float(x_step)
+                            except Exception:
+                                errors.append('X step size (greater than 0)')
+                        else:
+                            try:
+                                step_size = float(y_step)
+                            except Exception:
+                                errors.append('Y step size (greater than 0)')
+                        gridpoints = None
+
+                    try:
+                        step_speed = float(step_speed)
+                    except Exception:
+                        errors.append('Step speed (greater than 0)')
+
+                    try:
+                        step_acceleration = float(step_acceleration)
+                    except Exception:
+                        errors.append('Step acceleration (greater than 0)')
+
+                    if use_grid_from_file:
+                        if self.gridpoints is None:
+                            errors.append('You must select a file for the gridpoints.')
+
+                        else:
+                            if not (all(self.gridpoints == sorted(self.gridpoints)) or
+                                all(self.gridpoints[::-1] == sorted(self.gridpoints))):
+
+                                errors.append('Gridpoints should be specified in ascending or descending order.')
+
+                            else:
+                                gridpoints = self.gridpoints
+                                step_size = None
+
+                                if step_axis == 'x':
+                                    x_start = gridpoints[0]
+                                    x_end = gridpoints[-1]
+
+                                    wx.CallAfter(self.x_start.ChangeValue, str(x_start))
+                                    wx.CallAfter(self.x_end.ChangeValue, str(x_end))
+                                    wx.CallAfter(self.x_step.ChangeValue, '')
+
+                                else:
+                                    y_start = gridpoints[0]
+                                    y_end = gridpoints[-1]
+
+                                    wx.CallAfter(self.y_start.ChangeValue, str(y_start))
+                                    wx.CallAfter(self.y_end.ChangeValue, str(y_end))
+                                    wx.CallAfter(self.y_step.ChangeValue, '')
+                else:
+                    errors.append('PCO (vector) direction should be different from the step direction')
+        else:
+            step_size = None
+            gridpoints = None
+
 
         if isinstance(x_start, float):
             if (x_start < self.settings['x_range'][0] or
@@ -851,93 +1334,136 @@ class TRScanPanel(wx.Panel):
             and isinstance(x_end, float) and isinstance(y_start, float) and
             isinstance(y_end, float)):
 
-            tot_dist = math.sqrt((x_end - x_start)**2 + (y_end-y_start)**2)
-            if tot_dist != 0:
-                x_prop = abs((x_end - x_start)/tot_dist)
+            if scan_type == 'vector':
+                tot_dist = math.sqrt((x_end - x_start)**2 + (y_end-y_start)**2)
+                if tot_dist != 0:
+                    x_prop = abs((x_end - x_start)/tot_dist)
+                else:
+                    x_prop = 1
             else:
                 x_prop = 1
 
-            if x_start < x_end:
-                scan_x_start = x_start - scan_start_offset_dist*x_prop
-            else:
-                scan_x_start = x_start + scan_start_offset_dist*x_prop
+            if scan_type == 'vector' or (scan_type == 'grid' and step_axis == 'y'):
+                if x_start < x_end:
+                    scan_x_start = x_start - scan_start_offset_dist*x_prop
+                else:
+                    scan_x_start = x_start + scan_start_offset_dist*x_prop
 
-            if (scan_x_start < self.settings['x_range'][0] or
-                scan_x_start > self.settings['x_range'][1]):
-                errors.append(('Starting X position plus (or minus) start '
-                    'offset (between {} and {} {})'.format(
-                    self.settings['x_range'][0], self.settings['x_range'][1],
-                    pos_units)))
+                if (scan_x_start < self.settings['x_range'][0] or
+                    scan_x_start > self.settings['x_range'][1]):
+                    errors.append(('Starting X position plus (or minus) start '
+                        'offset (between {} and {} {})'.format(
+                        self.settings['x_range'][0], self.settings['x_range'][1],
+                        pos_units)))
+            else:
+                scan_x_start = x_start
 
         if (isinstance(scan_end_offset_dist, float) and isinstance(x_start, float)
             and isinstance(x_end, float) and isinstance(y_start, float) and
             isinstance(y_end, float)):
 
-            tot_dist = math.sqrt((x_end - x_start)**2 + (y_end-y_start)**2)
-            if tot_dist != 0:
-                x_prop = abs((x_end - x_start)/tot_dist)
+            if scan_type == 'vector':
+                tot_dist = math.sqrt((x_end - x_start)**2 + (y_end-y_start)**2)
+                if tot_dist != 0:
+                    x_prop = abs((x_end - x_start)/tot_dist)
+                else:
+                    x_prop = 1
             else:
                 x_prop = 1
 
-            if x_end < x_start:
-                scan_x_end = x_end - scan_end_offset_dist*x_prop
-            else:
-                scan_x_end = x_end + scan_end_offset_dist*x_prop
+            if scan_type == 'vector' or (scan_type == 'grid' and step_axis == 'y'):
+                if x_end < x_start:
+                    scan_x_end = x_end - scan_end_offset_dist*x_prop
+                else:
+                    scan_x_end = x_end + scan_end_offset_dist*x_prop
 
-            if (scan_x_end < self.settings['x_range'][0] or
-                scan_x_end > self.settings['x_range'][1]):
-                errors.append(('Final X position plus (or minus) end '
-                    'offset (between {} and {} {})'.format(
-                    self.settings['x_range'][0], self.settings['x_range'][1],
-                    pos_units)))
+                if (scan_x_end < self.settings['x_range'][0] or
+                    scan_x_end > self.settings['x_range'][1]):
+                    errors.append(('Final X position plus (or minus) end '
+                        'offset (between {} and {} {})'.format(
+                        self.settings['x_range'][0], self.settings['x_range'][1],
+                        pos_units)))
+            else:
+                scan_x_end = x_end
 
         if (isinstance(scan_start_offset_dist, float) and isinstance(x_start, float)
             and isinstance(x_end, float) and isinstance(y_start, float) and
             isinstance(y_end, float)):
 
-            tot_dist = math.sqrt((x_end - x_start)**2 + (y_end-y_start)**2)
-            if tot_dist != 0:
-                y_prop = abs((y_end-y_start)/tot_dist)
+            if scan_type == 'vector':
+                tot_dist = math.sqrt((x_end - x_start)**2 + (y_end-y_start)**2)
+                if tot_dist != 0:
+                    y_prop = abs((y_end-y_start)/tot_dist)
+                else:
+                    y_prop = 1
             else:
                 y_prop = 1
 
-            if y_start < y_end:
-                scan_y_start = y_start - scan_start_offset_dist*y_prop
-            else:
-                scan_y_start = y_start + scan_start_offset_dist*y_prop
+            if scan_type == 'vector' or (scan_type == 'grid' and step_axis == 'x'):
+                if y_start < y_end:
+                    scan_y_start = y_start - scan_start_offset_dist*y_prop
+                else:
+                    scan_y_start = y_start + scan_start_offset_dist*y_prop
 
-            if (scan_y_start < self.settings['y_range'][0] or
-                scan_y_start > self.settings['y_range'][1]):
-                errors.append(('Starting Y position plus (or minus) start '
-                    'offset (between {} and {} {})'.format(
-                    self.settings['y_range'][0], self.settings['y_range'][1],
-                    pos_units)))
+                if (scan_y_start < self.settings['y_range'][0] or
+                    scan_y_start > self.settings['y_range'][1]):
+                    errors.append(('Starting Y position plus (or minus) start '
+                        'offset (between {} and {} {})'.format(
+                        self.settings['y_range'][0], self.settings['y_range'][1],
+                        pos_units)))
+            else:
+                scan_y_start = y_start
 
         if (isinstance(scan_end_offset_dist, float) and isinstance(x_start, float)
             and isinstance(x_end, float) and isinstance(y_start, float) and
             isinstance(y_end, float)):
 
-            tot_dist = math.sqrt((x_end - x_start)**2 + (y_end-y_start)**2)
-            if tot_dist != 0:
-                y_prop = abs((y_end-y_start)/tot_dist)
+            if scan_type == 'vector':
+                tot_dist = math.sqrt((x_end - x_start)**2 + (y_end-y_start)**2)
+                if tot_dist != 0:
+                    y_prop = abs((y_end-y_start)/tot_dist)
+                else:
+                    y_prop = 1
             else:
                 y_prop = 1
 
-            if y_end < y_start:
-                scan_y_end = y_end - scan_end_offset_dist*y_prop
-            else:
-                scan_y_end = y_end + scan_end_offset_dist*y_prop
+            if scan_type == 'vector' or (scan_type == 'grid' and step_axis == 'x'):
+                if y_end < y_start:
+                    scan_y_end = y_end - scan_end_offset_dist*y_prop
+                else:
+                    scan_y_end = y_end + scan_end_offset_dist*y_prop
 
-            if (scan_y_end < self.settings['y_range'][0] or
-                scan_y_end > self.settings['y_range'][1]):
-                errors.append(('Final Y position plus (or minus) end '
-                    'offset (between {} and {} {})'.format(
-                    self.settings['y_range'][0], self.settings['y_range'][1],
-                    pos_units)))
+                if (scan_y_end < self.settings['y_range'][0] or
+                    scan_y_end > self.settings['y_range'][1]):
+                    errors.append(('Final Y position plus (or minus) end '
+                        'offset (between {} and {} {})'.format(
+                        self.settings['y_range'][0], self.settings['y_range'][1],
+                        pos_units)))
+            else:
+                scan_y_end = y_end
+
+
+        if scan_type == 'grid':
+            if isinstance(step_speed, float):
+                if (step_speed <= self.settings['speed_lim'][0] or
+                    step_speed > self.settings['speed_lim'][1]):
+                    errors.append('Step speed (between {} and {} {})'.format(
+                    self.settings['speed_lim'][0], self.settings['speed_lim'][1],
+                    pos_units))
+
+            if isinstance(step_acceleration, float):
+                if (step_acceleration <= self.settings['acceleration_lim'][0] or
+                    step_acceleration > self.settings['acceleration_lim'][1]):
+                    errors.append('Step acceleration (between {} and {} {})'.format(
+                    self.settings['acceleration_lim'][0],
+                    self.settings['acceleration_lim'][1], pos_units))
 
         if isinstance(num_scans, int):
             if num_scans <= 0:
                 errors.append('Number of scans (greater than 0)')
+
+        if len(errors) > 0:
+            valid = False
 
         if valid:
             try:
@@ -948,9 +1474,11 @@ class TRScanPanel(wx.Panel):
                     total_time) = self._calc_scan_params(x_start, x_end, y_start,
                     y_end, scan_speed, return_speed, scan_acceleration,
                     return_acceleration, scan_start_offset_dist, scan_end_offset_dist,
-                    num_scans)
+                    num_scans, scan_type, step_axis, step_size, step_speed,
+                    step_acceleration, gridpoints)
 
             except Exception:
+                # print(traceback.print_exc())
                 valid = False
                 errors.append('Error calculating scan parameters')
 
@@ -961,6 +1489,7 @@ class TRScanPanel(wx.Panel):
                     errors.extend(return_vals[0])
 
             except Exception:
+                print(traceback.print_exc())
                 valid = False
 
 
@@ -1000,6 +1529,13 @@ class TRScanPanel(wx.Panel):
                 'total_time'            : total_time,
                 'motor_type'            : self.settings['motor_type'],
                 'motor'                 : self.motor,
+                'scan_type'             : scan_type,
+                'step_axis'             : step_axis,
+                'step_size'             : step_size,
+                'step_speed'            : step_speed,
+                'step_acceleration'     : step_acceleration,
+                'gridpoints'            : gridpoints,
+                'use_gridpoints'        : use_grid_from_file,
             }
 
             if self.settings['motor_type'] == 'Newport_XPS':
@@ -1023,48 +1559,72 @@ class TRScanPanel(wx.Panel):
                 scan_values['pco_pulse_width'] = self.settings['pco_pulse_width']
                 scan_values['pco_encoder_settle_t'] =  self.settings['pco_encoder_settle_t']
 
-
         return scan_values, valid
 
     def _calc_vector_params(self, x_start, x_end, y_start, y_end, scan_speed,
-        return_speed, scan_acceleration, return_acceleration):
+        return_speed, scan_acceleration, return_acceleration, scan_type,
+        step_axis):
 
-        if x_start == x_end:
-            scan_speed_y = scan_speed
-            return_speed_y = return_speed
-            scan_acceleration_y = scan_acceleration
-            return_acceleration_y = return_acceleration
+        if scan_type == 'vector':
+            if x_start == x_end:
+                scan_speed_y = scan_speed
+                return_speed_y = return_speed
+                scan_acceleration_y = scan_acceleration
+                return_acceleration_y = return_acceleration
 
-            scan_speed_x = 0
-            return_speed_x = 0
-            scan_acceleration_x = 0
-            return_acceleration_x = 0
+                scan_speed_x = 0
+                return_speed_x = 0
+                scan_acceleration_x = 0
+                return_acceleration_x = 0
 
-        elif y_start == y_end:
-            scan_speed_x = scan_speed
-            return_speed_x = return_speed
-            scan_acceleration_x = scan_acceleration
-            return_acceleration_x = return_acceleration
+            elif y_start == y_end:
+                scan_speed_x = scan_speed
+                return_speed_x = return_speed
+                scan_acceleration_x = scan_acceleration
+                return_acceleration_x = return_acceleration
 
-            scan_speed_y = 0
-            return_speed_y = 0
-            scan_acceleration_y = 0
-            return_acceleration_y = 0
+                scan_speed_y = 0
+                return_speed_y = 0
+                scan_acceleration_y = 0
+                return_acceleration_y = 0
+
+            else:
+                tot_dist = ((x_end - x_start)**D(2) + (y_end-y_start)**D(2))**(D(0.5))
+                x_prop = abs((x_end - x_start)/tot_dist)
+                y_prop = abs((y_end-y_start)/tot_dist)
+
+                scan_speed_x = scan_speed*x_prop
+                return_speed_x = return_speed*x_prop
+                scan_acceleration_x = scan_acceleration*x_prop
+                return_acceleration_x = return_acceleration*x_prop
+
+                scan_speed_y = scan_speed*y_prop
+                return_speed_y = return_speed*y_prop
+                scan_acceleration_y = scan_acceleration*y_prop
+                return_acceleration_y = return_acceleration*y_prop
 
         else:
-            tot_dist = math.sqrt((x_end - x_start)**2 + (y_end-y_start)**2)
-            x_prop = abs((x_end - x_start)/tot_dist)
-            y_prop = abs((y_end-y_start)/tot_dist)
+            if step_axis == 'x':
+                scan_speed_y = scan_speed
+                return_speed_y = return_speed
+                scan_acceleration_y = scan_acceleration
+                return_acceleration_y = return_acceleration
 
-            scan_speed_x = scan_speed*x_prop
-            return_speed_x = return_speed*x_prop
-            scan_acceleration_x = scan_acceleration*x_prop
-            return_acceleration_x = return_acceleration*x_prop
+                scan_speed_x = 0
+                return_speed_x = 0
+                scan_acceleration_x = 0
+                return_acceleration_x = 0
 
-            scan_speed_y = scan_speed*y_prop
-            return_speed_y = return_speed*y_prop
-            scan_acceleration_y = scan_acceleration*y_prop
-            return_acceleration_y = return_acceleration*y_prop
+            elif step_axis == 'y':
+                scan_speed_x = scan_speed
+                return_speed_x = return_speed
+                scan_acceleration_x = scan_acceleration
+                return_acceleration_x = return_acceleration
+
+                scan_speed_y = 0
+                return_speed_y = 0
+                scan_acceleration_y = 0
+                return_acceleration_y = 0
 
         vect_scan_speed = (scan_speed_x, scan_speed_y)
         vect_scan_accel = (scan_acceleration_x, scan_acceleration_y)
@@ -1075,12 +1635,14 @@ class TRScanPanel(wx.Panel):
 
 
     def _calc_pco_params(self, x_start, x_end, y_start, y_end, scan_speed,
-        return_speed, scan_acceleration, return_acceleration, delta_t):
+        return_speed, scan_acceleration, return_acceleration, delta_t,
+        scan_type, step_axis):
         """ For Newport XPS controller with encoded stages"""
+
         (vect_scan_speed, vect_scan_accel,
             vect_return_speed, vect_return_accel) = self._calc_vector_params(x_start,
             x_end, y_start, y_end, scan_speed, return_speed, scan_acceleration,
-            return_acceleration)
+            return_acceleration, scan_type, step_axis)
 
         x_pco_step = delta_t*D(vect_scan_speed[0])
         y_pco_step = delta_t*D(vect_scan_speed[1])
@@ -1098,7 +1660,11 @@ class TRScanPanel(wx.Panel):
         return x_pco_step, y_pco_step, vect_scan_speed, vect_scan_accel, vect_return_speed, vect_return_accel
 
     def round_to(self, x, prec, base):
-        return round(float(base)*round(x/base), prec)
+        # print(type(x))
+        # print(type(prec))
+        # print(type(base))
+        # return round(float(base)*round(x/base), prec)
+        return x.quantize(base)
 
     def update_params(self):
         self._param_change()
@@ -1461,8 +2027,12 @@ class TRFlowPanel(wx.Panel):
         info_parent = info_box_sizer.GetStaticBox()
 
         self.max_flow_time = wx.StaticText(info_parent, size=(60, -1))
+        # self.current_flow_time = wx.StaticText(info_parent, size=(60, -1))
 
         info_sizer = wx.FlexGridSizer(cols=2, hgap=5, vgap=5)
+        # info_sizer.Add(wx.StaticText(info_parent, label='Cur. flow time [s]:'),
+        #     flag=wx.ALIGN_CENTER_VERTICAL)
+        # info_sizer.Add(self.current_flow_time, flag=wx.ALIGN_CENTER_VERTICAL)
         info_sizer.Add(wx.StaticText(info_parent, label='Max. flow time [s]:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
         info_sizer.Add(self.max_flow_time, flag=wx.ALIGN_CENTER_VERTICAL)
@@ -1512,7 +2082,7 @@ class TRFlowPanel(wx.Panel):
             label='Set valve positions on start/refill')
         self.set_valve_position.SetValue(self.settings['auto_set_valves'])
 
-        valve_box_sizer.Add(valve_sizer)
+        valve_box_sizer.Add(valve_sizer, flag=wx.ALL, border=2)
         valve_box_sizer.Add(self.set_valve_position, flag=wx.TOP, border=5)
         valve_box_sizer.AddStretchSpacer(1)
 
@@ -1556,7 +2126,7 @@ class TRFlowPanel(wx.Panel):
         fm_parent = fm_box_sizer.GetStaticBox()
 
         self.outlet_flow = wx.StaticText(fm_parent)
-        self.outlet_density = wx.StaticText(fm_parent)
+        self.outlet_density = wx.StaticText(fm_parent, size=(60, -1))
         self.outlet_T = wx.StaticText(fm_parent)
 
         fm_sizer = wx.FlexGridSizer(cols=3, vgap=2, hgap=2)
@@ -1576,7 +2146,7 @@ class TRFlowPanel(wx.Panel):
         fm_sizer.Add(wx.StaticText(fm_parent, label='°C'),
             flag=wx.ALIGN_CENTER_VERTICAL)
 
-        fm_box_sizer.Add(fm_sizer)
+        fm_box_sizer.Add(fm_sizer, flag=wx.ALL, border=2)
         fm_box_sizer.AddStretchSpacer(1)
 
         exp_start_box_sizer = wx.StaticBoxSizer(wx.VERTICAL, ctrl_parent, "Exposure Start")
@@ -1604,7 +2174,7 @@ class TRFlowPanel(wx.Panel):
             flag=wx.ALIGN_CENTER_VERTICAL)
         exp_start_sizer.Add(self.start_delay, flag=wx.ALIGN_CENTER_VERTICAL)
 
-        exp_start_box_sizer.Add(exp_start_sizer)
+        exp_start_box_sizer.Add(exp_start_sizer, flag=wx.ALL, border=2)
         exp_start_box_sizer.AddStretchSpacer(1)
 
 
@@ -1628,7 +2198,7 @@ class TRFlowPanel(wx.Panel):
             flag=wx.ALIGN_CENTER_VERTICAL)
         inj_sizer.Add(self.autoinject_scan, flag=wx.ALIGN_CENTER_VERTICAL)
 
-        inj_box_sizer.Add(inj_sizer)
+        inj_box_sizer.Add(inj_sizer, flag=wx.ALL, border=2)
         inj_box_sizer.AddStretchSpacer(1)
 
         sub_sizer1 = wx.BoxSizer(wx.HORIZONTAL)
@@ -1718,8 +2288,40 @@ class TRFlowPanel(wx.Panel):
         self.pause_valve_monitor.set()
         self.pause_pump_monitor.set()
 
+        # success = self.stop_all()
+
+        # if not success:
+        #     return
+
         self.get_all_valve_positions()
         self.get_all_pump_status()
+
+
+        for pump_panel in self.pump_panels.values():
+            pump_status = pump_panel.moving
+            pump_volume = float(pump_panel.get_status_volume())
+
+            if pump_status:
+                msg = ('Cannot start all pumps when one or more pumps '
+                    'are already moving.')
+                dialog = wx.MessageDialog(self, msg, 'Failed to start pumps',
+                    style=wx.OK|wx.ICON_ERROR)
+                wx.CallAfter(dialog.ShowModal)
+
+                self.pause_valve_monitor.clear()
+                self.pause_pump_monitor.clear()
+                return False
+
+            if pump_volume <= 0:
+                msg = ('Cannot start all pumps when one or more pumps '
+                    'have no loaded volume.')
+                dialog = wx.MessageDialog(self, msg, 'Failed to start pumps',
+                    style=wx.OK|wx.ICON_ERROR)
+                wx.CallAfter(dialog.ShowModal)
+
+                self.pause_valve_monitor.clear()
+                self.pause_pump_monitor.clear()
+                return False
 
         if self.set_valve_position.IsChecked():
             names = [valve for valve in self.settings['valve_start_positions']]
@@ -1738,34 +2340,7 @@ class TRFlowPanel(wx.Panel):
             self.pause_valve_monitor.clear()
             self.pause_pump_monitor.clear()
             return False
-
         else:
-            for pump_panel in self.pump_panels.values():
-                pump_status = pump_panel.get_status()
-                pump_volume = float(pump_panel.get_status_volume())
-
-                if pump_status != 'Connected' and pump_status != 'Done':
-                    msg = ('Cannot start all pumps when one or more pumps '
-                        'are already moving.')
-                    dialog = wx.MessageDialog(self, msg, 'Failed to start pumps',
-                        style=wx.OK|wx.ICON_ERROR)
-                    wx.CallAfter(dialog.ShowModal)
-
-                    self.pause_valve_monitor.clear()
-                    self.pause_pump_monitor.clear()
-                    return False
-
-                if pump_volume <= 0:
-                    msg = ('Cannot start all pumps when one or more pumps '
-                        'have no loaded volume.')
-                    dialog = wx.MessageDialog(self, msg, 'Failed to start pumps',
-                        style=wx.OK|wx.ICON_ERROR)
-                    wx.CallAfter(dialog.ShowModal)
-
-                    self.pause_valve_monitor.clear()
-                    self.pause_pump_monitor.clear()
-                    return False
-
             for pump_panel in self.pump_panels.values():
                 pump_panel.set_pump_direction(True)
                 success = pump_panel.run_pump()
@@ -1796,6 +2371,8 @@ class TRFlowPanel(wx.Panel):
             wx.MessageDialog(self, msg, 'Failed to stop pumps',
                 style=wx.OK|wx.ICON_ERROR)
 
+        return success
+
     def _on_refill_all(self, evt):
         wx.CallAfter(self.refill_all)
 
@@ -1806,6 +2383,23 @@ class TRFlowPanel(wx.Panel):
 
         self.get_all_valve_positions()
         self.get_all_pump_status()
+
+
+        for pump_panel in self.pump_panels.values():
+            pump_status = pump_panel.get_status()
+
+            if pump_status != 'Connected' and pump_status != 'Done':
+                msg = ('Cannot refill all pumps when one or more pumps '
+                    'are already moving.')
+                dialog = wx.MessageDialog(self, msg, 'Failed to refill pumps',
+                    style=wx.OK|wx.ICON_ERROR)
+                dialog.ShowModal()
+
+                logger.error('Failed to refill all pumps, one or more pumps is already moving.')
+
+                self.pause_valve_monitor.clear()
+                self.pause_pump_monitor.clear()
+                return False
 
         if self.set_valve_position.IsChecked():
             names = [valve for valve in self.settings['valve_refill_positions']]
@@ -1829,24 +2423,8 @@ class TRFlowPanel(wx.Panel):
 
         else:
             for pump_panel in self.pump_panels.values():
-                pump_status = pump_panel.get_status()
-
-                if pump_status != 'Connected' and pump_status != 'Done':
-                    msg = ('Cannot refill all pumps when one or more pumps '
-                        'are already moving.')
-                    dialog = wx.MessageDialog(self, msg, 'Failed to refill pumps',
-                        style=wx.OK|wx.ICON_ERROR)
-                    dialog.ShowModal()
-
-                    logger.error('Failed to refill all pumps, one or more pumps is already moving.')
-
-                    self.pause_valve_monitor.clear()
-                    self.pause_pump_monitor.clear()
-                    return False
-
-            for pump_panel in self.pump_panels.values():
-                pump_panel.set_pump_direction(False)
-                success = pump_panel.run_pump()
+                    pump_panel.set_pump_direction(False)
+                    success = pump_panel.run_pump()
 
         if not success:
             msg = ('Pumps failed to refill correctly.')
@@ -1925,7 +2503,7 @@ class TRFlowPanel(wx.Panel):
         position = self._send_valvecmd(cmd, True)
 
         if position is not None and position[0] == 'position':
-            self._set_valve_status(position[1], position[2])
+            wx.CallAfter(self._set_valve_status, position[1], position[2])
 
     def get_all_valve_positions(self):
         cmd = ('get_position_multi', ([valve for valve in self.valves],), {})
@@ -1934,7 +2512,7 @@ class TRFlowPanel(wx.Panel):
 
         if ret is not None and ret[0] == 'multi_positions':
             for i in range(len(ret[1])):
-                self._set_valve_status(ret[1][i], ret[2][i])
+                wx.CallAfter(self._set_valve_status, ret[1][i], ret[2][i])
 
     def set_multiple_valve_positions(self, valve_names, positions):
         cmd = ('set_position_multi', (valve_names, positions), {})
@@ -1989,8 +2567,11 @@ class TRFlowPanel(wx.Panel):
                         elif name == 'buffer2_valve':
                             pos = self.buffer2_valve_position.GetValue()
 
-                        if int(pos) != int(ret[2][i]):
-                            wx.CallAfter(self._set_valve_status, name, ret[2][i])
+                        try:
+                            if int(pos) != int(ret[2][i]):
+                                wx.CallAfter(self._set_valve_status, name, ret[2][i])
+                        except Exception:
+                            pass
 
             while time.time() - start_time < self.valve_monitor_interval:
                 time.sleep(0.1)
@@ -2314,13 +2895,13 @@ class TRFlowPanel(wx.Panel):
 
                 if pump_status != 'Connected' and pump_status != 'Done':
                     errors.append(('Pump {} is moving. All pumps must be '
-                        'stopped before starting exposure'))
+                        'stopped before starting exposure').format(pump_name))
 
             for pump_name, pump_panel in self.pump_panels.items():
                 pump_volume = float(pump_panel.get_status_volume())
 
                 if pump_volume <= 0:
-                    errors.append(('Pump {} has loaded volume <= 0'))
+                    errors.append(('Pump {} has loaded volume <= 0').format(pump_name))
 
         if autoinject == 'After scan':
             try:
@@ -2351,7 +2932,7 @@ class TRFlowPanel(wx.Panel):
                 'start_delay'       : start_delay,
                 'start_flow'        : start_flow,
                 'autoinject'        : autoinject.lower().replace(' ', '_'),
-                'autoinect_scan'    : autoinject_scan,
+                'autoinject_scan'   : autoinject_scan,
                 'start_flow_event'  : self.start_flow_event,
                 'stop_flow_event'   : self.stop_flow_event,
                 'autoinject_event'  : self.autoinject_event,
@@ -2392,15 +2973,15 @@ class TRFlowPanel(wx.Panel):
                     buffer2_fr = flow_rate
 
             metadata['Total flow rate [{}]:'.format(flow_units)] = total_fr
-            metadata['Dilution ratio:'] = sample_fr/total_fr
-            metadata['Sample flow rate [{}]'.format(flow_units)] = sample_fr
-            metadata['Buffer 1 flow rate [{}]'.format(flow_units)] = buffer1_fr
-            metadata['Buffer 2 flow rate [{}]'.format(flow_units)] = buffer2_fr
+            metadata['Dilution ratio:'] = 1./(sample_fr/total_fr)
+            metadata['Sample flow rate [{}]:'.format(flow_units)] = sample_fr
+            metadata['Buffer 1 flow rate [{}]:'.format(flow_units)] = buffer1_fr
+            metadata['Buffer 2 flow rate [{}]:'.format(flow_units)] = buffer2_fr
             metadata['Exposure start setting:'] = start_condition
             if start_condition == 'Fixed delay':
                 metadata['Exposure start delay [s]:'] = float(start_delay)
             elif start_condition == 'At flow rate':
-                metadata['Exposure start flow rate [{}]'.format(flow_units)] = float(start_flow)
+                metadata['Exposure start flow rate [{}]:'.format(flow_units)] = float(start_flow)
             metadata['Autoinject start setting:'] = autoinject
             if autoinject == 'After scan':
                 metadata['Autoinject after scan:'] = int(autoinject_scan)
@@ -2417,7 +2998,7 @@ class TRFlowPanel(wx.Panel):
         self.autoinject_event.clear()
         self.start_exposure_event.clear()
 
-        self.exp_thread = threading.Thread(target=self._start_flow_and_exposure, args=(settings))
+        self.exp_thread = threading.Thread(target=self._start_flow_and_exposure, args=(settings,))
         self.exp_thread.daemon = True
         self.exp_thread.start()
 
@@ -2426,7 +3007,7 @@ class TRFlowPanel(wx.Panel):
         autoinject = settings['autoinject']
         autoinject_valve_position = self.settings['autoinject_valve_pos']
         start_delay = settings['start_delay']
-        start_flow_rate = settings['start_flow_rate']
+        start_flow_rate = settings['start_flow']
 
         exp_panel = wx.FindWindowByName('exposure')
 
@@ -2472,7 +3053,7 @@ class TRFlowPanel(wx.Panel):
 
         if success and start_condition == 'at_flow_rate':
             logger.info(('Waiting for flow rate to reach {} {} to start '
-                'exposure'.format(start_delay, self.settings['flow_units'])))
+                'exposure'.format(start_flow_rate, self.settings['flow_units'])))
 
             success = self.wait_for_flow(start_flow_rate)
 
@@ -2493,6 +3074,8 @@ class TRFlowPanel(wx.Panel):
                 if not success:
                     wx.CallAfter(exp_panel.stop_exp)
 
+        self.pause_valve_monitor.clear()
+        self.pause_pump_monitor.clear()
 
     def inject_sample(self, valve_position):
         cmd = ('set_position', ('injection_valve', valve_position), {})
@@ -2513,21 +3096,27 @@ class TRFlowPanel(wx.Panel):
 
         return success
 
-    def wait_flow_flow(self, target_flow_rate):
+    def wait_for_flow(self, target_flow_rate):
         self.pause_fm_monitor.set()
         flow_cmd = ('get_flow_rate', ('outlet_fm',), {})
-        ret = self._send_fmcmd(flow_cmd, True)
         flow_rate = 0
-
+        target_flow_rate = float(target_flow_rate)
         success = True
 
+        start_time = time.time()
+
         while flow_rate < target_flow_rate:
+            ret = self._send_fmcmd(flow_cmd, True)
             if ret is not None and ret[0] == 'flow_rate':
                 flow_rate = float(ret[1])
 
             if self.stop_flow_event.is_set():
                 success = False
                 break
+
+            if time.time() - start_time > self.fm_monitor_interval:
+                wx.CallAfter(self._set_fm_values, 'outlet_fm', flow_rate=flow_rate)
+                start_time = time.time()
 
         self.pause_fm_monitor.clear()
 
@@ -2747,10 +3336,11 @@ class TRPumpPanel(wx.Panel):
         self.pump_type = pump_type
         self.connected = False
         self.moving = False
+        self.syringe_volume_val = 0
 
         self.known_syringes = {'30 mL, EXEL': {'diameter': 23.5, 'max_volume': 30,
             'max_rate': 70},
-            '3 mL, Medline P.C.': {'diameter': 9.1, 'max_volume': 3,
+            '3 mL, Medline P.C.': {'diameter': 9.1, 'max_volume': 3.0,
             'max_rate': 11},
             '6 mL, Medline P.C.': {'diameter': 12.8, 'max_volume': 6,
             'max_rate': 23},
@@ -2774,7 +3364,7 @@ class TRPumpPanel(wx.Panel):
         parent = top_sizer.GetStaticBox()
 
         self.status = wx.StaticText(parent, label='Not connected')
-        self.syringe_volume = wx.StaticText(parent, label='0', size=(40,-1),
+        self.syringe_volume = wx.StaticText(parent, label='0', size=(50,-1),
             style=wx.ST_NO_AUTORESIZE)
         self.syringe_volume_label = wx.StaticText(parent, label='Current volume:')
         self.syringe_volume_units = wx.StaticText(parent, label='mL')
@@ -2815,7 +3405,7 @@ class TRPumpPanel(wx.Panel):
 
         self.status_sizer = wx.StaticBoxSizer(wx.StaticBox(parent, label='Info'),
             wx.VERTICAL)
-        self.status_sizer.Add(status_grid, 1, wx.EXPAND)
+        self.status_sizer.Add(status_grid, 1, flag=wx.ALL|wx.EXPAND, border=2)
 
         self.mode_ctrl = wx.Choice(parent, choices=['Continuous flow', 'Fixed volume'])
         self.mode_ctrl.SetSelection(0)
@@ -2835,6 +3425,7 @@ class TRPumpPanel(wx.Panel):
 
         self.flow_rate_ctrl.Bind(wx.EVT_KILL_FOCUS, self._on_fr_setting_change)
         self.flow_rate_ctrl.Bind(wx.EVT_TEXT_ENTER, self._on_fr_setting_change)
+        self.direction_ctrl.Bind(wx.EVT_CHOICE, self._on_direction_change)
 
         syr_types = sorted(self.known_syringes.keys(), key=lambda x: float(x.split()[0]))
         self.syringe_type = wx.Choice(parent, choices=syr_types)
@@ -2894,8 +3485,8 @@ class TRPumpPanel(wx.Panel):
 
         self.control_box_sizer = wx.StaticBoxSizer(wx.StaticBox(parent, label='Controls'),
             wx.VERTICAL)
-        self.control_box_sizer.Add(basic_ctrl_sizer, flag=wx.EXPAND)
-        self.control_box_sizer.Add(button_ctrl_sizer, flag=wx.ALIGN_CENTER_HORIZONTAL|wx.TOP, border=2)
+        self.control_box_sizer.Add(basic_ctrl_sizer, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT, border=2)
+        self.control_box_sizer.Add(button_ctrl_sizer, flag=wx.ALIGN_CENTER_HORIZONTAL|wx.ALL, border=2)
 
         top_sizer.Add(self.status_sizer, flag=wx.EXPAND)
         top_sizer.Add(self.control_box_sizer, border=5, flag=wx.EXPAND|wx.TOP)
@@ -2937,6 +3528,12 @@ class TRPumpPanel(wx.Panel):
 
     def _on_fr_change(self, evt):
         self._set_flowrate()
+
+    def _on_direction_change(self, evt):
+        if self.direction_ctrl.GetStringSelection() == 'Dispense':
+            self.pump_direction = 'Dispense'
+        else:
+            self.pump_direction = 'Aspirate'
 
     def on_pump_run(self):
         """
@@ -3064,7 +3661,8 @@ class TRPumpPanel(wx.Panel):
                         vol = float(self.volume_ctrl.GetValue())
                     except Exception:
                         msg = "Volume must be a number."
-                        wx.MessageBox(msg, "Error setting volume")
+                        dialog = wx.MessageDialog(msg, "Error setting volume")
+                        wx.CallAfter(dialog.ShowModal)
                         logger.debug('Failed to set dispense/aspirate volume to %s for pump %s', vol, self.name)
                         return
 
@@ -3074,7 +3672,7 @@ class TRPumpPanel(wx.Panel):
                     vol = None
                     fixed = False
 
-                if self.direction_ctrl.GetStringSelection().lower() == 'dispense':
+                if self.pump_direction.lower() == 'dispense':
                     dispense = True
                 else:
                     dispense = False
@@ -3092,7 +3690,8 @@ class TRPumpPanel(wx.Panel):
 
         else:
             msg = "Cannot start pump flow before the pump is connected."
-            wx.MessageBox(msg, "Error starting flow")
+            dialog = wx.MessageDialog(msg, "Error starting flow")
+            wx.CallAfter(dialog.ShowModal)
             logger.debug('Failed to start flow for pump %s because it is not connected', self.name)
             success = False
 
@@ -3112,10 +3711,12 @@ class TRPumpPanel(wx.Panel):
             vol = float(vol)
             if vol != -1:
                 self.tr_flow_panel.set_pump_volume(self.name, vol)
-
+                self.syringe_volume_val = vol
+                max_vol = self.get_max_volume()
+                set_vol = min(max_vol, vol)
                 wx.CallAfter(self._set_status_volume, vol)
                 wx.CallAfter(self.syringe_vol_gauge.SetValue,
-                    int(round(float(vol)*1000)))
+                    int(round(float(set_vol)*1000)))
 
         except ValueError:
             msg = "Volume must be a number."
@@ -3134,14 +3735,17 @@ class TRPumpPanel(wx.Panel):
         return self.status.GetLabel()
 
     def get_status_volume(self):
-        return self.syringe_volume.GetLabel()
+        return self.syringe_volume_val
 
     def set_status_volume(self, vol):
         try:
             vol = float(vol)
             if vol != -1:
-                self._set_status_volume(vol)
-                self.syringe_vol_gauge.SetValue(int(round(float(vol)*1000)))
+                self.syringe_volume_val = vol
+                wx.CallAfter(self._set_status_volume, vol)
+                max_vol = self.get_max_volume()
+                set_vol = min(max_vol, vol)
+                wx.CallAfter(self.syringe_vol_gauge.SetValue, int(round(float(set_vol)*1000.)))
 
         except ValueError:
             pass
@@ -3153,7 +3757,7 @@ class TRPumpPanel(wx.Panel):
     def set_moving(self, moving):
         if moving != self.moving:
             self.moving = moving
-            self.on_pump_run()
+            wx.CallAfter(self.on_pump_run)
 
     def _on_syringe_type(self, evt):
         vals = copy.deepcopy(self.known_syringes[self.syringe_type.GetStringSelection()])
@@ -3166,9 +3770,11 @@ class TRPumpPanel(wx.Panel):
 
     def set_pump_direction(self, dispense):
         if dispense:
-            self.direction_ctrl.SetStringSelection('Dispense')
+            self.pump_direction = 'Dispense'
+            wx.CallAfter(self.direction_ctrl.SetStringSelection, 'Dispense')
         else:
-            self.direction_ctrl.SetStringSelection('Aspirate')
+            self.pump_direction = 'Aspirate'
+            wx.CallAfter(self.direction_ctrl.SetStringSelection, 'Aspirate')
 
     def get_max_volume(self):
         max_vol = float(self.known_syringes[self.syringe_type.GetStringSelection()]['max_volume'])
@@ -3259,21 +3865,21 @@ if __name__ == '__main__':
         'scan_start_offset_dist': 0,
         'scan_end_offset_dist'  : 0,
         'motor_type'            : 'Newport_XPS',
-        'motor_ip'              : '164.54.204.74',
+        'motor_ip'              : '164.54.204.76',
         'motor_port'            : '5001',
         'motor_group_name'      : 'XY',
         'motor_x_name'          : 'XY.X',
         'motor_y_name'          : 'XY.Y',
         'pco_direction'         : 'x',
         'pco_pulse_width'       : D('10'), #In microseconds, opt: 0.2, 1, 2.5, 10
-        'pco_encoder_settle_t'  : D('12'), #In microseconds, opt: 0.075, 1, 4, 12
-        'encoder_resolution'    : D('0.0005'), #for ILS50PP, in mm
-        'encoder_precision'     : 4, #Number of significant decimals in encoder value
+        'pco_encoder_settle_t'  : D('0.075'), #In microseconds, opt: 0.075, 1, 4, 12
+        'encoder_resolution'    : D('0.000001'), #for ILS50PP, in mm
+        'encoder_precision'     : D(6), #Number of significant decimals in encoder value
         'min_off_time'          : D('0.001'),
-        'x_range'               : (-25, 25),
-        'y_range'               : (-25, 25),
-        'speed_lim'             : (0, 50),
-        'acceleration_lim'      : (0, 200),
+        'x_range'               : (-80, 80),
+        'y_range'               : (-5, 25),
+        'speed_lim'             : (0, 300),
+        'acceleration_lim'      : (0, 2500),
         'remote_pump_ip'        : '164.54.204.8',
         'remote_pump_port'      : '5556',
         'remote_fm_ip'          : '164.54.204.8',
@@ -3330,7 +3936,7 @@ if __name__ == '__main__':
     # logger.addHandler(h2)
 
     logger.debug('Setting up wx app')
-    frame = TRFrame(settings, 'flow', None, title='TRSAXS Control')
+    frame = TRFrame(settings, 'scan', None, title='TRSAXS Control')
     frame.Show()
     app.MainLoop()
 

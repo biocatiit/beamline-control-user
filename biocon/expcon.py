@@ -32,6 +32,7 @@ import os
 import decimal
 from decimal import Decimal as D
 import datetime
+import copy
 
 if __name__ != '__main__':
     logger = logging.getLogger(__name__)
@@ -41,6 +42,7 @@ import numpy as np
 
 import motorcon
 import utils
+import XPS_C8_drivers as xps_drivers
 
 utils.set_mppath() #This must be done before importing any Mp Modules.
 import Mp as mp
@@ -184,12 +186,14 @@ class ExpCommThread(threading.Thread):
             'ki2'   : mx_database.get_record('ki2'),
             'ki3'   : mx_database.get_record('ki3'),
             'mx_db' : mx_database,
-            motors  : {},
+            'motors'  : {},
             }
 
         logger.debug("Generated mx_data")
 
         self._mx_data = mx_data
+
+        self.xps = None
 
         self._commands = {
             'start_exp'     : self._start_exp,
@@ -606,6 +610,14 @@ class ExpCommThread(threading.Thread):
         return_speed = tr_scan_settings['return_speed']
         return_accel = tr_scan_settings['return_accel']
 
+        scan_type = tr_scan_settings['scan_type']
+        step_axis = tr_scan_settings['step_axis']
+        step_size = tr_scan_settings['step_size']
+        step_speed = tr_scan_settings['step_speed']
+        step_accel = tr_scan_settings['step_acceleration']
+        use_gridpoints = tr_scan_settings['use_gridpoints']
+        gridpoints = tr_scan_settings['gridpoints']
+
         if motor_type == 'Newport_XPS':
             pco_start = tr_scan_settings['pco_start']
             pco_end = tr_scan_settings['pco_end']
@@ -615,18 +627,21 @@ class ExpCommThread(threading.Thread):
             pco_encoder_settle_t = tr_scan_settings['pco_encoder_settle_t']
             x_motor = str(tr_scan_settings['motor_x_name'])
             y_motor = str(tr_scan_settings['motor_y_name'])
-            x_positions = [i*tr_scan_settings['x_pco_step']+tr_scan_settings['x_pco_start']
-                for i in range(num_frames)]
-            y_positions = [i*tr_scan_settings['y_pco_step']+tr_scan_settings['y_pco_start']
-                for i in range(num_frames)]
 
         if tr_flow:
             start_condition = tr_flow_settings['start_condition']
             start_flow_event = tr_flow_settings['start_flow_event']
-            start_exposure_event = tr_flow_settings['start_exposure_event']
+            start_exposure_event = tr_flow_settings['start_exp_event']
             start_autoinject_event = tr_flow_settings['autoinject_event']
             autoinject = tr_flow_settings['autoinject']
             autoinject_scan = tr_flow_settings['autoinject_scan']
+        else:
+            start_condition = None
+            start_flow_event = None
+            start_exposure_event = None
+            start_autoinject_event = None
+            autoinject = None
+            autoinject_scan = None
 
         motor_cmd_q = deque()
         motor_answer_q = deque()
@@ -644,7 +659,7 @@ class ExpCommThread(threading.Thread):
             else:
                 motor.stop_position_compare(y_motor)
                 motor.set_position_compare(y_motor, 1, pco_start, pco_end, pco_step)
-                motor.set_position_compare_pulse(x_motor, pco_pulse_width, pco_encoder_settle_t)
+                motor.set_position_compare_pulse(y_motor, pco_pulse_width, pco_encoder_settle_t)
 
             # For newports this is fine, because it automatically scales down different axes speeds
             # so that a group move ends simultaneously. For other controls may need to
@@ -705,169 +720,158 @@ class ExpCommThread(threading.Thread):
 
         # Flow stuff goes here
         if tr_flow:
-            if start_condition != 'none':
+            if start_condition.lower() != 'none':
                 start_flow_event.set()
 
-            while not start_exposure_event.is_set():
+                while not start_exposure_event.is_set():
+                    if self._abort_event.is_set():
+                        self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6,
+                            comp_settings, exp_time)
+                        break
+                    time.sleep(0.001)
+
+        if scan_type == 'vector':
+            next_x = x_start
+            next_y = y_start
+            step_num = None
+            set_step_speed = False
+
+            x_positions = [i*tr_scan_settings['x_pco_step']+tr_scan_settings['x_pco_start']
+                for i in range(num_frames)]
+            y_positions = [i*tr_scan_settings['y_pco_step']+tr_scan_settings['y_pco_start']
+                for i in range(num_frames)]
+
+            for current_run in range(1,num_runs+1):
                 if self._abort_event.is_set():
-                    self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6,
-                        comp_settings, exp_time)
                     break
-                time.sleep(0.001)
 
+                logger.info('Scan %s started', current_run)
 
-        for current_run in range(1,num_runs+1):
-            self.return_queue.append(['scan', current_run])
+                self.return_queue.append(['scan', current_run])
 
-            if det.get_status() & 0x1 !=0:
-                try:
-                    det.abort()
-                except (mp.Device_Action_Failed_Error, mp.Unparseable_String_Error):
-                    pass
-                try:
-                    det.abort()
-                except (mp.Device_Action_Failed_Error, mp.Unparseable_String_Error):
-                    pass
+                self._inner_tr_exp(det, det_filename, exp_time, exp_period, exp_settings,
+                    data_dir, fprefix, num_frames, current_run, struck, ab_burst, dio_out6,
+                    dio_out9, dio_out10, wait_for_trig, motor, motor_type, pco_direction,
+                    x_motor, y_motor, vect_scan_speed, vect_scan_accel, vect_return_speed,
+                    vect_return_accel, x_start, y_start, x_end, y_end, next_x, next_y,
+                    step_num, step_speed, step_accel, set_step_speed, motor_cmd_q, tr_flow,
+                    autoinject, autoinject_scan, start_autoinject_event, s_counters, log_vals,
+                    x_positions, y_positions, comp_settings, tr_scan_settings)
 
-            struck.stop()
-            ab_burst.stop()
+                logger.info('Scan %s done', current_run)
 
-            dio_out9.write(0) # Make sure the NM shutter is closed
-            dio_out10.write(0) # Make sure the trigger is off
-
-            if wait_for_trig:
-                cur_fprefix = '{}_{:04}'.format(fprefix, current_run)
-                new_fname = '{}_0001.tif'.format(cur_fprefix)
+        else:
+            if step_axis == 'x':
+                y_positions = [i*tr_scan_settings['y_pco_step']+tr_scan_settings['y_pco_start']
+                    for i in range(num_frames)]
             else:
-                cur_fprefix = fprefix
-                new_fname = '{}_0001.tif'.format(cur_fprefix)
+                x_positions = [i*tr_scan_settings['x_pco_step']+tr_scan_settings['x_pco_start']
+                    for i in range(num_frames)]
 
-            det_filename.put(new_fname)
+            if not use_gridpoints:
+                if step_axis == 'x':
+                    step_start = x_start
+                    step_end = x_end
 
-            while det_filename.get() != new_fname:
-                logger.debug(det_filename.get())
-                time.sleep(0.01)
-
-            dio_out6.write(0) #Open the slow normally closed xia shutter
-
-            struck.start()
-            ab_burst.arm()
-            det.arm()
-
-            #If the softglue is running, could replace this by a put to a variable that ors with the XPS enable signal?
-            # if continuous_exp:
-            #     dio_out9.write(1)
-
-            logger.info("Waiting to start scan %s", current_run)
-
-            start = time.time()
-            timeout = False
-            while not motor.is_moving() and not timeout:
-                time.sleep(0.001) #Waits for motion to start
-                if time.time()-start>0.1:
-                    timeout = True
-
-            while motor.is_moving():
-                if self._abort_event.is_set():
-                    self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6,
-                        comp_settings, exp_time)
-                    break
-                time.sleep(0.001)
-
-            if self._abort_event.is_set():
-                self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6,
-                    comp_settings, exp_time)
-                break
-
-            if motor_type == 'Newport_XPS':
-                if pco_direction == 'x':
-                    logger.debug('starting x pco')
-                    motor.start_position_compare(x_motor)
                 else:
-                    logger.debug('starting x pco')
-                    motor.start_position_compare(y_motor)
+                    step_start = y_start
+                    step_end = y_end
 
-                if vect_scan_speed[0] != 0:
-                    motor.set_velocity(vect_scan_speed[0], x_motor, 0)
-                if vect_scan_speed[1] != 0:
-                    motor.set_velocity(vect_scan_speed[1], y_motor, 1)
-                if vect_scan_accel[0] != 0:
-                    motor.set_acceleration(vect_scan_accel[0], x_motor, 0)
-                if vect_scan_accel[1] != 0:
-                    motor.set_acceleration(vect_scan_accel[1], y_motor, 1)
+                if step_start < step_end:
+                    mtr_positions = np.arange(step_start, step_end+step_size, step_size)
 
-            if tr_flow:
-                if autoinject == 'after_scan':
-                    if current_run == int(autoinject_scan)+1:
-                        start_autoinject_event.set()
+                    if mtr_positions[-1] > step_end:
+                        mtr_positions = mtr_positions[:-1]
 
-            motor_cmd_q.append(('move_absolute', ('TR_motor', (x_end, y_end)), {}))
+                else:
+                    mtr_positions = np.arange(step_end, step_start+step_size, step_size)
 
-            logger.info('Scan %s started', current_run)
-            self._exp_event.set()
+                    if mtr_positions[-1] > step_start:
+                            mtr_positions = mtr_positions[:-1]
 
-            start = time.time()
-            timeout = False
-            while not motor.is_moving() and not timeout:
-                time.sleep(0.001) #Waits for motion to start
-                if time.time()-start>0.5:
-                    timeout = True
+                    mtr_positions = mtr_positions[::-1]
+            else:
+                mtr_positions = gridpoints
 
-            while motor.is_moving():
+            for current_run in range(1,num_runs+1):
+                start = time.time()
+                timeout = False
+                while not motor.is_moving() and not timeout:
+                    time.sleep(0.001) #Waits for motion to start
+                    if time.time()-start>0.1:
+                        timeout = True
+
+                while motor.is_moving():
+                    if self._abort_event.is_set():
+                        break
+                    time.sleep(0.001)
+
                 if self._abort_event.is_set():
-                    self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6,
-                        comp_settings, exp_time)
                     break
 
-                time.sleep(0.001)
+                logger.info('Scan %s started', current_run)
+                self.return_queue.append(['scan', current_run])
 
-            dio_out6.write(1) #Close the slow normally closed xia shutter
+                for step_num, pos in enumerate(mtr_positions):
+                    if self._abort_event.is_set():
+                        break
 
-            if motor_type == 'Newport_XPS':
-                if pco_direction == 'x':
-                    motor.stop_position_compare(x_motor)
-                else:
-                    motor.stop_position_compare(y_motor)
+                    if step_axis == 'x':
+                        step_x_start = pos
+                        step_x_end = pos
+                        step_y_start = y_start
+                        step_y_end = y_end
+                        # motor.set_velocity(step_speed, x_motor, 0)
+                        # motor.set_acceleration(step_accel, x_motor, 0)
 
-                if vect_return_speed[0] != 0:
-                    motor.set_velocity(vect_return_speed[0], x_motor, 0)
-                if vect_return_speed[1] != 0:
-                    motor.set_velocity(vect_return_speed[1], y_motor, 1)
-                if vect_return_accel[0] != 0:
-                    motor.set_acceleration(vect_return_accel[0], x_motor, 0)
-                if vect_return_accel[1] != 0:
-                    motor.set_acceleration(vect_return_accel[1], y_motor, 1)
+                        if step_num + 1 < len(mtr_positions):
+                            next_x = mtr_positions[step_num+1]
+                            set_step_speed = True
+                        else:
+                            next_x = x_start
+                            set_step_speed = False
 
-            motor_cmd_q.append(('move_absolute', ('TR_motor', (x_start, y_start)), {}))
+                        next_y = y_start
 
-            measurement = struck.read_all()
+                        x_positions = [pos for i in range(num_frames)]
 
-            dark_counts = []
-            for i in range(len(s_counters)):
-                if log_vals[i]['dark']:
-                    dark_counts.append(s_counters[i].get_dark_current())
-                else:
-                    dark_counts.append(0)
+                    else:
+                        step_x_start = x_start
+                        step_x_end = x_end
+                        step_y_start = pos
+                        step_y_end = pos
+                        # motor.set_velocity(step_speed, y_motor, 1)
+                        # motor.set_acceleration(step_accel, y_motor, 1)
 
-            logger.info('Writing counters')
-            extra_vals = [['x', x_positions], ['y', y_positions]]
-            self.write_counters_struck(measurement, num_frames, data_dir,
-                cur_fprefix, exp_period, dark_counts, log_vals,
-                exp_settings['metadata'], extra_vals)
+                        next_x = x_start
 
-            while det.get_status() & 0x1 !=0:
-                time.sleep(0.001)
-                if self._abort_event.is_set():
-                    self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6,
-                        comp_settings, exp_time)
-                    break
+                        if step_num + 1 < len(mtr_positions):
+                            next_y = mtr_positions[step_num+1]
+                            set_step_speed = True
+                        else:
+                            next_y = y_start
+                            set_step_speed = False
 
-            logger.info('Scan %s done', current_run)
+                        y_positions = [pos for i in range(num_frames)]
 
-            if self._abort_event.is_set():
-                self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6,
-                    comp_settings, exp_time)
-                break
+                    # motor_cmd_q.append(('move_absolute', ('TR_motor',
+                    #     (step_x_start, step_y_start)), {}))
+
+                    step_fprefix = '{}_s{:03}'.format(fprefix, step_num+1)
+
+
+                    self._inner_tr_exp(det, det_filename, exp_time, exp_period, exp_settings,
+                        data_dir, step_fprefix, num_frames, current_run, struck, ab_burst, dio_out6,
+                        dio_out9, dio_out10, wait_for_trig, motor, motor_type, pco_direction,
+                        x_motor, y_motor, vect_scan_speed, vect_scan_accel, vect_return_speed,
+                        vect_return_accel, step_x_start, step_y_start, step_x_end, step_y_end,
+                        next_x, next_y, step_num, step_speed, step_accel, set_step_speed,
+                        motor_cmd_q, tr_flow, autoinject, autoinject_scan, start_autoinject_event,
+                        s_counters, log_vals, x_positions, y_positions, comp_settings, tr_scan_settings)
+
+                logger.info('Scan %s done', current_run)
+
+
 
         start = time.time()
         timeout = False
@@ -889,6 +893,194 @@ class ExpCommThread(threading.Thread):
 
         self._exp_event.clear()
 
+    def _inner_tr_exp(self, det, det_filename, exp_time, exp_period, exp_settings,
+        data_dir, fprefix, num_frames, current_run, struck, ab_burst, dio_out6,
+        dio_out9, dio_out10, wait_for_trig, motor, motor_type, pco_direction,
+        x_motor, y_motor, vect_scan_speed, vect_scan_accel, vect_return_speed,
+        vect_return_accel, x_start, y_start, x_end, y_end, next_x, next_y,
+        step_num, step_speed, step_accel, set_step_speed, motor_cmd_q, tr_flow,
+        autoinject, autoinject_scan, start_autoinject_event, s_counters, log_vals,
+        x_positions, y_positions, comp_settings, tr_scan_settings):
+
+        if det.get_status() & 0x1 !=0:
+            try:
+                det.abort()
+            except (mp.Device_Action_Failed_Error, mp.Unparseable_String_Error):
+                pass
+            try:
+                det.abort()
+            except (mp.Device_Action_Failed_Error, mp.Unparseable_String_Error):
+                pass
+
+        struck.stop()
+        ab_burst.stop()
+
+        dio_out9.write(0) # Make sure the NM shutter is closed
+        dio_out10.write(0) # Make sure the trigger is off
+
+        if wait_for_trig:
+            cur_fprefix = '{}_{:04}'.format(fprefix, current_run)
+            new_fname = '{}_0001.tif'.format(cur_fprefix)
+        else:
+            cur_fprefix = fprefix
+            new_fname = '{}_0001.tif'.format(cur_fprefix)
+
+        det_filename.put(new_fname)
+
+        while det_filename.get() != new_fname:
+            logger.debug(det_filename.get())
+            time.sleep(0.01)
+
+        dio_out6.write(0) #Open the slow normally closed xia shutter
+
+        struck.start()
+        ab_burst.arm()
+        det.arm()
+
+        #If the softglue is running, could replace this by a put to a variable that ors with the XPS enable signal?
+        # if continuous_exp:
+        #     dio_out9.write(1)
+
+        # logger.info("Waiting to start scan %s", current_run)
+
+        start = time.time()
+        timeout = False
+        while not motor.is_moving() and not timeout:
+            time.sleep(0.001) #Waits for motion to start
+            if time.time()-start>0.1:
+                timeout = True
+
+        while motor.is_moving():
+            if self._abort_event.is_set():
+                self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6,
+                    comp_settings, exp_time)
+                break
+            time.sleep(0.001)
+
+        if self._abort_event.is_set():
+            self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6,
+                comp_settings, exp_time)
+            return
+
+        if motor_type == 'Newport_XPS':
+            if pco_direction == 'x':
+                wait_for_motor = True
+                while wait_for_motor:
+                    status, descrip = motor.get_group_status(tr_scan_settings['motor_group_name'])
+                    logger.info(status)
+                    if status == 12:
+                        wait_for_motor = False
+
+                logger.debug('starting x pco')
+                motor.start_position_compare(x_motor)
+            else:
+                wait_for_motor = True
+                while wait_for_motor:
+                    status, descrip = motor.get_group_status(tr_scan_settings['motor_group_name'])
+                    logger.info(status)
+                    if status == 12:
+                        wait_for_motor = False
+
+                logger.debug('starting Y pco')
+
+                motor.start_position_compare(y_motor)
+
+            if vect_scan_speed[0] != 0:
+                motor.set_velocity(vect_scan_speed[0], x_motor, 0)
+            if vect_scan_speed[1] != 0:
+                motor.set_velocity(vect_scan_speed[1], y_motor, 1)
+            if vect_scan_accel[0] != 0:
+                motor.set_acceleration(vect_scan_accel[0], x_motor, 0)
+            if vect_scan_accel[1] != 0:
+                motor.set_acceleration(vect_scan_accel[1], y_motor, 1)
+
+        if tr_flow:
+            if autoinject == 'after_scan':
+                if current_run == int(autoinject_scan)+1:
+                    start_autoinject_event.set()
+
+        motor_cmd_q.append(('move_absolute', ('TR_motor', (x_end, y_end)), {}))
+
+        self._exp_event.set()
+
+        start = time.time()
+        timeout = False
+        while not motor.is_moving() and not timeout:
+            time.sleep(0.001) #Waits for motion to start
+            if time.time()-start>0.5:
+                timeout = True
+
+        while motor.is_moving():
+            if self._abort_event.is_set():
+                self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6,
+                    comp_settings, exp_time)
+                break
+
+            time.sleep(0.001)
+
+        dio_out6.write(1) #Close the slow normally closed xia shutter
+
+        if motor_type == 'Newport_XPS':
+            if pco_direction == 'x':
+                motor.stop_position_compare(x_motor)
+            else:
+                motor.stop_position_compare(y_motor)
+
+            if vect_return_speed[0] != 0:
+                motor.set_velocity(vect_return_speed[0], x_motor, 0)
+            if vect_return_speed[1] != 0:
+                motor.set_velocity(vect_return_speed[1], y_motor, 1)
+            if vect_return_accel[0] != 0:
+                motor.set_acceleration(vect_return_accel[0], x_motor, 0)
+            if vect_return_accel[1] != 0:
+                motor.set_acceleration(vect_return_accel[1], y_motor, 1)
+
+            if set_step_speed:
+                if pco_direction == 'x':
+                    motor.set_velocity(step_speed, y_motor, 1)
+                    motor.set_acceleration(step_accel, y_motor, 1)
+                else:
+                    motor.set_velocity(step_speed, x_motor, 0)
+                    motor.set_acceleration(step_accel, x_motor, 0)
+
+            else:
+                if step_num is not None:
+                    if pco_direction == 'x':
+                        motor.set_velocity(vect_return_speed[0], y_motor, 1)
+                        motor.set_acceleration(vect_return_accel[0], y_motor, 1)
+                    else:
+                        motor.set_velocity(vect_return_speed[1], x_motor, 0)
+                        motor.set_acceleration(vect_return_speed[0], x_motor, 0)
+
+
+        motor_cmd_q.append(('move_absolute', ('TR_motor', (next_x, next_y)), {}))
+
+        measurement = struck.read_all()
+
+        dark_counts = []
+        for i in range(len(s_counters)):
+            if log_vals[i]['dark']:
+                dark_counts.append(s_counters[i].get_dark_current())
+            else:
+                dark_counts.append(0)
+
+        logger.info('Writing counters')
+        extra_vals = [['x', x_positions], ['y', y_positions]]
+        self.write_counters_struck(measurement, num_frames, data_dir,
+            cur_fprefix, exp_period, dark_counts, log_vals,
+            exp_settings['metadata'], extra_vals)
+
+        while det.get_status() & 0x1 !=0:
+            time.sleep(0.001)
+            if self._abort_event.is_set():
+                self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6,
+                    comp_settings, exp_time)
+                break
+
+        if self._abort_event.is_set():
+            self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6,
+                comp_settings, exp_time)
+
     def scan_exposure(self, exp_settings, comp_settings):
         logger.debug('Setting up scan exposure')
 
@@ -897,14 +1089,16 @@ class ExpCommThread(threading.Thread):
         num_scans = scan_settings['num_scans']
         scan_motors = copy.deepcopy(scan_settings['motors'])
 
-        for current_run in range(1,num_runs+1):
-            self.return_queue.append(['scan', cur_trig])
+        for current_run in range(1,num_scans+1):
+            self.return_queue.append(['scan', current_run])
 
-            self._inner_scan_exp(exp_settings, scan_motors, OrderedDict())
+            self._inner_scan_exp(exp_settings, scan_settings,
+                scan_motors, OrderedDict(), current_run)
 
         self._exp_event.clear()
 
-    def _inner_scan_exp(self, exp_settings, scan_motors, motor_positions):
+    def _inner_scan_exp(self, exp_settings, scan_settings, scan_motors,
+        motor_positions, current_run):
         det = self._mx_data['det']          #Detector
 
         struck = self._mx_data['struck']    #Struck SIS3820
@@ -954,13 +1148,25 @@ class ExpCommThread(threading.Thread):
         motor_name = motor_params['motor']
         start = motor_params['start']
         stop = motor_params['stop']
-        step = motor_params['step']
+        step_size = motor_params['step']
+        motor_type = motor_params['type']
 
-        if motor_name in self._mx_data['motors']:
-            motor = self._mx_data['motors']
-        else:
-            motor = self._mx_data['db'].get_record(motor_name)
-            self._mx_data['motors'][motor_name] = motor
+        if motor_type == 'MX':
+            if motor_name in self._mx_data['motors']:
+                motor = self._mx_data['motors']
+            else:
+                motor = self._mx_data['db'].get_record(motor_name)
+                self._mx_data['motors'][motor_name] = motor
+        elif motor_type == 'Newport':
+            if self.xps is None:
+                np_group = motor_params['np_group']
+                np_index = motor_params['np_index']
+                np_axes = motor_params['np_axes']
+                self.xps = xps_drivers.XPS()
+                motor = motorcon.NewportXPSSingleAxis('Scan', self.xps,
+                    scan_settings['motor_ip'], int(scan_settings['motor_port']),
+                    20, np_group, np_axes, motor_name, np_index)
+
 
         initial_motor_position = float(motor.get_position())
 
@@ -1010,7 +1216,9 @@ class ExpCommThread(threading.Thread):
 
                 det_datadir.put(data_dir)
 
-                new_fname = '{}_{:04}'.format(fprefix_cur_trig)
+                cur_fprefix = '{}_{:04}'.format(fprefix, current_run)
+
+                new_fname = '{}_{:04}'.format(cur_fprefix)
 
                 for mprefix, pos in motor_positions:
                     new_fname = new_fname + '_{}_{}'.format(mprefix, pos)
@@ -1037,12 +1245,14 @@ class ExpCommThread(threading.Thread):
                     cd_burst.setup(exp_period, 0.0001, num_frames, exp_time+s_offset, 1, -1)
                     ef_burst.setup(exp_period, exp_time, num_frames, s_offset_half, 1, -1)
                     gh_burst.setup(exp_period, exp_time, num_frames, 0, 1, -1)
+                    continuous_exp = False
                 else:
                     #Shutter will be open continuously, via dio_out9
                     ab_burst.setup(exp_period, exp_time, num_frames, 0, 1, -1) #Irrelevant
                     cd_burst.setup(exp_period, 0.0001, num_frames, exp_time+0.00015, 1, -1)
                     ef_burst.setup(exp_period, exp_time, num_frames, 0, 1, -1)
                     gh_burst.setup(exp_period, exp_time, num_frames, 0, 1, -1)
+                    continuous_exp = True
 
                 dio_out6.write(0) #Open the slow normally closed xia shutter
 
@@ -1979,11 +2189,11 @@ class ExpCommThread(threading.Thread):
         dio_out9.write(0) #Close the fast shutter
         dio_out6.write(1) #Close the slow normally closed xia shutter
 
-        if 'tr_scan' in comp_settings:
-            tr_scan_settings = comp_settings['tr_scan']
+        if 'trsaxs_scan' in comp_settings:
+            tr_scan_settings = comp_settings['trsaxs_scan']
 
-        if 'tr_flow' in comp_settings:
-            tr_flow_settings = comp_settings['tr_flow']
+        if 'trsaxs_flow' in comp_settings:
+            tr_flow_settings = comp_settings['trsaxs_flow']
             tr_flow = True
         else:
             tr_flow = False
@@ -2672,6 +2882,7 @@ class ExpPanel(wx.Panel):
 
     def _check_components(self):
         comp_settings = {}
+        errors = []
 
         if 'coflow' in self.settings['components']:
             coflow_panel = wx.FindWindowByName('coflow')
@@ -2707,7 +2918,29 @@ class ExpPanel(wx.Panel):
             wx.CallAfter(wx.MessageBox, msg, 'Error starting coflow',
                 style=wx.OK|wx.ICON_ERROR)
 
-        valid = coflow_started and trsaxs_scan_valid and trsaxs_flow_valid and scan_valid
+        if ('trsaxs_scan' in self.settings['components'] and 'trsaxs_flow' in self.settings['components']
+            and trsaxs_scan_valid and trsaxs_flow_valid):
+            autoinject = comp_settings['trsaxs_flow']['autoinject']
+            autoinject_scan = comp_settings['trsaxs_flow']['autoinject_scan']
+            total_scans = comp_settings['trsaxs_scan']['num_scans']
+
+            if autoinject == 'after_scan' and  autoinject_scan >= total_scans:
+                errors.append(('Autoinjection scan must be less than the total '
+                    'number of scans.'))
+
+        if len(errors) > 0:
+            msg = 'The following field(s) have invalid values:'
+            for err in errors:
+                msg = msg + '\n- ' + err
+            msg = msg + ('\n\nPlease correct these errors, then start the exposure.')
+
+            wx.CallAfter(wx.MessageBox, msg, 'Error in component parameters',
+                style=wx.OK|wx.ICON_ERROR)
+
+            comp_settings = {}
+            valid = False
+        else:
+            valid = coflow_started and trsaxs_scan_valid and trsaxs_flow_valid and scan_valid
 
         return valid, comp_settings
 
