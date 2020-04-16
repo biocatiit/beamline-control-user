@@ -37,6 +37,7 @@ import wx
 import expcon
 import coflowcon
 import trcon
+import metadata
 
 class BioFrame(wx.Frame):
     """
@@ -93,7 +94,25 @@ class BioFrame(wx.Frame):
             or 'trsaxs_scan' in self.component_sizers or 'scan' in self.component_sizers):
             exp_sizer = wx.BoxSizer(wx.HORIZONTAL)
 
-            if 'exposure' in self.component_sizers and 'trsaxs_flow' in self.component_sizers:
+            if ('exposure' in self.component_sizers
+                and 'trsaxs_flow' in self.component_sizers
+                and 'metadata' in self.component_sizers):
+
+                sub_sub_sizer = wx.BoxSizer(wx.HORIZONTAL)
+                sub_sub_sizer.Add(self.component_sizers['metadata'], proportion=1,
+                    border=10, flag=wx.EXPAND|wx.ALL)
+                sub_sub_sizer.Add(self.component_sizers['exposure'], proportion=2,
+                    border=10, flag=wx.EXPAND|wx.ALL)
+
+                sub_sizer = wx.BoxSizer(wx.VERTICAL)
+                sub_sizer.Add(sub_sub_sizer, flag=wx.EXPAND)
+                sub_sizer.Add(self.component_sizers['trsaxs_flow'], proportion=1,
+                    border=10, flag=wx.EXPAND|wx.ALL)
+
+                exp_sizer.Add(sub_sizer, flag=wx.EXPAND, proportion=1)
+
+            elif ('exposure' in self.component_sizers
+                and 'trsaxs_flow' in self.component_sizers):
                 sub_sizer = wx.BoxSizer(wx.VERTICAL)
                 sub_sizer.Add(self.component_sizers['exposure'],
                     border=10, flag=wx.EXPAND|wx.ALL)
@@ -101,6 +120,13 @@ class BioFrame(wx.Frame):
                     border=10, flag=wx.EXPAND|wx.ALL)
 
                 exp_sizer.Add(sub_sizer, flag=wx.EXPAND, proportion=1)
+
+            elif ('exposure' in self.component_sizers
+                and 'metadata' in self.component_sizers):
+                exp_sizer.Add(self.component_sizers['metadata'], proportion=1,
+                    border=10, flag=wx.EXPAND|wx.ALL)
+                exp_sizer.Add(self.component_sizers['exposure'], proportion=2,
+                    border=10, flag=wx.EXPAND|wx.ALL)
 
             elif 'exposure' in self.component_sizers:
                 exp_sizer.Add(self.component_sizers['exposure'], proportion=1,
@@ -329,14 +355,35 @@ if __name__ == '__main__':
         'motor_group_name'      : 'XY',
         }
 
+    metadata_settings = {
+        'components'        : ['metadata'],
+        'saxs_defaults'     : {'exp_type'   : 'SEC-SAXS',
+                                'temp'      : 22,
+                                'volume'    : '',
+                                'conc'      : '',
+                                'column'    : 'Superdex 200 10/300 Increase',
+                                'is_buffer' : False,
+                                'mixer'     : 'Chaotic S-bend (90 ms)',
+                                'notes'     : '',
+                                },
+        'muscle_defaults'   : {'system'         : 'Mouse',
+                                'muscle_type'   : 'Cardiac',
+                                'muscle'        : '',
+                                'preparation'   : 'Intact',
+                                'notes'         : '',
+                                },
+        'metadata_type'     : 'auto',
+        }
+
     biocon_settings = {}
 
     components = OrderedDict([
         ('exposure', expcon.ExpPanel),
         # ('coflow', coflowcon.CoflowPanel),
-        ('trsaxs_scan', trcon.TRScanPanel),
+        # ('trsaxs_scan', trcon.TRScanPanel),
         # ('trsaxs_flow', trcon.TRFlowPanel),
         # ('scan',    scancon.ScanPanel),
+        ('metadata', metadata.ParamPanel)
         ])
 
     settings = {
@@ -344,6 +391,8 @@ if __name__ == '__main__':
         'exposure'      : exposure_settings,
         'trsaxs_scan'   : trsaxs_settings,
         'trsaxs_flow'   : trsaxs_settings,
+        'scan'          : scan_settings,
+        'metadata'      : metadata_settings,
         'components'    : components,
         'biocon'        : biocon_settings,
         }
@@ -351,7 +400,9 @@ if __name__ == '__main__':
 
     for key in settings:
         if key != 'components' and key != 'biocon':
-            settings[key]['components'] = settings['components'].keys()
+            keys = settings['components'].keys()
+            comps = keys.append('biocon')
+            settings[key]['components'] = comps
 
     app = wx.App()
 
@@ -370,7 +421,7 @@ if __name__ == '__main__':
     logger.addHandler(h2)
 
     logger.debug('Setting up wx app')
-    frame = BioFrame(settings, None, title='BioCAT Control')
+    frame = BioFrame(settings, None, title='BioCAT Control', name='biocon')
     frame.Show()
     app.MainLoop()
 

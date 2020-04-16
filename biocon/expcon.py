@@ -2062,7 +2062,11 @@ class ExpCommThread(threading.Thread):
     def _get_header(self, metadata, log_vals, fname=True):
         header = ''
         for key, value in metadata.items():
-            header = header + '#{}\t{}\n'.format(key, value)
+            if key == 'Notes:':
+                for line in value.split('\n'):
+                    header = header + '#{}\t{}\n'.format(key, line)
+            else:
+                header = header + '#{}\t{}\n'.format(key, value)
 
         if fname:
             header=header+'#Filename\tstart_time\texposure_time'
@@ -2566,7 +2570,13 @@ class ExpPanel(wx.Panel):
         if not comp_valid:
             return
 
-        exp_values['metadata'] = self._get_metadata()
+        metadata, metadata_valid = self._get_metadata()
+
+        if metadata_valid:
+            exp_values['metadata'] = metadata
+        else:
+            return
+
 
         self.set_status('Preparing exposure')
         self.start_exp_btn.Disable()
@@ -2987,12 +2997,19 @@ class ExpPanel(wx.Panel):
 
         metadata = self.metadata()
 
+        column = None
+        flow_rate = None
+        errors = []
+
         if 'coflow' in self.settings['components']:
             coflow_panel = wx.FindWindowByName('coflow')
             coflow_metadata = coflow_panel.metadata()
 
             for key, value in coflow_metadata.items():
                 metadata[key] = value
+
+                if key.startswith('LC flow rate'):
+                    flow_rate = float(value)
 
         if 'trsaxs_scan' in self.settings['components']:
             trsaxs_panel = wx.FindWindowByName('trsaxs_scan')
@@ -3015,7 +3032,56 @@ class ExpPanel(wx.Panel):
             for key, value in scan_metadata.items():
                 metadata[key] = value
 
-        return metadata
+        if 'metadata' in self.settings['components']:
+            params_panel = wx.FindWindowByName('metadata')
+            params_metadata = params_panel.metadata()
+
+            for key, value in params_metadata.items():
+                metadata[key] = value
+
+                if key == 'Column:':
+                    column = value
+
+
+        if ('coflow' in self.settings['components']
+            and 'metadata' in self.settings['components']):
+            if metadata['Coflow on']:
+                if column is not None and flow_rate is not None:
+                    if '10/300' in column:
+                        flow_range = (0.5, 0.8)
+                    elif '5/150' in column:
+                        flow_range = (0.25, 0.5)
+                    elif 'Wyatt' in column:
+                        flow_range = (0.5, 0.8)
+                    else:
+                        flow_range = None
+
+                    if flow_range is not None:
+                        if flow_rate < flow_range[0] or flow_rate > flow_range[1]:
+                            msg = ('Flow rate of {} is not in the usual '
+                                'range of {} to {} for column {}'.format(flow_rate,
+                                flow_range[0], flow_range[1], column))
+
+                            errors.append(msg)
+
+        if len(errors) == 0:
+            metadata_valid = True
+
+        else:
+            msg = ('Your settings may be inconsistent:')
+            msg = msg + '\n-'.join(errors)
+            msg = msg + '\n\nDo you wish to continue the exposure?'
+
+            dlg = wx.MessageDialog(self, msg, "Confirm data overwrite",
+                wx.YES_NO|wx.ICON_QUESTION|wx.NO_DEFAULT)
+            result = dlg.ShowModal()
+
+            if result == wx.ID_YES:
+                metadata_valid = True
+            else:
+                metadata_valid = False
+
+        return metadata, metadata_valid
 
     def metadata(self):
         metadata = OrderedDict()
