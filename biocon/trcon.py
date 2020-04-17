@@ -1940,7 +1940,7 @@ class TRFlowPanel(wx.Panel):
         if not outlet_init and not self.timeout_event.is_set():
             logger.error('Failed to connect to the outlet flow meter.')
 
-            msg = ('Could not connect to the coflow outlet flow meter. '
+            msg = ('Could not connect to the TR-SAXS outlet flow meter. '
                 'Contact your beamline scientist.')
 
             dialog = wx.MessageDialog(self, msg, 'Connection error',
@@ -1962,7 +1962,7 @@ class TRFlowPanel(wx.Panel):
             if ret is not None and ret[0] == 'flow_rate':
                 self._set_fm_values('outlet_fm', flow_rate=ret[1])
 
-            logger.info('Coflow flow meters initialization successful')
+            logger.info('TR-SAXS flow meters initialization successful')
 
         else:
             self.stop_fm_monitor.set()
@@ -1970,17 +1970,6 @@ class TRFlowPanel(wx.Panel):
         self.fm_monitor_thread.start()
 
     def _create_layout(self):
-
-        # Controls to create:
-        # Overall flow rate, dilution ratio, which then calculate individual flow rates
-        # Start all button
-        # Stop all button
-        # Control for automatically triggering exposures at a certain flow rate
-        # Control for automatically injecting after a certain number of scans
-        # Control for refilling all
-        # Needs to automatically set all valves to the right position for start of exposure
-        # Needs to generate appropriate metadata for the exposure
-        # Needs to interact with exposure control as appropriate
 
         basic_flow_box_sizer = wx.StaticBoxSizer(wx.HORIZONTAL, self, 'Flow Controls')
         basic_flow_parent = basic_flow_box_sizer.GetStaticBox()
@@ -3936,7 +3925,7 @@ if __name__ == '__main__':
     # logger.addHandler(h2)
 
     logger.debug('Setting up wx app')
-    frame = TRFrame(settings, 'scan', None, title='TRSAXS Control')
+    frame = TRFrame(settings, 'flow', None, title='TRSAXS Control')
     frame.Show()
     app.MainLoop()
 
