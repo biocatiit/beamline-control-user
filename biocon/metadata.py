@@ -128,6 +128,8 @@ class SAXSPanel(wx.Panel):
         defaults = self.settings['saxs_defaults']
 
         self.experiment_type.SetStringSelection(defaults['exp_type'])
+        self.buffer.SetValue(defaults['buffer'])
+        self.sample.SetValue(defaults['sample'])
         self.temperature.SetValue(str(defaults['temp']))
         self.volume.SetValue(str(defaults['volume']))
         self.concentration.SetValue(str(defaults['conc']))
@@ -151,6 +153,9 @@ class SAXSPanel(wx.Panel):
             'IEC-SAXS', 'SEC-SAXS', 'SEC-MALS-SAXS', 'TR-SAXS', 'Other'])
         self.experiment_type.Bind(wx.EVT_CHOICE, self._on_experiment_type)
 
+        self.sample = wx.TextCtrl(ctrl_parent)
+        self.buffer = wx.TextCtrl(ctrl_parent)
+
         self.temperature = wx.TextCtrl(ctrl_parent, size=(80, -1),
             validator=utils.CharValidator('float_neg'))
 
@@ -163,23 +168,31 @@ class SAXSPanel(wx.Panel):
         exp_const_sizer.Add(wx.StaticText(ctrl_parent, label='Experiment type:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
         exp_const_sizer.Add(self.experiment_type, flag=wx.ALIGN_CENTER_VERTICAL)
+        exp_const_sizer.Add(wx.StaticText(ctrl_parent, label='Sample:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        exp_const_sizer.Add(self.sample, flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
+        exp_const_sizer.Add(wx.StaticText(ctrl_parent, label='Buffer:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        exp_const_sizer.Add(self.buffer, flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
         exp_const_sizer.Add(wx.StaticText(ctrl_parent, label='Temperature [C]:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
-        exp_const_sizer.Add(self.temperature)
+        exp_const_sizer.Add(self.temperature, flag=wx.ALIGN_CENTER_VERTICAL)
         exp_const_sizer.Add(wx.StaticText(ctrl_parent, label='Loaded volume [uL]:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
-        exp_const_sizer.Add(self.volume)
+        exp_const_sizer.Add(self.volume, flag=wx.ALIGN_CENTER_VERTICAL)
         exp_const_sizer.Add(wx.StaticText(ctrl_parent, label='Concentration [mg/ml]:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
-        exp_const_sizer.Add(self.concentration)
+        exp_const_sizer.Add(self.concentration, flag=wx.ALIGN_CENTER_VERTICAL)
 
+        exp_const_sizer.AddGrowableCol(1)
 
         column_choices = ['Superdex 200 10/300 Increase', 'Superdex 75 10/300 Increase',
             'Superose 6 10/300 Increase', 'Superdex 200 5/150 Increase',
             'Superdex 75 5/150 Increase', 'Superose 6 5/150 Increase',
             'Superdex 200 10/300', 'Superdex 75 10/300', 'Superose 6 10/300',
             'Superdex 200 5/150', 'Superdex 75 5/150', 'Superose 6 5/150',
-            'Wyatt 010S5', 'Wyatt 015S5', 'Wyatt 030S5', 'Other']
+            'Wyatt 010S5', 'Wyatt 015S5', 'Wyatt 030S5', 'HiTrap Q FF, 5 ml',
+            'HiTrap SP FF, 5 ml', 'Other']
 
         self.lc_column_choice = wx.Choice(ctrl_parent, choices=column_choices)
 
@@ -214,7 +227,8 @@ class SAXSPanel(wx.Panel):
         notes_sizer.Add(self.notes, proportion=1, border=5,
             flag=wx.EXPAND|wx.LEFT)
 
-        self.top_sizer.Add(exp_const_sizer, border=5, flag=wx.LEFT|wx.RIGHT|wx.TOP)
+        self.top_sizer.Add(exp_const_sizer, border=5,
+            flag=wx.LEFT|wx.RIGHT|wx.TOP|wx.EXPAND)
         self.top_sizer.Add(self.lc_sizer, border=5, flag=wx.LEFT|wx.RIGHT|wx.TOP)
         self.top_sizer.Add(self.batch_sizer, border=5, flag=wx.LEFT|wx.RIGHT|wx.TOP)
         self.top_sizer.Add(self.tr_sizer, border=5, flag=wx.LEFT|wx.RIGHT|wx.TOP)
@@ -255,6 +269,8 @@ class SAXSPanel(wx.Panel):
         exp_type = self.experiment_type.GetStringSelection()
 
         metadata['Experiment type:'] = exp_type
+        metadata['Sample:'] = self.sample.GetValue()
+        metadata['Buffer:'] = self.buffer.GetValue()
         metadata['Temperature [C]:'] = self.temperature.GetValue()
         metadata['Loaded volume [uL]:'] = self.volume.GetValue()
         metadata['Concentration [mg/ml]:'] = self.concentration.GetValue()
@@ -426,6 +442,8 @@ if __name__ == '__main__':
     settings = {
         'components'        : ['metadata'],
         'saxs_defaults'     : {'exp_type'   : 'SEC-SAXS',
+                                'buffer'    : '',
+                                'sample'    : '',
                                 'temp'      : 22,
                                 'volume'    : '',
                                 'conc'      : '',
@@ -440,7 +458,7 @@ if __name__ == '__main__':
                                 'preparation'   : 'Intact',
                                 'notes'         : '',
                                 },
-        'metadata_type'     : 'muscle',
+        'metadata_type'     : 'auto',
         }
 
     app = wx.App()
