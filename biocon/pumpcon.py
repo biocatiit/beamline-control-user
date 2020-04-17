@@ -1396,14 +1396,11 @@ class SoftPump(Pump):
         :param name: A unique identifier for the pump
         :type name: str
         """
-
-        self.device = device
-        self.name = name
+        Pump.__init__(self, device, name)
 
         self._is_flowing = False
         self._is_dispensing = False
         self._is_aspirating = False
-
 
         self._units = 'mL/min'
         self._flow_rate = 0
@@ -1420,13 +1417,6 @@ class SoftPump(Pump):
         self.sim_thread = threading.Thread(target=self._sim_flow)
         self.sim_thread.daemon = True
         self.sim_thread.start()
-
-
-    def __repr__(self):
-        return '{}({}, {})'.format(self.__class__.__name__, self.name, self.device)
-
-    def __str__(self):
-        return '{} {}, connected to {}'.format(self.__class__.__name__, self.name, self.device)
 
     @property
     def flow_rate(self):
@@ -1636,8 +1626,7 @@ class SoftSyringePump(Pump):
         :type name: str
         """
 
-        self.device = device
-        self.name = name
+        Pump.__init__(self, device, name)
 
         self._is_flowing = False
         self._is_dispensing = False
@@ -1662,13 +1651,6 @@ class SoftSyringePump(Pump):
         self.sim_thread = threading.Thread(target=self._sim_flow)
         self.sim_thread.daemon = True
         self.sim_thread.start()
-
-
-    def __repr__(self):
-        return '{}({}, {})'.format(self.__class__.__name__, self.name, self.device)
-
-    def __str__(self):
-        return '{} {}, connected to {}'.format(self.__class__.__name__, self.name, self.device)
 
     @property
     def flow_rate(self):

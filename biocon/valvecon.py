@@ -198,7 +198,7 @@ class Valve(object):
     def get_position(self):
         pass
 
-    def set_position(self):
+    def set_position(self, position):
         pass
 
     def send_command(self):
@@ -206,6 +206,7 @@ class Valve(object):
 
     def stop(self):
         pass
+
 
 class RheodyneValve(Valve):
     """
@@ -332,6 +333,55 @@ class RheodyneValve(Valve):
 
         return ret, success
 
+class SoftValve(Valve):
+    """
+    This class contains the settings and communication for a generic valve.
+    It is intended to be subclassed by other valve classes, which contain
+    specific information for communicating with a given pump. A valve object
+    can be wrapped in a thread for using a GUI, implimented in :py:class:`ValveCommThread`
+    or it can be used directly from the command line. The :py:class:`M5Pump`
+    documentation contains an example.
+    """
+
+    def __init__(self, device, name, positions, comm_lock=None):
+        """
+        :param str device: The device comport
+
+        :param str name: A unique identifier for the device
+        """
+
+        Valve.__init__(self, device, name, comm_lock=comm_lock)
+
+        self._position = 1
+        self._positions = int(positions)
+
+    def get_status(self):
+        return ''
+
+    def get_error(self):
+        return ''
+
+    def get_position(self):
+        return self._position
+
+    def set_position(self, position):
+        if position > self._positions:
+            logger.error('Cannot set valve to position %i, maximum position is %i',
+                position, self._positions)
+            success = False
+        elif position < 1:
+            logger.error('Cannot set valve to position %i, minimum position is 1',
+                position)
+            success = False
+
+        else:
+            self._position = int(position)
+            success = True
+
+        return success
+
+    def send_command(self):
+        pass
 
 class ValveCommThread(threading.Thread):
     """
@@ -404,7 +454,8 @@ class ValveCommThread(threading.Thread):
         self.comm_locks = {}
 
         self.known_valves = {'Rheodyne' : RheodyneValve,
-                            }
+            'Soft'  : SoftValve,
+            }
 
     def run(self):
         """
@@ -786,13 +837,17 @@ class ValvePanel(wx.Panel):
         if comport in self.all_comports:
             self.com_ctrl.SetStringSelection(comport)
 
-        if valve_type == 'Rheodyne':
+        if valve_type == 'Rheodyne' or valve_type == 'Soft':
             self.valve_position.SetMin(1)
 
             if 'positions' in valve_kwargs.keys():
                 self.positions_ctrl.SetValue(str(valve_kwargs['positions']))
 
         if valve_type in my_valves and comport in self.all_comports:
+            logger.info('Initialized valve %s on startup', self.name)
+            self._connect()
+
+        elif valve_type == 'Soft':
             logger.info('Initialized valve %s on startup', self.name)
             self._connect()
 
@@ -820,7 +875,7 @@ class ValvePanel(wx.Panel):
         # self._send_cmd('connect')
         # self._set_status('Connected')
 
-        if valve == 'Rheodyne':
+        if valve == 'Rheodyne' or valve == 'Soft':
             self.valve_position.SetMin(1)
             self.valve_position.SetMax(int(self.positions_ctrl.GetValue()))
 
@@ -1010,11 +1065,17 @@ class ValveFrame(wx.Frame):
             self.valve_sizer.Remove(0)
 
         if setup_valves is None:
-            setup_valves = [('Injection', 'Rheodyne', 'COM6', [], {'positions' : 2}),
-                ('Sample', 'Rheodyne', 'COM7', [], {'positions' : 6}),
-                ('Buffer 1', 'Rheodyne', 'COM8', [], {'positions' : 6}),
-                ('Buffer 2', 'Rheodyne', 'COM9', [], {'positions' : 6}),
-                        ]
+            # setup_valves = [('Injection', 'Rheodyne', 'COM6', [], {'positions' : 2}),
+            #     ('Sample', 'Rheodyne', 'COM7', [], {'positions' : 6}),
+            #     ('Buffer 1', 'Rheodyne', 'COM8', [], {'positions' : 6}),
+            #     ('Buffer 2', 'Rheodyne', 'COM9', [], {'positions' : 6}),
+            #             ]
+
+            setup_valves = [('Injection', 'Soft', '', [], {'positions' : 2}),
+                ('Sample', 'Soft', '', [], {'positions' : 6}),
+                ('Buffer 1', 'Soft', '', [], {'positions' : 6}),
+                ('Buffer 2', 'Soft', '', [], {'positions' : 6}),
+                ]
 
         logger.info('Initializing %s valves on startup', str(len(setup_valves)))
 
