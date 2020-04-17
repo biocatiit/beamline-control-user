@@ -459,6 +459,7 @@ class M50Pump(Pump):
         self.send_cmd('D 1000000') #Deceleration to 1000000, MForce default
         self.send_cmd('HC 5') #Hold current to 5%, MForce default
         self.send_cmd('RC 25') #Run current to 25%, MForce default
+        self.send_cmd('S1=17,1,0') #Sets output 1 to be active high (sinking) when motor is moving
         # # self.send_cmd('S') #Saves current settings in non-volatile memory
 
         self._is_flowing = False
@@ -575,7 +576,7 @@ class M50Pump(Pump):
 
     def dispense(self, vol, units='uL'):
         if self._is_flowing or self._is_dispensing:
-            logger.debug("Stopping pump %s current motion before starting continuous flow", self.name)
+            logger.debug("Stopping pump %s current motion before starting flow", self.name)
             self.stop()
 
         if vol > 0:
