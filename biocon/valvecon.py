@@ -380,9 +380,6 @@ class SoftValve(Valve):
 
         return success
 
-    def send_command(self):
-        pass
-
 class ValveCommThread(threading.Thread):
     """
     This class creates a control thread for flow meters attached to the system.

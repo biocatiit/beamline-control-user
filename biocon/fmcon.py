@@ -757,6 +757,7 @@ class FlowMeterPanel(wx.Panel):
         if fm == 'BFS':
             self.settings_box_sizer.Show(self.bfs_settings_sizer, recursive=True)
             self.results_box_sizer.Show(self.bfs_results_sizer, recursive=True)
+
         elif fm == 'Soft':
             self.settings_box_sizer.Hide(self.bfs_settings_sizer, recursive=True)
             self.results_box_sizer.Hide(self.bfs_results_sizer, recursive=True)

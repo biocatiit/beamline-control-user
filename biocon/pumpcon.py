@@ -1475,19 +1475,6 @@ class SoftPump(Pump):
         else:
             logger.warning("Failed to change pump %s units, units supplied were invalid: %s", self.name, units)
 
-
-    def send_cmd(self, cmd, get_response=True):
-        """
-        Sends a command to the pump.
-
-        :param cmd: The command to send to the pump.
-
-        :param get_response: Whether the program should get a response from the pump
-        :type get_response: bool
-        """
-        pass #Should be implimented in each subclass
-
-
     def is_moving(self):
         """
         Queries the pump about whether or not it's moving.
@@ -1756,19 +1743,6 @@ class SoftSyringePump(Pump):
             logger.info("Changed pump %s units from %s to %s", self.name, old_units, units)
         else:
             logger.warning("Failed to change pump %s units, units supplied were invalid: %s", self.name, units)
-
-
-    def send_cmd(self, cmd, get_response=True):
-        """
-        Sends a command to the pump.
-
-        :param cmd: The command to send to the pump.
-
-        :param get_response: Whether the program should get a response from the pump
-        :type get_response: bool
-        """
-        pass #Should be implimented in each subclass
-
 
     def is_moving(self):
         """
