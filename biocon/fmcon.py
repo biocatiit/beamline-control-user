@@ -328,6 +328,7 @@ class FlowMeterCommThread(threading.Thread):
                         'disconnect'        : self._disconnect,
                         'get_fr_multi'      : self._get_flow_rate_multiple,
                         'get_all_multi'     : self._get_all_multiple,
+                        'set_flow_rate'     : self._set_flow_rate, #Simulations only!
                         }
 
         self._connected_fms = OrderedDict()
@@ -431,6 +432,20 @@ class FlowMeterCommThread(threading.Thread):
 
         self.return_queue.append(('flow_rate', flow_rate))
 
+    def _set_flow_rate(self, name, flow_rate):
+        """
+        This method sets the flow rate measured by a simulated flow meter.
+
+        :param str name: The unique identifier for a flow meter that was used
+            in the :py:func:`_connect_fm` method.
+        """
+        logger.debug("Setting flow meter %s flow rate", name)
+        fm = self._connected_fms[name]
+        fm.flow_rate = flow_rate
+        logger.debug("Flow meter %s flow rate set to: %f", name, flow_rate)
+
+        self.return_queue.append(('set_flow_rate', True))
+
     def _get_density(self, name):
         """
         This method gets the flow rate measured by a flow meter.
@@ -505,8 +520,12 @@ class FlowMeterCommThread(threading.Thread):
         vals = []
         for name in names:
             fm = self._connected_fms[name]
-            density = fm.density
-            temperature = fm.temperature
+            if isinstance(fm, BFS):
+                density = fm.density
+                temperature = fm.temperature
+            else:
+                density = None
+                temperature = None
             flow_rate = fm.flow_rate
             vals.append((flow_rate, density, temperature))
 

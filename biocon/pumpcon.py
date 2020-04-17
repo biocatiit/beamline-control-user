@@ -1652,6 +1652,7 @@ class SoftSyringePump(Pump):
 
     @flow_rate.setter
     def flow_rate(self, rate):
+        logger.info("Setting pump %s infuse flow rate to %f %s", self.name, rate, self.units)
         self._flow_rate = rate
 
     @property
