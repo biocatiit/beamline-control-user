@@ -2870,10 +2870,11 @@ class PumpPanel(wx.Panel):
                 self.syringe_vol_gauge_high.SetLabel(str(max_vol))
                 self.syringe_vol_gauge.SetRange(int(round(float(max_vol)*1000)))
 
+        if pump_type in my_pumps and comport in self.all_comports:
             logger.info('Initialized pump %s on startup', self.name)
             self._connect()
 
-        if pump_type in my_pumps and comport in self.all_comports:
+        elif pump_type == 'Soft' or pump_type == 'Soft Syringe':
             logger.info('Initialized pump %s on startup', self.name)
             self._connect()
 
