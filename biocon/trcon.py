@@ -1734,6 +1734,12 @@ class TRFlowPanel(wx.Panel):
         logger.debug('Initializing TRFlowPanel')
 
         self.settings = settings
+
+        if self.settings['mixer_type'] == 'chaotic':
+            self.chaotic_mixer = True
+        else:
+            self.chaotic_mixer = False
+
         self._create_layout()
         self._init_connections()
         self._init_values()
@@ -2007,25 +2013,54 @@ class TRFlowPanel(wx.Panel):
         basic_flow_box_sizer = wx.StaticBoxSizer(wx.HORIZONTAL, self, 'Flow Controls')
         basic_flow_parent = basic_flow_box_sizer.GetStaticBox()
 
-        self.total_flow = wx.TextCtrl(basic_flow_parent, value=self.settings['total_flow_rate'],
-            style=wx.TE_PROCESS_ENTER, validator=utils.CharValidator('float_te'),
-            size=(60, -1))
-        self.dilution_ratio = wx.TextCtrl(basic_flow_parent, value=self.settings['dilution_ratio'],
-            style=wx.TE_PROCESS_ENTER, validator=utils.CharValidator('float_te'),
-            size=(60, -1))
+        if self.chaotic_mixer:
+            self.total_flow = wx.TextCtrl(basic_flow_parent, value=self.settings['total_flow_rate'],
+                style=wx.TE_PROCESS_ENTER, validator=utils.CharValidator('float_te'),
+                size=(60, -1))
+            self.dilution_ratio = wx.TextCtrl(basic_flow_parent, value=self.settings['dilution_ratio'],
+                style=wx.TE_PROCESS_ENTER, validator=utils.CharValidator('float_te'),
+                size=(60, -1))
 
-        self.total_flow.Bind(wx.EVT_TEXT_ENTER, self._on_flow_change)
-        self.total_flow.Bind(wx.EVT_KILL_FOCUS, self._on_flow_change)
-        self.dilution_ratio.Bind(wx.EVT_TEXT_ENTER, self._on_flow_change)
-        self.dilution_ratio.Bind(wx.EVT_KILL_FOCUS, self._on_flow_change)
+            self.total_flow.Bind(wx.EVT_TEXT_ENTER, self._on_flow_change)
+            self.total_flow.Bind(wx.EVT_KILL_FOCUS, self._on_flow_change)
+            self.dilution_ratio.Bind(wx.EVT_TEXT_ENTER, self._on_flow_change)
+            self.dilution_ratio.Bind(wx.EVT_KILL_FOCUS, self._on_flow_change)
 
-        flow_sizer = wx.FlexGridSizer(cols=2, vgap=5, hgap=5)
-        flow_sizer.Add(wx.StaticText(basic_flow_parent, label='Total flow rate [{}]:'
-            ''.format(self.settings['flow_units'])), flag=wx.ALIGN_CENTER_VERTICAL)
-        flow_sizer.Add(self.total_flow, flag=wx.ALIGN_CENTER_VERTICAL)
-        flow_sizer.Add(wx.StaticText(basic_flow_parent, label='Dilution ratio:'),
-            flag=wx.ALIGN_CENTER_VERTICAL)
-        flow_sizer.Add(self.dilution_ratio, flag=wx.ALIGN_CENTER_VERTICAL)
+            flow_sizer = wx.FlexGridSizer(cols=2, vgap=5, hgap=5)
+            flow_sizer.Add(wx.StaticText(basic_flow_parent, label='Total flow rate [{}]:'
+                ''.format(self.settings['flow_units'])), flag=wx.ALIGN_CENTER_VERTICAL)
+            flow_sizer.Add(self.total_flow, flag=wx.ALIGN_CENTER_VERTICAL)
+            flow_sizer.Add(wx.StaticText(basic_flow_parent, label='Dilution ratio:'),
+                flag=wx.ALIGN_CENTER_VERTICAL)
+            flow_sizer.Add(self.dilution_ratio, flag=wx.ALIGN_CENTER_VERTICAL)
+        else:
+            self.total_flow = wx.TextCtrl(basic_flow_parent, value=self.settings['total_flow_rate'],
+                style=wx.TE_PROCESS_ENTER, validator=utils.CharValidator('float_te'),
+                size=(60, -1))
+            self.sample_ratio = wx.TextCtrl(basic_flow_parent, value=self.settings['sample_ratio'],
+                style=wx.TE_PROCESS_ENTER, validator=utils.CharValidator('float_te'),
+                size=(60, -1))
+            self.sheath_ratio = wx.TextCtrl(basic_flow_parent, value=self.settings['sheath_ratio'],
+                style=wx.TE_PROCESS_ENTER, validator=utils.CharValidator('float_te'),
+                size=(60, -1))
+
+            self.total_flow.Bind(wx.EVT_TEXT_ENTER, self._on_flow_change)
+            self.total_flow.Bind(wx.EVT_KILL_FOCUS, self._on_flow_change)
+            self.sample_ratio.Bind(wx.EVT_TEXT_ENTER, self._on_flow_change)
+            self.sample_ratio.Bind(wx.EVT_KILL_FOCUS, self._on_flow_change)
+            self.sheath_ratio.Bind(wx.EVT_TEXT_ENTER, self._on_flow_change)
+            self.sheath_ratio.Bind(wx.EVT_KILL_FOCUS, self._on_flow_change)
+
+            flow_sizer = wx.FlexGridSizer(cols=2, vgap=5, hgap=5)
+            flow_sizer.Add(wx.StaticText(basic_flow_parent, label='Total flow rate [{}]:'
+                ''.format(self.settings['flow_units'])), flag=wx.ALIGN_CENTER_VERTICAL)
+            flow_sizer.Add(self.total_flow, flag=wx.ALIGN_CENTER_VERTICAL)
+            flow_sizer.Add(wx.StaticText(basic_flow_parent, label='Sample/buffer ratio:'),
+                flag=wx.ALIGN_CENTER_VERTICAL)
+            flow_sizer.Add(self.sample_ratio, flag=wx.ALIGN_CENTER_VERTICAL)
+            flow_sizer.Add(wx.StaticText(basic_flow_parent, label='Sheath/buffer ratio:'),
+                flag=wx.ALIGN_CENTER_VERTICAL)
+            flow_sizer.Add(self.sheath_ratio, flag=wx.ALIGN_CENTER_VERTICAL)
 
         start_all = wx.Button(basic_flow_parent, label='Start pumps')
         stop_all = wx.Button(basic_flow_parent, label='Stop pumps')
@@ -2123,13 +2158,13 @@ class TRFlowPanel(wx.Panel):
             flow_rate=self.settings['buffer1_pump'][5]['flow_rate'],
             refill_rate=self.settings['buffer1_pump'][5]['refill_rate'],
             syringe=self.settings['buffer1_pump'][3][0],
-            dual_syringe=self.settings['sample_pump'][5]['dual_syringe'],)
+            dual_syringe=self.settings['buffer1_pump'][5]['dual_syringe'],)
         self.buffer2_pump_panel = TRPumpPanel(pump_parent, self, self.settings['buffer2_pump'][0],
             self.settings['buffer2_pump'][0], self.settings['buffer2_pump'][1],
             flow_rate=self.settings['buffer2_pump'][5]['flow_rate'],
             refill_rate=self.settings['buffer2_pump'][5]['refill_rate'],
-            syringe=self.settings['buffer1_pump'][3][0],
-            dual_syringe=self.settings['sample_pump'][5]['dual_syringe'],)
+            syringe=self.settings['buffer2_pump'][3][0],
+            dual_syringe=self.settings['buffer2_pump'][5]['dual_syringe'],)
 
         self.pump_panels = {}
         self.pump_panels[self.settings['sample_pump'][0]] = self.sample_pump_panel
@@ -2250,7 +2285,13 @@ class TRFlowPanel(wx.Panel):
 
     def _on_flow_change(self, event):
         flow_rate = self.total_flow.GetValue()
-        dilution = self.dilution_ratio.GetValue()
+
+        if self.chaotic_mixer:
+            dilution = self.dilution_ratio.GetValue()
+        else:
+            sample_ratio = self.sample_ratio.GetValue()
+            sheath_ratio = self.sheath_ratio.GetValue()
+
         errors = []
 
         try:
@@ -2259,21 +2300,33 @@ class TRFlowPanel(wx.Panel):
             errors.append(('Total flow rate must be between 0 and {}'
                 '.'.format(self.settings['max_flow'])))
 
-        try:
-            dilution = float(dilution)
-        except Exception:
-            errors.append(('Dilution ratio must be between 0 and {}'
-                '.'.format(self.settings['max_dilution'])))
-
         if isinstance(flow_rate, float):
             if flow_rate < 0 or flow_rate > self.settings['max_flow']:
                 errors.append(('Total flow rate must be between 0 and {}'
                 '.'.format(self.settings['max_flow'])))
 
-        if isinstance(dilution, float):
-            if dilution < 0 or dilution > self.settings['max_dilution']:
-                errors.append(('Total dilution ratio must be between 0 and {}'
-                '.'.format(self.settings['max_dilution'])))
+        if self.chaotic_mixer:
+            try:
+                dilution = float(dilution)
+            except Exception:
+                errors.append(('Dilution ratio must be between 0 and {}'
+                    '.'.format(self.settings['max_dilution'])))
+
+            if isinstance(dilution, float):
+                if dilution < 0 or dilution > self.settings['max_dilution']:
+                    errors.append(('Total dilution ratio must be between 0 and {}'
+                    '.'.format(self.settings['max_dilution'])))
+
+        else:
+            try:
+                sample_ratio = float(sample_ratio)
+            except Exception:
+                errors.append(('Sample/buffer flow ratio must be a number.'))
+
+            try:
+                sheath_ratio = float(sheath_ratio)
+            except Exception:
+                errors.append(('Sheath/buffer flow ratio must be a number.'))
 
         if len(errors) > 0:
             msg = 'The following field(s) have invalid values:'
@@ -2293,15 +2346,28 @@ class TRFlowPanel(wx.Panel):
 
 
         else:
-            sample_flow = flow_rate/dilution
-            buffer_flow = (flow_rate - sample_flow)/2.
+            if self.chaotic_mixer:
+                sample_flow = flow_rate/dilution
+                buffer_flow = (flow_rate - sample_flow)/2.
 
-            wx.CallAfter(self.set_pump_panel_flow_rate, self.settings['sample_pump'][0],
-                sample_flow)
-            wx.CallAfter(self.set_pump_panel_flow_rate, self.settings['buffer1_pump'][0],
-                buffer_flow)
-            wx.CallAfter(self.set_pump_panel_flow_rate, self.settings['buffer2_pump'][0],
-                buffer_flow)
+                wx.CallAfter(self.set_pump_panel_flow_rate,
+                    self.settings['sample_pump'][0], sample_flow)
+                wx.CallAfter(self.set_pump_panel_flow_rate,
+                    self.settings['buffer1_pump'][0], buffer_flow)
+                wx.CallAfter(self.set_pump_panel_flow_rate,
+                    self.settings['buffer2_pump'][0], buffer_flow)
+
+            else:
+                buffer_flow = flow_rate/(1+sample_ratio+sheath_ratio)
+                sample_flow = buffer_flow*sample_ratio
+                sheath_flow = buffer_flow*sheath_ratio
+
+                wx.CallAfter(self.set_pump_panel_flow_rate,
+                    self.settings['sample_pump'][0], sample_flow)
+                wx.CallAfter(self.set_pump_panel_flow_rate,
+                    self.settings['buffer1_pump'][0], buffer_flow)
+                wx.CallAfter(self.set_pump_panel_flow_rate,
+                    self.settings['buffer2_pump'][0], sheath_flow)
 
             wx.CallAfter(self.update_flow_info)
 
@@ -3315,9 +3381,15 @@ class TRFlowPanel(wx.Panel):
                 if valve == 'sample_valve':
                     pump_name = 'Sample'
                 elif valve == 'buffer1_valve':
-                    pump_name = 'Buffer 1'
+                    if self.chaotic_mixer:
+                        pump_name = 'Buffer 1'
+                    else:
+                        pump_name = 'Buffer'
                 elif valve == 'buffer2_valve':
-                    pump_name = 'Buffer 2'
+                    if self.chaotic_mixer:
+                        pump_name = 'Buffer 2'
+                    else:
+                        pump_name = 'Sheath'
                 else:
                     pump_name = None
 
@@ -4080,19 +4152,29 @@ if __name__ == '__main__':
         'sample_valve'          : ('Soft', '', [], {'positions' : 6}),
         'buffer1_valve'         : ('Soft', '', [], {'positions' : 6}),
         'buffer2_valve'         : ('Soft', '', [], {'positions' : 6}),
+        # 'sample_pump'           : ('Sample', 'Soft Syringe', '',
+        #     ['10 mL, Medline P.C.',], {}, {'flow_rate' : '5',
+        #     'refill_rate' : '20', 'dual_syringe' : False}),
+        # 'buffer1_pump'           : ('Buffer 1', 'Soft Syringe', '',
+        #     ['20 mL, Medline P.C.',], {}, {'flow_rate' : '10',
+        #     'refill_rate' : '40', 'dual_syringe' : False}),
+        # 'buffer2_pump'          : ('Buffer 2', 'Soft Syringe', '',
+        #     ['20 mL, Medline P.C.',], {}, {'flow_rate' : '10',
+        #     'refill_rate' : '40', 'dual_syringe' : False}),
         'sample_pump'           : ('Sample', 'Soft Syringe', '',
             ['10 mL, Medline P.C.',], {}, {'flow_rate' : '5',
             'refill_rate' : '20', 'dual_syringe' : False}),
-        'buffer1_pump'           : ('Buffer 1', 'Soft Syringe', '',
+        'buffer1_pump'           : ('Buffer', 'Soft Syringe', '',
             ['20 mL, Medline P.C.',], {}, {'flow_rate' : '10',
-            'refill_rate' : '40', 'dual_syringe' : False}),
-        'buffer2_pump'          : ('Buffer 2', 'Soft Syringe', '',
+            'refill_rate' : '40', 'dual_syringe' : True}),
+        'buffer2_pump'          : ('Sheath', 'Soft Syringe', '',
             ['20 mL, Medline P.C.',], {}, {'flow_rate' : '10',
-            'refill_rate' : '40', 'dual_syringe' : False}),
+            'refill_rate' : '40', 'dual_syringe' : True}),
         'outlet_fm'             : ('Soft', '', [], {}),
         'flow_units'            : 'mL/min',
-        'total_flow_rate'       : '6',
-        'dilution_ratio'        : '10',
+        'total_flow_rate'       : '1.5', # For laminar flow
+        # 'total_flow_rate'       : '6', # For chaotic flow
+        'dilution_ratio'        : '10', # For chaotic flow
         'max_flow'              : 8,
         'max_dilution'          : 50,
         'auto_set_valves'       : True,
@@ -4106,7 +4188,9 @@ if __name__ == '__main__':
         'autoinject'            : 'After scan',
         'autoinject_scan'       : '5',
         'autoinject_valve_pos'  : 1,
-        'mixer_type'            : 'laminar',
+        'mixer_type'            : 'laminar', # laminar or chaotic
+        'sample_ratio'          : '0.066', # For laminar flow
+        'sheath_ratio'          : '0.032', # For laminar flow
         'simulated'             : True, # VERY IMPORTANT. MAKE SURE THIS IS FALSE FOR EXPERIMENTS
         }
 
