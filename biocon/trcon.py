@@ -1746,6 +1746,8 @@ class TRFlowPanel(wx.Panel):
             self.sim_thread = threading.Thread(target=self._simulated_mode)
             self.sim_thread.daemon = True
             self.sim_thread.start()
+            self.outlet_density.SetLabel('1.000')
+            self.outlet_T.SetLabel('22')
 
     def _init_connections(self):
         self.pump_cmd_q = deque()
@@ -1915,6 +1917,14 @@ class TRFlowPanel(wx.Panel):
 
             if address is not None:
                 kwargs['pump_address'] = address
+
+            try:
+                dual_syringe = pump[1][3][2]
+            except Exception:
+                dual_syringe = False
+
+            if dual_syringe:
+                kwargs['dual_syringe'] = dual_syringe
 
             if not self.local_devices:
                 cmd = ('connect_remote', args, kwargs)
@@ -2106,17 +2116,20 @@ class TRFlowPanel(wx.Panel):
             self.settings['sample_pump'][0], self.settings['sample_pump'][1],
             flow_rate=self.settings['sample_pump'][5]['flow_rate'],
             refill_rate=self.settings['sample_pump'][5]['refill_rate'],
-            syringe=self.settings['sample_pump'][3][0])
+            syringe=self.settings['sample_pump'][3][0],
+            dual_syringe=self.settings['sample_pump'][5]['dual_syringe'],)
         self.buffer1_pump_panel = TRPumpPanel(pump_parent, self, self.settings['buffer1_pump'][0],
             self.settings['buffer1_pump'][0], self.settings['buffer1_pump'][1],
             flow_rate=self.settings['buffer1_pump'][5]['flow_rate'],
             refill_rate=self.settings['buffer1_pump'][5]['refill_rate'],
-            syringe=self.settings['buffer1_pump'][3][0])
+            syringe=self.settings['buffer1_pump'][3][0],
+            dual_syringe=self.settings['sample_pump'][5]['dual_syringe'],)
         self.buffer2_pump_panel = TRPumpPanel(pump_parent, self, self.settings['buffer2_pump'][0],
             self.settings['buffer2_pump'][0], self.settings['buffer2_pump'][1],
             flow_rate=self.settings['buffer2_pump'][5]['flow_rate'],
             refill_rate=self.settings['buffer2_pump'][5]['refill_rate'],
-            syringe=self.settings['buffer1_pump'][3][0])
+            syringe=self.settings['buffer1_pump'][3][0],
+            dual_syringe=self.settings['sample_pump'][5]['dual_syringe'],)
 
         self.pump_panels = {}
         self.pump_panels[self.settings['sample_pump'][0]] = self.sample_pump_panel
@@ -2688,6 +2701,8 @@ class TRFlowPanel(wx.Panel):
 
     def set_pump_panel_flow_rate(self, pump_name, flow_rate):
         pump_panel = self.pump_panels[pump_name]
+        if pump_panel.get_dual_syringe():
+            flow_rate = flow_rate/2.
         pump_panel.change_flowrate(flow_rate=flow_rate)
 
     def set_pump_panel_refill_rate(self, pump_name, flow_rate):
@@ -2703,6 +2718,12 @@ class TRFlowPanel(wx.Panel):
         self._send_pumpcmd(cmd)
 
         wx.CallAfter(self.update_flow_info)
+
+    def set_pump_dual_syringe_type(self, pump_name, dual_syringe):
+        print('int set_pump_dual_syringe_type')
+        cmd = ('set_pump_dual_syringe', (pump_name, dual_syringe), {})
+        self._send_pumpcmd(cmd)
+        wx.CallAfter(self._on_flow_change, None)
 
     def set_pump_volume(self, pump_name, volume):
         cmd = ('set_volume', (pump_name, volume), {})
@@ -3304,9 +3325,12 @@ class TRFlowPanel(wx.Panel):
                     flow_rate = self.pump_panels[pump_name].get_flow_rate()
                     is_moving = self.pump_panels[pump_name].get_moving()
                     pump_direction = self.pump_panels[pump_name].get_pump_direction()
+                    dual_syringe = self.pump_panels[pump_name].get_dual_syringe()
 
                     if pump_direction == 'Aspirate':
                         flow_rate = -flow_rate
+                    elif pump_direction == 'Dispense' and dual_syringe:
+                        flow_rate = flow_rate*2.
 
                     if is_moving:
                        total_flow = total_flow + flow_rate
@@ -3398,7 +3422,7 @@ class TRPumpPanel(wx.Panel):
     :py:func:`_on_type` function.
     """
     def __init__(self, parent, tr_panel, panel_name, pump_name, pump_type, flow_rate='',
-        refill_rate='', syringe=None):
+        refill_rate='', syringe=None, dual_syringe=False):
         """
         Initializes the custom thread. Important parameters here are the
         list of known commands ``_commands`` and known pumps ``known_pumps``.
@@ -3475,9 +3499,10 @@ class TRPumpPanel(wx.Panel):
             'max_rate': 11},
             }
 
-        self._create_layout(flow_rate, refill_rate, syringe)
+        self._create_layout(flow_rate, refill_rate, syringe, dual_syringe)
 
-    def _create_layout(self, flow_rate='', refill_rate='', syringe=None):
+    def _create_layout(self, flow_rate='', refill_rate='', syringe=None,
+        dual_syringe=False):
         """Creates the layout for the panel."""
         top_sizer = wx.StaticBoxSizer(wx.VERTICAL, self, self.name)
         parent = top_sizer.GetStaticBox()
@@ -3526,6 +3551,8 @@ class TRPumpPanel(wx.Panel):
             wx.VERTICAL)
         self.status_sizer.Add(status_grid, 1, flag=wx.ALL|wx.EXPAND, border=2)
 
+        syr_types = sorted(self.known_syringes.keys(), key=lambda x: float(x.split()[0]))
+        self.syringe_type = wx.Choice(parent, choices=syr_types)
         self.mode_ctrl = wx.Choice(parent, choices=['Continuous flow', 'Fixed volume'])
         self.mode_ctrl.SetSelection(0)
         self.direction_ctrl = wx.Choice(parent, choices=['Dispense', 'Aspirate'])
@@ -3541,19 +3568,20 @@ class TRPumpPanel(wx.Panel):
         self.volume_ctrl = wx.TextCtrl(parent, size=(60,-1),
             validator=utils.CharValidator('float'))
         self.vol_units_lbl = wx.StaticText(parent, label=self.tr_flow_panel.settings['flow_units'][:2])
+        self.dual_syringe = wx.Choice(parent, choices=['True', 'False'])
+        self.dual_syringe.SetStringSelection(str(dual_syringe))
 
         self.flow_rate_ctrl.Bind(wx.EVT_KILL_FOCUS, self._on_fr_setting_change)
         self.flow_rate_ctrl.Bind(wx.EVT_TEXT_ENTER, self._on_fr_setting_change)
         self.direction_ctrl.Bind(wx.EVT_CHOICE, self._on_direction_change)
-
-        syr_types = sorted(self.known_syringes.keys(), key=lambda x: float(x.split()[0]))
-        self.syringe_type = wx.Choice(parent, choices=syr_types)
 
         if syringe is not None and syringe in syr_types:
             self.syringe_type.SetStringSelection(syringe)
         else:
             self.syringe_type.SetSelection(0)
         self.syringe_type.Bind(wx.EVT_CHOICE, self._on_syringe_type)
+
+        self.dual_syringe.Bind(wx.EVT_CHOICE, self._on_dual_syringe)
 
         self.mode_ctrl.Bind(wx.EVT_CHOICE, self._on_mode)
 
@@ -3562,31 +3590,35 @@ class TRPumpPanel(wx.Panel):
             flag=wx.ALIGN_CENTER_VERTICAL)
         basic_ctrl_sizer.Add(self.syringe_type, (0,1), span=(1,2),
             flag=wx.ALIGN_CENTER_VERTICAL)
-        basic_ctrl_sizer.Add(wx.StaticText(parent, label='Mode:'), (1,0),
+        basic_ctrl_sizer.Add(wx.StaticText(parent, label='Dual syringe:'), (1,0),
             flag=wx.ALIGN_CENTER_VERTICAL)
-        basic_ctrl_sizer.Add(self.mode_ctrl, (1,1), span=(1,2),
+        basic_ctrl_sizer.Add(self.dual_syringe, (1,1), span=(1,2),
             flag=wx.ALIGN_CENTER_VERTICAL)
-        basic_ctrl_sizer.Add(wx.StaticText(parent, label='Direction:'), (2,0),
+        basic_ctrl_sizer.Add(wx.StaticText(parent, label='Mode:'), (2,0),
             flag=wx.ALIGN_CENTER_VERTICAL)
-        basic_ctrl_sizer.Add(self.direction_ctrl, (2,1), span=(1,2),
+        basic_ctrl_sizer.Add(self.mode_ctrl, (2,1), span=(1,2),
             flag=wx.ALIGN_CENTER_VERTICAL)
-        basic_ctrl_sizer.Add(wx.StaticText(parent, label='Flow rate:'), (3,0),
+        basic_ctrl_sizer.Add(wx.StaticText(parent, label='Direction:'), (3,0),
             flag=wx.ALIGN_CENTER_VERTICAL)
-        basic_ctrl_sizer.Add(self.flow_rate_ctrl, (3,1),
+        basic_ctrl_sizer.Add(self.direction_ctrl, (3,1), span=(1,2),
             flag=wx.ALIGN_CENTER_VERTICAL)
-        basic_ctrl_sizer.Add(self.flow_units_lbl, (3,2),
+        basic_ctrl_sizer.Add(wx.StaticText(parent, label='Flow rate:'), (4,0),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        basic_ctrl_sizer.Add(self.flow_rate_ctrl, (4,1),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        basic_ctrl_sizer.Add(self.flow_units_lbl, (4,2),
             flag=wx.ALIGN_CENTER_VERTICAL|wx.ALIGN_LEFT)
-        basic_ctrl_sizer.Add(self.refill_rate_lbl, (4,0),
+        basic_ctrl_sizer.Add(self.refill_rate_lbl, (5,0),
             flag=wx.ALIGN_CENTER_VERTICAL)
-        basic_ctrl_sizer.Add(self.refill_rate_ctrl, (4,1),
+        basic_ctrl_sizer.Add(self.refill_rate_ctrl, (5,1),
             flag=wx.ALIGN_CENTER_VERTICAL)
-        basic_ctrl_sizer.Add(self.refill_rate_units, (4,2),
+        basic_ctrl_sizer.Add(self.refill_rate_units, (5,2),
             flag=wx.ALIGN_CENTER_VERTICAL|wx.ALIGN_LEFT)
-        basic_ctrl_sizer.Add(self.volume_lbl, (5,0),
+        basic_ctrl_sizer.Add(self.volume_lbl, (6,0),
             flag=wx.RESERVE_SPACE_EVEN_IF_HIDDEN|wx.ALIGN_CENTER_VERTICAL)
-        basic_ctrl_sizer.Add(self.volume_ctrl, (5,1),
+        basic_ctrl_sizer.Add(self.volume_ctrl, (6,1),
             flag=wx.RESERVE_SPACE_EVEN_IF_HIDDEN|wx.ALIGN_CENTER_VERTICAL)
-        basic_ctrl_sizer.Add(self.vol_units_lbl, (5,2),
+        basic_ctrl_sizer.Add(self.vol_units_lbl, (6,2),
             flag=wx.RESERVE_SPACE_EVEN_IF_HIDDEN|wx.ALIGN_CENTER_VERTICAL|wx.ALIGN_LEFT)
         basic_ctrl_sizer.AddGrowableCol(1)
         basic_ctrl_sizer.SetEmptyCellSize((0,0))
@@ -3890,6 +3922,14 @@ class TRPumpPanel(wx.Panel):
         self.syringe_vol_gauge_high.SetLabel(str(max_vol))
         self.syringe_vol_gauge.SetRange(int(round(float(max_vol)*1000)))
 
+    def _on_dual_syringe(self, evt):
+        print('in _on_dual_syringe')
+        self.tr_flow_panel.set_pump_dual_syringe_type(self.name,
+            self.dual_syringe.GetStringSelection()=='True')
+
+    def get_dual_syringe(self):
+        return self.dual_syringe.GetStringSelection()=='True'
+
     def set_pump_direction(self, dispense):
         if dispense:
             self.pump_direction = 'Dispense'
@@ -4042,13 +4082,13 @@ if __name__ == '__main__':
         'buffer2_valve'         : ('Soft', '', [], {'positions' : 6}),
         'sample_pump'           : ('Sample', 'Soft Syringe', '',
             ['10 mL, Medline P.C.',], {}, {'flow_rate' : '5',
-            'refill_rate' : '20'}),
+            'refill_rate' : '20', 'dual_syringe' : False}),
         'buffer1_pump'           : ('Buffer 1', 'Soft Syringe', '',
             ['20 mL, Medline P.C.',], {}, {'flow_rate' : '10',
-            'refill_rate' : '40'}),
+            'refill_rate' : '40', 'dual_syringe' : False}),
         'buffer2_pump'          : ('Buffer 2', 'Soft Syringe', '',
             ['20 mL, Medline P.C.',], {}, {'flow_rate' : '10',
-            'refill_rate' : '40'}),
+            'refill_rate' : '40', 'dual_syringe' : False}),
         'outlet_fm'             : ('Soft', '', [], {}),
         'flow_units'            : 'mL/min',
         'total_flow_rate'       : '6',
@@ -4066,6 +4106,7 @@ if __name__ == '__main__':
         'autoinject'            : 'After scan',
         'autoinject_scan'       : '5',
         'autoinject_valve_pos'  : 1,
+        'mixer_type'            : 'laminar',
         'simulated'             : True, # VERY IMPORTANT. MAKE SURE THIS IS FALSE FOR EXPERIMENTS
         }
 

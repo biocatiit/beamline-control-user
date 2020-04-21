@@ -632,7 +632,7 @@ class PHD4400Pump(Pump):
     """
 
     def __init__(self, device, name, pump_address, diameter, max_volume, max_rate,
-        syringe_id, comm_lock):
+        syringe_id, dual_syringe, comm_lock):
         """
         :param device: The device comport as sent to pyserial
         :type device: str
@@ -664,6 +664,8 @@ class PHD4400Pump(Pump):
         self._volume = 0
 
         self._pump_address = pump_address
+
+        self.dual_syringe = dual_syringe
 
         self.stop()
         self.set_pump_cal(diameter, max_volume, max_rate, syringe_id)
@@ -1015,7 +1017,7 @@ class NE500Pump(Pump):
     """
 
     def __init__(self, device, name, pump_address, diameter, max_volume, max_rate,
-        syringe_id, comm_lock):
+        syringe_id, dual_syringe, comm_lock):
         """
         :param device: The device comport as sent to pyserial
         :type device: str
@@ -1046,6 +1048,8 @@ class NE500Pump(Pump):
         self._volume = 0
 
         self._pump_address = pump_address
+
+        self.dual_syringe = dual_syringe
 
         self.stop()
         self.set_pump_cal(diameter, max_volume, max_rate, syringe_id)
@@ -1604,7 +1608,8 @@ class SoftSyringePump(Pump):
     documentation contains an example.
     """
 
-    def __init__(self, device, name, diameter, max_volume, max_rate, syringe_id):
+    def __init__(self, device, name, diameter, max_volume, max_rate, syringe_id,
+        dual_syringe=False):
         """
         :param device: The device comport as sent to pyserial
         :type device: str
@@ -1630,6 +1635,7 @@ class SoftSyringePump(Pump):
         self._volume = 0
 
         self._pump_address = 'Simulated'
+        self.dual_syringe = dual_syringe
 
         self._connected = True
 
@@ -2034,6 +2040,7 @@ class PumpCommThread(threading.Thread):
                         'connect_remote': self._connect_pump_remote,
                         'get_status'    : self._get_status,
                         'get_status_multi': self._get_status_multiple,
+                        'set_pump_dual_syringe': self._set_dual_syringe,
                         }
 
         self._connected_pumps = OrderedDict()
@@ -2374,6 +2381,12 @@ class PumpCommThread(threading.Thread):
         pump.set_pump_cal(diameter, max_volume, max_rate, syringe_id)
         logger.debug("Pump %s calibration parameters set", name)
 
+    def _set_dual_syringe(self, name, dual_syringe):
+        logger.info("Setting pump %s dual syringe to %s", name, str(dual_syringe))
+        pump = self._connected_pumps[name]
+        pump.dual_syringe = dual_syringe
+        logger.debug("Pump %s dual syringe parameter set", name)
+
     def _get_status(self, name):
         logger.debug("Getting pump status")
         pump = self._connected_pumps[name]
@@ -2695,6 +2708,8 @@ class PumpPanel(wx.Panel):
         self.syringe_type.SetSelection(0)
         self.syringe_type.Bind(wx.EVT_CHOICE, self._on_syringe_type)
         self.pump_address = wx.TextCtrl(self, size=(60, -1))
+        self.dual_syringe = wx.Choice(self, choices=['True', 'False'])
+        self.dual_syringe.SetStringSelection('False')
 
         self.phd4400_settings_sizer = wx.FlexGridSizer(rows=2, cols=2, vgap=2, hgap=2)
         self.phd4400_settings_sizer.Add(wx.StaticText(self, label='Syringe type:'),
@@ -2704,6 +2719,10 @@ class PumpPanel(wx.Panel):
         self.phd4400_settings_sizer.Add(wx.StaticText(self, label='Pump address:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
         self.phd4400_settings_sizer.Add(self.pump_address,
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        self.phd4400_settings_sizer.Add(wx.StaticText(self, label='Dual syringes:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        self.phd4400_settings_sizer.Add(self.dual_syringe,
             flag=wx.ALIGN_CENTER_VERTICAL)
 
 
@@ -2824,16 +2843,24 @@ class PumpPanel(wx.Panel):
         elif pump_type == 'PHD 4400' or pump_type == 'NE 500':
             if 'syringe' in pump_kwargs.keys():
                 self.syringe_type.SetStringSelection(pump_kwargs['syringe'])
+
             if 'address' in pump_kwargs.keys():
                 self.pump_address.SetValue(pump_kwargs['address'])
+
+            if 'dual_syringe' in pump_kwargs.keys():
+                self.dual_syringe.SetStringSelection(pump_kwargs['dual_syringe'])
 
             if len(pump_args) >=1:
                 self.syringe_type.SetStringSelection(pump_args[0])
                 max_vol = self.known_syringes[pump_args[0]]['max_volume']
                 self.syringe_vol_gauge_high.SetLabel(str(max_vol))
                 self.syringe_vol_gauge.SetRange(int(round(float(max_vol)*1000)))
-            if len(pump_args) == 2:
+
+            if len(pump_args) >= 2:
                 self.pump_address.SetValue(pump_args[1])
+
+            if len(pump_args) >= 3:
+                self.dual_syringe.SetStringSelection(str(pump_args[2]))
 
         elif pump_type == 'Soft Syringe':
             if 'syringe' in pump_kwargs.keys():
@@ -3096,6 +3123,7 @@ class PumpPanel(wx.Panel):
             kwargs['comm_lock'] = self.comm_lock
             kwargs['syringe_id'] = self.syringe_type.GetStringSelection()
             kwargs['pump_address'] = self.pump_address.GetValue()
+            kwargs['dual_syringe'] = self.dual_syringe.GetStringSelection() == 'True'
         elif pump == 'Soft_Syringe':
             kwargs = copy.deepcopy(self.known_syringes[self.syringe_type2.GetStringSelection()])
             kwargs['syringe_id'] = self.syringe_type2.GetStringSelection()
@@ -3441,14 +3469,14 @@ class PumpFrame(wx.Frame):
             #         {'flow_rate' : '10', 'refill_rate' : '10'}),
             #     ]
 
-            # setup_pumps = [
-            #     ('Sample', 'NE 500', '/dev/cu.usbserial-AK06V22M', ['30 mL, EXEL', '02'], {},
-            #         {'flow_rate' : '30', 'refill_rate' : '30'}),
-            #     ('Sheath', 'NE 500', '/dev/cu.usbserial-A6022U62', ['30 mL, EXEL', '01'], {},
-            #         {'flow_rate' : '30', 'refill_rate' : '30'}),
-            #     ('Buffer', 'NE 500', '/dev/cu.usbserial-A6022U22', ['30 mL, EXEL', '00'], {},
-            #         {'flow_rate' : '30', 'refill_rate' : '30'}),
-                # ]
+            setup_pumps = [
+                ('Sample', 'NE 500', '/dev/cu.usbserial-AK06V22M', ['30 mL, EXEL', '02', False], {},
+                    {'flow_rate' : '30', 'refill_rate' : '30'}),
+                ('Sheath', 'NE 500', '/dev/cu.usbserial-A6022U62', ['30 mL, EXEL', '01', True], {},
+                    {'flow_rate' : '30', 'refill_rate' : '30'}),
+                ('Buffer', 'NE 500', '/dev/cu.usbserial-A6022U22', ['30 mL, EXEL', '00', True], {},
+                    {'flow_rate' : '30', 'refill_rate' : '30'}),
+                ]
 
             setup_pumps = [('Sheath', 'Soft Syringe', '',
                 ['10 mL, Medline P.C.',], {}, {'flow_rate' : '10',
