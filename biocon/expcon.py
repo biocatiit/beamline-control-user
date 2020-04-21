@@ -159,6 +159,17 @@ class ExpCommThread(threading.Thread):
 
         logger.debug("Got dg645 records")
 
+        attenuators = {
+                1   : self.mx_database.get_record('avme944x_in8'),
+                2   : self.mx_database.get_record('avme944x_in1'),
+                4   : self.mx_database.get_record('avme944x_in2'),
+                8   : self.mx_database.get_record('avme944x_in3'),
+                16  : self.mx_database.get_record('avme944x_in4'),
+                32  : self.mx_database.get_record('avme944x_in5'),
+            }
+
+        logger.debug("Got attenuator records.")
+
         mx_data = {'det': det,
             'det_datadir': det_datadir,
             'det_filename': det_filename,
@@ -187,6 +198,7 @@ class ExpCommThread(threading.Thread):
             'ki3'   : mx_database.get_record('ki3'),
             'mx_db' : mx_database,
             'motors'  : {},
+            'attenuators' : attenuators,
             }
 
         logger.debug("Generated mx_data")
@@ -2085,6 +2097,26 @@ class ExpCommThread(threading.Thread):
         metadata['I1 gain:'] = '{:.0e}'.format(self._mx_data['ki1'].get_gain())
         metadata['I2 gain:'] = '{:.0e}'.format(self._mx_data['ki2'].get_gain())
         metadata['I3 gain:'] = '{:.0e}'.format(self._mx_data['ki3'].get_gain())
+
+        atten_length = 0
+        for atten in sorted(self._mx_data['attenuators'].keys()):
+            atten_in = self._mx_data['attenuators'][atten].read()
+            metadata['Attenuator, {} foil:'.format(atten)] = '{}'.format(atten_in)
+
+            if atten_in:
+                atten_length = atten_length + atten
+        atten_length = 20*atten_length
+
+        atten = np.exp(-atten_length/256.568) #256.568 is Al attenuation length at 12 keV
+
+        if atten > 0.1:
+            atten = '{}'.format(round(atten, 3))
+        elif atten > 0.01:
+            atten = '{}'.format(round(atten, 4))
+        else:
+            atten = '{}'.format(round(atten, 5))
+
+        metadata['Nominal Transmission (12 keV):'] = atten
 
         return metadata
 
