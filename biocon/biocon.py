@@ -341,6 +341,7 @@ if __name__ == '__main__':
             'buffer2_valve' : 2, 'injection_valve' : 1},
         'autostart'             : 'At flow rate',
         'autostart_flow'        : '4.5',
+        'autostart_flow_ratio'  : 0.75,
         'autostart_delay'       : '0',
         'autoinject'            : 'After scan',
         'autoinject_scan'       : '5',

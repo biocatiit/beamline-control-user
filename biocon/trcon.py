@@ -2616,6 +2616,10 @@ class TRFlowPanel(wx.Panel):
                 flow_times.append(max_vol/flow_rate)
 
             self.max_flow_time.SetLabel('{}'.format(round(min(flow_times)*60, 2)))
+
+            if self.settings['autostart_flow_ratio'] != 0:
+                start_flow = float(self.total_flow.GetValue())*self.settings['autostart_flow_ratio']
+                self.start_flow.SetValue(str(start_flow))
         except Exception:
             pass
 
@@ -4257,10 +4261,10 @@ if __name__ == '__main__':
         'remote_valve_ip'       : '164.54.204.8',
         'remote_valve_port'     : '5558',
         # 'device_communication'  : 'remote',
-        'injection_valve'       : [('Rheodyne', 'COM6', [], {'positions' : 2}, 'Injection'),],
-        'sample_valve'          : [('Rheodyne', 'COM7', [], {'positions' : 6}, 'Sample'),],
-        'buffer1_valve'         : [('Rheodyne', 'COM8', [], {'positions' : 6}, 'Buffer 1'),],
-        'buffer2_valve'         : [('Rheodyne', 'COM9', [], {'positions' : 6}, 'Buffer 2'),],
+        # 'injection_valve'       : [('Rheodyne', 'COM6', [], {'positions' : 2}, 'Injection'),],
+        # 'sample_valve'          : [('Rheodyne', 'COM7', [], {'positions' : 6}, 'Sample'),],
+        # 'buffer1_valve'         : [('Rheodyne', 'COM8', [], {'positions' : 6}, 'Buffer 1'),],
+        # 'buffer2_valve'         : [('Rheodyne', 'COM9', [], {'positions' : 6}, 'Buffer 2'),],
         # 'sample_pump'           : ('Sample', 'PHD 4400', 'COM4',
         #     ['10 mL, Medline P.C.', '1'], {}, {'flow_rate' : '5',
         #     'refill_rate' : '5', 'dual_syringe': False}),
@@ -4314,6 +4318,7 @@ if __name__ == '__main__':
             'buffer2_valve' : 4, 'injection_valve' : 1},
         'autostart'             : 'At flow rate',
         'autostart_flow'        : '4.5',
+        'autostart_flow_ratio'  : 0.75,
         'autostart_delay'       : '0',
         'autoinject'            : 'After scan',
         'autoinject_scan'       : '5',
