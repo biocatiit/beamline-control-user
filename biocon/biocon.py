@@ -315,19 +315,19 @@ if __name__ == '__main__':
         'remote_valve_ip'       : '164.54.204.8',
         'remote_valve_port'     : '5558',
         'device_communication'  : 'remote',
-        'injection_valve'       : ('Rheodyne', 'COM6', [], {'positions' : 2}),
-        'sample_valve'          : ('Rheodyne', 'COM7', [], {'positions' : 6}),
-        'buffer1_valve'         : ('Rheodyne', 'COM8', [], {'positions' : 6}),
-        'buffer2_valve'         : ('Rheodyne', 'COM9', [], {'positions' : 6}),
+        'injection_valve'       : [('Rheodyne', 'COM6', [], {'positions' : 2}, 'Injection'),],
+        'sample_valve'          : [('Rheodyne', 'COM7', [], {'positions' : 6}, 'Sample'),],
+        'buffer1_valve'         : [('Rheodyne', 'COM8', [], {'positions' : 6}, 'Buffer 1'),],
+        'buffer2_valve'         : [('Rheodyne', 'COM9', [], {'positions' : 6}, 'Buffer 2'),],
         'sample_pump'           : ('Sample', 'NE 500', 'COM10',
             ['3 mL, Medline P.C.', '1'], {}, {'flow_rate' : '0.6',
-            'refill_rate' : '2'}),
+            'refill_rate' : '2', 'dual_syringe' : False}),
         'buffer1_pump'           : ('Buffer 1', 'PHD 4400', 'COM4',
             ['10 mL, Medline P.C.', '2'], {}, {'flow_rate' : '2.4',
-            'refill_rate' : '5'}),
+            'refill_rate' : '5', 'dual_syringe' : False}),
         'buffer2_pump'          : ('Buffer 2', 'PHD 4400', 'COM4',
             ['10 mL, Medline P.C.', '3'], {}, {'flow_rate' : '2.4',
-            'refill_rate' : '5'}),
+            'refill_rate' : '5', 'dual_syringe' : False}),
         'outlet_fm'             : ('BFS', 'COM5', [], {}),
         'flow_units'            : 'mL/min',
         'total_flow_rate'       : '6',
@@ -345,6 +345,10 @@ if __name__ == '__main__':
         'autoinject'            : 'After scan',
         'autoinject_scan'       : '5',
         'autoinject_valve_pos'  : 2,
+        'mixer_type'            : 'chaotic', # laminar or chaotic
+        'sample_ratio'          : '0.066', # For laminar flow
+        'sheath_ratio'          : '0.032', # For laminar flow
+        'simulated'             : False, # VERY IMPORTANT. MAKE SURE THIS IS FALSE FOR EXPERIMENTS
         }
 
     scan_settings = {
