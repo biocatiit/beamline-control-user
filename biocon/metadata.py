@@ -53,13 +53,13 @@ class ParamPanel(wx.Panel):
         metadata_type = self.settings['metadata_type']
 
         if metadata_type == 'auto':
-            if 'coflow' in settings['components']:
+            if 'coflow' in self.settings['components']:
                 metadata_type = 'saxs'
-            elif 'trsaxs_scan' in settings['components']:
+            elif 'trsaxs_scan' in self.settings['components']:
                 metadata_type = 'saxs'
-            elif 'trsaxs_flow' in settings['components']:
+            elif 'trsaxs_flow' in self.settings['components']:
                 metadata_type = 'saxs'
-            elif 'biocon' in settings['components']:
+            elif 'biocon' in self.settings['components']:
                 biocon = wx.FindWindowByName('biocon')
 
                 if 'exposure' in biocon.settings.keys():
@@ -114,6 +114,9 @@ class ParamPanel(wx.Panel):
     # def _on_get_metadata(self, evt):
     #     metadata = self.metadata()
     #     print(metadata)
+
+    def on_exit(self):
+        pass
 
 class SAXSPanel(wx.Panel):
     def __init__(self, settings, *args, **kwargs):

@@ -380,6 +380,8 @@ if __name__ == '__main__':
     metadata_settings = {
         'components'        : ['metadata'],
         'saxs_defaults'     : {'exp_type'   : 'SEC-SAXS',
+                                'buffer'    : '',
+                                'sample'    : '',
                                 'temp'      : 22,
                                 'volume'    : '',
                                 'conc'      : '',
@@ -401,11 +403,11 @@ if __name__ == '__main__':
 
     components = OrderedDict([
         ('exposure', expcon.ExpPanel),
-        # ('coflow', coflowcon.CoflowPanel),
-        ('trsaxs_scan', trcon.TRScanPanel),
-        ('trsaxs_flow', trcon.TRFlowPanel),
+        ('coflow', coflowcon.CoflowPanel),
+        # ('trsaxs_scan', trcon.TRScanPanel),
+        # ('trsaxs_flow', trcon.TRFlowPanel),
         # ('scan',    scancon.ScanPanel),
-        # ('metadata', metadata.ParamPanel)
+        ('metadata', metadata.ParamPanel)
         ])
 
     settings = {
