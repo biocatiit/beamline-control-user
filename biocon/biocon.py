@@ -329,6 +329,23 @@ if __name__ == '__main__':
             ['10 mL, Medline P.C.', '3'], {}, {'flow_rate' : '2.4',
             'refill_rate' : '5', 'dual_syringe' : False}),
         'outlet_fm'             : ('BFS', 'COM5', [], {}),
+        # 'device_communication'  : 'local',
+        # 'injection_valve'       : [('Soft', '', [], {'positions' : 2}, 'Injection'),],
+        # 'sample_valve'          : [('Soft', '', [], {'positions' : 6}, 'Sample'),],
+        # 'buffer1_valve'         : [('Soft', '', [], {'positions' : 6}, 'Buffer'),
+        #                             ('Soft', '', [], {'positions' : 6}, 'Buffer')],
+        # 'buffer2_valve'         : [('Soft', '', [], {'positions' : 6}, 'Sheath'),
+        #                             ('Soft', '', [], {'positions' : 6}, 'Sheath')],
+        # 'sample_pump'           : ('Sample', 'Soft Syringe', '',
+        #     ['10 mL, Medline P.C.',], {}, {'flow_rate' : '5',
+        #     'refill_rate' : '20', 'dual_syringe' : False}),
+        # 'buffer1_pump'           : ('Buffer', 'Soft Syringe', '',
+        #     ['20 mL, Medline P.C.',], {}, {'flow_rate' : '10',
+        #     'refill_rate' : '40', 'dual_syringe' : True}),
+        # 'buffer2_pump'          : ('Sheath', 'Soft Syringe', '',
+        #     ['20 mL, Medline P.C.',], {}, {'flow_rate' : '10',
+        #     'refill_rate' : '40', 'dual_syringe' : True}),
+        # 'outlet_fm'             : ('Soft', '', [], {}),
         'flow_units'            : 'mL/min',
         'total_flow_rate'       : '6',
         'dilution_ratio'        : '10',
@@ -385,10 +402,10 @@ if __name__ == '__main__':
     components = OrderedDict([
         ('exposure', expcon.ExpPanel),
         # ('coflow', coflowcon.CoflowPanel),
-        # ('trsaxs_scan', trcon.TRScanPanel),
-        # ('trsaxs_flow', trcon.TRFlowPanel),
+        ('trsaxs_scan', trcon.TRScanPanel),
+        ('trsaxs_flow', trcon.TRFlowPanel),
         # ('scan',    scancon.ScanPanel),
-        ('metadata', metadata.ParamPanel)
+        # ('metadata', metadata.ParamPanel)
         ])
 
     settings = {
@@ -405,9 +422,9 @@ if __name__ == '__main__':
 
     for key in settings:
         if key != 'components' and key != 'biocon':
-            keys = settings['components'].keys()
-            comps = keys.append('biocon')
-            settings[key]['components'] = comps
+            keys = list(settings['components'].keys())
+            keys.append('biocon')
+            settings[key]['components'] = keys
 
     app = wx.App()
 
