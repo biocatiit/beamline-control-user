@@ -221,7 +221,7 @@ if __name__ == '__main__':
             {'mx_record': 'j11', 'name': 'Beam_current', 'scale': 5000,
             'offset': 0.5, 'norm_time': True}
             ],
-        'base_data_dir'         : '/nas_data/Pilatus1M/2019_Run3/20191205Hopkins', #CHANGE ME
+        'base_data_dir'         : '/nas_data/Pilatus1M/2020_Run2/20200621_Srinivas', #CHANGE ME
         }
 
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']
@@ -234,8 +234,8 @@ if __name__ == '__main__':
         'remote_fm_ip'          : '164.54.204.53',
         'remote_fm_port'        : '5557',
         'flow_units'            : 'mL/min',
-        'sheath_pump'           : ('VICI_M50', 'COM3', [626.2, 9.278], {}),
-        'outlet_pump'           : ('VICI_M50', 'COM4', [624.32, 9.554], {}),
+        'sheath_pump'           : ('VICI_M50', 'COM3', [625.84, 12.55], {}),
+        'outlet_pump'           : ('VICI_M50', 'COM4', [629.16, 12.354], {}),
         'sheath_fm'             : ('BFS', 'COM5', [], {}),
         'outlet_fm'             : ('BFS', 'COM6', [], {}),
         'sheath_ratio'          : 0.5,
@@ -333,8 +333,8 @@ if __name__ == '__main__':
 
     components = OrderedDict([
         ('exposure', expcon.ExpPanel),
-        # ('coflow', coflowcon.CoflowPanel),
-        ('trsaxs_scan', trcon.TRScanPanel),
+        ('coflow', coflowcon.CoflowPanel),
+        # ('trsaxs_scan', trcon.TRScanPanel),
         # ('trsaxs_flow', trcon.TRFlowPanel),
         # ('scan',    scancon.ScanPanel),
         ])
