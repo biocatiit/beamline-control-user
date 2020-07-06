@@ -206,9 +206,10 @@ class SAXSPanel(wx.Panel):
 
 
         self.is_buffer = wx.Choice(ctrl_parent, choices=['True', 'False'])
+        self.is_buffer.SetSelection(1)
 
         self.batch_sizer = wx.FlexGridSizer(cols=2, vgap=5, hgap=5)
-        self.batch_sizer.Add(wx.StaticText(ctrl_parent, label='Buffer:'),
+        self.batch_sizer.Add(wx.StaticText(ctrl_parent, label='Is buffer:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
         self.batch_sizer.Add(self.is_buffer, flag=wx.ALIGN_CENTER_VERTICAL)
 
@@ -279,10 +280,12 @@ class SAXSPanel(wx.Panel):
         metadata['Concentration [mg/ml]:'] = self.concentration.GetValue()
 
         if exp_type == 'Batch mode SAXS':
-            metadata['Buffer:'] = self.is_buffer.GetValue()
 
-            if self.is_buffer.GetValue():
+            if self.is_buffer.GetStringSelection() == 'True':
+                metadata['Is Buffer:'] = True
                 metadata['Concentration [mg/ml]:'] = ''
+            else:
+                metadata['Is Buffer:'] = False
 
         elif exp_type == 'TR-SAXS':
             metadata['Mixer:'] = self.mixer_type.GetStringSelection()

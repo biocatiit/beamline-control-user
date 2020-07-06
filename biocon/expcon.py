@@ -160,12 +160,12 @@ class ExpCommThread(threading.Thread):
         logger.debug("Got dg645 records")
 
         attenuators = {
-                1   : self.mx_database.get_record('avme944x_in8'),
-                2   : self.mx_database.get_record('avme944x_in1'),
-                4   : self.mx_database.get_record('avme944x_in2'),
-                8   : self.mx_database.get_record('avme944x_in3'),
-                16  : self.mx_database.get_record('avme944x_in4'),
-                32  : self.mx_database.get_record('avme944x_in5'),
+                1   : mx_database.get_record('avme944x_in8'),
+                2   : mx_database.get_record('avme944x_in1'),
+                4   : mx_database.get_record('avme944x_in2'),
+                8   : mx_database.get_record('avme944x_in3'),
+                16  : mx_database.get_record('avme944x_in4'),
+                32  : mx_database.get_record('avme944x_in5'),
             }
 
         logger.debug("Got attenuator records.")
@@ -2101,7 +2101,12 @@ class ExpCommThread(threading.Thread):
         atten_length = 0
         for atten in sorted(self._mx_data['attenuators'].keys()):
             atten_in = self._mx_data['attenuators'][atten].read()
-            metadata['Attenuator, {} foil:'.format(atten)] = '{}'.format(atten_in)
+            if atten_in:
+                atten_str = 'In'
+            else:
+                atten_str = 'Out'
+
+            metadata['Attenuator, {} foil:'.format(atten)] = atten_str
 
             if atten_in:
                 atten_length = atten_length + atten
@@ -3074,10 +3079,9 @@ class ExpPanel(wx.Panel):
                 if key == 'Column:':
                     column = value
 
-
         if ('coflow' in self.settings['components']
             and 'metadata' in self.settings['components']):
-            if metadata['Coflow on']:
+            if metadata['Coflow on:']:
                 if column is not None and flow_rate is not None:
                     if '10/300' in column:
                         flow_range = (0.5, 0.8)
