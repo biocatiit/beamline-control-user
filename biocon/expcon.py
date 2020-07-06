@@ -159,6 +159,17 @@ class ExpCommThread(threading.Thread):
 
         logger.debug("Got dg645 records")
 
+        attenuators = {
+                1   : self.mx_database.get_record('avme944x_in8'),
+                2   : self.mx_database.get_record('avme944x_in1'),
+                4   : self.mx_database.get_record('avme944x_in2'),
+                8   : self.mx_database.get_record('avme944x_in3'),
+                16  : self.mx_database.get_record('avme944x_in4'),
+                32  : self.mx_database.get_record('avme944x_in5'),
+            }
+
+        logger.debug("Got attenuator records.")
+
         mx_data = {'det': det,
             'det_datadir': det_datadir,
             'det_filename': det_filename,
@@ -187,6 +198,7 @@ class ExpCommThread(threading.Thread):
             'ki3'   : mx_database.get_record('ki3'),
             'mx_db' : mx_database,
             'motors'  : {},
+            'attenuators' : attenuators,
             }
 
         logger.debug("Generated mx_data")
@@ -2062,7 +2074,11 @@ class ExpCommThread(threading.Thread):
     def _get_header(self, metadata, log_vals, fname=True):
         header = ''
         for key, value in metadata.items():
-            header = header + '#{}\t{}\n'.format(key, value)
+            if key == 'Notes:':
+                for line in value.split('\n'):
+                    header = header + '#{}\t{}\n'.format(key, line)
+            else:
+                header = header + '#{}\t{}\n'.format(key, value)
 
         if fname:
             header=header+'#Filename\tstart_time\texposure_time'
@@ -2081,6 +2097,26 @@ class ExpCommThread(threading.Thread):
         metadata['I1 gain:'] = '{:.0e}'.format(self._mx_data['ki1'].get_gain())
         metadata['I2 gain:'] = '{:.0e}'.format(self._mx_data['ki2'].get_gain())
         metadata['I3 gain:'] = '{:.0e}'.format(self._mx_data['ki3'].get_gain())
+
+        atten_length = 0
+        for atten in sorted(self._mx_data['attenuators'].keys()):
+            atten_in = self._mx_data['attenuators'][atten].read()
+            metadata['Attenuator, {} foil:'.format(atten)] = '{}'.format(atten_in)
+
+            if atten_in:
+                atten_length = atten_length + atten
+        atten_length = 20*atten_length
+
+        atten = np.exp(-atten_length/256.568) #256.568 is Al attenuation length at 12 keV
+
+        if atten > 0.1:
+            atten = '{}'.format(round(atten, 3))
+        elif atten > 0.01:
+            atten = '{}'.format(round(atten, 4))
+        else:
+            atten = '{}'.format(round(atten, 5))
+
+        metadata['Nominal Transmission (12 keV):'] = atten
 
         return metadata
 
@@ -2566,7 +2602,13 @@ class ExpPanel(wx.Panel):
         if not comp_valid:
             return
 
-        exp_values['metadata'] = self._get_metadata()
+        metadata, metadata_valid = self._get_metadata()
+
+        if metadata_valid:
+            exp_values['metadata'] = metadata
+        else:
+            return
+
 
         self.set_status('Preparing exposure')
         self.start_exp_btn.Disable()
@@ -2987,12 +3029,19 @@ class ExpPanel(wx.Panel):
 
         metadata = self.metadata()
 
+        column = None
+        flow_rate = None
+        errors = []
+
         if 'coflow' in self.settings['components']:
             coflow_panel = wx.FindWindowByName('coflow')
             coflow_metadata = coflow_panel.metadata()
 
             for key, value in coflow_metadata.items():
                 metadata[key] = value
+
+                if key.startswith('LC flow rate'):
+                    flow_rate = float(value)
 
         if 'trsaxs_scan' in self.settings['components']:
             trsaxs_panel = wx.FindWindowByName('trsaxs_scan')
@@ -3015,7 +3064,56 @@ class ExpPanel(wx.Panel):
             for key, value in scan_metadata.items():
                 metadata[key] = value
 
-        return metadata
+        if 'metadata' in self.settings['components']:
+            params_panel = wx.FindWindowByName('metadata')
+            params_metadata = params_panel.metadata()
+
+            for key, value in params_metadata.items():
+                metadata[key] = value
+
+                if key == 'Column:':
+                    column = value
+
+
+        if ('coflow' in self.settings['components']
+            and 'metadata' in self.settings['components']):
+            if metadata['Coflow on']:
+                if column is not None and flow_rate is not None:
+                    if '10/300' in column:
+                        flow_range = (0.5, 0.8)
+                    elif '5/150' in column:
+                        flow_range = (0.25, 0.5)
+                    elif 'Wyatt' in column:
+                        flow_range = (0.5, 0.8)
+                    else:
+                        flow_range = None
+
+                    if flow_range is not None:
+                        if flow_rate < flow_range[0] or flow_rate > flow_range[1]:
+                            msg = ('Flow rate of {} is not in the usual '
+                                'range of {} to {} for column {}'.format(flow_rate,
+                                flow_range[0], flow_range[1], column))
+
+                            errors.append(msg)
+
+        if len(errors) == 0:
+            metadata_valid = True
+
+        else:
+            msg = ('Your settings may be inconsistent:')
+            msg = msg + '\n-'.join(errors)
+            msg = msg + '\n\nDo you wish to continue the exposure?'
+
+            dlg = wx.MessageDialog(self, msg, "Confirm data overwrite",
+                wx.YES_NO|wx.ICON_QUESTION|wx.NO_DEFAULT)
+            result = dlg.ShowModal()
+
+            if result == wx.ID_YES:
+                metadata_valid = True
+            else:
+                metadata_valid = False
+
+        return metadata, metadata_valid
 
     def metadata(self):
         metadata = OrderedDict()

@@ -37,6 +37,7 @@ import wx
 import expcon
 import coflowcon
 import trcon
+import metadata
 
 class BioFrame(wx.Frame):
     """
@@ -93,7 +94,25 @@ class BioFrame(wx.Frame):
             or 'trsaxs_scan' in self.component_sizers or 'scan' in self.component_sizers):
             exp_sizer = wx.BoxSizer(wx.HORIZONTAL)
 
-            if 'exposure' in self.component_sizers and 'trsaxs_flow' in self.component_sizers:
+            if ('exposure' in self.component_sizers
+                and 'trsaxs_flow' in self.component_sizers
+                and 'metadata' in self.component_sizers):
+
+                sub_sub_sizer = wx.BoxSizer(wx.HORIZONTAL)
+                sub_sub_sizer.Add(self.component_sizers['metadata'], proportion=1,
+                    border=10, flag=wx.EXPAND|wx.ALL)
+                sub_sub_sizer.Add(self.component_sizers['exposure'], proportion=2,
+                    border=10, flag=wx.EXPAND|wx.ALL)
+
+                sub_sizer = wx.BoxSizer(wx.VERTICAL)
+                sub_sizer.Add(sub_sub_sizer, flag=wx.EXPAND)
+                sub_sizer.Add(self.component_sizers['trsaxs_flow'], proportion=1,
+                    border=10, flag=wx.EXPAND|wx.ALL)
+
+                exp_sizer.Add(sub_sizer, flag=wx.EXPAND, proportion=1)
+
+            elif ('exposure' in self.component_sizers
+                and 'trsaxs_flow' in self.component_sizers):
                 sub_sizer = wx.BoxSizer(wx.VERTICAL)
                 sub_sizer.Add(self.component_sizers['exposure'],
                     border=10, flag=wx.EXPAND|wx.ALL)
@@ -101,6 +120,13 @@ class BioFrame(wx.Frame):
                     border=10, flag=wx.EXPAND|wx.ALL)
 
                 exp_sizer.Add(sub_sizer, flag=wx.EXPAND, proportion=1)
+
+            elif ('exposure' in self.component_sizers
+                and 'metadata' in self.component_sizers):
+                exp_sizer.Add(self.component_sizers['metadata'], proportion=1,
+                    border=10, flag=wx.EXPAND|wx.ALL)
+                exp_sizer.Add(self.component_sizers['exposure'], proportion=2,
+                    border=10, flag=wx.EXPAND|wx.ALL)
 
             elif 'exposure' in self.component_sizers:
                 exp_sizer.Add(self.component_sizers['exposure'], proportion=1,
@@ -289,20 +315,37 @@ if __name__ == '__main__':
         'remote_valve_ip'       : '164.54.204.8',
         'remote_valve_port'     : '5558',
         'device_communication'  : 'remote',
-        'injection_valve'       : ('Rheodyne', 'COM6', [], {'positions' : 2}),
-        'sample_valve'          : ('Rheodyne', 'COM7', [], {'positions' : 6}),
-        'buffer1_valve'         : ('Rheodyne', 'COM8', [], {'positions' : 6}),
-        'buffer2_valve'         : ('Rheodyne', 'COM9', [], {'positions' : 6}),
+        'injection_valve'       : [('Rheodyne', 'COM6', [], {'positions' : 2}, 'Injection'),],
+        'sample_valve'          : [('Rheodyne', 'COM7', [], {'positions' : 6}, 'Sample'),],
+        'buffer1_valve'         : [('Rheodyne', 'COM8', [], {'positions' : 6}, 'Buffer 1'),],
+        'buffer2_valve'         : [('Rheodyne', 'COM9', [], {'positions' : 6}, 'Buffer 2'),],
         'sample_pump'           : ('Sample', 'NE 500', 'COM10',
             ['3 mL, Medline P.C.', '1'], {}, {'flow_rate' : '0.6',
-            'refill_rate' : '2'}),
+            'refill_rate' : '2', 'dual_syringe' : False}),
         'buffer1_pump'           : ('Buffer 1', 'PHD 4400', 'COM4',
             ['10 mL, Medline P.C.', '2'], {}, {'flow_rate' : '2.4',
-            'refill_rate' : '5'}),
+            'refill_rate' : '5', 'dual_syringe' : False}),
         'buffer2_pump'          : ('Buffer 2', 'PHD 4400', 'COM4',
             ['10 mL, Medline P.C.', '3'], {}, {'flow_rate' : '2.4',
-            'refill_rate' : '5'}),
+            'refill_rate' : '5', 'dual_syringe' : False}),
         'outlet_fm'             : ('BFS', 'COM5', [], {}),
+        # 'device_communication'  : 'local',
+        # 'injection_valve'       : [('Soft', '', [], {'positions' : 2}, 'Injection'),],
+        # 'sample_valve'          : [('Soft', '', [], {'positions' : 6}, 'Sample'),],
+        # 'buffer1_valve'         : [('Soft', '', [], {'positions' : 6}, 'Buffer'),
+        #                             ('Soft', '', [], {'positions' : 6}, 'Buffer')],
+        # 'buffer2_valve'         : [('Soft', '', [], {'positions' : 6}, 'Sheath'),
+        #                             ('Soft', '', [], {'positions' : 6}, 'Sheath')],
+        # 'sample_pump'           : ('Sample', 'Soft Syringe', '',
+        #     ['10 mL, Medline P.C.',], {}, {'flow_rate' : '5',
+        #     'refill_rate' : '20', 'dual_syringe' : False}),
+        # 'buffer1_pump'           : ('Buffer', 'Soft Syringe', '',
+        #     ['20 mL, Medline P.C.',], {}, {'flow_rate' : '10',
+        #     'refill_rate' : '40', 'dual_syringe' : True}),
+        # 'buffer2_pump'          : ('Sheath', 'Soft Syringe', '',
+        #     ['20 mL, Medline P.C.',], {}, {'flow_rate' : '10',
+        #     'refill_rate' : '40', 'dual_syringe' : True}),
+        # 'outlet_fm'             : ('Soft', '', [], {}),
         'flow_units'            : 'mL/min',
         'total_flow_rate'       : '6',
         'dilution_ratio'        : '10',
@@ -315,10 +358,15 @@ if __name__ == '__main__':
             'buffer2_valve' : 2, 'injection_valve' : 1},
         'autostart'             : 'At flow rate',
         'autostart_flow'        : '4.5',
+        'autostart_flow_ratio'  : 0.75,
         'autostart_delay'       : '0',
         'autoinject'            : 'After scan',
         'autoinject_scan'       : '5',
         'autoinject_valve_pos'  : 2,
+        'mixer_type'            : 'chaotic', # laminar or chaotic
+        'sample_ratio'          : '0.066', # For laminar flow
+        'sheath_ratio'          : '0.032', # For laminar flow
+        'simulated'             : False, # VERY IMPORTANT. MAKE SURE THIS IS FALSE FOR EXPERIMENTS
         }
 
     scan_settings = {
@@ -329,6 +377,28 @@ if __name__ == '__main__':
         'motor_group_name'      : 'XY',
         }
 
+    metadata_settings = {
+        'components'        : ['metadata'],
+        'saxs_defaults'     : {'exp_type'   : 'SEC-SAXS',
+                                'buffer'    : '',
+                                'sample'    : '',
+                                'temp'      : 22,
+                                'volume'    : '',
+                                'conc'      : '',
+                                'column'    : 'Superdex 200 10/300 Increase',
+                                'is_buffer' : False,
+                                'mixer'     : 'Chaotic S-bend (90 ms)',
+                                'notes'     : '',
+                                },
+        'muscle_defaults'   : {'system'         : 'Mouse',
+                                'muscle_type'   : 'Cardiac',
+                                'muscle'        : '',
+                                'preparation'   : 'Intact',
+                                'notes'         : '',
+                                },
+        'metadata_type'     : 'auto',
+        }
+
     biocon_settings = {}
 
     components = OrderedDict([
@@ -337,6 +407,7 @@ if __name__ == '__main__':
         # ('trsaxs_scan', trcon.TRScanPanel),
         # ('trsaxs_flow', trcon.TRFlowPanel),
         # ('scan',    scancon.ScanPanel),
+        ('metadata', metadata.ParamPanel)
         ])
 
     settings = {
@@ -344,6 +415,8 @@ if __name__ == '__main__':
         'exposure'      : exposure_settings,
         'trsaxs_scan'   : trsaxs_settings,
         'trsaxs_flow'   : trsaxs_settings,
+        'scan'          : scan_settings,
+        'metadata'      : metadata_settings,
         'components'    : components,
         'biocon'        : biocon_settings,
         }
@@ -351,7 +424,9 @@ if __name__ == '__main__':
 
     for key in settings:
         if key != 'components' and key != 'biocon':
-            settings[key]['components'] = settings['components'].keys()
+            keys = list(settings['components'].keys())
+            keys.append('biocon')
+            settings[key]['components'] = keys
 
     app = wx.App()
 
@@ -370,7 +445,7 @@ if __name__ == '__main__':
     logger.addHandler(h2)
 
     logger.debug('Setting up wx app')
-    frame = BioFrame(settings, None, title='BioCAT Control')
+    frame = BioFrame(settings, None, title='BioCAT Control', name='biocon')
     frame.Show()
     app.MainLoop()
 
