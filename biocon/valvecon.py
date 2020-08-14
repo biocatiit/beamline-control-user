@@ -333,6 +333,81 @@ class RheodyneValve(Valve):
 
         return ret, success
 
+
+class CheminertValve(Valve):
+    """
+    A VICI cheminert valve with universal actuator and serial control.
+    """
+
+    def __init__(self, device, name, positions, comm_lock=None):
+        """
+        """
+        Valve.__init__(self, device, name, comm_lock=comm_lock)
+
+        logstr = ("Initializing valve {} on port {}".format(self.name,
+            self.device))
+        logger.info(logstr)
+
+        self.comm_lock.acquire()
+        self.valve_comm = SerialComm(device, 9600)
+        self.comm_lock.release()
+
+        self.send_command('IFM1', False) #Sets the response mode to basic
+        self.send_command('SMA', False) #Sets the rotation mode to auto (shortest)
+        self.send_command('AM3', False) #Sets mode to multiposition valve
+        self.send_command('HM', False) #Homes valve
+
+        self._positions = int(positions)
+
+
+    def get_position(self):
+        position = self.send_command('CP')
+
+        try:
+            int(position)
+            success = True
+        except Exception:
+            success = False
+
+        if success:
+            logger.debug("Valve %s position %s", self.name, position)
+        else:
+            logger.error('Valve %s could not get position', self.name)
+            position = None
+
+        return position
+
+    def set_position(self, position):
+        position = int(position)
+
+        if position > self._positions:
+            logger.error('Cannot set valve to position %i, maximum position is %i',
+                position, self._positions)
+            success = False
+        elif position < 1:
+            logger.error('Cannot set valve to position %i, minimum position is 1',
+                position)
+            success = False
+
+        else:
+            position = '{}'.format(position)
+
+            ret, success = self.send_command('GO{}'.format(position))
+
+        return success
+
+    def send_command(self, cmd, get_response=True):
+        self.comm_lock.acquire()
+        ret = self.valve_comm.write(cmd, get_response, send_term_char = '\r', term_char='\r')
+        self.comm_lock.release()
+
+        if '' != ret:
+            success = True
+        else:
+            success = True
+
+        return ret, success
+
 class SoftValve(Valve):
     """
     This class contains the settings and communication for a generic valve.
