@@ -352,19 +352,20 @@ class CheminertValve(Valve):
         self.valve_comm = SerialComm(device, 9600)
         self.comm_lock.release()
 
-        self.send_command('IFM1', False) #Sets the response mode to basic
-        self.send_command('SMA', False) #Sets the rotation mode to auto (shortest)
-        self.send_command('AM3', False) #Sets mode to multiposition valve
-        self.send_command('HM', False) #Homes valve
+        # self.send_command('IFM1', False) #Sets the response mode to basic
+        # self.send_command('SMA', False) #Sets the rotation mode to auto (shortest)
+        # self.send_command('AM3', False) #Sets mode to multiposition valve
+        # self.send_command('HM', False) #Homes valve
 
         self._positions = int(positions)
 
 
     def get_position(self):
-        position = self.send_command('CP')
+        position = self.send_command('CP')[0]
+        position = position.strip().lstrip('CP')
 
         try:
-            int(position)
+            position = '{}'.format(int(position))
             success = True
         except Exception:
             success = False
@@ -527,6 +528,7 @@ class ValveCommThread(threading.Thread):
 
         self.known_valves = {'Rheodyne' : RheodyneValve,
             'Soft'  : SoftValve,
+            'Cheminert' : CheminertValve,
             }
 
     def run(self):
@@ -909,7 +911,7 @@ class ValvePanel(wx.Panel):
         if comport in self.all_comports:
             self.com_ctrl.SetStringSelection(comport)
 
-        if valve_type == 'Rheodyne' or valve_type == 'Soft':
+        if valve_type == 'Rheodyne' or valve_type == 'Soft' or valve_type == 'Cheminert':
             self.valve_position.SetMin(1)
 
             if 'positions' in valve_kwargs.keys():
@@ -1143,11 +1145,13 @@ class ValveFrame(wx.Frame):
             #     ('Buffer 2', 'Rheodyne', 'COM9', [], {'positions' : 6}),
             #             ]
 
-            setup_valves = [('Injection', 'Soft', '', [], {'positions' : 2}),
-                ('Sample', 'Soft', '', [], {'positions' : 6}),
-                ('Buffer 1', 'Soft', '', [], {'positions' : 6}),
-                ('Buffer 2', 'Soft', '', [], {'positions' : 6}),
-                ]
+            # setup_valves = [('Injection', 'Soft', '', [], {'positions' : 2}),
+            #     ('Sample', 'Soft', '', [], {'positions' : 6}),
+            #     ('Buffer 1', 'Soft', '', [], {'positions' : 6}),
+            #     ('Buffer 2', 'Soft', '', [], {'positions' : 6}),
+            #     ]
+
+            setup_valves = [('Buffer', 'Cheminert', 'COM5', [], {'positions': 10})]
 
         logger.info('Initializing %s valves on startup', str(len(setup_valves)))
 
@@ -1245,6 +1249,7 @@ if __name__ == '__main__':
     # my_rv67.get_position()
     # my_rv67.set_position(4)
 
+    # my_vici = CheminertValve('COM3', 'vici1', 10)
 
     # valve_cmd_q = deque()
     # valve_return_q = deque()
@@ -1264,13 +1269,14 @@ if __name__ == '__main__':
     # time.sleep(5)
     # my_valvecon.stop()
 
-    threading.Lock()
+    # threading.Lock()
 
-    comm_locks = {'Injection'   : threading.Lock(),
-        'Sample'    : threading.Lock(),
-        'Buffer 1'  : threading.Lock(),
-        'Buffer 2'  : threading.Lock(),
-        }
+    # comm_locks = {'Injection'   : threading.Lock(),
+    #     'Sample'    : threading.Lock(),
+    #     'Buffer 1'  : threading.Lock(),
+    #     'Buffer 2'  : threading.Lock(),
+    #     }
+    comm_locks = {}
 
     app = wx.App()
     logger.debug('Setting up wx app')
