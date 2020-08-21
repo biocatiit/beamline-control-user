@@ -459,7 +459,8 @@ class M50Pump(Pump):
         self.send_cmd('D 1000000') #Deceleration to 1000000, MForce default
         self.send_cmd('HC 5') #Hold current to 5%, MForce default
         self.send_cmd('RC 25') #Run current to 25%, MForce default
-        self.send_cmd('S1=17,1,0') #Sets output 1 to be active high (sinking) when motor is moving
+        # Next command doesn't match syntax in manual. Manual says it should be S1=17,1,0
+        self.send_cmd('S1 17,0,0') #Sets output 1 to be active high (sinking) when motor is moving
         # # self.send_cmd('S') #Saves current settings in non-volatile memory
 
         self._is_flowing = False
@@ -2711,7 +2712,7 @@ class PumpPanel(wx.Panel):
         self.dual_syringe = wx.Choice(self, choices=['True', 'False'])
         self.dual_syringe.SetStringSelection('False')
 
-        self.phd4400_settings_sizer = wx.FlexGridSizer(rows=2, cols=2, vgap=2, hgap=2)
+        self.phd4400_settings_sizer = wx.FlexGridSizer(cols=2, vgap=2, hgap=2)
         self.phd4400_settings_sizer.Add(wx.StaticText(self, label='Syringe type:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
         self.phd4400_settings_sizer.Add(self.syringe_type,
@@ -3469,18 +3470,21 @@ class PumpFrame(wx.Frame):
             #         {'flow_rate' : '10', 'refill_rate' : '10'}),
             #     ]
 
-            setup_pumps = [
-                ('Sample', 'NE 500', '/dev/cu.usbserial-AK06V22M', ['30 mL, EXEL', '02', False], {},
-                    {'flow_rate' : '30', 'refill_rate' : '30'}),
-                ('Sheath', 'NE 500', '/dev/cu.usbserial-A6022U62', ['30 mL, EXEL', '01', True], {},
-                    {'flow_rate' : '30', 'refill_rate' : '30'}),
-                ('Buffer', 'NE 500', '/dev/cu.usbserial-A6022U22', ['30 mL, EXEL', '00', True], {},
-                    {'flow_rate' : '30', 'refill_rate' : '30'}),
-                ]
+            # setup_pumps = [
+            #     ('Sample', 'NE 500', '/dev/cu.usbserial-AK06V22M', ['30 mL, EXEL', '02', False], {},
+            #         {'flow_rate' : '30', 'refill_rate' : '30'}),
+            #     ('Sheath', 'NE 500', '/dev/cu.usbserial-A6022U62', ['30 mL, EXEL', '01', True], {},
+            #         {'flow_rate' : '30', 'refill_rate' : '30'}),
+            #     ('Buffer', 'NE 500', '/dev/cu.usbserial-A6022U22', ['30 mL, EXEL', '00', True], {},
+            #         {'flow_rate' : '30', 'refill_rate' : '30'}),
+            #     ]
 
-            setup_pumps = [('Sheath', 'Soft Syringe', '',
-                ['10 mL, Medline P.C.',], {}, {'flow_rate' : '10',
-                'refill_rate' : '10'}),
+            # setup_pumps = [('Sheath', 'Soft Syringe', '',
+            #     ['10 mL, Medline P.C.',], {}, {'flow_rate' : '10',
+            #     'refill_rate' : '10'}),
+                        # ]
+
+            setup_pumps = [('Pump 2', 'VICI M50', 'COM6', ['626.8', '11.935'], {}, {}),
                         ]
 
         logger.info('Initializing %s pumps on startup', str(len(setup_pumps)))
@@ -3571,8 +3575,8 @@ if __name__ == '__main__':
     h1.setFormatter(formatter)
     logger.addHandler(h1)
 
-    # my_pump = M50Pump('COM6', '2', 626.2, 9.278)
-    comm_lock = threading.Lock()
+    # my_pump = M50Pump('COM6', '2')
+    # comm_lock = threading.Lock()
 
     # my_pump = PHD4400Pump('COM4', 'H1', '1', 23.5, 30, 30, '30 mL', comm_lock)
     # my_pump.flow_rate = 10
