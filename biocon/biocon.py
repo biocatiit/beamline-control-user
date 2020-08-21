@@ -37,6 +37,7 @@ import wx
 import expcon
 import coflowcon
 import trcon
+import metadata
 
 class BioFrame(wx.Frame):
     """
@@ -71,10 +72,13 @@ class BioFrame(wx.Frame):
 
         for key in self.settings['components']:
             logger.info('Setting up %s panel', key)
-            if key == 'trsaxs':
-                label = 'TRSAXS'
+            if key == 'trsaxs_scan':
+                label = 'TRSAXS Scan'
+            elif key == 'trsaxs_flow':
+                label='TRSAXS Flow'
             else:
                 label = key.capitalize()
+
             box = wx.StaticBox(top_panel, label=label)
             box.SetOwnForegroundColour(wx.Colour('firebrick'))
             component_panel = self.settings['components'][key](self.settings[key], box, name=key)
@@ -87,10 +91,44 @@ class BioFrame(wx.Frame):
             self.component_panels[key] = component_panel
 
         if ('exposure' in self.component_sizers or 'coflow' in self.component_sizers
-            or 'trsaxs' in self.component_sizers):
+            or 'trsaxs_scan' in self.component_sizers or 'scan' in self.component_sizers):
             exp_sizer = wx.BoxSizer(wx.HORIZONTAL)
 
-            if 'exposure' in self.component_sizers:
+            if ('exposure' in self.component_sizers
+                and 'trsaxs_flow' in self.component_sizers
+                and 'metadata' in self.component_sizers):
+
+                sub_sub_sizer = wx.BoxSizer(wx.HORIZONTAL)
+                sub_sub_sizer.Add(self.component_sizers['metadata'], proportion=1,
+                    border=10, flag=wx.EXPAND|wx.ALL)
+                sub_sub_sizer.Add(self.component_sizers['exposure'], proportion=2,
+                    border=10, flag=wx.EXPAND|wx.ALL)
+
+                sub_sizer = wx.BoxSizer(wx.VERTICAL)
+                sub_sizer.Add(sub_sub_sizer, flag=wx.EXPAND)
+                sub_sizer.Add(self.component_sizers['trsaxs_flow'], proportion=1,
+                    border=10, flag=wx.EXPAND|wx.ALL)
+
+                exp_sizer.Add(sub_sizer, flag=wx.EXPAND, proportion=1)
+
+            elif ('exposure' in self.component_sizers
+                and 'trsaxs_flow' in self.component_sizers):
+                sub_sizer = wx.BoxSizer(wx.VERTICAL)
+                sub_sizer.Add(self.component_sizers['exposure'],
+                    border=10, flag=wx.EXPAND|wx.ALL)
+                sub_sizer.Add(self.component_sizers['trsaxs_flow'], proportion=1,
+                    border=10, flag=wx.EXPAND|wx.ALL)
+
+                exp_sizer.Add(sub_sizer, flag=wx.EXPAND, proportion=1)
+
+            elif ('exposure' in self.component_sizers
+                and 'metadata' in self.component_sizers):
+                exp_sizer.Add(self.component_sizers['metadata'], proportion=1,
+                    border=10, flag=wx.EXPAND|wx.ALL)
+                exp_sizer.Add(self.component_sizers['exposure'], proportion=2,
+                    border=10, flag=wx.EXPAND|wx.ALL)
+
+            elif 'exposure' in self.component_sizers:
                 exp_sizer.Add(self.component_sizers['exposure'], proportion=1,
                     border=10, flag=wx.EXPAND|wx.ALL)
 
@@ -98,8 +136,12 @@ class BioFrame(wx.Frame):
                 exp_sizer.Add(self.component_sizers['coflow'], border=10,
                     flag=wx.EXPAND|wx.ALL)
 
-            if 'trsaxs' in self.component_sizers:
-                exp_sizer.Add(self.component_sizers['trsaxs'], border=10,
+            if 'trsaxs_scan' in self.component_sizers:
+                exp_sizer.Add(self.component_sizers['trsaxs_scan'], border=10,
+                    flag=wx.EXPAND|wx.ALL)
+
+            if 'scan' in self.component_sizers:
+                exp_sizer.Add(self.component_sizers['scan'], border=5,
                     flag=wx.EXPAND|wx.ALL)
 
             panel_sizer.Add(exp_sizer, flag=wx.EXPAND)
@@ -148,7 +190,7 @@ if __name__ == '__main__':
         'nframes_max'           : 15000, # For Pilatus: 999999, for Struck: 15000 (set by maxChannels in the driver configuration)
         'nparams_max'           : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
         'exp_period_delta'      : 0.00095,
-        # 'shutter_speed_open'    : 0.004, #in s      Normal vacuum shutter
+        # 'shutter_speed_open'    : 0.004, #in s      NM vacuum shutter, broken
         # 'shutter_speed_close'   : 0.004, # in s
         # 'shutter_pad'           : 0.002, #padding for shutter related values
         # 'shutter_cycle'         : 0.02, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
@@ -156,10 +198,14 @@ if __name__ == '__main__':
         # 'shutter_speed_close'   : 0.001, # in s
         # 'shutter_pad'           : 0.00, #padding for shutter related values
         # 'shutter_cycle'         : 0.002, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
-        'shutter_speed_open'    : 0.075, #in s      Slow vacuum shutter
-        'shutter_speed_close'   : 0.075, # in s
-        'shutter_pad'           : 0.01, #padding for shutter related values
-        'shutter_cycle'         : 0.2, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
+        # 'shutter_speed_open'    : 0.075, #in s      Slow vacuum shutter
+        # 'shutter_speed_close'   : 0.075, # in s
+        # 'shutter_pad'           : 0.01, #padding for shutter related values
+        # 'shutter_cycle'         : 0.2, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
+        'shutter_speed_open'    : 0.0045, #in s      Normal vacuum shutter
+        'shutter_speed_close'   : 0.004, # in s
+        'shutter_pad'           : 0.002, #padding for shutter related values
+        'shutter_cycle'         : 0.1, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
         'struck_measurement_time' : '0.001', #in s
         'tr_muscle_exp'         : False,
         'slow_mode_thres'       : 0.1,
@@ -201,7 +247,7 @@ if __name__ == '__main__':
             {'mx_record': 'j11', 'name': 'Beam_current', 'scale': 5000,
             'offset': 0.5, 'norm_time': True}
             ],
-        'base_data_dir'         : '/nas_data/Pilatus1M/2019_Run3/20191015Hopkins', #CHANGE ME
+        'base_data_dir'         : '/nas_data/Pilatus1M/2020_Run2/20200621_Srinivas', #CHANGE ME
         }
 
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']
@@ -214,8 +260,8 @@ if __name__ == '__main__':
         'remote_fm_ip'          : '164.54.204.53',
         'remote_fm_port'        : '5557',
         'flow_units'            : 'mL/min',
-        'sheath_pump'           : ('VICI_M50', 'COM3', [626.2, 9.278], {}),
-        'outlet_pump'           : ('VICI_M50', 'COM4', [623.56, 12.222], {}),
+        'sheath_pump'           : ('VICI_M50', 'COM3', [625.84, 12.55], {}),
+        'outlet_pump'           : ('VICI_M50', 'COM4', [629.16, 12.354], {}),
         'sheath_fm'             : ('BFS', 'COM5', [], {}),
         'outlet_fm'             : ('BFS', 'COM6', [], {}),
         'sheath_ratio'          : 0.5,
@@ -245,43 +291,142 @@ if __name__ == '__main__':
         'scan_start_offset_dist': 0,
         'scan_end_offset_dist'  : 0,
         'motor_type'            : 'Newport_XPS',
-        'motor_ip'              : '164.54.204.74',
+        'motor_ip'              : '164.54.204.76',
         'motor_port'            : '5001',
         'motor_group_name'      : 'XY',
         'motor_x_name'          : 'XY.X',
         'motor_y_name'          : 'XY.Y',
         'pco_direction'         : 'x',
         'pco_pulse_width'       : D('10'), #In microseconds, opt: 0.2, 1, 2.5, 10
-        'pco_encoder_settle_t'  : D('12'), #In microseconds, opt: 0.075, 1, 4, 12
-        'encoder_resolution'    : D('0.0005'), #for ILS50PP, in mm
-        'encoder_precision'     : 4, #Number of significant decimals in encoder value
+        'pco_encoder_settle_t'  : D('0.075'), #In microseconds, opt: 0.075, 1, 4, 12
+        # 'encoder_resolution'    : D('0.000001'), #for XMS160, in mm
+        # 'encoder_precision'     : 6, #Number of significant decimals in encoder value
+        'encoder_resolution'    : D('0.00001'), #for GS30V, in mm
+        'encoder_precision'     : 5, #Number of significant decimals in encoder value
         'min_off_time'          : D('0.001'),
-        'x_range'               : (-25, 25),
-        'y_range'               : (-25, 25),
-        'speed_lim'             : (0, 50),
-        'acceleration_lim'      : (0, 200),
+        'x_range'               : (-80, 80),
+        'y_range'               : (-5, 25),
+        'speed_lim'             : (0, 300),
+        'acceleration_lim'      : (0, 2500),
+        'remote_pump_ip'        : '164.54.204.8',
+        'remote_pump_port'      : '5556',
+        'remote_fm_ip'          : '164.54.204.8',
+        'remote_fm_port'        : '5557',
+        'remote_valve_ip'       : '164.54.204.8',
+        'remote_valve_port'     : '5558',
+        'device_communication'  : 'remote',
+        'injection_valve'       : [('Rheodyne', 'COM6', [], {'positions' : 2}, 'Injection'),],
+        'sample_valve'          : [('Rheodyne', 'COM7', [], {'positions' : 6}, 'Sample'),],
+        'buffer1_valve'         : [('Rheodyne', 'COM8', [], {'positions' : 6}, 'Buffer 1'),],
+        'buffer2_valve'         : [('Rheodyne', 'COM9', [], {'positions' : 6}, 'Buffer 2'),],
+        'sample_pump'           : ('Sample', 'NE 500', 'COM10',
+            ['3 mL, Medline P.C.', '1'], {}, {'flow_rate' : '0.6',
+            'refill_rate' : '2', 'dual_syringe' : False}),
+        'buffer1_pump'           : ('Buffer 1', 'PHD 4400', 'COM4',
+            ['10 mL, Medline P.C.', '2'], {}, {'flow_rate' : '2.4',
+            'refill_rate' : '5', 'dual_syringe' : False}),
+        'buffer2_pump'          : ('Buffer 2', 'PHD 4400', 'COM4',
+            ['10 mL, Medline P.C.', '3'], {}, {'flow_rate' : '2.4',
+            'refill_rate' : '5', 'dual_syringe' : False}),
+        'outlet_fm'             : ('BFS', 'COM5', [], {}),
+        # 'device_communication'  : 'local',
+        # 'injection_valve'       : [('Soft', '', [], {'positions' : 2}, 'Injection'),],
+        # 'sample_valve'          : [('Soft', '', [], {'positions' : 6}, 'Sample'),],
+        # 'buffer1_valve'         : [('Soft', '', [], {'positions' : 6}, 'Buffer'),
+        #                             ('Soft', '', [], {'positions' : 6}, 'Buffer')],
+        # 'buffer2_valve'         : [('Soft', '', [], {'positions' : 6}, 'Sheath'),
+        #                             ('Soft', '', [], {'positions' : 6}, 'Sheath')],
+        # 'sample_pump'           : ('Sample', 'Soft Syringe', '',
+        #     ['10 mL, Medline P.C.',], {}, {'flow_rate' : '5',
+        #     'refill_rate' : '20', 'dual_syringe' : False}),
+        # 'buffer1_pump'           : ('Buffer', 'Soft Syringe', '',
+        #     ['20 mL, Medline P.C.',], {}, {'flow_rate' : '10',
+        #     'refill_rate' : '40', 'dual_syringe' : True}),
+        # 'buffer2_pump'          : ('Sheath', 'Soft Syringe', '',
+        #     ['20 mL, Medline P.C.',], {}, {'flow_rate' : '10',
+        #     'refill_rate' : '40', 'dual_syringe' : True}),
+        # 'outlet_fm'             : ('Soft', '', [], {}),
+        'flow_units'            : 'mL/min',
+        'total_flow_rate'       : '6',
+        'dilution_ratio'        : '10',
+        'max_flow'              : 8,
+        'max_dilution'          : 50,
+        'auto_set_valves'       : True,
+        'valve_start_positions' : {'sample_valve' : 1, 'buffer1_valve': 1,
+            'buffer2_valve' : 1, 'injection_valve' : 1},
+        'valve_refill_positions': {'sample_valve' : 2, 'buffer1_valve': 2,
+            'buffer2_valve' : 2, 'injection_valve' : 1},
+        'autostart'             : 'At flow rate',
+        'autostart_flow'        : '4.5',
+        'autostart_flow_ratio'  : 0.75,
+        'autostart_delay'       : '0',
+        'autoinject'            : 'After scan',
+        'autoinject_scan'       : '5',
+        'autoinject_valve_pos'  : 2,
+        'mixer_type'            : 'chaotic', # laminar or chaotic
+        'sample_ratio'          : '0.066', # For laminar flow
+        'sheath_ratio'          : '0.032', # For laminar flow
+        'simulated'             : False, # VERY IMPORTANT. MAKE SURE THIS IS FALSE FOR EXPERIMENTS
+        }
+
+    scan_settings = {
+        'components'            : ['scan'],
+        'newport_ip'            : '164.54.204.76',
+        'newport_port'          : '5001',
+        'show_advanced_options' : True,
+        'motor_group_name'      : 'XY',
+        }
+
+    metadata_settings = {
+        'components'        : ['metadata'],
+        'saxs_defaults'     : {'exp_type'   : 'SEC-SAXS',
+                                'buffer'    : '',
+                                'sample'    : '',
+                                'temp'      : 22,
+                                'volume'    : '',
+                                'conc'      : '',
+                                'column'    : 'Superdex 200 10/300 Increase',
+                                'is_buffer' : False,
+                                'mixer'     : 'Chaotic S-bend (90 ms)',
+                                'notes'     : '',
+                                },
+        'muscle_defaults'   : {'system'         : 'Mouse',
+                                'muscle_type'   : 'Cardiac',
+                                'muscle'        : '',
+                                'preparation'   : 'Intact',
+                                'notes'         : '',
+                                },
+        'metadata_type'     : 'auto',
         }
 
     biocon_settings = {}
 
     components = OrderedDict([
         ('exposure', expcon.ExpPanel),
-        # ('coflow', coflowcon.CoflowPanel),
-        # ('trsaxs', trcon.TRPanel),
+        ('coflow', coflowcon.CoflowPanel),
+        # ('trsaxs_scan', trcon.TRScanPanel),
+        # ('trsaxs_flow', trcon.TRFlowPanel),
+        # ('scan',    scancon.ScanPanel),
+        ('metadata', metadata.ParamPanel)
         ])
 
     settings = {
         'coflow'        : coflow_settings,
         'exposure'      : exposure_settings,
-        'trsaxs'        : trsaxs_settings,
+        'trsaxs_scan'   : trsaxs_settings,
+        'trsaxs_flow'   : trsaxs_settings,
+        'scan'          : scan_settings,
+        'metadata'      : metadata_settings,
         'components'    : components,
-        'biocon'        : biocon_settings
+        'biocon'        : biocon_settings,
         }
 
 
     for key in settings:
         if key != 'components' and key != 'biocon':
-            settings[key]['components'] = settings['components'].keys()
+            keys = list(settings['components'].keys())
+            keys.append('biocon')
+            settings[key]['components'] = keys
 
     app = wx.App()
 
@@ -300,7 +445,7 @@ if __name__ == '__main__':
     logger.addHandler(h2)
 
     logger.debug('Setting up wx app')
-    frame = BioFrame(settings, None, title='BioCAT Control')
+    frame = BioFrame(settings, None, title='BioCAT Control', name='biocon')
     frame.Show()
     app.MainLoop()
 

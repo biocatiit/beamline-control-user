@@ -365,7 +365,7 @@ class NewportXPSMotor(Motor):
 
     def get_positioner_position(self, positioner, index):
 
-        print (self.sockets)
+        # print (self.sockets)
 
         logger.debug('Getting %s position', positioner)
         error, positions = self.xps.GroupPositionCurrentGet(self.sockets['status'],
@@ -954,6 +954,30 @@ class NewportXPSMotor(Motor):
             logger.info('%s disconnecting from the XPS at %s:%i on socket %s', self.name,
                 self.ip_address, self.port, socket_id)
             self.xps.TCP_CloseSocket(socket_id)
+
+class NewportXPSSingleAxis(object):
+
+    def __init__(self, name, xps, ip_address, port, timeout, group, num_axes,
+        axis, index):
+
+        self.newport_motor = NewportXPSMotor(name, xps, ip_address, port, timeout, group, num_axes)
+        self.axis = axis
+        self.index = index
+
+    def get_position(self):
+        return self.newport_motor.get_positioner_position(self.axis, self.index)
+
+    def move_absolute(self, pos):
+        return self.newport_motor.move_positioner_absolute(self.axis, self.index, pos)
+
+    def move_relative(self, pos):
+        return self.newport_motor.move_positioner_relative(self.axis, self.index, pos)
+
+    def is_busy(self):
+        return self.newport_motor.positioner_is_moving(self.axis)
+
+    def stop(self):
+        self.newport_motor.stop(self.axis)
 
 class ZaberMotor(object):
     """
