@@ -2098,30 +2098,30 @@ class ExpCommThread(threading.Thread):
         metadata['I2 gain:'] = '{:.0e}'.format(self._mx_data['ki2'].get_gain())
         metadata['I3 gain:'] = '{:.0e}'.format(self._mx_data['ki3'].get_gain())
 
-        atten_length = 0
-        for atten in sorted(self._mx_data['attenuators'].keys()):
-            atten_in = self._mx_data['attenuators'][atten].read()
-            if atten_in:
-                atten_str = 'In'
-            else:
-                atten_str = 'Out'
+        # atten_length = 0
+        # for atten in sorted(self._mx_data['attenuators'].keys()):
+        #     atten_in = self._mx_data['attenuators'][atten].read()
+        #     if atten_in:
+        #         atten_str = 'In'
+        #     else:
+        #         atten_str = 'Out'
 
-            metadata['Attenuator, {} foil:'.format(atten)] = atten_str
+        #     metadata['Attenuator, {} foil:'.format(atten)] = atten_str
 
-            if atten_in:
-                atten_length = atten_length + atten
-        atten_length = 20*atten_length
+        #     if atten_in:
+        #         atten_length = atten_length + atten
+        # atten_length = 20*atten_length
 
-        atten = np.exp(-atten_length/256.568) #256.568 is Al attenuation length at 12 keV
+        # atten = np.exp(-atten_length/256.568) #256.568 is Al attenuation length at 12 keV
 
-        if atten > 0.1:
-            atten = '{}'.format(round(atten, 3))
-        elif atten > 0.01:
-            atten = '{}'.format(round(atten, 4))
-        else:
-            atten = '{}'.format(round(atten, 5))
+        # if atten > 0.1:
+        #     atten = '{}'.format(round(atten, 3))
+        # elif atten > 0.01:
+        #     atten = '{}'.format(round(atten, 4))
+        # else:
+        #     atten = '{}'.format(round(atten, 5))
 
-        metadata['Nominal Transmission (12 keV):'] = atten
+        # metadata['Nominal Transmission (12 keV):'] = atten
 
         return metadata
 

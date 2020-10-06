@@ -212,7 +212,7 @@ if __name__ == '__main__':
         'fast_mode_max_exp_time': 2000,
         'wait_for_trig'         : False,
         'num_trig'              : '1',
-        'show_advanced_options' : False,
+        'show_advanced_options' : True,
         'fe_shutter_pv'         : 'FE:18:ID:FEshutter',
         'd_shutter_pv'          : 'PA:18ID:STA_D_SDS_OPEN_PL.VAL',
         'local_dir_root'        : '/nas_data/Pilatus1M',
@@ -247,7 +247,7 @@ if __name__ == '__main__':
             {'mx_record': 'j11', 'name': 'Beam_current', 'scale': 5000,
             'offset': 0.5, 'norm_time': True}
             ],
-        'base_data_dir'         : '/nas_data/Pilatus1M/2020_Run2/20200621_Srinivas', #CHANGE ME
+        'base_data_dir'         : '/nas_data/Pilatus1M/2020_Run3', #CHANGE ME
         }
 
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']
