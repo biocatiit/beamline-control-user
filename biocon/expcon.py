@@ -1699,6 +1699,7 @@ class ExpCommThread(threading.Thread):
         # start = time.time()
 
         for cur_trig in range(1, num_trig+1):
+            self.return_queue.append(['scan', cur_trig])
             det.arm()
 
             for i in range(num_frames):
@@ -1860,9 +1861,16 @@ class ExpCommThread(threading.Thread):
                             val = val + '\n'
                             f.write(val)
 
+                        if m_exp_t == 0:
+                            msg = ('Counter values are not being recorded properly. '
+                                'Please contact your beamline scientist and '
+                                'restart the exposure sequence.')
+                            self.return_queue.append(['counter_error', msg])
                         break
 
                     time.sleep(0.001)
+
+                if m_exp_
 
                 # logger.debug('Joerger Done!\n')
                 # logger.debug( "After Joerger readout = %f" % \
@@ -2391,6 +2399,8 @@ class ExpPanel(wx.Panel):
 
         self.SetSizer(self.top_sizer)
 
+        self._initialize()
+
 
     def _create_layout(self):
         """Creates the layout for the panel."""
@@ -2555,6 +2565,16 @@ class ExpPanel(wx.Panel):
 
         return top_sizer
 
+    def _initialize(self):
+        self.fe_shutter_pv = mpca.PV(self.settings['fe_shutter_pv'])
+        self.d_shutter_pv = mpca.PV(self.settings['d_shutter_pv'])
+        self.col_vac_pv = mpca.PV(self.settings['col_vac_pv'])
+        self.guard_vac_pv = mpca.PV(self.settings['guard_vac_pv'])
+        self.sample_vac_pv = mpca.PV(self.settings['sample_vac_pv'])
+        self.sc_vac_pv = mpca.PV(self.settings['sc_vac_pv'])
+
+        self.warning_dialog = None
+
     def _on_change_dir(self, evt):
         with wx.DirDialog(self, "Select Directory", self.data_dir.GetValue()) as fd:
             if fd.ShowModal() == wx.ID_CANCEL:
@@ -2587,9 +2607,9 @@ class ExpPanel(wx.Panel):
         self.abort_event.clear()
         self.exp_event.clear()
 
-        shutter_valid = self._check_shutters()
+        warnings_valid = self._check_warnings()
 
-        if not shutter_valid:
+        if not warnings_valid:
             return
 
         exp_values, exp_valid = self._get_exp_values()
@@ -2719,61 +2739,139 @@ class ExpPanel(wx.Panel):
 
                 if status == 'scan':
                     self.set_scan_number(val)
+                elif status == 'counter_error':
+                    self._show_warning_dialog(msg)
 
         else:
             self._on_exp_finish()
 
+    def _show_warning_dialog(self, msg):
+        if self.warning_dialog is None:
+            self.warning_dialog = utils.WarningMessage(self, msg, 'WARNING')
+            self.warning_dialog.Show()
+
+    def _check_warnings(self):
+        shutter_valid = self._check_shutters()
+
+        if not shutter_valid:
+            return shutter_valid
+
+        vac_valid = self._check_vacuum()
+
+        if not vac_valid:
+            return vac_valid
+
+        return True
+
     def _check_shutters(self):
+
         cont = True
         msg = ''
 
-        fe_shutter_pv = mpca.PV(self.settings['fe_shutter_pv'])
-        d_shutter_pv = mpca.PV(self.settings['d_shutter_pv'])
+        if self.settings['warnings']['shutter']:
+            try:
+                if self.fe_shutter_pv.caget() == 0:
+                    fes = False
+                else:
+                    fes = True
+            except mp.Timed_Out_Error:
+                fes = True #REVISIT
 
-        try:
-            if fe_shutter_pv.caget() == 0:
-                fes = False
-            else:
-                fes = True
-        except mp.Timed_Out_Error:
-            fes = True #REVISIT
+            try:
+                if self.d_shutter_pv.caget() == 0:
+                    ds = False
+                else:
+                    ds = True
+            except mp.Timed_Out_Error:
+                ds = True #REVISIT
 
-        try:
-            if d_shutter_pv.caget() == 0:
-                ds = False
-            else:
-                ds = True
-        except mp.Timed_Out_Error:
-            ds = True #REVISIT
+            if not fes and not ds:
+                msg = ('Both the Front End shutter and the D Hutch '
+                    'shutter are closed. Are you sure you want to '
+                    'continue?')
 
-        if not fes and not ds:
-            msg = ('Both the Front End shutter and the D Hutch '
-                'shutter are closed. Are you sure you want to '
-                'continue?')
+            elif not fes:
+                msg = ('The Front End shutter is closed. Are you sure '
+                    'you want to continue?')
 
-        elif not fes:
-            msg = ('The Front End shutter is closed. Are you sure '
-                'you want to continue?')
+            elif not ds:
+                msg = ('The D Hutch shutter is closed. Are you sure you '
+                    'want to continue?')
 
-        elif not ds:
-            msg = ('The D Hutch shutter is closed. Are you sure you '
-                'want to continue?')
+            if msg != '':
+                dlg = wx.MessageDialog(None, msg, "Shutter Closed", wx.YES_NO|wx.ICON_EXCLAMATION|wx.NO_DEFAULT)
+                result = dlg.ShowModal()
+
+                if result == wx.ID_NO:
+                    cont = False
+                else:
+                    if not fes and not ds:
+                        logger.info('Front End shutter and D Hutch shutter are closed.')
+
+                    elif not fes:
+                        logger.info('Front End shtuter is closed.')
+
+                    elif not ds:
+                        logger.info('D Hutch shutter is closed.')
+
+        return cont
+
+    def _check_vac(self):
+        cont = True
+        msg = ''
+
+        if self.settings['warnings']['col_vac']['check']:
+            thresh = self.settings['warnings']['col_vac']['thresh']
+            try:
+                vac = self.col_vac_pv.caget()
+            except mp.Timed_Out_Error:
+                vac = 0
+
+            if  vac > thresh:
+                msg = msg + ('\nCollimator vacuum (< {} mtorr): {} mtorr'.format(
+                    int(round(thresh*1000)), int(round(vac*1000))))
+
+        if self.settings['warnings']['guard_vac']['check']:
+            thresh = self.settings['warnings']['guard_vac']['thresh']
+            try:
+                vac = self.guard_vac_pv.caget()
+            except mp.Timed_Out_Error:
+                vac = 0
+
+            if  vac > thresh:
+                msg = msg + ('\nGuard slit vacuum (< {} mtorr): {} mtorr'.format(
+                    int(round(thresh*1000)), int(round(vac*1000))))
+
+        if self.settings['warnings']['sample_vac']['check']:
+            thresh = self.settings['warnings']['sample_vac']['thresh']
+            try:
+                vac = self.sample_vac_pv.caget()
+            except mp.Timed_Out_Error:
+                vac = 0
+
+            if  vac > thresh:
+                msg = msg + ('\nSample vacuum (< {} mtorr): {} mtorr'.format(
+                    int(round(thresh*1000)), int(round(vac*1000))))
+
+        if self.settings['warnings']['sc_vac']['check']:
+            thresh = self.settings['warnings']['sc_vac']['thresh']
+            try:
+                vac = self.sc_vac_pv.caget()
+            except mp.Timed_Out_Error:
+                vac = 0
+
+            if  vac > thresh:
+                msg = msg + ('\nFlight tube vacuum (< {} mtorr): {} mtorr'.format(
+                    int(round(thresh*1000)), int(round(vac*1000))))
 
         if msg != '':
+            msg = ('The following vacuum readings are too high, are you sure '
+                'you want to continue?') + msg
             dlg = wx.MessageDialog(None, msg, "Shutter Closed", wx.YES_NO|wx.ICON_EXCLAMATION|wx.NO_DEFAULT)
             result = dlg.ShowModal()
 
             if result == wx.ID_NO:
                 cont = False
-            else:
-                if not fes and not ds:
-                    logger.info('Front End shutter and D Hutch shutter are closed.')
-
-                elif not fes:
-                    logger.info('Front End shtuter is closed.')
-
-                elif not ds:
-                    logger.info('D Hutch shutter is closed.')
 
         return cont
 
@@ -3134,21 +3232,48 @@ class ExpPanel(wx.Panel):
             if self.current_exposure_values['wait_for_trig']:
                 metadata['Number of triggers:'] = self.current_exposure_values['num_trig']
 
-            fe_shutter_pv = mpca.PV(self.settings['fe_shutter_pv'])
-            d_shutter_pv = mpca.PV(self.settings['d_shutter_pv'])
+            try:
+                if self.fe_shutter_pv.caget() == 0:
+                    fes = False
+                else:
+                    fes = True
+                metadata['Front end shutter open:'] = fes
+             except mp.Timed_Out_Error:
+                pass
 
-            if fe_shutter_pv.caget() == 0:
-                fes = False
-            else:
-                fes = True
+            try:
+                if self.d_shutter_pv.caget() == 0:
+                    ds = False
+                else:
+                    ds = True
 
-            if d_shutter_pv.caget() == 0:
-                ds = False
-            else:
-                ds = True
+                metadata['D hutch shutter open:'] = ds
+            except mp.Timed_Out_Error:
+                pass
 
-            metadata['Front end shutter open:'] = fes
-            metadata['D hutch shutter open:'] = ds
+            try:
+                vac = self.col_vac_pv.caget()
+                metadata['Collimator vacuum [mtorr]:'] = vac*1000
+            except mp.Timed_Out_Error:
+                pass
+
+            try:
+                vac = self.guard_vac_pv.caget()
+                metadata['Guard slit vacuum [mtorr]:'] = vac*1000
+            except mp.Timed_Out_Error:
+                pass
+
+            try:
+                vac = self.sample_vac_pv.caget()
+                metadata['Sample vacuum [mtorr]:'] = vac*1000
+            except mp.Timed_Out_Error:
+                pass
+
+            try:
+                vac = self.sc_vac_pv.caget()
+                metadata['Flight tube vacuum [mtorr]:'] = vac*1000
+            except mp.Timed_Out_Error:
+                pass
 
         return metadata
 
@@ -3268,44 +3393,6 @@ if __name__ == '__main__':
 
     logger.addHandler(h1)
 
-    # #MX stuff
-    # try:
-    #     # First try to get the name from an environment variable.
-    #     database_filename = os.environ["MXDATABASE"]
-    # except:
-    #     # If the environment variable does not exist, construct
-    #     # the filename for the default MX database.
-    #     mxdir = utils.get_mxdir()
-    #     database_filename = os.path.join(mxdir, "etc", "mpilatus.dat")
-    #     database_filename = os.path.normpath(database_filename)
-
-    # mx_database = mp.setup_database(database_filename)
-    # mx_database.set_plot_enable(2)
-
-    # det = mx_database.get_record('pilatus')
-
-    # server_record_name = det.get_field('server_record')
-    # remote_det_name = det.get_field('remote_record_name')
-    # server_record = mx_database.get_record(server_record_name)
-    # det_datadir_name = '{}.datafile_directory'.format(remote_det_name)
-    # det_datafile_name = '{}.datafile_pattern'.format(remote_det_name)
-
-    # det_datadir = mp.Net(server_record, det_datadir_name)
-    # det_filename = mp.Net(server_record, det_datafile_name)
-
-    # mx_data = {'det': det,
-    #     'det_datadir': det_datadir,
-    #     'det_filename': det_filename,
-    #     'struck': mx_database.get_record('sis3820'),
-    #     'ab_burst': mx_database.get_record('ab_burst'),
-    #     'cd_burst': mx_database.get_record('cd_burst'),
-    #     'ef_burst': mx_database.get_record('ef_burst'),
-    #     'dio': [mx_database.get_record('avme944x_out{}'.format(i)) for i in range(16)],
-    #     'joerger': mx_database.get_record('joerger_timer'),
-    #     'joerger_ctrs':[mx_database.get_record('j{}'.format(i)) for i in range(2,8)],
-    #     'mx_db': mx_database,
-    #     }
-
     #Settings for Pilatus 3X 1M
     settings = {'data_dir'      : '',
         'filename'              :'',
@@ -3333,6 +3420,10 @@ if __name__ == '__main__':
         'show_advanced_options' : True,
         'fe_shutter_pv'         : 'FE:18:ID:FEshutter',
         'd_shutter_pv'          : 'PA:18ID:STA_D_SDS_OPEN_PL.VAL',
+        'col_vac_pv'            : '18ID:VAC:D:Cols',
+        'guard_vac_pv'          : '18ID:VAC:D:Guards',
+        'sample_vac_pv'         : '18ID:VAC:D:Sample',
+        'sc_vac_pv'             : '18ID:VAC:D:ScatterChamber',
         'local_dir_root'        : '/nas_data/Pilatus1M',
         'remote_dir_root'       : '/nas_data',
         'struck_log_vals'       : [{'mx_record': 'mcs3', 'channel': 2, 'name': 'I0',
@@ -3359,6 +3450,10 @@ if __name__ == '__main__':
             {'mx_record': 'j11', 'name': 'Beam_current', 'scale': 5000,
             'offset': 0.5, 'norm_time': True}
             ],
+        'warnings'              : {'shutter' : True, 'col_vac' : {'check': True,
+            'thresh': 0.04}, 'guard_vac' : {'check': True, 'thresh': 0.04},
+            'sample_vac': {'check': True, 'thresh': 0.04}, 'sc_vac':
+            {'check': True, 'thresh':0.04}},
         'components'            : ['exposure'],
         'base_data_dir'         : '/nas_data/Pilatus1M/20190605Hopkins', #CHANGE ME
         }

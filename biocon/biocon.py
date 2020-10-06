@@ -247,6 +247,10 @@ if __name__ == '__main__':
             {'mx_record': 'j11', 'name': 'Beam_current', 'scale': 5000,
             'offset': 0.5, 'norm_time': True}
             ],
+        'warnings'              : {'shutter' : True, 'col_vac' : {'check': True,
+            'thresh': 0.04}, 'guard_vac' : {'check': True, 'thresh': 0.04},
+            'sample_vac': {'check': True, 'thresh': 0.04}, 'sc_vac':
+            {'check': True, 'thresh':0.04}},
         'base_data_dir'         : '/nas_data/Pilatus1M/2020_Run3', #CHANGE ME
         }
 

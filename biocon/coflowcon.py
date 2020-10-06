@@ -766,7 +766,7 @@ class CoflowPanel(wx.Panel):
                     logger.debug('Sheath temperature: %f', sheath_t)
                     logger.debug('Outlet temperature: %f', outlet_t)
 
-                if (not self.stop_get_fr_event.is_set() and time.time() - log_time > 10
+                if (not self.stop_get_fr_event.is_set() and time.time() - log_time > 300
                     and self.coflow_on):
                     logger.info('Sheath flow rate: %f', sheath_fr)
                     logger.info('Outlet flow rate: %f', outlet_fr)
