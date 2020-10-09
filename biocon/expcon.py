@@ -505,7 +505,7 @@ class ExpCommThread(threading.Thread):
                         dio_out9, dio_out6, exp_time)
                     break
 
-                # current_meas = struck_current_channel_pv.caget()
+                # current_meas = struck_current_channel_pv.caget(timeout=2)
                 # if current_meas != current_channel:
                 #     current_channel = current_meas
                     # print(struck.read_all()) #This should work but it doesn't, gives a timeout error
@@ -1303,7 +1303,7 @@ class ExpCommThread(threading.Thread):
                             dio_out9, dio_out6, exp_time)
                         break
 
-                    # current_meas = struck_current_channel_pv.caget()
+                    # current_meas = struck_current_channel_pv.caget(timeout=2)
                     # logger.debug(current_meas)
                     # if current_meas != current_channel and current_meas != 0:
                     #     current_channel = current_meas
@@ -1535,7 +1535,7 @@ class ExpCommThread(threading.Thread):
                         dio_out9, dio_out6, exp_time)
                     break
 
-                # current_meas = struck_current_channel_pv.caget()
+                # current_meas = struck_current_channel_pv.caget(timeout=2)
                 # logger.debug(current_meas)
                 # if current_meas != current_channel and current_meas != 0:
                 #     current_channel = current_meas
@@ -2770,7 +2770,7 @@ class ExpPanel(wx.Panel):
 
         if self.settings['warnings']['shutter']:
             try:
-                if self.fe_shutter_pv.caget() == 0:
+                if self.fe_shutter_pv.caget(timeout=2) == 0:
                     fes = False
                 else:
                     fes = True
@@ -2778,7 +2778,7 @@ class ExpPanel(wx.Panel):
                 fes = True #REVISIT
 
             try:
-                if self.d_shutter_pv.caget() == 0:
+                if self.d_shutter_pv.caget(timeout=2) == 0:
                     ds = False
                 else:
                     ds = True
@@ -2823,7 +2823,7 @@ class ExpPanel(wx.Panel):
         if self.settings['warnings']['col_vac']['check']:
             thresh = self.settings['warnings']['col_vac']['thresh']
             try:
-                vac = self.col_vac_pv.caget()
+                vac = self.col_vac_pv.caget(timeout=2)
             except mp.Timed_Out_Error:
                 vac = 0
 
@@ -2834,7 +2834,7 @@ class ExpPanel(wx.Panel):
         if self.settings['warnings']['guard_vac']['check']:
             thresh = self.settings['warnings']['guard_vac']['thresh']
             try:
-                vac = self.guard_vac_pv.caget()
+                vac = self.guard_vac_pv.caget(timeout=2)
             except mp.Timed_Out_Error:
                 vac = 0
 
@@ -2845,7 +2845,7 @@ class ExpPanel(wx.Panel):
         if self.settings['warnings']['sample_vac']['check']:
             thresh = self.settings['warnings']['sample_vac']['thresh']
             try:
-                vac = self.sample_vac_pv.caget()
+                vac = self.sample_vac_pv.caget(timeout=2)
             except mp.Timed_Out_Error:
                 vac = 0
 
@@ -2856,7 +2856,7 @@ class ExpPanel(wx.Panel):
         if self.settings['warnings']['sc_vac']['check']:
             thresh = self.settings['warnings']['sc_vac']['thresh']
             try:
-                vac = self.sc_vac_pv.caget()
+                vac = self.sc_vac_pv.caget(timeout=2)
             except mp.Timed_Out_Error:
                 vac = 0
 
@@ -3233,7 +3233,7 @@ class ExpPanel(wx.Panel):
                 metadata['Number of triggers:'] = self.current_exposure_values['num_trig']
 
             try:
-                if self.fe_shutter_pv.caget() == 0:
+                if self.fe_shutter_pv.caget(timeout=2) == 0:
                     fes = False
                 else:
                     fes = True
@@ -3242,7 +3242,7 @@ class ExpPanel(wx.Panel):
                 pass
 
             try:
-                if self.d_shutter_pv.caget() == 0:
+                if self.d_shutter_pv.caget(timeout=2) == 0:
                     ds = False
                 else:
                     ds = True
@@ -3252,25 +3252,25 @@ class ExpPanel(wx.Panel):
                 pass
 
             try:
-                vac = self.col_vac_pv.caget()
+                vac = self.col_vac_pv.caget(timeout=2)
                 metadata['Collimator vacuum [mtorr]:'] = vac*1000
             except mp.Timed_Out_Error:
                 pass
 
             try:
-                vac = self.guard_vac_pv.caget()
+                vac = self.guard_vac_pv.caget(timeout=2)
                 metadata['Guard slit vacuum [mtorr]:'] = vac*1000
             except mp.Timed_Out_Error:
                 pass
 
             try:
-                vac = self.sample_vac_pv.caget()
+                vac = self.sample_vac_pv.caget(timeout=2)
                 metadata['Sample vacuum [mtorr]:'] = vac*1000
             except mp.Timed_Out_Error:
                 pass
 
             try:
-                vac = self.sc_vac_pv.caget()
+                vac = self.sc_vac_pv.caget(timeout=2)
                 metadata['Flight tube vacuum [mtorr]:'] = vac*1000
             except mp.Timed_Out_Error:
                 pass
