@@ -80,7 +80,7 @@ class ControlClient(threading.Thread):
         """
         while True:
             if len(self.command_queue) > 0:
-                logger.debug("Getting new command")
+                # logger.debug("Getting new command")
                 command = self.command_queue.popleft()
             else:
                 command = None
@@ -98,7 +98,7 @@ class ControlClient(threading.Thread):
                 device = command['device']
                 device_cmd = command['command']
                 get_response = command['response']
-                logger.debug("For device %s, processing cmd '%s' with args: %s and kwargs: %s ", device, device_cmd[0], ', '.join(['{}'.format(a) for a in device_cmd[1]]), ', '.join(['{}:{}'.format(kw, item) for kw, item in device_cmd[2].items()]))
+                # logger.debug("For device %s, processing cmd '%s' with args: %s and kwargs: %s ", device, device_cmd[0], ', '.join(['{}'.format(a) for a in device_cmd[1]]), ', '.join(['{}:{}'.format(kw, item) for kw, item in device_cmd[2].items()]))
                 try:
                     self.socket.send_json(command)
 
@@ -116,7 +116,7 @@ class ControlClient(threading.Thread):
                     else:
                         self.connect_error[device] = 0
 
-                    logger.debug('Command response: %s' %(answer))
+                    # logger.debug('Command response: %s' %(answer))
 
                     if get_response:
                         self.answer_queue.append(answer)
@@ -167,7 +167,7 @@ class ControlClient(threading.Thread):
         logger.info("Quitting remote client thread: %s", self.name)
 
     def _ping(self):
-        logger.debug("Checking if server is active")
+        # logger.debug("Checking if server is active")
         cmd = {'device': 'server', 'command': ('ping', (), {}), 'response': False}
 
         connect_tries = 0

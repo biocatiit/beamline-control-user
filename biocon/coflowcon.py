@@ -759,12 +759,12 @@ class CoflowPanel(wx.Panel):
                     wx.CallAfter(self.outlet_flow.SetLabel, str(round(outlet_fr,3 )))
 
                 if not self.stop_get_fr_event.is_set():
-                    logger.debug('Sheath flow rate: %f', sheath_fr)
-                    logger.debug('Outlet flow rate: %f', outlet_fr)
-                    logger.debug('Sheath density: %f', sheath_density)
-                    logger.debug('Outlet density: %f', outlet_density)
-                    logger.debug('Sheath temperature: %f', sheath_t)
-                    logger.debug('Outlet temperature: %f', outlet_t)
+                    # logger.debug('Sheath flow rate: %f', sheath_fr)
+                    # logger.debug('Outlet flow rate: %f', outlet_fr)
+                    # logger.debug('Sheath density: %f', sheath_density)
+                    # logger.debug('Outlet density: %f', outlet_density)
+                    # logger.debug('Sheath temperature: %f', sheath_t)
+                    # logger.debug('Outlet temperature: %f', outlet_t)
 
                 if (not self.stop_get_fr_event.is_set() and time.time() - log_time > 300
                     and self.coflow_on):
