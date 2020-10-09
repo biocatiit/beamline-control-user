@@ -2584,29 +2584,32 @@ class ExpPanel(wx.Panel):
         self.stop_exp()
 
     def start_exp(self):
+        logger.debug('in start exposure')
         self.abort_event.clear()
         self.exp_event.clear()
 
+
+        logger.debug('checking shutters')
         shutter_valid = self._check_shutters()
 
         if not shutter_valid:
             return
-
+        logger.debug('getting exposure values')
         exp_values, exp_valid = self._get_exp_values()
 
         if not exp_valid:
             return
-
+        logger.debug('checking overwrite')
         overwrite_valid = self._check_overwrite(exp_values)
 
         if not overwrite_valid:
             return
-
+        logger.debug('checking components')
         comp_valid, comp_settings = self._check_components()
 
         if not comp_valid:
             return
-
+        logger.debug('get metadata')
         metadata, metadata_valid = self._get_metadata()
 
         if metadata_valid:
@@ -2614,7 +2617,7 @@ class ExpPanel(wx.Panel):
         else:
             return
 
-
+        logger.debug('setting status')
         self.set_status('Preparing exposure')
         self.start_exp_btn.Disable()
         self.stop_exp_btn.Enable()
@@ -3360,7 +3363,7 @@ if __name__ == '__main__':
             'offset': 0.5, 'norm_time': True}
             ],
         'components'            : ['exposure'],
-        'base_data_dir'         : '/nas_data/Pilatus1M/20190605Hopkins', #CHANGE ME
+        'base_data_dir'         : '/nas_data/Pilatus1M/2020_Run3', #CHANGE ME
         }
 
     settings['data_dir'] = settings['base_data_dir']
