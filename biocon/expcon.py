@@ -2730,16 +2730,16 @@ class ExpPanel(wx.Panel):
         cont = True
         msg = ''
 
-        fe_shutter_pv = mpca.PV(self.settings['fe_shutter_pv'])
+        # fe_shutter_pv = mpca.PV(self.settings['fe_shutter_pv'])
         d_shutter_pv = mpca.PV(self.settings['d_shutter_pv'])
 
-        try:
-            if fe_shutter_pv.caget() == 0:
-                fes = False
-            else:
-                fes = True
-        except mp.Timed_Out_Error:
-            fes = True #REVISIT
+        # try:
+        #     if fe_shutter_pv.caget() == 0:
+        #         fes = False
+        #     else:
+        #         fes = True
+        # except mp.Timed_Out_Error:
+        #     fes = True #REVISIT
 
         try:
             if d_shutter_pv.caget() == 0:
@@ -2749,16 +2749,16 @@ class ExpPanel(wx.Panel):
         except mp.Timed_Out_Error:
             ds = True #REVISIT
 
-        if not fes and not ds:
-            msg = ('Both the Front End shutter and the D Hutch '
-                'shutter are closed. Are you sure you want to '
-                'continue?')
+        # if not fes and not ds:
+        #     msg = ('Both the Front End shutter and the D Hutch '
+        #         'shutter are closed. Are you sure you want to '
+        #         'continue?')
 
-        elif not fes:
-            msg = ('The Front End shutter is closed. Are you sure '
-                'you want to continue?')
+        # elif not fes:
+        #     msg = ('The Front End shutter is closed. Are you sure '
+        #         'you want to continue?')
 
-        elif not ds:
+        if not ds:
             msg = ('The D Hutch shutter is closed. Are you sure you '
                 'want to continue?')
 
@@ -2769,13 +2769,13 @@ class ExpPanel(wx.Panel):
             if result == wx.ID_NO:
                 cont = False
             else:
-                if not fes and not ds:
-                    logger.info('Front End shutter and D Hutch shutter are closed.')
+                # if not fes and not ds:
+                #     logger.info('Front End shutter and D Hutch shutter are closed.')
 
-                elif not fes:
-                    logger.info('Front End shtuter is closed.')
+                # elif not fes:
+                #     logger.info('Front End shtuter is closed.')
 
-                elif not ds:
+                if not ds:
                     logger.info('D Hutch shutter is closed.')
 
         return cont
@@ -3137,20 +3137,20 @@ class ExpPanel(wx.Panel):
             if self.current_exposure_values['wait_for_trig']:
                 metadata['Number of triggers:'] = self.current_exposure_values['num_trig']
 
-            fe_shutter_pv = mpca.PV(self.settings['fe_shutter_pv'])
+            # fe_shutter_pv = mpca.PV(self.settings['fe_shutter_pv'])
             d_shutter_pv = mpca.PV(self.settings['d_shutter_pv'])
 
-            if fe_shutter_pv.caget() == 0:
-                fes = False
-            else:
-                fes = True
+            # if fe_shutter_pv.caget() == 0:
+            #     fes = False
+            # else:
+            #     fes = True
 
             if d_shutter_pv.caget() == 0:
                 ds = False
             else:
                 ds = True
 
-            metadata['Front end shutter open:'] = fes
+            # metadata['Front end shutter open:'] = fes
             metadata['D hutch shutter open:'] = ds
 
         return metadata
