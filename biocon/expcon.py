@@ -1870,8 +1870,6 @@ class ExpCommThread(threading.Thread):
 
                     time.sleep(0.001)
 
-                if m_exp_
-
                 # logger.debug('Joerger Done!\n')
                 # logger.debug( "After Joerger readout = %f" % \
                 #       (time.time() - start ) )
@@ -3238,7 +3236,7 @@ class ExpPanel(wx.Panel):
                 else:
                     fes = True
                 metadata['Front end shutter open:'] = fes
-             except mp.Timed_Out_Error:
+            except mp.Timed_Out_Error:
                 pass
 
             try:
@@ -3467,8 +3465,7 @@ if __name__ == '__main__':
 
     if not os.path.exists(info_dir):
         os.mkdir(info_dir)
-    # if not os.path.exists(os.path.join(info_dir, 'expcon.log')):
-    #     open(os.path.join(info_dir, 'expcon.log'), 'w')
+
     h2 = handlers.RotatingFileHandler(os.path.join(info_dir, 'expcon.log'), maxBytes=10e6, backupCount=5, delay=True)
     h2.setLevel(logging.DEBUG)
     formatter2 = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
@@ -3480,5 +3477,3 @@ if __name__ == '__main__':
     frame = ExpFrame(settings, None, title='Exposure Control')
     frame.Show()
     app.MainLoop()
-
-
