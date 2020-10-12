@@ -393,7 +393,7 @@ class ExpCommThread(threading.Thread):
             det_exp_time.put(exp_time)
             det_exp_period.put(exp_period)
 
-            struck_mode_pv.caput(1)
+            struck_mode_pv.caput(1, timeout=5)
             struck.set_measurement_time(struck_meas_time)   #Ignored for external LNE of Struck
             struck.set_num_measurements(struck_num_meas)
             struck.set_trigger_mode(0x2)    #Sets external mode, i.e. counting on first LNE
@@ -692,7 +692,7 @@ class ExpCommThread(threading.Thread):
         det_exp_time.put(exp_time)
         det_exp_period.put(exp_period)
 
-        struck_mode_pv.caput(1)
+        struck_mode_pv.caput(1, timeout=5)
         struck.set_measurement_time(exp_time)   #Ignored for external LNE of Struck
         struck.set_num_measurements(num_frames)
         struck.set_trigger_mode(0x8)    #Sets 'autotrigger' mode, i.e. counting as soon as armed
@@ -1244,7 +1244,7 @@ class ExpCommThread(threading.Thread):
                 det_exp_time.put(exp_time)
                 det_exp_period.put(exp_period)
 
-                struck_mode_pv.caput(1)
+                struck_mode_pv.caput(1, timeout=5)
                 struck.set_measurement_time(exp_time)   #Ignored for external LNE of Struck
                 struck.set_num_measurements(num_frames)
                 struck.set_trigger_mode(0x8)    #Sets 'autotrigger' mode, i.e. counting as soon as armed
@@ -1438,7 +1438,7 @@ class ExpCommThread(threading.Thread):
             det_exp_time.put(exp_time)
             det_exp_period.put(exp_period)
 
-            struck_mode_pv.caput(1)
+            struck_mode_pv.caput(1, timeout=5)
             struck.set_measurement_time(exp_time)   #Ignored for external LNE of Struck
             struck.set_num_measurements(num_frames)
             struck.set_trigger_mode(0x8)    #Sets 'autotrigger' mode, i.e. counting as soon as armed
@@ -2564,12 +2564,35 @@ class ExpPanel(wx.Panel):
         return top_sizer
 
     def _initialize(self):
-        self.fe_shutter_pv = mpca.PV(self.settings['fe_shutter_pv'])
-        self.d_shutter_pv = mpca.PV(self.settings['d_shutter_pv'])
-        self.col_vac_pv = mpca.PV(self.settings['col_vac_pv'])
-        self.guard_vac_pv = mpca.PV(self.settings['guard_vac_pv'])
-        self.sample_vac_pv = mpca.PV(self.settings['sample_vac_pv'])
-        self.sc_vac_pv = mpca.PV(self.settings['sc_vac_pv'])
+        try:
+            self.fe_shutter_pv = mpca.PV(self.settings['fe_shutter_pv'])
+        except mp.Timed_Out_Error:
+            self.fe_shutter_pv = None
+
+        try:
+            self.d_shutter_pv = mpca.PV(self.settings['d_shutter_pv'])
+        except mp.Timed_Out_Error:
+            self.d_shutter_pv = None
+
+        try:
+            self.col_vac_pv = mpca.PV(self.settings['col_vac_pv'])
+        except mp.Timed_Out_Error:
+            self.col_vac_pv = None
+
+        try:
+            self.guard_vac_pv = mpca.PV(self.settings['guard_vac_pv'])
+        except mp.Timed_Out_Error:
+            self.guard_vac_pv = None
+
+        try:
+            self.sample_vac_pv = mpca.PV(self.settings['sample_vac_pv'])
+        except mp.Timed_Out_Error:
+            self.sample_vac_pv = None
+
+        try:
+            self.sc_vac_pv = mpca.PV(self.settings['sc_vac_pv'])
+        except mp.Timed_Out_Error:
+            self.sc_vac_pv = None
 
         self.warning_dialog = None
 
@@ -2738,7 +2761,7 @@ class ExpPanel(wx.Panel):
                 if status == 'scan':
                     self.set_scan_number(val)
                 elif status == 'counter_error':
-                    self._show_warning_dialog(msg)
+                    self._show_warning_dialog(val)
 
         else:
             self._on_exp_finish()
@@ -2768,7 +2791,8 @@ class ExpPanel(wx.Panel):
 
         if self.settings['warnings']['shutter']:
             try:
-                if self.fe_shutter_pv.caget(timeout=2) == 0:
+                if (self.fe_shutter_pv is not None and
+                    self.fe_shutter_pv.caget(timeout=2) == 0):
                     fes = False
                 else:
                     fes = True
@@ -2776,7 +2800,8 @@ class ExpPanel(wx.Panel):
                 fes = True #REVISIT
 
             try:
-                if self.d_shutter_pv.caget(timeout=2) == 0:
+                if (self.d_shutter_pv is not None and
+                    self.d_shutter_pv.caget(timeout=2) == 0):
                     ds = False
                 else:
                     ds = True
@@ -2814,14 +2839,17 @@ class ExpPanel(wx.Panel):
 
         return cont
 
-    def _check_vac(self):
+    def _check_vacuum(self):
         cont = True
         msg = ''
 
         if self.settings['warnings']['col_vac']['check']:
             thresh = self.settings['warnings']['col_vac']['thresh']
             try:
-                vac = self.col_vac_pv.caget(timeout=2)
+                if self.col_vac_pv is not None:
+                    vac = self.col_vac_pv.caget(timeout=2)
+                else:
+                    vac = 0
             except mp.Timed_Out_Error:
                 vac = 0
 
@@ -2832,7 +2860,10 @@ class ExpPanel(wx.Panel):
         if self.settings['warnings']['guard_vac']['check']:
             thresh = self.settings['warnings']['guard_vac']['thresh']
             try:
-                vac = self.guard_vac_pv.caget(timeout=2)
+                if self.guard_vac_pv is not None:
+                    vac = self.guard_vac_pv.caget(timeout=2)
+                else:
+                    vac = 0
             except mp.Timed_Out_Error:
                 vac = 0
 
@@ -2843,7 +2874,10 @@ class ExpPanel(wx.Panel):
         if self.settings['warnings']['sample_vac']['check']:
             thresh = self.settings['warnings']['sample_vac']['thresh']
             try:
-                vac = self.sample_vac_pv.caget(timeout=2)
+                if self.sample_vac_pv is not None:
+                    vac = self.sample_vac_pv.caget(timeout=2)
+                else:
+                    vac = 0
             except mp.Timed_Out_Error:
                 vac = 0
 
@@ -2854,7 +2888,10 @@ class ExpPanel(wx.Panel):
         if self.settings['warnings']['sc_vac']['check']:
             thresh = self.settings['warnings']['sc_vac']['thresh']
             try:
-                vac = self.sc_vac_pv.caget(timeout=2)
+                if self.sc_vac_pv is not None:
+                    vac = self.sc_vac_pv.caget(timeout=2)
+                else:
+                    vac = 0
             except mp.Timed_Out_Error:
                 vac = 0
 
@@ -3231,45 +3268,51 @@ class ExpPanel(wx.Panel):
                 metadata['Number of triggers:'] = self.current_exposure_values['num_trig']
 
             try:
-                if self.fe_shutter_pv.caget(timeout=2) == 0:
-                    fes = False
-                else:
-                    fes = True
-                metadata['Front end shutter open:'] = fes
+                if self.fe_shutter_pv is not None:
+                    if self.fe_shutter_pv.caget(timeout=2) == 0:
+                        fes = False
+                    else:
+                        fes = True
+                    metadata['Front end shutter open:'] = fes
             except mp.Timed_Out_Error:
                 pass
 
             try:
-                if self.d_shutter_pv.caget(timeout=2) == 0:
-                    ds = False
-                else:
-                    ds = True
+                if self.d_shutter_pv is not None:
+                    if self.d_shutter_pv.caget(timeout=2) == 0:
+                        ds = False
+                    else:
+                        ds = True
 
-                metadata['D hutch shutter open:'] = ds
+                    metadata['D hutch shutter open:'] = ds
             except mp.Timed_Out_Error:
                 pass
 
             try:
-                vac = self.col_vac_pv.caget(timeout=2)
-                metadata['Collimator vacuum [mtorr]:'] = vac*1000
+                if self.col_vac_pv is not None:
+                    vac = self.col_vac_pv.caget(timeout=2)
+                    metadata['Collimator vacuum [mtorr]:'] = round(vac*1000, 1)
             except mp.Timed_Out_Error:
                 pass
 
             try:
-                vac = self.guard_vac_pv.caget(timeout=2)
-                metadata['Guard slit vacuum [mtorr]:'] = vac*1000
+                if self.guard_vac_pv is not None:
+                    vac = self.guard_vac_pv.caget(timeout=2)
+                    metadata['Guard slit vacuum [mtorr]:'] = round(vac*1000, 1)
             except mp.Timed_Out_Error:
                 pass
 
             try:
-                vac = self.sample_vac_pv.caget(timeout=2)
-                metadata['Sample vacuum [mtorr]:'] = vac*1000
+                if self.sample_vac_pv is not None:
+                    vac = self.sample_vac_pv.caget(timeout=2)
+                    metadata['Sample vacuum [mtorr]:'] = round(vac*1000, 1)
             except mp.Timed_Out_Error:
                 pass
 
             try:
-                vac = self.sc_vac_pv.caget(timeout=2)
-                metadata['Flight tube vacuum [mtorr]:'] = vac*1000
+                if self.sc_vac_pv is not None:
+                    vac = self.sc_vac_pv.caget(timeout=2)
+                    metadata['Flight tube vacuum [mtorr]:'] = round(vac*1000, 1)
             except mp.Timed_Out_Error:
                 pass
 

@@ -758,7 +758,7 @@ class CoflowPanel(wx.Panel):
                     wx.CallAfter(self.sheath_flow.SetLabel, str(round(sheath_fr, 3)))
                     wx.CallAfter(self.outlet_flow.SetLabel, str(round(outlet_fr,3 )))
 
-                if not self.stop_get_fr_event.is_set():
+                # if not self.stop_get_fr_event.is_set():
                     # logger.debug('Sheath flow rate: %f', sheath_fr)
                     # logger.debug('Outlet flow rate: %f', outlet_fr)
                     # logger.debug('Sheath density: %f', sheath_density)
