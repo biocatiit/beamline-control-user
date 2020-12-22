@@ -74,6 +74,7 @@ class ControlServer(threading.Thread):
 
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.PAIR)
+        self.socket.set(zmq.LINGER, 0)
         self.socket.bind("tcp://{}:{}".format(self.ip, self.port))
 
         self.pump_comm_locks = pump_comm_locks
@@ -209,8 +210,8 @@ class ControlServer(threading.Thread):
         """Stops the thread cleanly."""
         # logger.info("Starting to clean up and shut down pump control thread: %s", self.name)
         self.socket.unbind("tcp://{}:{}".format(self.ip, self.port))
-        self.socket.close()
-        self.context.destroy()
+        self.socket.close(0)
+        self.context.destroy(0)
 
         for device in self._device_control:
             self._device_control[device]['abort'].set()

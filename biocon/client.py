@@ -68,6 +68,7 @@ class ControlClient(threading.Thread):
         logger.info("Connecting to %s on port %s", self.ip, self.port)
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.PAIR)
+        self.socket.set(zmq.LINGER, 0)
         self.socket.connect("tcp://{}:{}".format(self.ip, self.port))
 
         self._ping()
@@ -160,9 +161,9 @@ class ControlClient(threading.Thread):
         else:
             self._abort()
 
-        self.socket.unbind("tcp://{}:{}".format(self.ip, self.port))
-        self.socket.close()
-        self.context.destroy()
+        self.socket.disconnect("tcp://{}:{}".format(self.ip, self.port))
+        self.socket.close(0)
+        self.context.destroy(0)
 
         logger.info("Quitting remote client thread: %s", self.name)
 
