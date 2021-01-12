@@ -112,6 +112,19 @@ class ExpCommThread(threading.Thread):
         self._stop_event = threading.Event()
         self._settings = settings
 
+        self.xps = None
+
+        self._commands = {
+            'start_exp'     : self._start_exp,
+            'start_tr_exp'  : self._start_tr_exp,
+            'start_ms_exp'  : self._start_muscle_exp,
+            'start_scan_exp': self._start_scan_exp,
+            }
+
+    def run(self):
+        """
+        Custom run method for the thread.
+        """
 
         #MX stuff
         try:
@@ -205,19 +218,6 @@ class ExpCommThread(threading.Thread):
 
         self._mx_data = mx_data
 
-        self.xps = None
-
-        self._commands = {
-            'start_exp'     : self._start_exp,
-            'start_tr_exp'  : self._start_tr_exp,
-            'start_ms_exp'  : self._start_muscle_exp,
-            'start_scan_exp': self._start_scan_exp,
-            }
-
-    def run(self):
-        """
-        Custom run method for the thread.
-        """
         while True:
             if len(self.command_queue) > 0:
                 logger.debug("Getting new command")
