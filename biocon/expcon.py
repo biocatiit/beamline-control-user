@@ -2596,6 +2596,9 @@ class ExpPanel(wx.Panel):
 
         self.warning_dialog = None
 
+        self.pipeline_ctrl = None
+        self.pipeline_timer = None
+
     def _on_change_dir(self, evt):
         with wx.DirDialog(self, "Select Directory", self.data_dir.GetValue()) as fd:
             if fd.ShowModal() == wx.ID_CANCEL:
@@ -2654,6 +2657,36 @@ class ExpPanel(wx.Panel):
             exp_values['metadata'] = metadata
         else:
             return
+
+
+        if self.pipeline_ctrl is not None:
+            if 'Experiment type:' in exp_values['metadata']:
+                md_exp_type =  exp_values['metadata']['Experiment type:']
+
+                if md_exp_type == 'Batch mode SAXS':
+                    exp_type = 'Batch'
+
+                elif md_exp_type == 'SEC-SAXS' or md_exp_type == 'SEC-MALS-SAXS':
+                    exp_type = 'SEC'
+
+                else:
+                    exp_type = None
+
+                if exp_type is not None:
+                    data_dir = os.path.join(exp_values['data_dir'], 'images')
+                    exp_values['data_dir'] = data_dir
+
+                    fprefix = exp_values['fprefix']
+                    num_frames = exp_values['num_frames']
+
+                    # Note, in the future this should get parameters for batch
+                    # mode experiments out of the autosampler metadata, where you
+                    # define number of expeirments, and related sample and buffer
+                    # experiments and file prefixes. RIght now, the only processing
+                    # the pipeline will do for batch mode is radial averaging, since
+                    # it doesn't know the associated sample and buffer files
+                    self.pipeline_ctrl.start_experiment(fprefix, exp_type, data_dir,
+                        fprefix, num_frames)
 
 
         self.set_status('Preparing exposure')
@@ -2729,6 +2762,12 @@ class ExpPanel(wx.Panel):
         if 'coflow' in self.settings['components']:
             coflow_panel = wx.FindWindowByName('coflow')
             coflow_panel.auto_stop()
+
+        if self.pipeline_ctrl is not None:
+            # Note, in the future, for batch mode experiments they may not
+            # be stopped, since there may be a buffer/sample yet to colelct
+            # Will have to figure that out once I have that metadata available
+            self.pipeline_ctrl.stop_current_experiment()
 
     def set_status(self, status):
         self.status.SetLabel(status)
@@ -3366,7 +3405,22 @@ class ExpPanel(wx.Panel):
         if 'wait_for_trig' in exp_settings:
             self.wait_for_trig.ChangeValue(str(exp_settings['wait_for_trig']))
 
+    def set_pipeline_ctrl(self, pipeline_ctrl):
+        self.pipeline_ctrl = pipeline_ctrl
+
+        self.pipeline_timer = wx.Timer(self)
+        self.pipeline_timer.Start(1000)
+
+
+    def on_pipeline_timer(self, evt):
+        if self.pipeline_ctrl.timeout_event.is_set():
+            msg = 'Warning: Lost connection to SAXS pipeline'
+            self._show_warning_dialog(msg)
+
     def on_exit(self):
+        if self.pipeline_timer is not None:
+            self.pipeline_timer.Stop()
+
         if self.exp_event.is_set() and not self.abort_event.is_set():
             self.abort_event.set()
             time.sleep(2)
