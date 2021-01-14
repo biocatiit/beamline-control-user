@@ -276,12 +276,13 @@ class ExpCommThread(threading.Thread):
             called. For example, for a :py:class:`BFS` you could pass ``bfs_filter``.
         """
         kwargs['metadata'] = self._add_metadata(kwargs['metadata'])
-        if exp_period < exp_time + self._settings['slow_mode_thres']:
-            logger.debug('Choosing fast exposure')
-            self.fast_exposure(data_dir, fprefix, num_frames, exp_time, exp_period, **kwargs)
-        else:
-            logger.debug('Choosing slow exposure')
-            self.slow_exposure(data_dir, fprefix, num_frames, exp_time, exp_period, **kwargs)
+        # if exp_period < exp_time + self._settings['slow_mode_thres']:
+        #     logger.debug('Choosing fast exposure')
+        #     self.fast_exposure(data_dir, fprefix, num_frames, exp_time, exp_period, **kwargs)
+        # else:
+        #     logger.debug('Choosing slow exposure')
+        #     self.slow_exposure(data_dir, fprefix, num_frames, exp_time, exp_period, **kwargs)
+        self.fast_exposure(data_dir, fprefix, num_frames, exp_time, exp_period, **kwargs)
 
     def _start_tr_exp(self, exp_settings, comp_settings):
         exp_settings['metadata'] = self._add_metadata(exp_settings['metadata'])
@@ -1398,6 +1399,13 @@ class ExpCommThread(threading.Thread):
             logger.info('Continuous mode')
             continuous_exp = True
 
+        dark_counts = []
+        for i in range(len(s_counters)):
+            if log_vals[i]['dark']:
+                dark_counts.append(s_counters[i].get_dark_current())
+            else:
+                dark_counts.append(0)
+
         for cur_trig in range(1,num_trig+1):
             self.return_queue.append(['scan', cur_trig])
 
@@ -1438,10 +1446,11 @@ class ExpCommThread(threading.Thread):
             det_exp_time.put(exp_time)
             det_exp_period.put(exp_period)
 
-            struck_mode_pv.caput(1, timeout=5)
+            # struck_mode_pv.caput(1, timeout=5)
             struck.set_measurement_time(exp_time)   #Ignored for external LNE of Struck
             struck.set_num_measurements(num_frames)
-            struck.set_trigger_mode(0x8)    #Sets 'autotrigger' mode, i.e. counting as soon as armed
+            struck.set_trigger_mode(0x8|0x2)    #Sets 'autotrigger' mode, i.e. counting as soon as armed
+            # struck_mode_pv.caput(1, timeout=5)
 
             dg645_trigger_source.put(1)
 
@@ -1488,6 +1497,9 @@ class ExpCommThread(threading.Thread):
             if continuous_exp:
                 dio_out9.write(1)
 
+            self.write_log_header(data_dir, cur_fprefix, log_vals,
+                kwargs['metadata'])
+
             time.sleep(1)
 
             if not wait_for_trig:
@@ -1520,7 +1532,7 @@ class ExpCommThread(threading.Thread):
             logger.info('Exposures started')
             self._exp_event.set()
 
-            # current_channel = 0
+            last_meas = 0
 
             while True:
                 #Struck is_busy doesn't work in thread! So have to go elsewhere
@@ -1535,11 +1547,26 @@ class ExpCommThread(threading.Thread):
                         dio_out9, dio_out6, exp_time)
                     break
 
-                # current_meas = struck_current_channel_pv.caget(timeout=2)
-                # logger.debug(current_meas)
-                # if current_meas != current_channel and current_meas != 0:
-                #     current_channel = current_meas
-                #     logger.debug(struck.read_all()) #This should work but it doesn't, gives a timeout error
+                # logger.debug('here')
+
+                current_meas = struck.get_last_measurement_number()
+                logger.debug(current_meas)
+                if current_meas != last_meas and current_meas != -1:
+                    logger.debug('Finished measurement %s', current_meas+1)
+
+                    cvals = struck.read_all()
+                    # logger.debug(cvals)
+
+                    if last_meas == 0:
+                        prev_meas = -1
+                    else:
+                        prev_meas = last_meas
+
+                    self.append_log_counters(cvals, prev_meas, current_meas,
+                        data_dir, cur_fprefix, exp_period, dark_counts,
+                        log_vals)
+
+                    last_meas = current_meas
 
                 time.sleep(0.01)
 
@@ -1548,18 +1575,25 @@ class ExpCommThread(threading.Thread):
 
             dio_out6.write(1) #Close the slow normally closed xia shutter
 
-            measurement = struck.read_all()
+            current_meas = struck.get_last_measurement_number()
+            if current_meas != last_meas:
+                cvals = struck.read_all()
+                # logger.debug(cvals)
 
-            dark_counts = []
-            for i in range(len(s_counters)):
-                if log_vals[i]['dark']:
-                    dark_counts.append(s_counters[i].get_dark_current())
+                if last_meas == 0:
+                    prev_meas = -1
                 else:
-                    dark_counts.append(0)
+                    prev_meas = last_meas
 
-            logger.info('Writing counters')
-            self.write_counters_struck(measurement, num_frames, data_dir,
-                cur_fprefix, exp_period, dark_counts, log_vals, kwargs['metadata'])
+                self.append_log_counters(cvals, prev_meas, current_meas,
+                    data_dir, cur_fprefix, exp_period, dark_counts,
+                    log_vals)
+
+            # measurement = struck.read_all()
+
+            # logger.info('Writing counters')
+            # self.write_counters_struck(measurement, num_frames, data_dir,
+            #     cur_fprefix, exp_period, dark_counts, log_vals, kwargs['metadata'])
 
             ab_burst.get_status() #Maybe need to clear this status?
 
@@ -1882,9 +1916,113 @@ class ExpCommThread(threading.Thread):
 
         return
 
+    # def write_counters_struck(self, cvals, num_frames, data_dir,
+    #         fprefix, exp_period, dark_counts, log_vals, metadata, extra_vals=None):
+    #     data_dir = data_dir.replace(self._settings['remote_dir_root'], self._settings['local_dir_root'], 1)
+
+    #     header = self._get_header(metadata, log_vals)
+
+    #     if extra_vals is not None:
+    #         header = header.rstrip('\n')
+    #         for ev in extra_vals:
+    #             header = header + '\t{}'.format(ev[0])
+    #         header = header + '\n'
+
+    #     log_file = os.path.join(data_dir, '{}.log'.format(fprefix))
+
+    #     with open(log_file, 'w') as f:
+    #         f.write(header)
+    #         for i in range(num_frames):
+    #             val = "{}_{:04d}.tif\t{}".format(fprefix, i+1, exp_period*i)
+
+    #             exp_time = cvals[0][i]/50.e6
+    #             val = val + "\t{}".format(exp_time)
+
+    #             for j, log in enumerate(log_vals):
+    #                 dark = dark_counts[j]
+    #                 scale = log['scale']
+    #                 offset = log['offset']
+    #                 chan = log['channel']
+
+    #                 counter = (cvals[chan][i]-(dark+offset)*exp_time)/scale
+
+    #                 if log['norm_time'] and exp_time > 0:
+    #                     counter = counter/exp_time
+
+    #                 val = val + "\t{}".format(counter)
+
+    #             if extra_vals is not None:
+    #                 for ev in extra_vals:
+    #                     val = val + "\t{}".format(ev[1][i])
+
+    #             val = val + "\n"
+
+    #             f.write(val)
+
+    def write_log_header(self, data_dir, fprefix, log_vals, metadata,
+            extra_vals=None):
+        data_dir = data_dir.replace(self._settings['remote_dir_root'],
+            self._settings['local_dir_root'], 1)
+
+        header = self._get_header(metadata, log_vals)
+
+        if extra_vals is not None:
+            header = header.rstrip('\n')
+            for ev in extra_vals:
+                header = header + '\t{}'.format(ev[0])
+            header = header + '\n'
+
+        log_file = os.path.join(data_dir, '{}.log'.format(fprefix))
+
+        with open(log_file, 'w') as f:
+            f.write(header)
+
+    def append_log_counters(self, cvals, prev_meas, cur_meas, data_dir,
+            fprefix, exp_period, dark_counts, log_vals, extra_vals=None):
+        logger.debug('Appending log counters to file')
+        data_dir = data_dir.replace(self._settings['remote_dir_root'],
+            self._settings['local_dir_root'], 1)
+
+        # cvals = np.array(cvals)
+        # print(cvals.shape)
+        # cvals = cvals[:, prev_meas:cur_meas+1]
+
+        log_file = os.path.join(data_dir, '{}.log'.format(fprefix))
+
+        with open(log_file, 'a') as f:
+            for i in range(prev_meas+1, cur_meas+1):
+                val = "{}_{:04d}.tif\t{}".format(fprefix, i+1, exp_period*i)
+
+                exp_time = cvals[0][i]/50.e6
+                val = val + "\t{}".format(exp_time)
+
+                for j, log in enumerate(log_vals):
+                    dark = dark_counts[j]
+                    scale = log['scale']
+                    offset = log['offset']
+                    chan = log['channel']
+
+                    counter = (cvals[chan][i]-(dark+offset)*exp_time)/scale
+
+                    if log['norm_time'] and exp_time > 0:
+                        counter = counter/exp_time
+
+                    val = val + "\t{}".format(counter)
+
+                if extra_vals is not None:
+                    for ev in extra_vals:
+                        val = val + "\t{}".format(ev[1][i])
+
+                val = val + "\n"
+
+                logger.info(val)
+                f.write(val)
+
     def write_counters_struck(self, cvals, num_frames, data_dir,
-            fprefix, exp_period, dark_counts, log_vals, metadata, extra_vals=None):
-        data_dir = data_dir.replace(self._settings['remote_dir_root'], self._settings['local_dir_root'], 1)
+            fprefix, exp_period, dark_counts, log_vals, metadata,
+            extra_vals=None):
+        data_dir = data_dir.replace(self._settings['remote_dir_root'],
+            self._settings['local_dir_root'], 1)
 
         header = self._get_header(metadata, log_vals)
 
@@ -2197,8 +2335,8 @@ class ExpCommThread(threading.Thread):
             except (mp.Device_Action_Failed_Error, mp.Unparseable_String_Error):
                 pass
 
-        struck.stop()
         ab_burst.stop()
+        struck.stop()
         dio_out9.write(0) #Close the fast shutter
         dio_out6.write(1) #Close the slow normally closed xia shutter
 
@@ -2676,8 +2814,14 @@ class ExpPanel(wx.Panel):
                     data_dir = os.path.join(exp_values['data_dir'], 'images')
                     exp_values['data_dir'] = data_dir
 
+                    local_data_dir = data_dir.replace(self.settings['remote_dir_root'],
+                        self.settings['local_dir_root'], 1)
+
                     fprefix = exp_values['fprefix']
                     num_frames = exp_values['num_frames']
+
+                    if not os.path.exists(local_data_dir):
+                        os.mkdir(local_data_dir)
 
                     # Note, in the future this should get parameters for batch
                     # mode experiments out of the autosampler metadata, where you
@@ -2685,7 +2829,7 @@ class ExpPanel(wx.Panel):
                     # experiments and file prefixes. RIght now, the only processing
                     # the pipeline will do for batch mode is radial averaging, since
                     # it doesn't know the associated sample and buffer files
-                    self.pipeline_ctrl.start_experiment(fprefix, exp_type, data_dir,
+                    self.pipeline_ctrl.start_experiment(fprefix, exp_type, local_data_dir,
                         fprefix, num_frames)
 
 
@@ -3069,7 +3213,8 @@ class ExpPanel(wx.Panel):
             valid = False
 
         else:
-            data_dir = data_dir.replace(self.settings['local_dir_root'], self.settings['remote_dir_root'], 1)
+            data_dir = data_dir.replace(self.settings['local_dir_root'],
+                self.settings['remote_dir_root'], 1)
 
             if self.settings['tr_muscle_exp']:
                 struck_num_meas = exp_period*num_frames/struck_measurement_time
@@ -3407,15 +3552,22 @@ class ExpPanel(wx.Panel):
 
     def set_pipeline_ctrl(self, pipeline_ctrl):
         self.pipeline_ctrl = pipeline_ctrl
-
+        self.pipeline_warning_shown = False
         self.pipeline_timer = wx.Timer(self)
+        self.Bind(wx.EVT_TIMER, self._on_pipeline_timer, self.pipeline_timer)
         self.pipeline_timer.Start(1000)
 
+    def _on_pipeline_timer(self, evt):
 
-    def on_pipeline_timer(self, evt):
         if self.pipeline_ctrl.timeout_event.is_set():
-            msg = 'Warning: Lost connection to SAXS pipeline'
-            self._show_warning_dialog(msg)
+            if not self.pipeline_warning_shown:
+                msg = 'Warning: Lost connection to SAXS pipeline'
+                self._show_warning_dialog(msg)
+                self.pipeline_warning_shown = True
+
+        else:
+            self.pipelin_warning_shown = False
+
 
     def on_exit(self):
         if self.pipeline_timer is not None:
@@ -3483,7 +3635,7 @@ if __name__ == '__main__':
     h1 = logging.StreamHandler(sys.stdout)
     # h1.setLevel(logging.INFO)
     h1.setLevel(logging.DEBUG)
-    formatter = logging.Formatter('%(asctime)s - %(message)s')
+    formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
     h1.setFormatter(formatter)
 
     logger.addHandler(h1)

@@ -30,11 +30,12 @@ import sys
 import copy
 import platform
 import os
+import multiprocessing
 
 if __name__ != '__main__':
     logger = logging.getLogger(__name__)
 
-pipeline_path = os.path.abspath(os.path.expanduser('~/Documents/software_dev/saxs-pipeline'))
+pipeline_path = os.path.abspath(os.path.expanduser('~//saxs-pipeline'))
 if pipeline_path not in os.sys.path:
     os.sys.path.append(pipeline_path)
 
@@ -45,17 +46,17 @@ class PipelineControl(object):
     def __init__(self, settings):
         self.settings = settings
         self.port = self.settings['server_port']
-        self.ip = self.settings['ip']
+        self.ip = self.settings['server_ip']
 
         self.cmd_q = deque()
         self.return_q = deque()
-        self.abort_event = deque()
-        self.timeout_event = deque()
+        self.abort_event = threading.Event()
+        self.timeout_event = threading.Event()
 
-        control_client = pipeline.client.ControlClient(self.ip, self.port,
+        self.control_client = pipeline.client.ControlClient(self.ip, self.port,
             self.cmd_q, self.return_q, self.abort_event, self.timeout_event,
             name='PipelineCtrlClient')
-        control_client.start()
+        self.control_client.start()
 
         self.set_raw_settings(self.settings['raw_settings'])
 
@@ -105,7 +106,7 @@ class PipelineControl(object):
 
     def stop_current_experiment(self):
         if self.current_expeirment != '':
-            cmd = ('stop_experiment', [self.current_expeirment,])
+            cmd = ('stop_experiment', [self.current_expeirment,], {})
             client_cmd = {'command': cmd, 'response': False}
             self.cmd_q.append(client_cmd)
 
@@ -115,7 +116,7 @@ class PipelineControl(object):
         settings_file - The settings file to load (must be accessible to pipeline,
             and path must be on pipeline computer)
         """
-        cmd = ('load_raw_settings', [settings_file,])
+        cmd = ('load_raw_settings', [settings_file,], {})
         client_cmd = {'command': cmd, 'response': False}
         self.cmd_q.append(client_cmd)
 
@@ -127,6 +128,8 @@ class PipelineControl(object):
         self.control_client.join()
 
 if __name__ == '__main__':
+    # multiprocessing.set_start_method('spawn')
+
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
     h1 = logging.StreamHandler(sys.stdout)

@@ -28,6 +28,7 @@ import sys
 import os
 from collections import OrderedDict
 from decimal import Decimal as D
+import multiprocessing
 
 if __name__ != '__main__':
     logger = logging.getLogger(__name__)
@@ -38,7 +39,7 @@ import expcon
 import coflowcon
 import trcon
 import metadata
-import pipeline
+import pipeline_ctrl
 
 class BioFrame(wx.Frame):
     """
@@ -55,7 +56,6 @@ class BioFrame(wx.Frame):
 
         self.settings = settings
 
-        self.component_sizers = {}
         self.component_panels = {}
         self.component_controls = {}
 
@@ -71,6 +71,8 @@ class BioFrame(wx.Frame):
         top_panel = wx.Panel(self)
 
         panel_sizer = wx.BoxSizer(wx.VERTICAL)
+
+        component_sizers = {}
 
         for key in self.settings['components']:
 
@@ -92,65 +94,65 @@ class BioFrame(wx.Frame):
                 component_sizer.Add(component_panel, proportion=1, border=2,
                     flag=wx.EXPAND|wx.ALL)
 
-                self.component_sizers[key] = component_sizer
+                component_sizers[key] = component_sizer
                 self.component_panels[key] = component_panel
 
             else:
                 ctrl = self.settings['components'][key](self.settings[key])
                 self.component_controls[key] = ctrl
 
-        if ('exposure' in self.component_sizers or 'coflow' in self.component_sizers
-            or 'trsaxs_scan' in self.component_sizers or 'scan' in self.component_sizers):
+        if ('exposure' in component_sizers or 'coflow' in component_sizers
+            or 'trsaxs_scan' in component_sizers or 'scan' in component_sizers):
             exp_sizer = wx.BoxSizer(wx.HORIZONTAL)
 
-            if ('exposure' in self.component_sizers
-                and 'trsaxs_flow' in self.component_sizers
-                and 'metadata' in self.component_sizers):
+            if ('exposure' in component_sizers
+                and 'trsaxs_flow' in component_sizers
+                and 'metadata' in component_sizers):
 
                 sub_sub_sizer = wx.BoxSizer(wx.HORIZONTAL)
-                sub_sub_sizer.Add(self.component_sizers['metadata'], proportion=1,
+                sub_sub_sizer.Add(component_sizers['metadata'], proportion=1,
                     border=10, flag=wx.EXPAND|wx.ALL)
-                sub_sub_sizer.Add(self.component_sizers['exposure'], proportion=2,
+                sub_sub_sizer.Add(component_sizers['exposure'], proportion=2,
                     border=10, flag=wx.EXPAND|wx.ALL)
 
                 sub_sizer = wx.BoxSizer(wx.VERTICAL)
                 sub_sizer.Add(sub_sub_sizer, flag=wx.EXPAND)
-                sub_sizer.Add(self.component_sizers['trsaxs_flow'], proportion=1,
+                sub_sizer.Add(component_sizers['trsaxs_flow'], proportion=1,
                     border=10, flag=wx.EXPAND|wx.ALL)
 
                 exp_sizer.Add(sub_sizer, flag=wx.EXPAND, proportion=1)
 
-            elif ('exposure' in self.component_sizers
-                and 'trsaxs_flow' in self.component_sizers):
+            elif ('exposure' in component_sizers
+                and 'trsaxs_flow' in component_sizers):
                 sub_sizer = wx.BoxSizer(wx.VERTICAL)
-                sub_sizer.Add(self.component_sizers['exposure'],
+                sub_sizer.Add(component_sizers['exposure'],
                     border=10, flag=wx.EXPAND|wx.ALL)
-                sub_sizer.Add(self.component_sizers['trsaxs_flow'], proportion=1,
+                sub_sizer.Add(component_sizers['trsaxs_flow'], proportion=1,
                     border=10, flag=wx.EXPAND|wx.ALL)
 
                 exp_sizer.Add(sub_sizer, flag=wx.EXPAND, proportion=1)
 
-            elif ('exposure' in self.component_sizers
-                and 'metadata' in self.component_sizers):
-                exp_sizer.Add(self.component_sizers['metadata'], proportion=1,
+            elif ('exposure' in component_sizers
+                and 'metadata' in component_sizers):
+                exp_sizer.Add(component_sizers['metadata'], proportion=1,
                     border=10, flag=wx.EXPAND|wx.ALL)
-                exp_sizer.Add(self.component_sizers['exposure'], proportion=2,
-                    border=10, flag=wx.EXPAND|wx.ALL)
-
-            elif 'exposure' in self.component_sizers:
-                exp_sizer.Add(self.component_sizers['exposure'], proportion=1,
+                exp_sizer.Add(component_sizers['exposure'], proportion=2,
                     border=10, flag=wx.EXPAND|wx.ALL)
 
-            if 'coflow' in self.component_sizers:
-                exp_sizer.Add(self.component_sizers['coflow'], border=10,
+            elif 'exposure' in component_sizers:
+                exp_sizer.Add(component_sizers['exposure'], proportion=1,
+                    border=10, flag=wx.EXPAND|wx.ALL)
+
+            if 'coflow' in component_sizers:
+                exp_sizer.Add(component_sizers['coflow'], border=10,
                     flag=wx.EXPAND|wx.ALL)
 
-            if 'trsaxs_scan' in self.component_sizers:
-                exp_sizer.Add(self.component_sizers['trsaxs_scan'], border=10,
+            if 'trsaxs_scan' in component_sizers:
+                exp_sizer.Add(component_sizers['trsaxs_scan'], border=10,
                     flag=wx.EXPAND|wx.ALL)
 
-            if 'scan' in self.component_sizers:
-                exp_sizer.Add(self.component_sizers['scan'], border=5,
+            if 'scan' in component_sizers:
+                exp_sizer.Add(component_sizers['scan'], border=5,
                     flag=wx.EXPAND|wx.ALL)
 
             panel_sizer.Add(exp_sizer, flag=wx.EXPAND)
@@ -182,12 +184,14 @@ class BioFrame(wx.Frame):
 
 
 if __name__ == '__main__':
+    # multiprocessing.set_start_method('spawn')
+
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
 
     h1 = logging.StreamHandler(sys.stdout)
-    h1.setLevel(logging.INFO)
-    # h1.setLevel(logging.DEBUG)
+    # h1.setLevel(logging.INFO)
+    h1.setLevel(logging.DEBUG)
     formatter = logging.Formatter('%(asctime)s - %(message)s')
     h1.setFormatter(formatter)
 
@@ -269,11 +273,11 @@ if __name__ == '__main__':
             {'mx_record': 'j11', 'name': 'Beam_current', 'scale': 5000,
             'offset': 0.5, 'norm_time': True}
             ],
-        'warnings'              : {'shutter' : True, 'col_vac' : {'check': True,
-            'thresh': 0.04}, 'guard_vac' : {'check': True, 'thresh': 0.04},
-            'sample_vac': {'check': True, 'thresh': 0.04}, 'sc_vac':
-            {'check': True, 'thresh':0.04}},
-        'base_data_dir'         : '/nas_data/Pilatus1M/2020_Run3', #CHANGE ME
+        'warnings'              : {'shutter' : False, 'col_vac' : {'check': False,
+            'thresh': 0.04}, 'guard_vac' : {'check': False, 'thresh': 0.04},
+            'sample_vac': {'check': False, 'thresh': 0.04}, 'sc_vac':
+            {'check': False, 'thresh':0.04}},
+        'base_data_dir'         : '/nas_data/Pilatus1M/2021_Run1', #CHANGE ME
         }
 
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']
@@ -428,20 +432,20 @@ if __name__ == '__main__':
     pipeline_settings = {
         'components'    : ['pipeline'],
         'server_port'   : '5556',
-        'server_ip'     : '192.168.1.14',
-        'raw_settings'  : '../data/UO_SEC/SAXS.cfg',
+        'server_ip'     : '164.54.204.31',
+        'raw_settings'  : '/nas_data/Pilatus1M/2021_Run1/20210114_Hopkins/test_pipeline/SAXS_new_mask.cfg',
         }
 
     biocon_settings = {}
 
     components = OrderedDict([
         ('exposure', expcon.ExpPanel),
-        ('coflow', coflowcon.CoflowPanel),
+        # ('coflow', coflowcon.CoflowPanel),
         # ('trsaxs_scan', trcon.TRScanPanel),
         # ('trsaxs_flow', trcon.TRFlowPanel),
         # ('scan',    scancon.ScanPanel),
         ('metadata', metadata.ParamPanel),
-        ('pipeline', pipeline.PipelineControl)
+        ('pipeline', pipeline_ctrl.PipelineControl)
         ])
 
     settings = {
