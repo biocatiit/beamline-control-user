@@ -38,6 +38,7 @@ import expcon
 import coflowcon
 import trcon
 import metadata
+import pipeline
 
 class BioFrame(wx.Frame):
     """
@@ -56,6 +57,7 @@ class BioFrame(wx.Frame):
 
         self.component_sizers = {}
         self.component_panels = {}
+        self.component_controls = {}
 
         self.Bind(wx.EVT_CLOSE, self._on_exit)
 
@@ -71,24 +73,31 @@ class BioFrame(wx.Frame):
         panel_sizer = wx.BoxSizer(wx.VERTICAL)
 
         for key in self.settings['components']:
-            logger.info('Setting up %s panel', key)
-            if key == 'trsaxs_scan':
-                label = 'TRSAXS Scan'
-            elif key == 'trsaxs_flow':
-                label='TRSAXS Flow'
+
+            if key != 'pipeline':
+                logger.info('Setting up %s panel', key)
+                if key == 'trsaxs_scan':
+                    label = 'TRSAXS Scan'
+                elif key == 'trsaxs_flow':
+                    label='TRSAXS Flow'
+                else:
+                    label = key.capitalize()
+
+                box = wx.StaticBox(top_panel, label=label)
+                box.SetOwnForegroundColour(wx.Colour('firebrick'))
+                component_panel = self.settings['components'][key](self.settings[key],
+                    box, name=key)
+
+                component_sizer = wx.StaticBoxSizer(box, wx.VERTICAL)
+                component_sizer.Add(component_panel, proportion=1, border=2,
+                    flag=wx.EXPAND|wx.ALL)
+
+                self.component_sizers[key] = component_sizer
+                self.component_panels[key] = component_panel
+
             else:
-                label = key.capitalize()
-
-            box = wx.StaticBox(top_panel, label=label)
-            box.SetOwnForegroundColour(wx.Colour('firebrick'))
-            component_panel = self.settings['components'][key](self.settings[key], box, name=key)
-
-            component_sizer = wx.StaticBoxSizer(box, wx.VERTICAL)
-            component_sizer.Add(component_panel, proportion=1, border=2,
-                flag=wx.EXPAND|wx.ALL)
-
-            self.component_sizers[key] = component_sizer
-            self.component_panels[key] = component_panel
+                ctrl = self.settings['components'][key](self.settings[key])
+                self.component_controls[key] = ctrl
 
         if ('exposure' in self.component_sizers or 'coflow' in self.component_sizers
             or 'trsaxs_scan' in self.component_sizers or 'scan' in self.component_sizers):
@@ -153,12 +162,21 @@ class BioFrame(wx.Frame):
 
         self.SetSizer(top_sizer)
 
+        if ('exposure' in self.component_panels
+            and 'pipeline' in self.component_controls):
+
+            self.component_panels['exposure'].set_pipeline_ctrl(
+                self.component_controls['pipeline'])
+
     def _on_exit(self, evt):
         """Stops all current pump motions and then closes the frame."""
         logger.debug('Closing the BioFrame')
 
         for panel in self.component_panels.values():
             panel.on_exit()
+
+        for ctrl in self.component_controls.values():
+            ctrl.stop()
 
         self.Destroy()
 
@@ -407,6 +425,13 @@ if __name__ == '__main__':
         'metadata_type'     : 'auto',
         }
 
+    pipeline_settings = {
+        'components'    : ['pipeline'],
+        'server_port'   : '5556',
+        'server_ip'     : '192.168.1.14',
+        'raw_settings'  : '../data/UO_SEC/SAXS.cfg',
+        }
+
     biocon_settings = {}
 
     components = OrderedDict([
@@ -415,7 +440,8 @@ if __name__ == '__main__':
         # ('trsaxs_scan', trcon.TRScanPanel),
         # ('trsaxs_flow', trcon.TRFlowPanel),
         # ('scan',    scancon.ScanPanel),
-        ('metadata', metadata.ParamPanel)
+        ('metadata', metadata.ParamPanel),
+        ('pipeline', pipeline.PipelineControl)
         ])
 
     settings = {
@@ -425,6 +451,7 @@ if __name__ == '__main__':
         'trsaxs_flow'   : trsaxs_settings,
         'scan'          : scan_settings,
         'metadata'      : metadata_settings,
+        'pipeline'      : pipeline_settings,
         'components'    : components,
         'biocon'        : biocon_settings,
         }

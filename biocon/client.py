@@ -68,6 +68,7 @@ class ControlClient(threading.Thread):
         logger.info("Connecting to %s on port %s", self.ip, self.port)
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.PAIR)
+        self.socket.set(zmq.LINGER, 0)
         self.socket.connect("tcp://{}:{}".format(self.ip, self.port))
 
         self._ping()
@@ -79,90 +80,94 @@ class ControlClient(threading.Thread):
         Custom run method for the thread.
         """
         while True:
-            if len(self.command_queue) > 0:
-                # logger.debug("Getting new command")
-                command = self.command_queue.popleft()
-            else:
-                command = None
+            try:
+                if len(self.command_queue) > 0:
+                    # logger.debug("Getting new command")
+                    command = self.command_queue.popleft()
+                else:
+                    command = None
 
-            if self._abort_event.is_set():
-                logger.debug("Abort event detected")
-                self._abort()
-                command = None
+                if self._abort_event.is_set():
+                    logger.debug("Abort event detected")
+                    self._abort()
+                    command = None
 
-            if self._stop_event.is_set():
-                logger.debug("Stop event detected")
-                break
+                if self._stop_event.is_set():
+                    logger.debug("Stop event detected")
+                    break
 
-            if command is not None:
-                device = command['device']
-                device_cmd = command['command']
-                get_response = command['response']
-                # logger.debug("For device %s, processing cmd '%s' with args: %s and kwargs: %s ", device, device_cmd[0], ', '.join(['{}'.format(a) for a in device_cmd[1]]), ', '.join(['{}:{}'.format(kw, item) for kw, item in device_cmd[2].items()]))
-                try:
-                    self.socket.send_json(command)
-
-                    start_time = time.time()
-                    while self.socket.poll(10) == 0 and time.time()-start_time < 5:
-                        pass
-
-                    if self.socket.poll(10) > 0:
-                        answer = self.socket.recv_json()
-                    else:
-                        answer = ''
-
-                    if answer == '':
-                        raise zmq.ZMQError(msg="Could not get a response from the server")
-                    else:
-                        self.connect_error[device] = 0
-
-                    # logger.debug('Command response: %s' %(answer))
-
-                    if get_response:
-                        self.answer_queue.append(answer)
-
-                except zmq.ZMQError:
+                if command is not None:
                     device = command['device']
                     device_cmd = command['command']
-                    msg = ("Device %s failed to run command '%s' "
-                        "with args: %s and kwargs: %s. Timeout or other ZMQ "
-                        "error." %(device, device_cmd[0],
-                        ', '.join(['{}'.format(a) for a in device_cmd[1]]),
-                        ', '.join(['{}:{}'.format(kw, item) for kw, item in device_cmd[2].items()])))
-                    logger.error(msg)
-                    self.connect_error[device] += 1
-                    self._ping()
-                    if not self.timeout_event.set():
-                        self.answer_queue.append(None)
+                    get_response = command['response']
+                    # logger.debug("For device %s, processing cmd '%s' with args: %s and kwargs: %s ", device, device_cmd[0], ', '.join(['{}'.format(a) for a in device_cmd[1]]), ', '.join(['{}:{}'.format(kw, item) for kw, item in device_cmd[2].items()]))
+                    try:
+                        self.socket.send_json(command)
 
-                except Exception:
-                    device = command['device']
-                    device_cmd = command['command']
-                    msg = ("Device %s failed to run command '%s' "
-                        "with args: %s and kwargs: %s. Exception follows:" %(device, device_cmd[0],
-                        ', '.join(['{}'.format(a) for a in device_cmd[1]]),
-                        ', '.join(['{}:{}'.format(kw, item) for kw, item in device_cmd[2].items()])))
-                    logger.error(msg)
-                    logger.error(traceback.print_exc())
-                    self.connect_error[device] += 1
+                        start_time = time.time()
+                        while self.socket.poll(10) == 0 and time.time()-start_time < 5:
+                            pass
 
-                if self.connect_error[device] > 5:
-                    msg = ('5 consecutive failures to run a command on device'
-                        '%s.'.format(device))
-                    logger.error(msg)
-                    logger.error("Connection timed out")
-                    self.timeout_event.set()
-            else:
-                time.sleep(0.01)
+                        if self.socket.poll(10) > 0:
+                            answer = self.socket.recv_json()
+                        else:
+                            answer = ''
+
+                        if answer == '':
+                            raise zmq.ZMQError(msg="Could not get a response from the server")
+                        else:
+                            self.connect_error[device] = 0
+
+                        # logger.debug('Command response: %s' %(answer))
+
+                        if get_response:
+                            self.answer_queue.append(answer)
+
+                    except zmq.ZMQError:
+                        device = command['device']
+                        device_cmd = command['command']
+                        msg = ("Device %s failed to run command '%s' "
+                            "with args: %s and kwargs: %s. Timeout or other ZMQ "
+                            "error." %(device, device_cmd[0],
+                            ', '.join(['{}'.format(a) for a in device_cmd[1]]),
+                            ', '.join(['{}:{}'.format(kw, item) for kw, item in device_cmd[2].items()])))
+                        logger.error(msg)
+                        self.connect_error[device] += 1
+                        self._ping()
+                        if not self.timeout_event.set():
+                            self.answer_queue.append(None)
+
+                    except Exception:
+                        device = command['device']
+                        device_cmd = command['command']
+                        msg = ("Device %s failed to run command '%s' "
+                            "with args: %s and kwargs: %s. Exception follows:" %(device, device_cmd[0],
+                            ', '.join(['{}'.format(a) for a in device_cmd[1]]),
+                            ', '.join(['{}:{}'.format(kw, item) for kw, item in device_cmd[2].items()])))
+                        logger.error(msg)
+                        logger.error(traceback.print_exc())
+                        self.connect_error[device] += 1
+
+                    if self.connect_error[device] > 5:
+                        msg = ('5 consecutive failures to run a command on device'
+                            '%s.'.format(device))
+                        logger.error(msg)
+                        logger.error("Connection timed out")
+                        self.timeout_event.set()
+                else:
+                    time.sleep(0.01)
+
+            except Exception:
+                logger.error('Error in client thread:\n{}'.format(traceback.format_exc()))
 
         if self._stop_event.is_set():
             self._stop_event.clear()
         else:
             self._abort()
 
-        self.socket.unbind("tcp://{}:{}".format(self.ip, self.port))
-        self.socket.close()
-        self.context.destroy()
+        self.socket.disconnect("tcp://{}:{}".format(self.ip, self.port))
+        self.socket.close(0)
+        self.context.destroy(0)
 
         logger.info("Quitting remote client thread: %s", self.name)
 
