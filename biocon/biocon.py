@@ -268,7 +268,7 @@ if __name__ == '__main__':
         'remote_fm_ip'          : '164.54.204.53',
         'remote_fm_port'        : '5557',
         'flow_units'            : 'mL/min',
-        'sheath_pump'           : ('VICI_M50', 'COM3', [625.84, 12.55], {}),
+        'sheath_pump'           : ('VICI_M50', 'COM3', [629.88, 13.381], {}),
         'outlet_pump'           : ('VICI_M50', 'COM4', [629.16, 12.354], {}),
         'sheath_fm'             : ('BFS', 'COM5', [], {}),
         'outlet_fm'             : ('BFS', 'COM6', [], {}),
