@@ -1550,9 +1550,9 @@ class ExpCommThread(threading.Thread):
                 # logger.debug('here')
 
                 current_meas = struck.get_last_measurement_number()
-                logger.debug(current_meas)
+                # logger.debug(current_meas)
                 if current_meas != last_meas and current_meas != -1:
-                    logger.debug('Finished measurement %s', current_meas+1)
+                    # logger.debug('Finished measurement %s', current_meas+1)
 
                     cvals = struck.read_all()
                     # logger.debug(cvals)

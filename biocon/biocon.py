@@ -190,8 +190,8 @@ if __name__ == '__main__':
     logger.setLevel(logging.DEBUG)
 
     h1 = logging.StreamHandler(sys.stdout)
-    # h1.setLevel(logging.INFO)
-    h1.setLevel(logging.DEBUG)
+    h1.setLevel(logging.INFO)
+    # h1.setLevel(logging.DEBUG)
     formatter = logging.Formatter('%(asctime)s - %(message)s')
     h1.setFormatter(formatter)
 
@@ -432,7 +432,7 @@ if __name__ == '__main__':
     pipeline_settings = {
         'components'    : ['pipeline'],
         'server_port'   : '5556',
-        'server_ip'     : '164.54.204.31',
+        'server_ip'     : '164.54.204.82',
         'raw_settings'  : '/nas_data/Pilatus1M/2021_Run1/20210114_Hopkins/test_pipeline/SAXS_new_mask.cfg',
         }
 
