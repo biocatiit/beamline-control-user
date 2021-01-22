@@ -173,12 +173,12 @@ class ExpCommThread(threading.Thread):
         logger.debug("Got dg645 records")
 
         attenuators = {
-                1   : mx_database.get_record('avme944x_in8'),
-                2   : mx_database.get_record('avme944x_in1'),
-                4   : mx_database.get_record('avme944x_in2'),
-                8   : mx_database.get_record('avme944x_in3'),
-                16  : mx_database.get_record('avme944x_in4'),
-                32  : mx_database.get_record('avme944x_in5'),
+                1   : mx_database.get_record('di_0'),
+                2   : mx_database.get_record('di_1'),
+                4   : mx_database.get_record('di_2'),
+                8   : mx_database.get_record('di_3'),
+                16  : mx_database.get_record('di_4'),
+                32  : mx_database.get_record('di_5'),
             }
 
         logger.debug("Got attenuator records.")
@@ -202,7 +202,7 @@ class ExpCommThread(threading.Thread):
             'gh_burst_2': mx_database.get_record('gh_burst_2'),
             'dg645_trigger_source2': dg645_trigger_source2,
             'ab': mx_database.get_record('ab'),
-            'dio': [mx_database.get_record('avme944x_out{}'.format(i)) for i in range(16)],
+            'dio': [mx_database.get_record('do_{}'.format(i)) for i in range(16)],
             'joerger': mx_database.get_record('joerger_timer'),
             'joerger_ctrs':[mx_database.get_record('j2')] + [mx_database.get_record(log['mx_record']) for log in self._settings['joerger_log_vals']],
             'ki0'   : mx_database.get_record('ki0'),
@@ -2242,30 +2242,30 @@ class ExpCommThread(threading.Thread):
         metadata['I2 gain:'] = '{:.0e}'.format(self._mx_data['ki2'].get_gain())
         metadata['I3 gain:'] = '{:.0e}'.format(self._mx_data['ki3'].get_gain())
 
-        # atten_length = 0
-        # for atten in sorted(self._mx_data['attenuators'].keys()):
-        #     atten_in = self._mx_data['attenuators'][atten].read()
-        #     if atten_in:
-        #         atten_str = 'In'
-        #     else:
-        #         atten_str = 'Out'
+        atten_length = 0
+        for atten in sorted(self._mx_data['attenuators'].keys()):
+            atten_in = not self._mx_data['attenuators'][atten].read()
+            if atten_in:
+                atten_str = 'In'
+            else:
+                atten_str = 'Out'
 
-        #     metadata['Attenuator, {} foil:'.format(atten)] = atten_str
+            metadata['Attenuator, {} foil:'.format(atten)] = atten_str
 
-        #     if atten_in:
-        #         atten_length = atten_length + atten
-        # atten_length = 20*atten_length
+            if atten_in:
+                atten_length = atten_length + atten
+        atten_length = 20*atten_length
 
-        # atten = np.exp(-atten_length/256.568) #256.568 is Al attenuation length at 12 keV
+        atten = np.exp(-atten_length/256.568) #256.568 is Al attenuation length at 12 keV
 
-        # if atten > 0.1:
-        #     atten = '{}'.format(round(atten, 3))
-        # elif atten > 0.01:
-        #     atten = '{}'.format(round(atten, 4))
-        # else:
-        #     atten = '{}'.format(round(atten, 5))
+        if atten > 0.1:
+            atten = '{}'.format(round(atten, 3))
+        elif atten > 0.01:
+            atten = '{}'.format(round(atten, 4))
+        else:
+            atten = '{}'.format(round(atten, 5))
 
-        # metadata['Nominal Transmission (12 keV):'] = atten
+        metadata['Nominal Transmission (12 keV):'] = atten
 
         return metadata
 
