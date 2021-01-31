@@ -106,11 +106,14 @@ class ScanPanel(wx.Panel):
         self._add_motor()
 
     def _add_motor(self):
-        motor_panel = MotorPanel(len(self.scan_motor_panels)+1, settings,
+        motor_panel = MotorPanel(len(self.scan_motor_panels)+1, self.settings,
             self, self.ctrl_parent)
         self.scan_motor_panels[motor_panel.number] = motor_panel
         self.motor_sizer.Add(motor_panel, ((motor_panel.number-1)%2, (motor_panel.number-1)//2))
 
+        self.ctrl_parent.Layout()
+        self.Layout()
+        self.Fit()
         self.GetParent().Layout()
         self.GetParent().Fit()
 
@@ -134,7 +137,8 @@ class ScanPanel(wx.Panel):
         all_errors = []
         num_motors = 0
 
-        for num, params in scan_params['motors']:
+        for num in scan_params['motors']:
+            params = scan_params['motors'][num]
             if params['use']:
                 num_motors = num_motors + 1
                 start_valid = True
@@ -215,6 +219,9 @@ class ScanPanel(wx.Panel):
 
         return metadata
 
+    def on_exit(self):
+        pass
+
 class MotorPanel(wx.Panel):
 
     def __init__(self, number, settings, top_frame, *args, **kwargs):
@@ -222,7 +229,7 @@ class MotorPanel(wx.Panel):
         wx.Panel.__init__(self, *args, **kwargs)
 
         self.number = number
-        self.top_frame
+        self.top_frame = top_frame
         self._create_layout(settings)
 
     def _create_layout(self, settings):

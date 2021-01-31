@@ -1155,7 +1155,14 @@ class ExpCommThread(threading.Thread):
 
         log_vals = exp_settings['struck_log_vals']
 
-        motor_num, motor_params = scan_motors.popindex(False)
+        dark_counts = []
+        for i in range(len(s_counters)):
+            if log_vals[i]['dark']:
+                dark_counts.append(s_counters[i].get_dark_current())
+            else:
+                dark_counts.append(0)
+
+        motor_num, motor_params = scan_motors.popitem(False)
         my_scan_motors = copy.deepcopy(scan_motors)
 
         motor_name = motor_params['motor']
@@ -1165,10 +1172,11 @@ class ExpCommThread(threading.Thread):
         motor_type = motor_params['type']
 
         if motor_type == 'MX':
+            logger.debug('Motor: {}'.format(motor_name))
             if motor_name in self._mx_data['motors']:
-                motor = self._mx_data['motors']
+                motor = self._mx_data['motors'][motor_name]
             else:
-                motor = self._mx_data['db'].get_record(motor_name)
+                motor = self._mx_data['mx_db'].get_record(motor_name)
                 self._mx_data['motors'][motor_name] = motor
         elif motor_type == 'Newport':
             if self.xps is None:
@@ -1190,12 +1198,13 @@ class ExpCommThread(threading.Thread):
             mtr_positions = mtr_positions[::-1]
 
         for position in mtr_positions:
+            logger.debug('Position: {}'.format(position))
             if self._abort_event.is_set():
                 break
 
             motor.move_absolute(position)
 
-            while self.motor.is_busy():
+            while motor.is_busy():
                 time.sleep(0.01)
                 if self._abort_event.is_set():
                     motor.stop()
@@ -1231,12 +1240,12 @@ class ExpCommThread(threading.Thread):
 
                 cur_fprefix = '{}_{:04}'.format(fprefix, current_run)
 
-                new_fname = '{}_{:04}'.format(cur_fprefix)
+                # new_fname = '{}_{:04}'.format(cur_fprefix)
+                logger.debug(motor_positions)
+                for mprefix, pos in motor_positions.items():
+                    cur_fprefix = cur_fprefix + '_{}_{}'.format(mprefix, pos)
 
-                for mprefix, pos in motor_positions:
-                    new_fname = new_fname + '_{}_{}'.format(mprefix, pos)
-
-                new_fname = new_fname + '_0001.tif'
+                new_fname = cur_fprefix + '_0001.tif'
 
                 det_filename.put(new_fname)
 
@@ -1245,10 +1254,11 @@ class ExpCommThread(threading.Thread):
                 det_exp_time.put(exp_time)
                 det_exp_period.put(exp_period)
 
-                struck_mode_pv.caput(1, timeout=5)
+                # struck_mode_pv.caput(1, timeout=5)
                 struck.set_measurement_time(exp_time)   #Ignored for external LNE of Struck
                 struck.set_num_measurements(num_frames)
-                struck.set_trigger_mode(0x8)    #Sets 'autotrigger' mode, i.e. counting as soon as armed
+                struck.set_trigger_mode(0x8|0x2)    #Sets 'autotrigger' mode, i.e. counting as soon as armed
+                # struck_mode_pv.caput(1, timeout=5)
 
                 dg645_trigger_source.put(1)
 
@@ -1269,12 +1279,24 @@ class ExpCommThread(threading.Thread):
 
                 dio_out6.write(0) #Open the slow normally closed xia shutter
 
+                ab_burst.get_status() #Maybe need to clear this status?
+                logger.debug("DG status: %s", ab_burst.get_status())
+
                 det.arm()
                 struck.start()
                 ab_burst.arm()
 
                 if continuous_exp:
                     dio_out9.write(1)
+
+                extra_vals = []
+                for mprefix, pos in motor_positions.items():
+                    extra_vals.append([mprefix, np.ones(num_frames)*float(pos)])
+
+                self.write_log_header(data_dir, cur_fprefix, log_vals,
+                    exp_settings['metadata'])
+
+                time.sleep(1)
 
                 logger.debug("Sending trigger")
                 dio_out10.write(1)
@@ -1289,7 +1311,7 @@ class ExpCommThread(threading.Thread):
                 logger.info('Exposures started')
                 self._exp_event.set()
 
-                # current_channel = 0
+                last_meas = 0
 
                 while True:
                     #Struck is_busy doesn't work in thread! So have to go elsewhere
@@ -1304,11 +1326,26 @@ class ExpCommThread(threading.Thread):
                             dio_out9, dio_out6, exp_time)
                         break
 
-                    # current_meas = struck_current_channel_pv.caget(timeout=2)
-                    # logger.debug(current_meas)
-                    # if current_meas != current_channel and current_meas != 0:
-                    #     current_channel = current_meas
-                    #     logger.debug(struck.read_all()) #This should work but it doesn't, gives a timeout error
+                    # logger.debug('here')
+
+                    current_meas = struck.get_last_measurement_number()
+                    logger.debug(current_meas)
+                    if current_meas != last_meas and current_meas != -1:
+                        # logger.debug('Finished measurement %s', current_meas+1)
+
+                        cvals = struck.read_all()
+                        # logger.debug(cvals)
+
+                        if last_meas == 0:
+                            prev_meas = -1
+                        else:
+                            prev_meas = last_meas
+
+                        self.append_log_counters(cvals, prev_meas, current_meas,
+                            data_dir, cur_fprefix, exp_period, dark_counts,
+                            log_vals, extra_vals)
+
+                        last_meas = current_meas
 
                     time.sleep(0.01)
 
@@ -1317,23 +1354,29 @@ class ExpCommThread(threading.Thread):
 
                 dio_out6.write(1) #Close the slow normally closed xia shutter
 
-                measurement = struck.read_all()
-
-                dark_counts = []
-                for i in range(len(s_counters)):
-                    if log_vals[i]['dark']:
-                        dark_counts.append(s_counters[i].get_dark_current())
-                    else:
-                        dark_counts.append(0)
-
                 extra_vals = []
-                for mprefix, pos in motor_positions:
-                    extra_vals.append([mprefix, np.ones(num_frames)*pos])
+                for mprefix, pos in motor_positions.items():
+                    extra_vals.append([mprefix, np.ones(num_frames)*float(pos)])
 
-                logger.info('Writing counters')
-                self.write_counters_struck(measurement, num_frames, data_dir,
-                    cur_fprefix, exp_period, dark_counts, log_vals,
-                    exp_settings['metadata'],extra_vals)
+                current_meas = struck.get_last_measurement_number()
+                if current_meas != last_meas or (current_meas == last_meas and current_meas == 0):
+                    cvals = struck.read_all()
+                    # logger.debug(cvals)
+
+                    if last_meas == 0:
+                        prev_meas = -1
+                    else:
+                        prev_meas = last_meas
+
+                    self.append_log_counters(cvals, prev_meas, current_meas,
+                        data_dir, cur_fprefix, exp_period, dark_counts,
+                        log_vals, extra_vals)
+
+                # measurement = struck.read_all()
+
+                # logger.info('Writing counters')
+                # self.write_counters_struck(measurement, num_frames, data_dir,
+                #     cur_fprefix, exp_period, dark_counts, log_vals, kwargs['metadata'])
 
                 ab_burst.get_status() #Maybe need to clear this status?
 
@@ -1350,6 +1393,31 @@ class ExpCommThread(threading.Thread):
                     self.fast_mode_abort_cleanup(det, struck, ab_burst, dio_out9,
                         dio_out6, exp_time)
                     break
+
+                # extra_vals = []
+                # for mprefix, pos in motor_positions.items():
+                #     extra_vals.append([mprefix, np.ones(num_frames)*float(pos)])
+
+                # logger.info('Writing counters')
+                # self.write_counters_struck(measurement, num_frames, data_dir,
+                #     cur_fprefix, exp_period, dark_counts, log_vals,
+                #     exp_settings['metadata'],extra_vals)
+
+                # ab_burst.get_status() #Maybe need to clear this status?
+
+                # while det.get_status() & 0x1 !=0:
+                #     time.sleep(0.001)
+                #     if self._abort_event.is_set():
+                #         self.fast_mode_abort_cleanup(det, struck, ab_burst,
+                #             dio_out9, dio_out6, exp_time)
+                #         break
+
+                # logger.info('Exposures done')
+
+                # if self._abort_event.is_set():
+                #     self.fast_mode_abort_cleanup(det, struck, ab_burst, dio_out9,
+                #         dio_out6, exp_time)
+                #     break
 
     def fast_exposure(self, data_dir, fprefix, num_frames, exp_time, exp_period, **kwargs):
         logger.debug('Setting up fast exposure')
@@ -1550,7 +1618,7 @@ class ExpCommThread(threading.Thread):
                 # logger.debug('here')
 
                 current_meas = struck.get_last_measurement_number()
-                # logger.debug(current_meas)
+                logger.debug(current_meas)
                 if current_meas != last_meas and current_meas != -1:
                     # logger.debug('Finished measurement %s', current_meas+1)
 
@@ -1576,7 +1644,7 @@ class ExpCommThread(threading.Thread):
             dio_out6.write(1) #Close the slow normally closed xia shutter
 
             current_meas = struck.get_last_measurement_number()
-            if current_meas != last_meas:
+            if current_meas != last_meas or (current_meas == last_meas and current_meas == 0):
                 cvals = struck.read_all()
                 # logger.debug(cvals)
 
@@ -1991,6 +2059,7 @@ class ExpCommThread(threading.Thread):
 
         with open(log_file, 'a') as f:
             for i in range(prev_meas+1, cur_meas+1):
+                logger.debug(i)
                 val = "{}_{:04d}.tif\t{}".format(fprefix, i+1, exp_period*i)
 
                 exp_time = cvals[0][i]/50.e6
