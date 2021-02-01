@@ -2848,11 +2848,6 @@ class ExpPanel(wx.Panel):
         if not exp_valid:
             return
 
-        overwrite_valid = self._check_overwrite(exp_values)
-
-        if not overwrite_valid:
-            return
-
         comp_valid, comp_settings = self._check_components()
 
         if not comp_valid:
@@ -2864,7 +2859,6 @@ class ExpPanel(wx.Panel):
             exp_values['metadata'] = metadata
         else:
             return
-
 
         if self.pipeline_ctrl is not None:
             if 'Experiment type:' in exp_values['metadata']:
@@ -2891,6 +2885,13 @@ class ExpPanel(wx.Panel):
 
                     if not os.path.exists(local_data_dir):
                         os.mkdir(local_data_dir)
+
+        overwrite_valid = self._check_overwrite(exp_values)
+
+        if not overwrite_valid:
+            return
+
+        if self.pipeline_ctrl is not None and exp_type is not None:
 
                     # Note, in the future this should get parameters for batch
                     # mode experiments out of the autosampler metadata, where you
@@ -3084,7 +3085,7 @@ class ExpPanel(wx.Panel):
                         logger.info('Front End shutter and D Hutch shutter are closed.')
 
                     elif not fes:
-                        logger.info('Front End shtuter is closed.')
+                        logger.info('Front End shutter is closed.')
 
                     elif not ds:
                         logger.info('D Hutch shutter is closed.')
