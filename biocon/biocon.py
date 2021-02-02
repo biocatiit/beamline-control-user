@@ -248,10 +248,10 @@ if __name__ == '__main__':
             'scale': 1, 'offset': 0, 'dark': True, 'norm_time': False}, #Format: (mx_record_name, struck_channel, header_name, scale, offset, use_dark_current, normalize_by_exp_time)
             {'mx_record': 'mcs4', 'channel': 3, 'name': 'I1', 'scale': 1,
             'offset': 0, 'dark': True, 'norm_time': False},
-            {'mx_record': 'mcs5', 'channel': 4, 'name': 'I2', 'scale': 1,
-            'offset': 0, 'dark': True, 'norm_time': False},
-            {'mx_record': 'mcs6', 'channel': 5, 'name': 'I3', 'scale': 1,
-            'offset': 0, 'dark': True, 'norm_time': False},
+            # {'mx_record': 'mcs5', 'channel': 4, 'name': 'I2', 'scale': 1,
+            # 'offset': 0, 'dark': True, 'norm_time': False},
+            # {'mx_record': 'mcs6', 'channel': 5, 'name': 'I3', 'scale': 1,
+            # 'offset': 0, 'dark': True, 'norm_time': False},
             {'mx_record': 'mcs11', 'channel': 10, 'name': 'Beam_current',
             'scale': 5000, 'offset': 0.5, 'dark': False, 'norm_time': True},
             # {'mx_record': 'mcs12', 'channel': 11, 'name': 'Flow_rate',
@@ -267,10 +267,10 @@ if __name__ == '__main__':
             'scale': 1, 'offset': 0, 'norm_time': False}, #Format: (mx_record_name, struck_channel, header_name, scale, offset, use_dark_current, normalize_by_exp_time)
             {'mx_record': 'j4', 'name': 'I1', 'scale': 1, 'offset': 0,
             'norm_time': False},
-            {'mx_record': 'j5', 'name': 'I2', 'scale': 1, 'offset': 0,
-            'norm_time': False},
-            {'mx_record': 'j6', 'name': 'I3', 'scale': 1, 'offset': 0,
-            'norm_time': False},
+            # {'mx_record': 'j5', 'name': 'I2', 'scale': 1, 'offset': 0,
+            # 'norm_time': False},
+            # {'mx_record': 'j6', 'name': 'I3', 'scale': 1, 'offset': 0,
+            # 'norm_time': False},
             {'mx_record': 'j11', 'name': 'Beam_current', 'scale': 5000,
             'offset': 0.5, 'norm_time': True}
             ],
@@ -434,14 +434,14 @@ if __name__ == '__main__':
         'components'    : ['pipeline'],
         'server_port'   : '5556',
         'server_ip'     : '164.54.204.82',
-        'raw_settings'  : '/nas_data/Pilatus1M/2021_Run1/20210114_Hopkins/test_pipeline/SAXS_new_mask.cfg',
+        'raw_settings'  : '/nas_data/Pilatus1M/2021_Run1/20210129_Hopkins/setup/calibration/pipeline_SAXS.cfg',
         }
 
     biocon_settings = {}
 
     components = OrderedDict([
         ('exposure', expcon.ExpPanel),
-        # ('coflow', coflowcon.CoflowPanel),
+        ('coflow', coflowcon.CoflowPanel),
         # ('trsaxs_scan', trcon.TRScanPanel),
         # ('trsaxs_flow', trcon.TRFlowPanel),
         # ('scan',    scancon.ScanPanel),

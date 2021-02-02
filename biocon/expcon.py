@@ -2045,6 +2045,8 @@ class ExpCommThread(threading.Thread):
         with open(log_file, 'w') as f:
             f.write(header)
 
+        logger.info(header.split('\n')[-2])
+
     def append_log_counters(self, cvals, prev_meas, cur_meas, data_dir,
             fprefix, exp_period, dark_counts, log_vals, extra_vals=None):
         logger.debug('Appending log counters to file')
