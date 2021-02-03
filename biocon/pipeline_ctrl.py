@@ -74,7 +74,7 @@ class PipelineControl(object):
                 name='PipelineCtrlClient')
         self.control_client.start()
 
-        self.set_raw_settings(self.settings['raw_settings'])
+        # self.set_raw_settings(self.settings['raw_settings'])
 
         self.current_expeirment = ''
 
@@ -404,7 +404,7 @@ if __name__ == '__main__':
         'components'    : ['pipeline'],
         'server_port'   : '5556',
         'server_ip'     : '192.168.1.14',
-        'raw_settings'  : '../data/UO_SEC/SAXS.cfg',
+        # 'raw_settings'  : '../data/UO_SEC/SAXS.cfg',
         }
 
 

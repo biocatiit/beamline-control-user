@@ -434,7 +434,7 @@ if __name__ == '__main__':
         'components'    : ['pipeline'],
         'server_port'   : '5556',
         'server_ip'     : '164.54.204.82',
-        'raw_settings'  : '/nas_data/Pilatus1M/2021_Run1/20210129_Hopkins/setup/calibration/pipeline_SAXS.cfg',
+        # 'raw_settings'  : '/nas_data/Pilatus1M/2021_Run1/20210129_Hopkins/setup/calibration/pipeline_SAXS.cfg',
         }
 
     biocon_settings = {}
