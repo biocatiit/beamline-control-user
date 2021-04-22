@@ -698,13 +698,15 @@ class CoflowPanel(wx.Panel):
                 self.get_plot_data_lock.release()
 
                 if self.monitor:
-                    if (sheath_fr < low_warning*self.sheath_setpoint or
-                        sheath_fr > high_warning*self.sheath_setpoint):
+                    if ((sheath_fr < low_warning*self.sheath_setpoint or
+                        sheath_fr > high_warning*self.sheath_setpoint) 
+                        and self.settings['show_sheath_warning']):
                         wx.CallAfter(self._show_warning_dialog, 'sheath', sheath_fr)
                         logger.error('Sheath flow out of bounds (%f to %f): %f', low_warning*self.sheath_setpoint, high_warning*self.sheath_setpoint, sheath_fr)
 
-                    if (outlet_fr < low_warning*self.outlet_setpoint or
-                        outlet_fr > high_warning*self.outlet_setpoint):
+                    if ((outlet_fr < low_warning*self.outlet_setpoint or
+                        outlet_fr > high_warning*self.outlet_setpoint)
+                        and self.settings['show_outlet_warning']):
                         wx.CallAfter(self._show_warning_dialog, 'outlet', outlet_fr)
                         logger.error('Outlet flow out of bounds (%f to %f): %f', low_warning*self.outlet_setpoint, high_warning*self.outlet_setpoint, outlet_fr)
 
@@ -1288,6 +1290,8 @@ if __name__ == '__main__':
         'warning_threshold_high': 1.2,
         'settling_time'         : 5000, #in ms
         'lc_flow_rate'          : '0.7',
+        'show_sheath_warning'   : True,
+        'show_outlet_warning'   : True,
         }
 
     app = wx.App()

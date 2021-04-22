@@ -276,7 +276,7 @@ if __name__ == '__main__':
             ],
         'warnings'              : {'shutter' : True, 'col_vac' : {'check': True,
             'thresh': 0.04}, 'guard_vac' : {'check': True, 'thresh': 0.04},
-            'sample_vac': {'check': True, 'thresh': 0.04}, 'sc_vac':
+            'sample_vac': {'check': False, 'thresh': 0.04}, 'sc_vac':
             {'check': True, 'thresh':0.04}},
         'base_data_dir'         : '/nas_data/Pilatus1M/2021_Run1', #CHANGE ME
         }
@@ -291,7 +291,7 @@ if __name__ == '__main__':
         'remote_fm_ip'          : '164.54.204.53',
         'remote_fm_port'        : '5557',
         'flow_units'            : 'mL/min',
-        'sheath_pump'           : ('VICI_M50', 'COM3', [629.88, 13.381], {}),
+        'sheath_pump'           : ('VICI_M50', 'COM3', [628.2, 13.051], {}),
         'outlet_pump'           : ('VICI_M50', 'COM4', [629.16, 12.354], {}),
         'sheath_fm'             : ('BFS', 'COM5', [], {}),
         'outlet_fm'             : ('BFS', 'COM6', [], {}),
@@ -301,6 +301,8 @@ if __name__ == '__main__':
         'warning_threshold_high': 1.2,
         'settling_time'         : 5000, #in ms
         'lc_flow_rate'          : '0.7',
+        'show_sheath_warning'   : True,
+        'show_outlet_warning'   : True,
         }
 
     trsaxs_settings = {
@@ -446,7 +448,7 @@ if __name__ == '__main__':
         # ('trsaxs_flow', trcon.TRFlowPanel),
         # ('scan',    scancon.ScanPanel),
         ('metadata', metadata.ParamPanel),
-        ('pipeline', pipeline_ctrl.PipelineControl)
+        # ('pipeline', pipeline_ctrl.PipelineControl)
         ])
 
     settings = {
@@ -477,8 +479,8 @@ if __name__ == '__main__':
         os.mkdir(info_dir)
 
     h2 = handlers.RotatingFileHandler(os.path.join(info_dir, 'biocon.log'), maxBytes=10e6, backupCount=5, delay=True)
-    # h2.setLevel(logging.INFO)
-    h2.setLevel(logging.DEBUG)
+    h2.setLevel(logging.INFO)
+    # h2.setLevel(logging.DEBUG)
     formatter2 = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
     h2.setFormatter(formatter2)
 
