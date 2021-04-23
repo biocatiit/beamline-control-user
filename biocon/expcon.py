@@ -1062,6 +1062,15 @@ class ExpCommThread(threading.Thread):
         shutter_pad = exp_settings['shutter_pad']
         shutter_cycle = exp_settings['shutter_cycle']
 
+        #Values for the _inner_fast_exp that aren't used in this function
+        wait_for_trig = False
+        exp_type = 'scan'
+        cur_trig = 0
+        struck_num_meas = 0
+        struck_meas_time = 0
+        kwargs = {}
+
+
         total_shutter_speed = shutter_speed_open+shutter_speed_close+shutter_pad
         s_open_time = shutter_speed_open + shutter_pad
 
@@ -1188,137 +1197,13 @@ class ExpCommThread(threading.Thread):
                 for mprefix, pos in motor_positions.items():
                     extra_vals.append([mprefix, np.ones(num_frames)*float(pos)])
 
-                if det.get_status() & 0x1 !=0:
-                    try:
-                        det.abort()
-                    except (mp.Device_Action_Failed_Error, mp.Unparseable_String_Error):
-                        pass
-                    try:
-                        det.abort()
-                    except (mp.Device_Action_Failed_Error, mp.Unparseable_String_Error):
-                        pass
 
-                struck.stop()
-                ab_burst.stop()
-
-                dio_out9.write(0) # Make sure the NM shutter is closed
-                dio_out10.write(0) # Make sure the trigger is off
-
-                det_datadir.put(data_dir)
-
-                det_filename.put(new_fname)
-
-                dio_out6.write(0) #Open the slow normally closed xia shutter
-
-                ab_burst.get_status() #Maybe need to clear this status?
-
-                det.arm()
-                struck.start()
-                ab_burst.arm()
-
-                if continuous_exp:
-                    dio_out9.write(1)
-
-                self.write_log_header(data_dir, cur_fprefix, log_vals,
-                    exp_settings['metadata'])
-
-                time.sleep(1)
-
-                logger.debug("Sending trigger")
-                dio_out10.write(1)
-                time.sleep(0.1)
-                dio_out10.write(0)
-
-                if self._abort_event.is_set():
-                    self.fast_mode_abort_cleanup(det, struck, ab_burst, ab_burst_2,
-                        dio_out9, dio_out6, exp_time)
-                    break
-
-                logger.info('Exposures started')
-                self._exp_event.set()
-
-                last_meas = 0
-
-                timeouts = 0
-
-                while True:
-                    #Struck is_busy doesn't work in thread! So have to go elsewhere
-
-                    exp_done, timeouts = self.get_experiment_status(ab_burst,
-                        ab_burst_2, det, timeouts)
-
-                    if exp_done:
-                        break
-
-                    if self._abort_event.is_set() or timeouts >= 5:
-                        if timeouts >= 5:
-                            logger.error(("Exposure aborted because current exposure "
-                                "status could not be verified"))
-                        self.fast_mode_abort_cleanup(det, struck, ab_burst, ab_burst_2,
-                            dio_out9, dio_out6, exp_time)
-                        break
-
-                    # logger.debug('here')
-
-                    current_meas = struck.get_last_measurement_number()
-                    logger.debug(current_meas)
-                    if current_meas != last_meas and current_meas != -1:
-                        # logger.debug('Finished measurement %s', current_meas+1)
-
-                        cvals = struck.read_all()
-                        # logger.debug(cvals)
-
-                        if last_meas == 0:
-                            prev_meas = -1
-                        else:
-                            prev_meas = last_meas
-
-                        self.append_log_counters(cvals, prev_meas, current_meas,
-                            data_dir, cur_fprefix, exp_period, num_frames,
-                            dark_counts, log_vals, extra_vals)
-
-                        last_meas = current_meas
-
-                    time.sleep(0.01)
-
-                if continuous_exp:
-                    dio_out9.write(0)
-
-                dio_out6.write(1) #Close the slow normally closed xia shutter
-
-                extra_vals = []
-                for mprefix, pos in motor_positions.items():
-                    extra_vals.append([mprefix, np.ones(num_frames)*float(pos)])
-
-                current_meas = struck.get_last_measurement_number()
-                if current_meas != last_meas or (current_meas == last_meas and current_meas == 0):
-                    cvals = struck.read_all()
-                    # logger.debug(cvals)
-
-                    if last_meas == 0:
-                        prev_meas = -1
-                    else:
-                        prev_meas = last_meas
-
-                    self.append_log_counters(cvals, prev_meas, current_meas,
-                        data_dir, cur_fprefix, exp_period, num_frames,
-                        dark_counts, log_vals, extra_vals)
-
-                ab_burst.get_status() #Maybe need to clear this status?
-
-                while det.get_status() & 0x1 !=0:
-                    time.sleep(0.001)
-                    if self._abort_event.is_set():
-                        self.fast_mode_abort_cleanup(det, struck, ab_burst, ab_burst_2,
-                            dio_out9, dio_out6, exp_time)
-                        break
-
-                logger.info('Exposures done')
-
-                if self._abort_event.is_set():
-                    self.fast_mode_abort_cleanup(det, struck, ab_burst, ab_burst_2,
-                        dio_out9, dio_out6, exp_time)
-                    break
+                self._inner_fast_exp(self, det, det_datadir, det_filename, struck,
+                    ab_burst, ab_burst_2, dio_out6, dio_out9, dio_out10,
+                    continuous_exp, wait_for_trig, exp_type, data_dir, new_fname,
+                    cur_fprefix, log_vals, extra_vals, dark_counts, cur_trig,
+                    exp_time, exp_period, num_frames, struck_num_meas,
+                    struck_meas_time, kwargs)
 
     def fast_exposure(self, data_dir, fprefix, num_frames, exp_time, exp_period,
         exp_type='standard', **kwargs):
@@ -1547,6 +1432,7 @@ class ExpCommThread(threading.Thread):
         exp_type, data_dir, new_fname, cur_fprefix, log_vals, extra_vals,
         dark_counts, cur_trig, exp_time, exp_period, num_frames, struck_num_meas,
         struck_meas_time, kwargs):
+
         if det.get_status() & 0x1 !=0:
             try:
                 det.abort()
@@ -1636,7 +1522,7 @@ class ExpCommThread(threading.Thread):
 
                     self.append_log_counters(cvals, prev_meas, current_meas,
                         data_dir, cur_fprefix, exp_period, num_frames,
-                        dark_counts, log_vals)
+                        dark_counts, log_vals, extra_vals)
 
                     last_meas = current_meas
 
@@ -1660,7 +1546,7 @@ class ExpCommThread(threading.Thread):
 
                 self.append_log_counters(cvals, prev_meas, current_meas,
                     data_dir, cur_fprefix, exp_period, num_frames, dark_counts,
-                    log_vals)
+                    log_vals, extra_vals)
 
         else:
             struck.stop()
@@ -1668,7 +1554,8 @@ class ExpCommThread(threading.Thread):
 
             logger.info('Writing counters')
             self.write_counters_muscle(measurement, struck_num_meas, data_dir,
-                cur_fprefix, struck_meas_time, dark_counts, log_vals, kwargs['metadata'])
+                cur_fprefix, struck_meas_time, dark_counts, log_vals,
+                kwargs['metadata'])
 
         ab_burst.get_status() #Maybe need to clear this status?
 
