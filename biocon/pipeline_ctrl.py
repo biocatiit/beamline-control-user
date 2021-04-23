@@ -101,10 +101,14 @@ class PipelineControl(object):
 
         if exp_type == 'SEC':
             cmd_kwargs = {'num_exps': n_exps}
+
         elif exp_type == 'Batch':
             cmd_kwargs = {'num_sample_exps': n_sample_exps,
             'num_buffer_exps': n_exps, 'sample_prefix': sample_prefix,
             'buffer_prefix': fprefix}
+
+        elif exp_type == 'Other':
+            cmd_kwargs = {'num_exps': n_exps}
 
         cmd = ('start_experiment', [exp_name, exp_type, data_dir, fprefix],
             cmd_kwargs)

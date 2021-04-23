@@ -221,6 +221,7 @@ class ExpCommThread(threading.Thread):
 
     def _start_tr_exp(self, exp_settings, comp_settings):
         exp_settings['metadata'] = self._add_metadata(exp_settings['metadata'])
+
         self.tr_exposure(exp_settings, comp_settings)
 
     def _start_muscle_exp(self, data_dir, fprefix, num_frames, exp_time, exp_period,
@@ -233,6 +234,7 @@ class ExpCommThread(threading.Thread):
 
     def _start_scan_exp(self, exp_settings, comp_settings):
         exp_settings['metadata'] = self._add_metadata(exp_settings['metadata'])
+
         self.scan_exposure(exp_settings, comp_settings)
 
     def muscle_exposure(self, data_dir, fprefix, num_frames, exp_time, exp_period, **kwargs):
@@ -2346,7 +2348,7 @@ class ExpPanel(wx.Panel):
                     exp_type = 'SEC'
 
                 else:
-                    exp_type = None
+                    exp_type = 'Other'
 
                 if exp_type is not None:
                     data_dir = os.path.join(exp_values['data_dir'], 'images')
@@ -2371,7 +2373,7 @@ class ExpPanel(wx.Panel):
                     # Note, in the future this should get parameters for batch
                     # mode experiments out of the autosampler metadata, where you
                     # define number of expeirments, and related sample and buffer
-                    # experiments and file prefixes. RIght now, the only processing
+                    # experiments and file prefixes. Right now, the only processing
                     # the pipeline will do for batch mode is radial averaging, since
                     # it doesn't know the associated sample and buffer files
                     self.pipeline_ctrl.start_experiment(fprefix, exp_type, local_data_dir,
