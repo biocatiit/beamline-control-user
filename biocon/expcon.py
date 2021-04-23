@@ -1602,28 +1602,42 @@ class ExpCommThread(threading.Thread):
 
             last_meas = 0
 
+            timeouts = 0
+
             while True:
                 #Struck is_busy doesn't work in thread! So have to go elsewhere
 
-                status = ab_burst.get_status()
+                try:
+                    status = ab_burst.get_status()
+                    timeouts=0
 
-                if ( ( status & 0x1 ) == 0 ):
+                except Exception:
+                    logger.debug('Timed out getting DG645 status')
+
+                    try:
+                        status = det.get_status()
+                        timeouts = 0
+
+                    except Exception:
+                        timeouts = timeouts + 1
+                        logger.debug('Timed out getting detector status')
+
+
+                if (status & 0x1) == 0:
                     break
 
-                if self._abort_event.is_set():
+                if self._abort_event.is_set() or timeouts >= 5:
+                    if timeouts >= 5:
+                        logger.error(("Exposure aborted because current exposure "
+                            "status could not be verified"))
                     self.fast_mode_abort_cleanup(det, struck, ab_burst,
                         dio_out9, dio_out6, exp_time)
                     break
 
-                # logger.debug('here')
-
                 current_meas = struck.get_last_measurement_number()
-                logger.debug(current_meas)
-                if current_meas != last_meas and current_meas != -1:
-                    # logger.debug('Finished measurement %s', current_meas+1)
 
+                if current_meas != last_meas and current_meas != -1:
                     cvals = struck.read_all()
-                    # logger.debug(cvals)
 
                     if last_meas == 0:
                         prev_meas = -1
@@ -1638,6 +1652,7 @@ class ExpCommThread(threading.Thread):
 
                 time.sleep(0.01)
 
+
             if continuous_exp:
                 dio_out9.write(0)
 
@@ -1646,7 +1661,6 @@ class ExpCommThread(threading.Thread):
             current_meas = struck.get_last_measurement_number()
             if current_meas != last_meas or (current_meas == last_meas and current_meas == 0):
                 cvals = struck.read_all()
-                # logger.debug(cvals)
 
                 if last_meas == 0:
                     prev_meas = -1
@@ -1656,12 +1670,6 @@ class ExpCommThread(threading.Thread):
                 self.append_log_counters(cvals, prev_meas, current_meas,
                     data_dir, cur_fprefix, exp_period, dark_counts,
                     log_vals)
-
-            # measurement = struck.read_all()
-
-            # logger.info('Writing counters')
-            # self.write_counters_struck(measurement, num_frames, data_dir,
-            #     cur_fprefix, exp_period, dark_counts, log_vals, kwargs['metadata'])
 
             ab_burst.get_status() #Maybe need to clear this status?
 

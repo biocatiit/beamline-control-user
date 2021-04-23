@@ -276,7 +276,7 @@ if __name__ == '__main__':
             ],
         'warnings'              : {'shutter' : True, 'col_vac' : {'check': True,
             'thresh': 0.04}, 'guard_vac' : {'check': True, 'thresh': 0.04},
-            'sample_vac': {'check': False, 'thresh': 0.04}, 'sc_vac':
+            'sample_vac': {'check': True, 'thresh': 0.04}, 'sc_vac':
             {'check': True, 'thresh':0.04}},
         'base_data_dir'         : '/nas_data/Pilatus1M/2021_Run1', #CHANGE ME
         }
