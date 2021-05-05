@@ -102,6 +102,11 @@ class ScanPanel(wx.Panel):
 
         self.SetSizer(self.top_sizer)
 
+    def showMessageDialog(self, parent, msg, title, style):
+        dialog = wx.MessageDialog(parent, msg, title, style=style)
+        dialog.ShowModal()
+        dialog.Destroy()
+
     def _on_add_button(self, evt):
         self._add_motor()
 
@@ -192,9 +197,8 @@ class ScanPanel(wx.Panel):
 
             msg = msg + errors
 
-            dialog = wx.MessageDialog(self, msg, 'Error in scan parameters',
-                style=wx.OK|wx.ICON_ERROR)
-            wx.CallAfter(dialog.ShowModal)
+            wx.CallAfter(self.showMessageDialog, self, msg, 'Error in scan parameters',
+                wx.OK|wx.ICON_ERROR)
 
         else:
             all_valid = True

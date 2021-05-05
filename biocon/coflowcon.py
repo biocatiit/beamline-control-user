@@ -182,9 +182,8 @@ class CoflowPanel(wx.Panel):
             msg = ('Could not connect to the coflow control server. '
                 'Contact your beamline scientist.')
 
-            dialog = wx.MessageDialog(self, msg, 'Connection error',
-                style=wx.OK|wx.ICON_ERROR)
-            wx.CallAfter(dialog.ShowModal)
+            wx.CallAfter(self.showMessageDialog, self, msg, "Connection error",
+                wx.OK|wx.ICON_ERROR)
 
 
     def _create_layout(self):
@@ -290,6 +289,11 @@ class CoflowPanel(wx.Panel):
 
         self.SetSizer(top_sizer)
 
+    def showMessageDialog(self, parent, msg, title, style):
+        dialog = wx.MessageDialog(parent, msg, title, style=style)
+        dialog.ShowModal()
+        dialog.Destroy()
+
     def _init_pumps(self):
         sheath_pump = self.settings['sheath_pump']
         outlet_pump = self.settings['outlet_pump']
@@ -329,6 +333,7 @@ class CoflowPanel(wx.Panel):
             dialog = wx.MessageDialog(self, msg, 'Connection error',
                 style=wx.OK|wx.ICON_ERROR)
             dialog.ShowModal()
+            dialog.Destroy()
 
         if not outlet_init and not self.timeout_event.is_set():
             logger.error('Failed to connect to the outlet pump.')
@@ -339,6 +344,7 @@ class CoflowPanel(wx.Panel):
             dialog = wx.MessageDialog(self, msg, 'Connection error',
                 style=wx.OK|wx.ICON_ERROR)
             dialog.ShowModal()
+            dialog.Destroy()
 
         if outlet_init and sheath_init:
             self.auto_flow.Enable()
@@ -397,6 +403,7 @@ class CoflowPanel(wx.Panel):
             dialog = wx.MessageDialog(self, msg, 'Connection error',
                 style=wx.OK|wx.ICON_ERROR)
             dialog.ShowModal()
+            dialog.Destroy()
 
         if not outlet_init and not self.timeout_event.is_set():
             logger.error('Failed to connect to the outlet flow meter.')
@@ -407,6 +414,7 @@ class CoflowPanel(wx.Panel):
             dialog = wx.MessageDialog(self, msg, 'Connection error',
                 style=wx.OK|wx.ICON_ERROR)
             dialog.ShowModal()
+            dialog.Destroy()
 
         if outlet_init and sheath_init:
             self._send_fmcmd(('set_units', ('sheath_fm', self.settings['flow_units']), {}))
@@ -644,6 +652,7 @@ class CoflowPanel(wx.Panel):
                 style=wx.YES_NO|wx.NO_DEFAULT|wx.ICON_QUESTION)
 
             ret = dialog.ShowModal()
+            dialog.Destroy()
 
             if ret == wx.ID_NO:
                 valid = False
@@ -699,7 +708,7 @@ class CoflowPanel(wx.Panel):
 
                 if self.monitor:
                     if ((sheath_fr < low_warning*self.sheath_setpoint or
-                        sheath_fr > high_warning*self.sheath_setpoint) 
+                        sheath_fr > high_warning*self.sheath_setpoint)
                         and self.settings['show_sheath_warning']):
                         wx.CallAfter(self._show_warning_dialog, 'sheath', sheath_fr)
                         logger.error('Sheath flow out of bounds (%f to %f): %f', low_warning*self.sheath_setpoint, high_warning*self.sheath_setpoint, sheath_fr)
@@ -887,9 +896,8 @@ class CoflowPanel(wx.Panel):
                     msg = ('Lost connection to the coflow control server. '
                         'Contact your beamline scientist.')
 
-                    dialog = wx.MessageDialog(self, msg, 'Connection error',
-                        style=wx.OK|wx.ICON_ERROR)
-                    wx.CallAfter(dialog.ShowModal)
+                    wx.CallAfter(self.showMessageDialog, self, msg, "Connection error",
+                        wx.OK|wx.ICON_ERROR)
 
                     self.stop_get_fr_event.set()
 
@@ -897,9 +905,8 @@ class CoflowPanel(wx.Panel):
             msg = ('No connection to the coflow control server. '
                 'Contact your beamline scientist.')
 
-            dialog = wx.MessageDialog(self, msg, 'Connection error',
-                style=wx.OK|wx.ICON_ERROR)
-            wx.CallAfter(dialog.ShowModal)
+            wx.CallAfter(self.showMessageDialog, self, msg, "Connection error",
+                wx.OK|wx.ICON_ERROR)
 
             self.stop_get_fr_event.set()
 

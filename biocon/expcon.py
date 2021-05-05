@@ -2554,6 +2554,7 @@ class ExpPanel(wx.Panel):
             if msg != '':
                 dlg = wx.MessageDialog(None, msg, "Shutter Closed", wx.YES_NO|wx.ICON_EXCLAMATION|wx.NO_DEFAULT)
                 result = dlg.ShowModal()
+                dlg.Destroy()
 
                 if result == wx.ID_NO:
                     cont = False
@@ -2634,6 +2635,7 @@ class ExpPanel(wx.Panel):
                 'you want to continue?') + msg
             dlg = wx.MessageDialog(None, msg, "Shutter Closed", wx.YES_NO|wx.ICON_EXCLAMATION|wx.NO_DEFAULT)
             result = dlg.ShowModal()
+            dlg.Destroy()
 
             if result == wx.ID_NO:
                 cont = False
@@ -2887,6 +2889,7 @@ class ExpPanel(wx.Panel):
             dlg = wx.MessageDialog(None, msg, "Confirm data overwrite",
                 wx.YES_NO|wx.ICON_EXCLAMATION|wx.NO_DEFAULT)
             result = dlg.ShowModal()
+            dlg.Destroy()
 
             if result == wx.ID_YES:
                 cont = True
@@ -2975,6 +2978,7 @@ class ExpPanel(wx.Panel):
             dlg = wx.MessageDialog(self, msg, "Confirm data overwrite",
                 wx.YES_NO|wx.ICON_QUESTION|wx.NO_DEFAULT)
             result = dlg.ShowModal()
+            dlg.Destroy()
 
             if result == wx.ID_YES:
                 metadata_valid = True

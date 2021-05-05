@@ -368,6 +368,7 @@ class TRScanPanel(wx.Panel):
 
         if dialog.ShowModal() == wx.ID_OK:
             fname = dialog.GetPath()
+            dialog.Destroy()
 
             self.step_filename.SetValue(os.path.split(fname)[1])
             self.gridpoints_file = fname
@@ -380,6 +381,7 @@ class TRScanPanel(wx.Panel):
                 dialog = wx.MessageDialog(self, msg, 'File format error',
                     style=wx.OK|wx.ICON_ERROR)
                 dialog.ShowModal()
+                dialog.Destroy()
 
 
     def _on_param_change(self, evt):
@@ -1889,6 +1891,7 @@ class TRFlowPanel(wx.Panel):
                     dialog = wx.MessageDialog(self, msg, 'Connection error',
                         style=wx.OK|wx.ICON_ERROR)
                     dialog.ShowModal()
+                    dialog.Destroy()
 
                 self.valves[name] = (name, vtype, com)
 
@@ -1947,6 +1950,7 @@ class TRFlowPanel(wx.Panel):
                 dialog = wx.MessageDialog(self, msg, 'Connection error',
                     style=wx.OK|wx.ICON_ERROR)
                 dialog.ShowModal()
+                dialog.Destroy()
 
             self.pumps[name] = (name, ptype, com, address)
 
@@ -1983,6 +1987,7 @@ class TRFlowPanel(wx.Panel):
             dialog = wx.MessageDialog(self, msg, 'Connection error',
                 style=wx.OK|wx.ICON_ERROR)
             dialog.ShowModal()
+            dialog.Destroy()
 
         if outlet_init:
             self._send_fmcmd(('set_units', ('outlet_fm', self.settings['flow_units']), {}))
@@ -2326,6 +2331,11 @@ class TRFlowPanel(wx.Panel):
         self.Layout()
         self.SendSizeEvent()
 
+    def showMessageDialog(self, parent, msg, title, style):
+        dialog = wx.MessageDialog(parent, msg, title, style=style)
+        dialog.ShowModal()
+        dialog.Destroy()
+
     def _on_flow_change(self, event):
         flow_rate = self.total_flow.GetValue()
 
@@ -2383,6 +2393,7 @@ class TRFlowPanel(wx.Panel):
             dialog = wx.MessageDialog(self, msg, 'Error in flow parameters',
                 style=wx.OK|wx.ICON_ERROR)
             dialog.ShowModal()
+            dialog.Destroy()
 
             self.total_flow.Bind(wx.EVT_KILL_FOCUS, self._on_flow_change)
             self.dilution_ratio.Bind(wx.EVT_KILL_FOCUS, self._on_flow_change)
@@ -2438,9 +2449,8 @@ class TRFlowPanel(wx.Panel):
             if pump_status:
                 msg = ('Cannot start all pumps when one or more pumps '
                     'are already moving.')
-                dialog = wx.MessageDialog(self, msg, 'Failed to start pumps',
-                    style=wx.OK|wx.ICON_ERROR)
-                wx.CallAfter(dialog.ShowModal)
+                wx.CallAfter(self.showMessageDialog, self, msg, 'Failed to start pumps',
+                        wx.OK|wx.ICON_ERROR)
 
                 self.pause_valve_monitor.clear()
                 self.pause_pump_monitor.clear()
@@ -2449,9 +2459,8 @@ class TRFlowPanel(wx.Panel):
             if pump_volume <= 0:
                 msg = ('Cannot start all pumps when one or more pumps '
                     'have no loaded volume.')
-                dialog = wx.MessageDialog(self, msg, 'Failed to start pumps',
-                    style=wx.OK|wx.ICON_ERROR)
-                wx.CallAfter(dialog.ShowModal)
+                wx.CallAfter(self.showMessageDialog, self, msg, 'Failed to start pumps',
+                        wx.OK|wx.ICON_ERROR)
 
                 self.pause_valve_monitor.clear()
                 self.pause_pump_monitor.clear()
@@ -2482,9 +2491,8 @@ class TRFlowPanel(wx.Panel):
         if not success:
             msg = ('Could not start pumps, failed to set valve positions '
                 'correctly.')
-            dialog = wx.MessageDialog(self, msg, 'Failed to start pumps',
-                style=wx.OK|wx.ICON_ERROR)
-            wx.CallAfter(dialog.ShowModal)
+            wx.CallAfter(self.showMessageDialog, self, msg, 'Failed to start pumps',
+                        wx.OK|wx.ICON_ERROR)
 
             self.pause_valve_monitor.clear()
             self.pause_pump_monitor.clear()
@@ -2496,9 +2504,8 @@ class TRFlowPanel(wx.Panel):
 
         if not success:
             msg = ('Pumps failed to start correctly.')
-            dialog = wx.MessageDialog(self, msg, 'Failed to start pumps',
-                style=wx.OK|wx.ICON_ERROR)
-            wx.CallAfter(dialog.ShowModal)
+            wx.CallAfter(self.showMessageDialog, self, msg, 'Failed to start pumps',
+                wx.OK|wx.ICON_ERROR)
 
             self.stop_all()
             self.pause_valve_monitor.clear()
@@ -2517,8 +2524,8 @@ class TRFlowPanel(wx.Panel):
 
         if not success:
             msg = ('Pumps failed to stop correctly.')
-            wx.MessageDialog(self, msg, 'Failed to stop pumps',
-                style=wx.OK|wx.ICON_ERROR)
+            wx.CallAfter(self.showMessageDialog, self, msg, 'Failed to stop pumps',
+                wx.OK|wx.ICON_ERROR)
 
         return success
 
@@ -2543,6 +2550,7 @@ class TRFlowPanel(wx.Panel):
                 dialog = wx.MessageDialog(self, msg, 'Failed to refill pumps',
                     style=wx.OK|wx.ICON_ERROR)
                 dialog.ShowModal()
+                dialog.Destroy()
 
                 logger.error('Failed to refill all pumps, one or more pumps is already moving.')
 
@@ -2578,6 +2586,7 @@ class TRFlowPanel(wx.Panel):
             dialog = wx.MessageDialog(self, msg, 'Failed to refill pumps',
                 style=wx.OK|wx.ICON_ERROR)
             dialog.ShowModal()
+            dialog.Destroy()
 
             logger.error('Failed to refill all pumps, could not set valve positions.')
 
@@ -2595,6 +2604,7 @@ class TRFlowPanel(wx.Panel):
             dialog = wx.MessageDialog(self, msg, 'Failed to refill pumps',
                 style=wx.OK|wx.ICON_ERROR)
             dialog.ShowModal()
+            dialog.Destroy()
 
             logger.error('Failed to refill all pumps, not all pumps started correctly.')
 
@@ -2662,18 +2672,16 @@ class TRFlowPanel(wx.Panel):
                 logger.error('Failed to set {} position'.format(name.replace('_', ' ')))
                 msg = ('Failed to set {} position'.format(name.replace('_', ' ')))
 
-                dialog = wx.MessageDialog(self, msg, 'Set position failed',
-                    style=wx.OK|wx.ICON_ERROR)
-                wx.CallAfter(dialog.ShowModal)
+                wx.CallAfter(self.showMessageDialog, self, msg, 'Set position failed',
+                    wx.OK|wx.ICON_ERROR)
         else:
             logger.error('Failed to set {} position, no response from the '
                 'server.'.format(ret[1].replace('_', ' ')))
             msg = ('Failed to set {} position, no response from the '
                 'server.'.format(ret[1].replace('_', ' ')))
 
-            dialog = wx.MessageDialog(self, msg, 'Set position failed',
-                style=wx.OK|wx.ICON_ERROR)
-            wx.CallAfter(dialog.ShowModal)
+            wx.CallAfter(self.showMessageDialog, self, msg, 'Set position failed',
+                    wx.OK|wx.ICON_ERROR)
 
         wx.CallLater(2000, self.pause_valve_monitor.clear)
 
@@ -3287,9 +3295,8 @@ class TRFlowPanel(wx.Panel):
                     logger.error('Injection valve {} failed to switch to '
                         'inject position'.format(i))
                     msg = ('Failed to inject sample')
-                    dialog = wx.MessageDialog(self, msg, 'Injection failed',
-                        style=wx.OK|wx.ICON_ERROR)
-                    wx.CallAfter(dialog.ShowModal)
+                    wx.CallAfter(self.showMessageDialog, self, msg, 'Injection failed',
+                        wx.OK|wx.ICON_ERROR)
 
         return success
 
@@ -3413,10 +3420,8 @@ class TRFlowPanel(wx.Panel):
                 else:
                     msg = ('Lost connection to the flow control server. '
                         'Contact your beamline scientist.')
-
-                    dialog = wx.MessageDialog(self, msg, 'Connection error',
-                        style=wx.OK|wx.ICON_ERROR)
-                    wx.CallAfter(dialog.ShowModal)
+                    wx.CallAfter(self.showMessageDialog, self, msg, 'Connection error',
+                        wx.OK|wx.ICON_ERROR)
 
                     self.stop_fm_monitor.set()
 
@@ -3424,9 +3429,8 @@ class TRFlowPanel(wx.Panel):
             msg = ('No connection to the flow control server. '
                 'Contact your beamline scientist.')
 
-            dialog = wx.MessageDialog(self, msg, 'Connection error',
-                style=wx.OK|wx.ICON_ERROR)
-            wx.CallAfter(dialog.ShowModal)
+            wx.CallAfter(self.showMessageDialog, self, msg, 'Connection error',
+                wx.OK|wx.ICON_ERROR)
 
             self.stop_fm_monitor.set()
 
@@ -4012,8 +4016,8 @@ class TRPumpPanel(wx.Panel):
                         vol = float(self.volume_ctrl.GetValue())
                     except Exception:
                         msg = "Volume must be a number."
-                        dialog = wx.MessageDialog(msg, "Error setting volume")
-                        wx.CallAfter(dialog.ShowModal)
+                        wx.CallAfter(self.showMessageDialog, self, msg, "Error setting volume",
+                            wx.OK|wx.ICON_ERROR)
                         logger.debug('Failed to set dispense/aspirate volume to %s for pump %s', vol, self.name)
                         return
 
@@ -4041,8 +4045,8 @@ class TRPumpPanel(wx.Panel):
 
         else:
             msg = "Cannot start pump flow before the pump is connected."
-            dialog = wx.MessageDialog(msg, "Error starting flow")
-            wx.CallAfter(dialog.ShowModal)
+            wx.CallAfter(self.showMessageDialog, self, msg, "Error starting flow",
+                            wx.OK|wx.ICON_ERROR)
             logger.debug('Failed to start flow for pump %s because it is not connected', self.name)
             success = False
 
@@ -4184,6 +4188,8 @@ class TRFrame(wx.Frame):
                 style=wx.ICON_WARNING|wx.OK)
 
             dialog.ShowModal()
+            dialog.Destroy()
+
 
     def _create_layout(self, settings, display):
         """Creates the layout"""
