@@ -2342,7 +2342,15 @@ class ExpPanel(wx.Panel):
                 md_exp_type =  exp_values['metadata']['Experiment type:']
 
                 if md_exp_type == 'Batch mode SAXS':
-                    exp_type = 'Batch'
+                    if ('Needs Separate Buffer Measurement:' in exp_values['metadata']
+                        and not exp_values['metadata']['Needs Separate Buffer Measurement:']):
+                        # batch mode experiments where the running buffer is
+                        # good for subtraction can be treated like SEC experiments
+                        # in the pipeline
+                        exp_type = 'SEC'
+
+                    else:
+                        exp_type = 'Batch'
 
                 elif md_exp_type == 'SEC-SAXS' or md_exp_type == 'SEC-MALS-SAXS':
                     exp_type = 'SEC'
@@ -2370,14 +2378,14 @@ class ExpPanel(wx.Panel):
 
         if self.pipeline_ctrl is not None and exp_type is not None:
 
-                    # Note, in the future this should get parameters for batch
-                    # mode experiments out of the autosampler metadata, where you
-                    # define number of expeirments, and related sample and buffer
-                    # experiments and file prefixes. Right now, the only processing
-                    # the pipeline will do for batch mode is radial averaging, since
-                    # it doesn't know the associated sample and buffer files
-                    self.pipeline_ctrl.start_experiment(fprefix, exp_type, local_data_dir,
-                        fprefix, num_frames)
+            # Note, in the future this should get parameters for batch
+            # mode experiments out of the autosampler metadata, where you
+            # define number of expeirments, and related sample and buffer
+            # experiments and file prefixes. Right now, the only processing
+            # the pipeline will do for batch mode is radial averaging, since
+            # it doesn't know the associated sample and buffer files
+            self.pipeline_ctrl.start_experiment(fprefix, exp_type, local_data_dir,
+                fprefix, num_frames)
 
 
         self.set_status('Preparing exposure')
