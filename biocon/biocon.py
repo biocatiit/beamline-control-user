@@ -230,7 +230,7 @@ if __name__ == '__main__':
         'shutter_pad'           : 0.002, #padding for shutter related values
         'shutter_cycle'         : 0.1, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
         'struck_measurement_time' : '0.001', #in s
-        'tr_muscle_exp'         : False,
+        'tr_muscle_exp'         : True,
         'slow_mode_thres'       : 0.1,
         'fast_mode_max_exp_time': 2000,
         'wait_for_trig'         : False,
@@ -256,8 +256,8 @@ if __name__ == '__main__':
             'scale': 5000, 'offset': 0.5, 'dark': False, 'norm_time': True},
             # {'mx_record': 'mcs12', 'channel': 11, 'name': 'Flow_rate',
             # 'scale': 10e6, 'offset': 0, 'dark': True, 'norm_time': True},
-            # {'mx_record': 'mcs7', 'channel': 6, 'name': 'Pilatus_Enable',
-            # 'scale': 1e5, 'offset': 0, 'dark': True, 'norm_time': True},
+            {'mx_record': 'mcs7', 'channel': 6, 'name': 'Pilatus_Enable',
+            'scale': 1e5, 'offset': 0, 'dark': True, 'norm_time': True},
             # {'mx_record': 'mcs12', 'channel': 11, 'name': 'Length',
             # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
             # {'mx_record': 'mcs13', 'channel': 12, 'name': 'Force',

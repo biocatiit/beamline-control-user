@@ -117,9 +117,9 @@ class ExpCommThread(threading.Thread):
         det_local_datafile_root = mp.Net(server_record, det_local_datafile_root_name)
 
         data_dir_root = copy.deepcopy(self._settings['base_data_dir']).replace(
-            self._settings['local_dir_root'], self.settings['remote_dir_root'], 1)
+            self._settings['local_dir_root'], self._settings['remote_dir_root'], 1)
 
-        det_local_datafile_root.put(data_dir_root)
+        # det_local_datafile_root.put(data_dir_root) #MX record field is read only?
 
         logger.debug("Got detector records")
 
@@ -404,7 +404,7 @@ class ExpCommThread(threading.Thread):
             time.sleep(1)
 
             self.wait_for_trigger(wait_for_trig, cur_trig, exp_time, ab_burst,
-                ab_burst_2, det, struck, dio_out6, dio_out9, dio_out10, 'muscle')
+                ab_burst_2, det, struck, dio_out6, dio_out9, dio_out10)
 
             if self._abort_event.is_set():
                 self.fast_mode_abort_cleanup(det, struck, ab_burst, ab_burst_2,
@@ -1225,6 +1225,9 @@ class ExpCommThread(threading.Thread):
         if exp_type == 'muscle':
             struck_meas_time = kwargs['struck_measurement_time']
             struck_num_meas = kwargs['struck_num_meas']
+        else:
+            struck_meas_time = 0
+            struck_num_meas = 0
 
         ab_burst = self._mx_data['ab_burst']   #Shutter control signal
         cd_burst = self._mx_data['cd_burst']   #Struck LNE/channel advance signal
@@ -1233,7 +1236,7 @@ class ExpCommThread(threading.Thread):
         dg645_trigger_source = self._mx_data['dg645_trigger_source']
 
         if exp_type == 'muscle':
-            ab_burst_2 = self._mx_data['ab_burst_2'] #Shutter continuously open control signal
+            ab_burst_2 = self._mx_data['ab_burst_2'] 
             cd_burst_2 = self._mx_data['cd_burst_2'] #Struck channel advance
             ef_burst_2 = self._mx_data['ef_burst_2']
             gh_burst_2 = self._mx_data['gh_burst_2']
@@ -1287,9 +1290,14 @@ class ExpCommThread(threading.Thread):
         det_exp_time.put(exp_time)
         det_exp_period.put(exp_period)
 
-        struck.set_measurement_time(exp_time)   #Ignored for external LNE of Struck
-        struck.set_num_measurements(num_frames)
-        struck.set_trigger_mode(0x8|0x2)    #Sets 'autotrigger' mode, i.e. counting as soon as armed
+        if exp_type == 'muscle':
+            struck.set_measurement_time(struck_meas_time)   #Ignored for external LNE of Struck
+            struck.set_num_measurements(struck_num_meas)
+            struck.set_trigger_mode(0x2)    #Sets external mode, i.e. counting on first LNE
+        else:
+            struck.set_measurement_time(exp_time)   #Ignored for external LNE of Struck
+            struck.set_num_measurements(num_frames)
+            struck.set_trigger_mode(0x8|0x2)    #Sets 'autotrigger' mode, i.e. counting as soon as armed
 
         dg645_trigger_source.put(1) #Change this to 2 for external falling edges
 
@@ -1325,20 +1333,25 @@ class ExpCommThread(threading.Thread):
             cd_burst.setup(exp_period, (exp_period-(exp_time+s_open_time))/10.,
                 num_frames, exp_time+s_open_time, 1, -1)
             ef_burst.setup(exp_period, exp_time, num_frames, s_open_time, 1, -1)
-            gh_burst.setup(exp_period, 0, num_frames, s_open_time, 1, -1)
+            gh_burst.setup(exp_period, 0, num_frames, s_open_time, 1, -1) #Irrelevant
         else:
             #Shutter will be open continuously
+            if exp_type == 'muscle':
+                offset = (exp_period - exp_time)/2.
+            else:
+                offset = 0
+
             ab_burst.setup(exp_period, exp_time, num_frames, 0, 1, -1) #Irrelevant
             cd_burst.setup(exp_period, (exp_period-exp_time)/10.,
                 num_frames, exp_time+(exp_period-exp_time)/10., 1, -1)
-            ef_burst.setup(exp_period, exp_time, num_frames, 0, 1, -1)
-            gh_burst.setup(exp_period, exp_period*(1-1/100000.), num_frames, 0, 1, -1)
+            ef_burst.setup(exp_period, exp_time, num_frames, offset, 1, -1)
+            gh_burst.setup(exp_period, exp_period*(1.-1./1000.), num_frames, 0, 1, -1)
 
         if exp_type == 'muscle':
-            ab_burst_2.setup(struck_meas_time, 0, struck_num_meas+1, 0, 1, -1)
+            ab_burst_2.setup(struck_meas_time, 0, struck_num_meas+1, 0, 1, -1) #Irrelevant
             cd_burst_2.setup(struck_meas_time, struck_meas_time/2., struck_num_meas+1, 0, 1, -1)
-            ef_burst_2.setup(struck_meas_time, struck_meas_time/2., struck_num_meas+1, 0, 1, -1) #Irrelevant
-            gh_burst_2.setup(struck_meas_time, struck_meas_time/2., struck_num_meas+1, 0, 1, -1) #Irrelevant
+            ef_burst_2.setup(struck_meas_time, 0, struck_num_meas+1, 0, 1, -1) #Irrelevant
+            gh_burst_2.setup(struck_meas_time, 0, struck_num_meas+1, 0, 1, -1) #Irrelevant
 
         for cur_trig in range(1,num_trig+1):
             #Runs a loop for each expected trigger signal (internal or external)
@@ -1452,6 +1465,8 @@ class ExpCommThread(threading.Thread):
             except (mp.Device_Action_Failed_Error, mp.Unparseable_String_Error):
                 pass
 
+        aborted = False
+
         struck.stop()
         ab_burst.stop()
 
@@ -1477,7 +1492,7 @@ class ExpCommThread(threading.Thread):
             ab_burst_2.arm()
 
         if continuous_exp:
-            if not (exp_type == 'muscle' and wait_for_trig):
+            if not exp_type == 'muscle' and not wait_for_trig:
                 dio_out9.write(1)
 
         if exp_type != 'muscle':
@@ -1492,9 +1507,10 @@ class ExpCommThread(threading.Thread):
         if self._abort_event.is_set():
             self.fast_mode_abort_cleanup(det, struck, ab_burst, ab_burst_2,
                 dio_out9, dio_out6, exp_time)
+            aborted = True
             return False
 
-        logger.info('Exposures started')
+        logger.debug('Exposures started')
         self._exp_event.set()
 
         last_meas = 0
@@ -1516,6 +1532,7 @@ class ExpCommThread(threading.Thread):
                         "status could not be verified"))
                 self.fast_mode_abort_cleanup(det, struck, ab_burst, ab_burst_2,
                     dio_out9, dio_out6, exp_time)
+                aborted = True
                 break
 
             if exp_type != 'muscle':
@@ -1570,16 +1587,19 @@ class ExpCommThread(threading.Thread):
 
         while det.get_status() & 0x1 !=0:
             time.sleep(0.001)
-            if self._abort_event.is_set():
+            if self._abort_event.is_set() and not aborted:
                 self.fast_mode_abort_cleanup(det, struck, ab_burst, ab_burst_2,
                     dio_out9, dio_out6, exp_time)
+                aborted = True
                 break
 
         logger.info('Exposures done')
 
         if self._abort_event.is_set():
-            self.fast_mode_abort_cleanup(det, struck, ab_burst, ab_burst_2,
-                dio_out9, dio_out6, exp_time)
+            if not aborted:
+                self.fast_mode_abort_cleanup(det, struck, ab_burst, ab_burst_2,
+                    dio_out9, dio_out6, exp_time)
+                aborted = True
             return False
 
         return True
@@ -1622,6 +1642,8 @@ class ExpCommThread(threading.Thread):
                     log_vals, dark_counts, extra_vals, zpad)
 
                 f.write(val)
+
+                logger.info(val.rstrip('\n'))
 
     def write_counters_struck(self, cvals, num_frames, data_dir,
             fprefix, exp_period, dark_counts, log_vals, metadata,
@@ -1762,15 +1784,15 @@ class ExpCommThread(threading.Thread):
                     val = val + "\t{}".format(counter)
 
                     if log['name'] == 'Pilatus_Enable':
-                        if prev_pil_en_ctr < 1 and counter > 1:
+                        if prev_pil_en_ctr < 4.5 and counter > 4.5:
                             filenum = filenum + 1
                             sum_start = i
 
-                        elif prev_pil_en_ctr > 1 and counter < 1:
+                        elif prev_pil_en_ctr > 4.5 and counter < 4.5:
                             sum_end = i
                             write_summary = True
 
-                        if counter > 1:
+                        if counter > 4.5:
                             pil_file = True
                         else:
                             pil_file = False
@@ -1870,6 +1892,7 @@ class ExpCommThread(threading.Thread):
         dio_out6, exp_time):
         logger.info("Aborting fast exposure")
         if exp_time < 60:
+            logger.debug('Aborting detector')
             try:
                 det.stop()
             except (mp.Device_Action_Failed_Error, mp.Unparseable_String_Error):
@@ -1888,12 +1911,16 @@ class ExpCommThread(threading.Thread):
             except (mp.Device_Action_Failed_Error, mp.Unparseable_String_Error):
                 pass
 
+        logger.debug('Stopping triggers')
         ab_burst.stop()
 
         if ab_burst_2 is not None:
             ab_burst_2.stop()
 
+        logger.debug('Stopping Struck')
         struck.stop()
+
+        logger.debug('Closing shutters')
         dio_out9.write(0) #Close the fast shutter
         dio_out6.write(1) #Close the slow normally closed xia shutter
 
