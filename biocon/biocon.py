@@ -422,6 +422,7 @@ if __name__ == '__main__':
                                 'is_buffer' : False,
                                 'mixer'     : 'Chaotic S-bend (90 ms)',
                                 'notes'     : '',
+                                'separate_buffer'   : False,
                                 },
         'muscle_defaults'   : {'system'         : 'Mouse',
                                 'muscle_type'   : 'Cardiac',

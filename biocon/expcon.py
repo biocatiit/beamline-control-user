@@ -108,11 +108,18 @@ class ExpCommThread(threading.Thread):
         det_datafile_name = '{}.datafile_pattern'.format(remote_det_name)
         det_exp_time_name = '{}.ext_enable_time'.format(remote_det_name)
         det_exp_period_name = '{}.ext_enable_period'.format(remote_det_name)
+        det_local_datafile_root_name = '{}.local_datafile_root'.format(remote_det_name)
 
         det_datadir = mp.Net(server_record, det_datadir_name)
         det_filename = mp.Net(server_record, det_datafile_name)
         det_exp_time = mp.Net(server_record, det_exp_time_name)
         det_exp_period = mp.Net(server_record, det_exp_period_name)
+        det_local_datafile_root = mp.Net(server_record, det_local_datafile_root_name)
+
+        data_dir_root = copy.deepcopy(self._settings['base_data_dir']).replace(
+            self._settings['local_dir_root'], self.settings['remote_dir_root'], 1)
+
+        det_local_datafile_root.put(data_dir_root)
 
         logger.debug("Got detector records")
 
@@ -2342,7 +2349,15 @@ class ExpPanel(wx.Panel):
                 md_exp_type =  exp_values['metadata']['Experiment type:']
 
                 if md_exp_type == 'Batch mode SAXS':
-                    exp_type = 'Batch'
+                    if ('Needs Separate Buffer Measurement:' in exp_values['metadata']
+                        and not exp_values['metadata']['Needs Separate Buffer Measurement:']):
+                        # batch mode experiments where the running buffer is
+                        # good for subtraction can be treated like SEC experiments
+                        # in the pipeline
+                        exp_type = 'SEC'
+
+                    else:
+                        exp_type = 'Batch'
 
                 elif md_exp_type == 'SEC-SAXS' or md_exp_type == 'SEC-MALS-SAXS':
                     exp_type = 'SEC'
@@ -2370,14 +2385,14 @@ class ExpPanel(wx.Panel):
 
         if self.pipeline_ctrl is not None and exp_type is not None:
 
-                    # Note, in the future this should get parameters for batch
-                    # mode experiments out of the autosampler metadata, where you
-                    # define number of expeirments, and related sample and buffer
-                    # experiments and file prefixes. Right now, the only processing
-                    # the pipeline will do for batch mode is radial averaging, since
-                    # it doesn't know the associated sample and buffer files
-                    self.pipeline_ctrl.start_experiment(fprefix, exp_type, local_data_dir,
-                        fprefix, num_frames)
+            # Note, in the future this should get parameters for batch
+            # mode experiments out of the autosampler metadata, where you
+            # define number of expeirments, and related sample and buffer
+            # experiments and file prefixes. Right now, the only processing
+            # the pipeline will do for batch mode is radial averaging, since
+            # it doesn't know the associated sample and buffer files
+            self.pipeline_ctrl.start_experiment(fprefix, exp_type, local_data_dir,
+                fprefix, num_frames)
 
 
         self.set_status('Preparing exposure')
