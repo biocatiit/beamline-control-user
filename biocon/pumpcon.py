@@ -3448,8 +3448,8 @@ class PumpFrame(wx.Frame):
             self.pump_sizer.Remove(0)
 
         if setup_pumps is None:
-            setup_pumps = [('Sheath', 'VICI M50', 'COM3', ['625.84', '12.550'], {}, {}),
-                        ('Outlet', 'VICI M50', 'COM4', ['629.16', '12.354'], {}, {})
+            setup_pumps = [('Sheath', 'VICI M50', 'COM3', ['629.88', '13.381'], {}, {}),
+                        ('Outlet', 'VICI M50', 'COM4', ['626.36', '10.109'], {}, {})
                         ]
 
             # setup_pumps = [

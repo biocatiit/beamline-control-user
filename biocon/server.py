@@ -278,8 +278,8 @@ if __name__ == '__main__':
 
     # Coflow
 
-    setup_pumps = [('sheath', 'VICI M50', 'COM3', ['625.84', '12.550'], {}, {}),
-        ('outlet', 'VICI M50', 'COM4', ['629.16', '12.354'], {}, {})
+    setup_pumps = [('sheath', 'VICI M50', 'COM3', ['628.2', '13.051'], {}, {}),
+        ('outlet', 'VICI M50', 'COM4', ['626.36', '10.109'], {}, {})
         ]
 
     pump_local_comm_locks = {'sheath'    : pump_comm_locks[setup_pumps[0][2]],
