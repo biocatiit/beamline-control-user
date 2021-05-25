@@ -331,6 +331,17 @@ if __name__ == '__main__':
     #     title='Valve Control')
     # valve_frame.Show()
 
+    # Coflow
+
+    setup_valves = [('Coflow Sheath', 'Cheminert', 'COM7', [], {'positions' : 10}),
+        ]
+
+    valve_frame = valvecon.ValveFrame(valve_comm_locks, setup_valves, 
+        None, title='Valve Control')
+    valve_frame.Show()
+
+    
+
     app.MainLoop()
 
     try:
