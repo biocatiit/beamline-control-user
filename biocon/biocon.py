@@ -28,6 +28,7 @@ import sys
 import os
 from collections import OrderedDict
 from decimal import Decimal as D
+import multiprocessing
 
 if __name__ != '__main__':
     logger = logging.getLogger(__name__)
@@ -38,6 +39,8 @@ import expcon
 import coflowcon
 import trcon
 import metadata
+import scancon
+import pipeline_ctrl
 
 class BioFrame(wx.Frame):
     """
@@ -54,8 +57,8 @@ class BioFrame(wx.Frame):
 
         self.settings = settings
 
-        self.component_sizers = {}
         self.component_panels = {}
+        self.component_controls = {}
 
         self.Bind(wx.EVT_CLOSE, self._on_exit)
 
@@ -70,78 +73,87 @@ class BioFrame(wx.Frame):
 
         panel_sizer = wx.BoxSizer(wx.VERTICAL)
 
+        component_sizers = {}
+
         for key in self.settings['components']:
-            logger.info('Setting up %s panel', key)
-            if key == 'trsaxs_scan':
-                label = 'TRSAXS Scan'
-            elif key == 'trsaxs_flow':
-                label='TRSAXS Flow'
+
+            if key != 'pipeline':
+                logger.info('Setting up %s panel', key)
+                if key == 'trsaxs_scan':
+                    label = 'TRSAXS Scan'
+                elif key == 'trsaxs_flow':
+                    label='TRSAXS Flow'
+                else:
+                    label = key.capitalize()
+
+                box = wx.StaticBox(top_panel, label=label)
+                box.SetOwnForegroundColour(wx.Colour('firebrick'))
+                component_panel = self.settings['components'][key](self.settings[key],
+                    box, name=key)
+
+                component_sizer = wx.StaticBoxSizer(box, wx.VERTICAL)
+                component_sizer.Add(component_panel, proportion=1, border=2,
+                    flag=wx.EXPAND|wx.ALL)
+
+                component_sizers[key] = component_sizer
+                self.component_panels[key] = component_panel
+
             else:
-                label = key.capitalize()
+                ctrl = self.settings['components'][key](self.settings[key])
+                self.component_controls[key] = ctrl
 
-            box = wx.StaticBox(top_panel, label=label)
-            box.SetOwnForegroundColour(wx.Colour('firebrick'))
-            component_panel = self.settings['components'][key](self.settings[key], box, name=key)
-
-            component_sizer = wx.StaticBoxSizer(box, wx.VERTICAL)
-            component_sizer.Add(component_panel, proportion=1, border=2,
-                flag=wx.EXPAND|wx.ALL)
-
-            self.component_sizers[key] = component_sizer
-            self.component_panels[key] = component_panel
-
-        if ('exposure' in self.component_sizers or 'coflow' in self.component_sizers
-            or 'trsaxs_scan' in self.component_sizers or 'scan' in self.component_sizers):
+        if ('exposure' in component_sizers or 'coflow' in component_sizers
+            or 'trsaxs_scan' in component_sizers or 'scan' in component_sizers):
             exp_sizer = wx.BoxSizer(wx.HORIZONTAL)
 
-            if ('exposure' in self.component_sizers
-                and 'trsaxs_flow' in self.component_sizers
-                and 'metadata' in self.component_sizers):
+            if ('exposure' in component_sizers
+                and 'trsaxs_flow' in component_sizers
+                and 'metadata' in component_sizers):
 
                 sub_sub_sizer = wx.BoxSizer(wx.HORIZONTAL)
-                sub_sub_sizer.Add(self.component_sizers['metadata'], proportion=1,
+                sub_sub_sizer.Add(component_sizers['metadata'], proportion=1,
                     border=10, flag=wx.EXPAND|wx.ALL)
-                sub_sub_sizer.Add(self.component_sizers['exposure'], proportion=2,
+                sub_sub_sizer.Add(component_sizers['exposure'], proportion=2,
                     border=10, flag=wx.EXPAND|wx.ALL)
 
                 sub_sizer = wx.BoxSizer(wx.VERTICAL)
                 sub_sizer.Add(sub_sub_sizer, flag=wx.EXPAND)
-                sub_sizer.Add(self.component_sizers['trsaxs_flow'], proportion=1,
+                sub_sizer.Add(component_sizers['trsaxs_flow'], proportion=1,
                     border=10, flag=wx.EXPAND|wx.ALL)
 
                 exp_sizer.Add(sub_sizer, flag=wx.EXPAND, proportion=1)
 
-            elif ('exposure' in self.component_sizers
-                and 'trsaxs_flow' in self.component_sizers):
+            elif ('exposure' in component_sizers
+                and 'trsaxs_flow' in component_sizers):
                 sub_sizer = wx.BoxSizer(wx.VERTICAL)
-                sub_sizer.Add(self.component_sizers['exposure'],
+                sub_sizer.Add(component_sizers['exposure'],
                     border=10, flag=wx.EXPAND|wx.ALL)
-                sub_sizer.Add(self.component_sizers['trsaxs_flow'], proportion=1,
+                sub_sizer.Add(component_sizers['trsaxs_flow'], proportion=1,
                     border=10, flag=wx.EXPAND|wx.ALL)
 
                 exp_sizer.Add(sub_sizer, flag=wx.EXPAND, proportion=1)
 
-            elif ('exposure' in self.component_sizers
-                and 'metadata' in self.component_sizers):
-                exp_sizer.Add(self.component_sizers['metadata'], proportion=1,
+            elif ('exposure' in component_sizers
+                and 'metadata' in component_sizers):
+                exp_sizer.Add(component_sizers['metadata'], proportion=1,
                     border=10, flag=wx.EXPAND|wx.ALL)
-                exp_sizer.Add(self.component_sizers['exposure'], proportion=2,
-                    border=10, flag=wx.EXPAND|wx.ALL)
-
-            elif 'exposure' in self.component_sizers:
-                exp_sizer.Add(self.component_sizers['exposure'], proportion=1,
+                exp_sizer.Add(component_sizers['exposure'], proportion=2,
                     border=10, flag=wx.EXPAND|wx.ALL)
 
-            if 'coflow' in self.component_sizers:
-                exp_sizer.Add(self.component_sizers['coflow'], border=10,
+            elif 'exposure' in component_sizers:
+                exp_sizer.Add(component_sizers['exposure'], proportion=1,
+                    border=10, flag=wx.EXPAND|wx.ALL)
+
+            if 'coflow' in component_sizers:
+                exp_sizer.Add(component_sizers['coflow'], border=10,
                     flag=wx.EXPAND|wx.ALL)
 
-            if 'trsaxs_scan' in self.component_sizers:
-                exp_sizer.Add(self.component_sizers['trsaxs_scan'], border=10,
+            if 'trsaxs_scan' in component_sizers:
+                exp_sizer.Add(component_sizers['trsaxs_scan'], border=10,
                     flag=wx.EXPAND|wx.ALL)
 
-            if 'scan' in self.component_sizers:
-                exp_sizer.Add(self.component_sizers['scan'], border=5,
+            if 'scan' in component_sizers:
+                exp_sizer.Add(component_sizers['scan'], border=5,
                     flag=wx.EXPAND|wx.ALL)
 
             panel_sizer.Add(exp_sizer, flag=wx.EXPAND)
@@ -153,6 +165,12 @@ class BioFrame(wx.Frame):
 
         self.SetSizer(top_sizer)
 
+        if ('exposure' in self.component_panels
+            and 'pipeline' in self.component_controls):
+
+            self.component_panels['exposure'].set_pipeline_ctrl(
+                self.component_controls['pipeline'])
+
     def _on_exit(self, evt):
         """Stops all current pump motions and then closes the frame."""
         logger.debug('Closing the BioFrame')
@@ -160,16 +178,21 @@ class BioFrame(wx.Frame):
         for panel in self.component_panels.values():
             panel.on_exit()
 
+        for ctrl in self.component_controls.values():
+            ctrl.stop()
+
         self.Destroy()
 
 
 if __name__ == '__main__':
+    # multiprocessing.set_start_method('spawn')
+
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
 
     h1 = logging.StreamHandler(sys.stdout)
     h1.setLevel(logging.INFO)
-    # h1.setLevel(logging.DEBUG)
+    h1.setLevel(logging.DEBUG)
     formatter = logging.Formatter('%(asctime)s - %(message)s')
     h1.setFormatter(formatter)
 
@@ -212,19 +235,23 @@ if __name__ == '__main__':
         'fast_mode_max_exp_time': 2000,
         'wait_for_trig'         : False,
         'num_trig'              : '1',
-        'show_advanced_options' : False,
+        'show_advanced_options' : True,
         'fe_shutter_pv'         : 'FE:18:ID:FEshutter',
         'd_shutter_pv'          : 'PA:18ID:STA_D_SDS_OPEN_PL.VAL',
+        'col_vac_pv'            : '18ID:VAC:D:Cols',
+        'guard_vac_pv'          : '18ID:VAC:D:Guards',
+        'sample_vac_pv'         : '18ID:VAC:D:Sample',
+        'sc_vac_pv'             : '18ID:VAC:D:ScatterChamber',
         'local_dir_root'        : '/nas_data/Pilatus1M',
         'remote_dir_root'       : '/nas_data',
         'struck_log_vals'       : [{'mx_record': 'mcs3', 'channel': 2, 'name': 'I0',
             'scale': 1, 'offset': 0, 'dark': True, 'norm_time': False}, #Format: (mx_record_name, struck_channel, header_name, scale, offset, use_dark_current, normalize_by_exp_time)
             {'mx_record': 'mcs4', 'channel': 3, 'name': 'I1', 'scale': 1,
             'offset': 0, 'dark': True, 'norm_time': False},
-            {'mx_record': 'mcs5', 'channel': 4, 'name': 'I2', 'scale': 1,
-            'offset': 0, 'dark': True, 'norm_time': False},
-            {'mx_record': 'mcs6', 'channel': 5, 'name': 'I3', 'scale': 1,
-            'offset': 0, 'dark': True, 'norm_time': False},
+            # {'mx_record': 'mcs5', 'channel': 4, 'name': 'I2', 'scale': 1,
+            # 'offset': 0, 'dark': True, 'norm_time': False},
+            # {'mx_record': 'mcs6', 'channel': 5, 'name': 'I3', 'scale': 1,
+            # 'offset': 0, 'dark': True, 'norm_time': False},
             {'mx_record': 'mcs11', 'channel': 10, 'name': 'Beam_current',
             'scale': 5000, 'offset': 0.5, 'dark': False, 'norm_time': True},
             # {'mx_record': 'mcs12', 'channel': 11, 'name': 'Flow_rate',
@@ -240,14 +267,18 @@ if __name__ == '__main__':
             'scale': 1, 'offset': 0, 'norm_time': False}, #Format: (mx_record_name, struck_channel, header_name, scale, offset, use_dark_current, normalize_by_exp_time)
             {'mx_record': 'j4', 'name': 'I1', 'scale': 1, 'offset': 0,
             'norm_time': False},
-            {'mx_record': 'j5', 'name': 'I2', 'scale': 1, 'offset': 0,
-            'norm_time': False},
-            {'mx_record': 'j6', 'name': 'I3', 'scale': 1, 'offset': 0,
-            'norm_time': False},
+            # {'mx_record': 'j5', 'name': 'I2', 'scale': 1, 'offset': 0,
+            # 'norm_time': False},
+            # {'mx_record': 'j6', 'name': 'I3', 'scale': 1, 'offset': 0,
+            # 'norm_time': False},
             {'mx_record': 'j11', 'name': 'Beam_current', 'scale': 5000,
             'offset': 0.5, 'norm_time': True}
             ],
-        'base_data_dir'         : '/nas_data/Pilatus1M/2020_Run2/20200621_Srinivas', #CHANGE ME
+        'warnings'              : {'shutter' : True, 'col_vac' : {'check': True,
+            'thresh': 0.04}, 'guard_vac' : {'check': True, 'thresh': 0.04},
+            'sample_vac': {'check': True, 'thresh': 0.04}, 'sc_vac':
+            {'check': True, 'thresh':0.04}},
+        'base_data_dir'         : '/nas_data/Pilatus1M/2021_Run2', #CHANGE ME
         }
 
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']
@@ -260,7 +291,7 @@ if __name__ == '__main__':
         'remote_fm_ip'          : '164.54.204.53',
         'remote_fm_port'        : '5557',
         'flow_units'            : 'mL/min',
-        'sheath_pump'           : ('VICI_M50', 'COM3', [625.84, 12.55], {}),
+        'sheath_pump'           : ('VICI_M50', 'COM3', [628.2, 13.051], {}),
         'outlet_pump'           : ('VICI_M50', 'COM4', [629.16, 12.354], {}),
         'sheath_fm'             : ('BFS', 'COM5', [], {}),
         'outlet_fm'             : ('BFS', 'COM6', [], {}),
@@ -270,6 +301,8 @@ if __name__ == '__main__':
         'warning_threshold_high': 1.2,
         'settling_time'         : 5000, #in ms
         'lc_flow_rate'          : '0.7',
+        'show_sheath_warning'   : True,
+        'show_outlet_warning'   : True,
         }
 
     trsaxs_settings = {
@@ -389,6 +422,7 @@ if __name__ == '__main__':
                                 'is_buffer' : False,
                                 'mixer'     : 'Chaotic S-bend (90 ms)',
                                 'notes'     : '',
+                                'separate_buffer'   : False,
                                 },
         'muscle_defaults'   : {'system'         : 'Mouse',
                                 'muscle_type'   : 'Cardiac',
@@ -399,15 +433,23 @@ if __name__ == '__main__':
         'metadata_type'     : 'auto',
         }
 
+    pipeline_settings = {
+        'components'    : ['pipeline'],
+        'server_port'   : '5556',
+        'server_ip'     : '164.54.204.82',
+        # 'raw_settings'  : '/nas_data/Pilatus1M/2021_Run1/20210129_Hopkins/setup/calibration/pipeline_SAXS.cfg',
+        }
+
     biocon_settings = {}
 
     components = OrderedDict([
         ('exposure', expcon.ExpPanel),
-        ('coflow', coflowcon.CoflowPanel),
+        # ('coflow', coflowcon.CoflowPanel),
         # ('trsaxs_scan', trcon.TRScanPanel),
         # ('trsaxs_flow', trcon.TRFlowPanel),
         # ('scan',    scancon.ScanPanel),
-        ('metadata', metadata.ParamPanel)
+        ('metadata', metadata.ParamPanel),
+        # ('pipeline', pipeline_ctrl.PipelineControl)
         ])
 
     settings = {
@@ -417,6 +459,7 @@ if __name__ == '__main__':
         'trsaxs_flow'   : trsaxs_settings,
         'scan'          : scan_settings,
         'metadata'      : metadata_settings,
+        'pipeline'      : pipeline_settings,
         'components'    : components,
         'biocon'        : biocon_settings,
         }
@@ -437,8 +480,8 @@ if __name__ == '__main__':
         os.mkdir(info_dir)
 
     h2 = handlers.RotatingFileHandler(os.path.join(info_dir, 'biocon.log'), maxBytes=10e6, backupCount=5, delay=True)
-    # h2.setLevel(logging.INFO)
-    h2.setLevel(logging.DEBUG)
+    h2.setLevel(logging.INFO)
+    # h2.setLevel(logging.DEBUG)
     formatter2 = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
     h2.setFormatter(formatter2)
 

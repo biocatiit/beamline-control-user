@@ -111,10 +111,6 @@ class ParamPanel(wx.Panel):
 
         return metadata
 
-    # def _on_get_metadata(self, evt):
-    #     metadata = self.metadata()
-    #     print(metadata)
-
     def on_exit(self):
         pass
 
@@ -139,6 +135,7 @@ class SAXSPanel(wx.Panel):
         self.lc_column_choice.SetStringSelection(defaults['column'])
         self.mixer_type.SetStringSelection(defaults['mixer'])
         self.notes.SetValue(defaults['notes'])
+        self.separate_buffer.SetValue(defaults['separate_buffer'])
 
         self._set_experiment_type()
 
@@ -207,11 +204,13 @@ class SAXSPanel(wx.Panel):
 
         self.is_buffer = wx.Choice(ctrl_parent, choices=['True', 'False'])
         self.is_buffer.SetSelection(1)
+        self.separate_buffer = wx.CheckBox(ctrl_parent, label='Use separate buffer measurement')
 
-        self.batch_sizer = wx.FlexGridSizer(cols=2, vgap=5, hgap=5)
+        self.batch_sizer = wx.GridBagSizer(vgap=5, hgap=5)
         self.batch_sizer.Add(wx.StaticText(ctrl_parent, label='Is buffer:'),
-            flag=wx.ALIGN_CENTER_VERTICAL)
-        self.batch_sizer.Add(self.is_buffer, flag=wx.ALIGN_CENTER_VERTICAL)
+            pos=(0,0), flag=wx.ALIGN_CENTER_VERTICAL)
+        self.batch_sizer.Add(self.is_buffer, pos=(0,1), flag=wx.ALIGN_CENTER_VERTICAL)
+        self.batch_sizer.Add(self.separate_buffer, pos=(1,0), span=(0, 2))
 
 
         mixers = ['Chaotic S-bend (90 ms)', 'Chaotic S-bend (1 s)',
@@ -283,9 +282,10 @@ class SAXSPanel(wx.Panel):
 
             if self.is_buffer.GetStringSelection() == 'True':
                 metadata['Is Buffer:'] = True
-                metadata['Concentration [mg/ml]:'] = ''
             else:
                 metadata['Is Buffer:'] = False
+                metadata['Concentration [mg/ml]:'] = ''
+                metadata['Needs Separate Buffer Measurement:'] = self.separate_buffer.GetValue()
 
         elif exp_type == 'TR-SAXS':
             metadata['Mixer:'] = self.mixer_type.GetStringSelection()
@@ -457,6 +457,7 @@ if __name__ == '__main__':
                                 'is_buffer' : False,
                                 'mixer'     : 'Chaotic S-bend (90 ms)',
                                 'notes'     : '',
+                                'separate_buffer'   : False,
                                 },
         'muscle_defaults'   : {'system'         : 'Mouse',
                                 'muscle_type'   : 'Cardiac',

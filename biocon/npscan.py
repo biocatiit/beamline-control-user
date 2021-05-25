@@ -93,9 +93,7 @@ class ScanProcess(multiprocessing.Process):
         self.motor_name2 = ''
 
         self.np_motor = None
-        self.xps = xps_drivers.XPS()
 
-        mp.set_user_interrupt_function(self._stop_scan)
 
         self._commands = {'start_mxdb'      : self._start_mxdb,
                         'set_scan_params'   : self._set_scan_params,
@@ -114,6 +112,11 @@ class ScanProcess(multiprocessing.Process):
         and then runs them. It is aborted if the abort_event is set. It is stopped
         when the stop_event is set, and that allows the process to end gracefully.
         """
+
+        self.xps = xps_drivers.XPS()
+
+        mp.set_user_interrupt_function(self._stop_scan)
+
         while True:
             try:
                 cmd, args, kwargs = self.command_queue.get_nowait()
@@ -1080,6 +1083,7 @@ class ScanPanel(wx.Panel):
                 agwStyle=wx.ICON_EXCLAMATION|wx.YES_NO|wx.CANCEL, wrap=500)
             dialog.SetYesNoCancelLabels('Overwrite', 'Remove old scan', 'Abort')
             result = dialog.ShowModal()
+            dialog.Destroy()
 
             if result == wx.ID_YES:
                 cont = True
@@ -1112,10 +1116,8 @@ class ScanPanel(wx.Panel):
             scan_return = None
 
         if scan_return is not None and scan_return != 'stop_live_plotting':
-            self.live_plt_evt.clear()
-            self.live_thread = threading.Thread(target=self.live_plot, args=(scan_return,))
-            self.live_thread.daemon = True
-            self.live_thread.start()
+            self._start_live_plot(scan_return)
+
         elif scan_return == 'stop_live_plotting':
             self.scan_timer.Stop()
             self.live_plt_evt.set()
@@ -1470,12 +1472,11 @@ class ScanPanel(wx.Panel):
 
         return redraw
 
-    def live_plot(self, filename):
-        """
-        This does the live plotting. It is intended to be run in its own
-        thread. It first clears all of the plot related variables and clears
-        the plot. It then enters a loop where it reads from the scan file
-        and plots the points as they come in, until the scan ends.
+    def _start_live_plot(self, filename):
+         """
+        This starts the live plotting. It first clears all of the plot related
+        variables and clears the plot. It then starts a thread that monitors the
+        scan results.
 
         :param str filename: The filename of the scan file to live plot.
         """
@@ -1537,9 +1538,24 @@ class ScanPanel(wx.Panel):
         self.com = None
         self.der_com = None
 
-        wx.CallAfter(self.update_plot)
-        wx.CallAfter(self._update_results)
+        self.update_plot()
+        self._update_results()
         wx.Yield()
+
+        self.live_plt_evt.clear()
+        self.live_thread = threading.Thread(target=self.live_plot, args=(filename,))
+        self.live_thread.daemon = True
+        self.live_thread.start()
+
+    def live_plot(self, filename):
+        """
+        This does the live plotting. It is intended to be run in its own
+        thread. It first clears all of the plot related variables and clears
+        the plot. It then enters a loop where it reads from the scan file
+        and plots the points as they come in, until the scan ends.
+
+        :param str filename: The filename of the scan file to live plot.
+        """
 
         if not os.path.exists(filename):
             time.sleep(0.1)
@@ -2043,9 +2059,10 @@ class ScanPanel(wx.Panel):
 
             if dialog.ShowModal() == wx.ID_OK:
                 path = dialog.GetPath()
+                dialog.Destroy()
             else:
+                dialog.Destroy()
                 return
-            dialog.Destroy()
 
             path=os.path.splitext(path)[0]+'.csv'
 

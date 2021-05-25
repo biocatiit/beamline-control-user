@@ -429,6 +429,7 @@ class WarningMessage(wx.Frame):
         self.Layout()
         self.SendSizeEvent()
         self.Fit()
+        self.SetSize(self.GetSize()[0], self.GetSize()[1]+30)
         self.Raise()
 
     def _create_layout(self, msg):
@@ -447,7 +448,7 @@ class WarningMessage(wx.Frame):
 
 
         panel_sizer = wx.BoxSizer(wx.VERTICAL)
-        panel_sizer.Add(msg_sizer, proportion=1, border=5, flag=wx.LEFT|wx.RIGHT|wx.TOP|wx.EXPAND)
+        panel_sizer.Add(msg_sizer, proportion=1, border=5, flag=wx.ALL|wx.EXPAND)
         panel_sizer.Add(button_sizer, border=5, flag=wx.ALL|wx.ALIGN_CENTER_HORIZONTAL)
 
         msg_panel.SetSizer(panel_sizer)
