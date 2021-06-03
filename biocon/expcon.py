@@ -43,6 +43,7 @@ import numpy as np
 import motorcon
 import utils
 import XPS_C8_drivers as xps_drivers
+import epics
 
 utils.set_mppath() #This must be done before importing any Mp Modules.
 import Mp as mp
@@ -168,7 +169,6 @@ class ExpCommThread(threading.Thread):
             'dio': [mx_database.get_record('do_{}'.format(i)) for i in range(16)],
             'joerger': mx_database.get_record('joerger_timer'),
             'joerger_ctrs':[mx_database.get_record('j2')] + [mx_database.get_record(log['mx_record']) for log in self._settings['joerger_log_vals']],
-            'ki0'   : mx_database.get_record('ki0'),
             'ki1'   : mx_database.get_record('ki1'),
             'ki2'   : mx_database.get_record('ki2'),
             'ki3'   : mx_database.get_record('ki3'),
@@ -176,6 +176,12 @@ class ExpCommThread(threading.Thread):
             'motors'  : {},
             'attenuators' : attenuators,
             }
+
+        if self._settings['use_old_i0_gain']:
+            mx_data['ki0'] = mx_database.get_record('ki0')
+        else:
+            mx_data['ki0'] = epics.PV(self._settings['i0_gain_pv'])
+            mx_data['ki0'].get()
 
         logger.debug("Generated mx_data")
 
@@ -1834,7 +1840,22 @@ class ExpCommThread(threading.Thread):
         return header
 
     def _add_metadata(self, metadata):
-        metadata['I0 gain:'] = '{:.0e}'.format(self._mx_data['ki0'].get_gain())
+        if self._settings['use_old_i0_gain']:
+            i0_gain = mx_data['ki0'].get_gain()
+        else:
+            value = mx_data['ki0'].get()
+            if value == 0:
+                i0_gain = 1e+07
+            elif value == 1:
+                i0_gain = 1e+06
+            elif value == 2:
+                i0_gain = 1e+05
+            elif value == 3:
+                i0_gain = 1e+04
+            elif value == 4:
+                i0_gain = 1e+02
+
+        metadata['I0 gain:'] = '{:.0e}'.format(i0_gain)
         metadata['I1 gain:'] = '{:.0e}'.format(self._mx_data['ki1'].get_gain())
         metadata['I2 gain:'] = '{:.0e}'.format(self._mx_data['ki2'].get_gain())
         metadata['I3 gain:'] = '{:.0e}'.format(self._mx_data['ki3'].get_gain())
@@ -3237,6 +3258,8 @@ if __name__ == '__main__':
         'guard_vac_pv'          : '18ID:VAC:D:Guards',
         'sample_vac_pv'         : '18ID:VAC:D:Sample',
         'sc_vac_pv'             : '18ID:VAC:D:ScatterChamber',
+        'use_old_i0_gain'       : False,
+        'i0_gain_pv'            : '18ID_D_BPM_Gain:Level-SP'
         'local_dir_root'        : '/nas_data/Pilatus1M',
         'remote_dir_root'       : '/nas_data',
         'struck_log_vals'       : [{'mx_record': 'mcs3', 'channel': 2, 'name': 'I0',
