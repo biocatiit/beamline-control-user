@@ -192,7 +192,7 @@ if __name__ == '__main__':
 
     h1 = logging.StreamHandler(sys.stdout)
     h1.setLevel(logging.INFO)
-    # h1.setLevel(logging.DEBUG)
+    h1.setLevel(logging.DEBUG)
     formatter = logging.Formatter('%(asctime)s - %(message)s')
     h1.setFormatter(formatter)
 
@@ -278,7 +278,7 @@ if __name__ == '__main__':
             'thresh': 0.04}, 'guard_vac' : {'check': True, 'thresh': 0.04},
             'sample_vac': {'check': True, 'thresh': 0.04}, 'sc_vac':
             {'check': True, 'thresh':0.04}},
-        'base_data_dir'         : '/nas_data/Pilatus1M/2021_Run1', #CHANGE ME
+        'base_data_dir'         : '/nas_data/Pilatus1M/2021_Run2', #CHANGE ME
         }
 
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']
@@ -444,7 +444,7 @@ if __name__ == '__main__':
 
     components = OrderedDict([
         ('exposure', expcon.ExpPanel),
-        ('coflow', coflowcon.CoflowPanel),
+        # ('coflow', coflowcon.CoflowPanel),
         # ('trsaxs_scan', trcon.TRScanPanel),
         # ('trsaxs_flow', trcon.TRFlowPanel),
         # ('scan',    scancon.ScanPanel),
