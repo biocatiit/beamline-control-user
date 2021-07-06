@@ -676,10 +676,29 @@ class ExpCommThread(threading.Thread):
             step_num = None
             set_step_speed = False
 
-            x_positions = [i*tr_scan_settings['x_pco_step']+tr_scan_settings['x_pco_start']
-                for i in range(num_frames)]
-            y_positions = [i*tr_scan_settings['y_pco_step']+tr_scan_settings['y_pco_start']
-                for i in range(num_frames)]
+            if pco_direction == 'x':
+                x_positions = [i*tr_scan_settings['x_pco_step']+tr_scan_settings['x_pco_start']
+                    for i in range(num_frames)]
+
+                step_start = tr_scan_settings['y_start']
+                step_end = tr_scan_settings['y_end']
+
+                if step_start != step_end:
+                    y_positions = np.linspace(step_start, step_end, len(x_positions))
+                else:
+                    y_positions = np.array([step_start]*len(x_positions))
+
+            else:
+                y_positions = [i*tr_scan_settings['y_pco_step']+tr_scan_settings['y_pco_start']
+                    for i in range(num_frames)]
+
+                step_start = tr_scan_settings['x_start']
+                step_end = tr_scan_settings['x_end']
+
+                if step_start != step_end:
+                    x_positions = np.linspace(step_start, step_end, len(y_positions))
+                else:
+                    x_positions = np.array([step_start]*len(y_positions))
 
             for current_run in range(1,num_runs+1):
                 if self._abort_event.is_set():
@@ -1121,6 +1140,7 @@ class ExpCommThread(threading.Thread):
             else:
                 motor = self._mx_data['mx_db'].get_record(motor_name)
                 self._mx_data['motors'][motor_name] = motor
+
         elif motor_type == 'Newport':
             if self.xps is None:
                 np_group = motor_params['np_group']
