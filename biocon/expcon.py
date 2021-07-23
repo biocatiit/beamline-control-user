@@ -21,6 +21,7 @@
 from __future__ import absolute_import, division, print_function, unicode_literals
 from builtins import object, range, map
 from io import open
+import six
 
 import threading
 import time
@@ -33,6 +34,11 @@ import decimal
 from decimal import Decimal as D
 import datetime
 import copy
+
+if six.PY2:
+    import subprocess32 as subprocess
+else:
+    import subprocess
 
 if __name__ != '__main__':
     logger = logging.getLogger(__name__)
@@ -52,7 +58,7 @@ import MpCa as mpca
 class ExpCommThread(threading.Thread):
 
     def __init__(self, command_queue, return_queue, abort_event, exp_event,
-        settings, name=None):
+        timeout_event, settings, name=None):
         """
         Initializes the custom thread.
         """
@@ -66,6 +72,7 @@ class ExpCommThread(threading.Thread):
         self.return_queue = return_queue
         self._abort_event = abort_event
         self._exp_event = exp_event
+        self._timeout_event = timeout_event
         self._stop_event = threading.Event()
         self._settings = settings
 
@@ -1632,12 +1639,26 @@ class ExpCommThread(threading.Thread):
 
     def write_log_header(self, data_dir, fprefix, log_vals, metadata,
             extra_vals=None):
-        data_dir = data_dir.replace(self._settings['remote_dir_root'],
-            self._settings['local_dir_root'], 1)
+
+        if self.timeout_event.is_set():
+            data_dir = os.path.expanduser('~')
+
+        else:
+            data_dir = data_dir.replace(self._settings['remote_dir_root'],
+                self._settings['local_dir_root'], 1)
+
+            try:
+                subprocess.check_call(['test', '-d', data_dir], timeout=30)
+            except Exception:
+                self.timeout_event.set()
+                self.return_queue.append(['timeout', [data_dir, os.path.expanduser('~')]])
+                data_dir = os.path.expanduser('~')
+
 
         header = self.format_log_header(metadata, log_vals, extra_vals)
 
         log_file = os.path.join(data_dir, '{}.log'.format(fprefix))
+
 
         with open(log_file, 'w') as f:
             f.write(header)
@@ -1648,8 +1669,20 @@ class ExpCommThread(threading.Thread):
             fprefix, exp_period, num_frames, dark_counts, log_vals,
             extra_vals=None):
         logger.debug('Appending log counters to file')
-        data_dir = data_dir.replace(self._settings['remote_dir_root'],
-            self._settings['local_dir_root'], 1)
+
+        if self.timeout_event.is_set():
+            data_dir = os.path.expanduser('~')
+
+        else:
+            data_dir = data_dir.replace(self._settings['remote_dir_root'],
+                self._settings['local_dir_root'], 1)
+
+            try:
+                subprocess.check_call(['test', '-d', data_dir], timeout=30)
+            except Exception:
+                self.timeout_event.set()
+                self.return_queue.append(['timeout', [data_dir, os.path.expanduser('~')]])
+                data_dir = os.path.expanduser('~')
 
         if num_frames <= 9999:
             zpad = 4
@@ -1674,8 +1707,19 @@ class ExpCommThread(threading.Thread):
     def write_counters_struck(self, cvals, num_frames, data_dir,
             fprefix, exp_period, dark_counts, log_vals, metadata,
             extra_vals=None):
-        data_dir = data_dir.replace(self._settings['remote_dir_root'],
-            self._settings['local_dir_root'], 1)
+        if self.timeout_event.is_set():
+            data_dir = os.path.expanduser('~')
+
+        else:
+            data_dir = data_dir.replace(self._settings['remote_dir_root'],
+                self._settings['local_dir_root'], 1)
+
+            try:
+                subprocess.check_call(['test', '-d', data_dir], timeout=30)
+            except Exception:
+                self.timeout_event.set()
+                self.return_queue.append(['timeout', [data_dir, os.path.expanduser('~')]])
+                data_dir = os.path.expanduser('~')
 
         header = self.format_log_header(metadata, log_vals, extra_vals)
 
@@ -1742,7 +1786,19 @@ class ExpCommThread(threading.Thread):
 
     def write_counters_muscle(self, cvals, num_frames, data_dir, fprefix,
         exp_period, dark_counts, log_vals, metadata, extra_vals=None):
-        data_dir = data_dir.replace(self._settings['remote_dir_root'], self._settings['local_dir_root'], 1)
+        if self.timeout_event.is_set():
+            data_dir = os.path.expanduser('~')
+
+        else:
+            data_dir = data_dir.replace(self._settings['remote_dir_root'],
+                self._settings['local_dir_root'], 1)
+
+            try:
+                subprocess.check_call(['test', '-d', data_dir], timeout=30)
+            except Exception:
+                self.timeout_event.set()
+                self.return_queue.append(['timeout', [data_dir, os.path.expanduser('~')]])
+                data_dir = os.path.expanduser('~')
 
         header = self._get_header(metadata, log_vals)
 
@@ -2141,8 +2197,9 @@ class ExpPanel(wx.Panel):
         self.exp_ret_q = deque()
         self.abort_event = threading.Event()
         self.exp_event = threading.Event()
+        self.timeout_event = threading.Event()
         self.exp_con = ExpCommThread(self.exp_cmd_q, self.exp_ret_q, self.abort_event,
-            self.exp_event, self.settings, 'ExpCon')
+            self.exp_event, self.timeout_event, self.settings, 'ExpCon')
         self.exp_con.start()
 
         # self.exp_con = None #For testing purposes
@@ -2354,6 +2411,7 @@ class ExpPanel(wx.Panel):
             self.sc_vac_pv = None
 
         self.warning_dialog = None
+        self.timeout_dialog = None
 
         self.pipeline_ctrl = None
         self.pipeline_timer = None
@@ -2389,6 +2447,7 @@ class ExpPanel(wx.Panel):
     def start_exp(self):
         self.abort_event.clear()
         self.exp_event.clear()
+        self.timeout_event.clear()
 
         warnings_valid = self._check_warnings()
 
@@ -2573,8 +2632,8 @@ class ExpPanel(wx.Panel):
 
                 if status == 'scan':
                     self.set_scan_number(val)
-                elif status == 'counter_error':
-                    self._show_warning_dialog(val)
+                elif status == 'timeout':
+                    self._show_timeout_dialog(val)
 
         else:
             self._on_exp_finish()
@@ -2583,6 +2642,18 @@ class ExpPanel(wx.Panel):
         if self.warning_dialog is None:
             self.warning_dialog = utils.WarningMessage(self, msg, 'WARNING')
             self.warning_dialog.Show()
+
+        def _show_timeout_dialog(self, data):
+        old_dir = data[0]
+        new_dir = data[1]
+        msg = ('BioCon is unable to find the specified data directory: {} . '
+            'Any further experimental data, besides images, will be written '
+            'in the following directory: {} . Contact your beamline '
+            'scientist.'.format(old_dir, new_dir))
+
+        if self.timeout_dialog is None:
+            self.timeout_dialog = utils.WarningMessage(self, msg, 'WARNING')
+            self.timeout_dialog.Show()
 
     def _check_warnings(self):
         shutter_valid = self._check_shutters()
