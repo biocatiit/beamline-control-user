@@ -81,7 +81,6 @@ class ExpCommThread(threading.Thread):
         self._commands = {
             'start_exp'     : self._start_exp,
             'start_tr_exp'  : self._start_tr_exp,
-            'start_ms_exp'  : self._start_muscle_exp,
             'start_scan_exp': self._start_scan_exp,
             }
 
@@ -107,7 +106,10 @@ class ExpCommThread(threading.Thread):
 
         logger.debug("Initialized mx database")
 
-        det = mx_database.get_record('pilatus')
+        if self._settings['detector'].lower() == 'pilatus':
+            det = mx_database.get_record('pilatus')
+        else:
+            det = mx_database.get_record('mar')
 
         server_record_name = det.get_field('server_record')
         remote_det_name = det.get_field('remote_record_name')
@@ -237,252 +239,20 @@ class ExpCommThread(threading.Thread):
         **kwargs):
         kwargs['metadata'] = self._add_metadata(kwargs['metadata'])
 
-        self.fast_exposure(data_dir, fprefix, num_frames, exp_time, exp_period, **kwargs)
+        if self._settings['detector'].lower() == 'mar':
+            self.mar_exposure(data_dir, fprefix, num_frames, exp_time, exp_period, **kwargs)
+        else:
+            self.fast_exposure(data_dir, fprefix, num_frames, exp_time, exp_period, **kwargs)
 
     def _start_tr_exp(self, exp_settings, comp_settings):
         exp_settings['metadata'] = self._add_metadata(exp_settings['metadata'])
 
         self.tr_exposure(exp_settings, comp_settings)
 
-    def _start_muscle_exp(self, data_dir, fprefix, num_frames, exp_time, exp_period,
-        **kwargs):
-        kwargs['metadata'] = self._add_metadata(kwargs['metadata'])
-
-        # self.muscle_exposure(data_dir, fprefix, num_frames, exp_time, exp_period, **kwargs)
-        self.fast_exposure(data_dir, fprefix, num_frames, exp_time, exp_period,
-            exp_type='muscle', **kwargs)
-
     def _start_scan_exp(self, exp_settings, comp_settings):
         exp_settings['metadata'] = self._add_metadata(exp_settings['metadata'])
 
         self.scan_exposure(exp_settings, comp_settings)
-
-    def muscle_exposure(self, data_dir, fprefix, num_frames, exp_time, exp_period, **kwargs):
-        logger.debug('Setting up muscle exposure')
-        det = self._mx_data['det']          #Detector
-
-        struck = self._mx_data['struck']    #Struck SIS3820
-        s_counters = self._mx_data['struck_ctrs']
-        # struck_mode_pv = mpca.PV(self._mx_data['struck_pv']+':ChannelAdvance')
-        struck_meas_time = kwargs['struck_measurement_time']
-        struck_num_meas = kwargs['struck_num_meas']
-
-        ab_burst = self._mx_data['ab_burst']   #Shutter open/close control signal
-        cd_burst = self._mx_data['cd_burst']
-        ef_burst = self._mx_data['ef_burst']   #Pilatus trigger signal
-        gh_burst = self._mx_data['gh_burst']
-        dg645_trigger_source = self._mx_data['dg645_trigger_source']
-
-        ab_burst_2 = self._mx_data['ab_burst_2'] #Shutter continuously open control signal
-        cd_burst_2 = self._mx_data['cd_burst_2'] #Struck channel advance
-        ef_burst_2 = self._mx_data['ef_burst_2']
-        gh_burst_2 = self._mx_data['gh_burst_2']
-        dg645_trigger_source2 = self._mx_data['dg645_trigger_source2']
-
-        dio_out6 = self._mx_data['dio'][6]      #Xia/wharberton shutter N.C.
-        dio_out9 = self._mx_data['dio'][9]      #Shutter control signal (alt.)
-        dio_out10 = self._mx_data['dio'][10]    #SRS DG645 trigger
-
-        det_datadir = self._mx_data['det_datadir']
-        det_filename = self._mx_data['det_filename']
-        det_exp_time = self._mx_data['det_exp_time']
-        det_exp_period = self._mx_data['det_exp_period']
-
-        wait_for_trig = kwargs['wait_for_trig']
-        if wait_for_trig:
-            num_trig = kwargs['num_trig']
-        else:
-            num_trig = 1
-
-        shutter_speed_open = kwargs['shutter_speed_open']
-        shutter_speed_close = kwargs['shutter_speed_close']
-        shutter_pad = kwargs['shutter_pad']
-        shutter_cycle = kwargs['shutter_cycle']
-
-        total_shutter_speed = shutter_speed_open+shutter_speed_close+shutter_pad
-        s_open_time = shutter_speed_open + shutter_pad
-
-        log_vals = kwargs['struck_log_vals']
-
-        if exp_period > exp_time + total_shutter_speed and exp_period >= shutter_cycle:
-            logger.info('Shuttered mode')
-            continuous_exp = False
-        else:
-            logger.info('Continuous mode')
-            continuous_exp = True
-
-        for cur_trig in range(1,num_trig+1):
-            self.return_queue.append(['scan', cur_trig])
-
-            if det.get_status() & 0x1 !=0:
-                try:
-                    det.abort()
-                except (mp.Device_Action_Failed_Error, mp.Unparseable_String_Error):
-                    pass
-                try:
-                    det.abort()
-                except (mp.Device_Action_Failed_Error, mp.Unparseable_String_Error):
-                    pass
-
-            struck.stop()
-            ab_burst.stop()
-
-            dio_out9.write(0) # Make sure the NM shutter is closed
-            dio_out10.write(0) # Make sure the trigger is off
-
-            det_datadir.put(data_dir)
-
-            if wait_for_trig and num_trig > 1:
-                cur_fprefix = '{}_{:04}'.format(fprefix, cur_trig)
-                new_fname = '{}_0001.tif'.format(cur_fprefix)
-            else:
-                cur_fprefix = fprefix
-                new_fname = '{}_0001.tif'.format(cur_fprefix)
-
-            det_filename.put(new_fname)
-
-            det.set_duration_mode(num_frames)
-            det.set_trigger_mode(2)
-            det_exp_time.put(exp_time)
-            det_exp_period.put(exp_period)
-
-            # struck_mode_pv.caput(1, timeout=5)    #I think I don't need this anymore, needs testing
-            struck.set_measurement_time(struck_meas_time)   #Ignored for external LNE of Struck
-            struck.set_num_measurements(struck_num_meas)
-            struck.set_trigger_mode(0x2)    #Sets external mode, i.e. counting on first LNE
-
-            dg645_trigger_source.put(1)
-            dg645_trigger_source2.put(1)
-
-            if cur_trig == 1:
-                ab_burst.setup(0.000001, 0.000000, 1, 0, 1, -1)
-                cd_burst.setup(0.000001, 0.000000, 1, 0, 1, -1)
-                ef_burst.setup(0.000001, 0.000000, 1, 0, 1, -1)
-                gh_burst.setup(0.000001, 0.000000, 1, 0, 1, -1)
-
-                ab_burst_2.setup(0.000001, 0.000000, 1, 0, 1, -1)
-                cd_burst_2.setup(0.000001, 0.000000, 1, 0, 1, -1)
-                ef_burst_2.setup(0.000001, 0.000000, 1, 0, 1, -1)
-                gh_burst_2.setup(0.000001, 0.000000, 1, 0, 1, -1)
-
-                ab_burst.arm()
-                ab_burst_2.arm()
-
-                dio_out10.write( 1 )
-                time.sleep(0.01)
-                dio_out10.write( 0 )
-
-                status = ab_burst.get_status()
-
-                while (status & 0x1) != 0:
-                    time.sleep(0.01)
-
-            if not continuous_exp:
-                #Shutter opens and closes
-                ab_burst.setup(exp_period, exp_time+s_open_time, num_frames, 0, 1, -1)
-                cd_burst.setup(exp_period, (exp_period-(exp_time+s_open_time))/10.,
-                    num_frames, exp_time+s_open_time, 1, -1) #Irrelevant
-                ef_burst.setup(exp_period, exp_time, num_frames, s_open_time, 1, -1)
-                gh_burst.setup(exp_period, 0, num_frames, s_open_time, 1, -1) #Irrelevant
-
-                ab_burst_2.setup(struck_meas_time, 0, struck_num_meas+1, 0, 1, -1)
-            else:
-                #Shutter will be open continuously
-                offset = (exp_period - exp_time)/2.
-                ab_burst.setup(exp_period, exp_time, num_frames, offset, 1, -1) #Irrelevant
-                cd_burst.setup(exp_period, exp_time, num_frames, offset, 1, -1) #Irrelevant
-                ef_burst.setup(exp_period, exp_time, num_frames, offset, 1, -1)
-                gh_burst.setup(exp_period, exp_time, num_frames, offset, 1, -1) #Irrelevant
-
-                ab_burst_2.setup(struck_meas_time, struck_meas_time*(1-1/1000.), struck_num_meas+1, 0, 1, -1)
-
-
-            cd_burst_2.setup(struck_meas_time, struck_meas_time/2., struck_num_meas+1, 0, 1, -1)
-            ef_burst_2.setup(struck_meas_time, struck_meas_time/2., struck_num_meas+1, 0, 1, -1) #Irrelevant
-            gh_burst_2.setup(struck_meas_time, struck_meas_time/2., struck_num_meas+1, 0, 1, -1) #Irrelevant
-
-
-            dio_out6.write(0) #Open the slow normally closed xia shutter
-
-            ab_burst.get_status() #Maybe need to clear this status?
-
-            det.arm()
-            struck.start()
-            ab_burst.arm()
-            ab_burst_2.arm()
-
-            if continuous_exp and not wait_for_trig:
-                dio_out9.write(1)
-
-            time.sleep(1)
-
-            self.wait_for_trigger(wait_for_trig, cur_trig, exp_time, ab_burst,
-                ab_burst_2, det, struck, dio_out6, dio_out9, dio_out10)
-
-            if self._abort_event.is_set():
-                self.fast_mode_abort_cleanup(det, struck, ab_burst, ab_burst_2,
-                    dio_out9, dio_out6, exp_time)
-                break
-
-            logger.info('Exposures started')
-            self._exp_event.set()
-
-            timeouts = 0
-
-            while True:
-                #Struck is_busy doesn't work in thread! So have to go elsewhere
-
-                exp_done, timeouts = self.get_experiment_status(ab_burst,
-                    ab_burst_2, det, timeouts)
-
-                if exp_done:
-                    break
-
-                if self._abort_event.is_set() or timeouts >= 5:
-                    if timeouts >= 5:
-                        logger.error(("Exposure aborted because current exposure "
-                            "status could not be verified"))
-                    self.fast_mode_abort_cleanup(det, struck, ab_burst, ab_burst_2,
-                        dio_out9, dio_out6, exp_time)
-                    break
-
-                time.sleep(0.01)
-
-            if continuous_exp:
-                dio_out9.write(0)
-
-            dio_out6.write(1) #Close the slow normally closed xia shutter
-            struck.stop()
-            measurement = struck.read_all()
-
-            dark_counts = []
-            for i in range(len(s_counters)):
-                if log_vals[i]['dark']:
-                    dark_counts.append(s_counters[i].get_dark_current())
-                else:
-                    dark_counts.append(0)
-
-            logger.info('Writing counters')
-            self.write_counters_muscle(measurement, struck_num_meas, data_dir,
-                cur_fprefix, struck_meas_time, dark_counts, log_vals, kwargs['metadata'])
-
-            ab_burst.get_status() #Maybe need to clear this status?
-
-            while det.get_status() & 0x1 !=0:
-                time.sleep(0.001)
-                if self._abort_event.is_set():
-                    self.fast_mode_abort_cleanup(det, struck, ab_burst, ab_burst_2,
-                        dio_out9, dio_out6, exp_time)
-                    break
-
-            logger.info('Exposures done')
-
-            if self._abort_event.is_set():
-                self.fast_mode_abort_cleanup(det, struck, ab_burst, ab_burst_2,
-                    dio_out9, dio_out6, exp_time)
-                break
-
-        self._exp_event.clear()
 
     def tr_exposure(self, exp_settings, comp_settings):
         if 'trsaxs_scan' in comp_settings:
@@ -1637,6 +1407,167 @@ class ExpCommThread(threading.Thread):
 
         return True
 
+    def mar_exposure(self, data_dir, fprefix, num_frames, exp_time, exp_period,
+        exp_type='mar', **kwargs):
+        logger.debug('Setting up %s exposure', exp_type)
+        det = self._mx_data['det']          #Detector
+
+        struck = self._mx_data['struck']    #Struck SIS3820
+        s_counters = self._mx_data['struck_ctrs']
+
+        dio_out6 = self._mx_data['dio'][6]      #Xia/wharberton shutter N.C.
+        dio_out9 = self._mx_data['dio'][9]      #Shutter control signal (alt.)
+        dio_out10 = self._mx_data['dio'][10]    #SRS DG645 trigger
+
+        det_datadir = self._mx_data['det_datadir']
+        det_filename = self._mx_data['det_filename']
+        det_exp_time = self._mx_data['det_exp_time']
+        det_exp_period = self._mx_data['det_exp_period']
+
+        shutter_speed_open = kwargs['shutter_speed_open']
+        shutter_speed_close = kwargs['shutter_speed_close']
+        shutter_pad = kwargs['shutter_pad']
+        shutter_cycle = kwargs['shutter_cycle']
+
+        total_shutter_speed = shutter_speed_open+shutter_speed_close+shutter_pad
+        s_open_time = shutter_speed_open + shutter_pad
+
+        log_vals = kwargs['struck_log_vals']
+
+        if exp_period > exp_time + total_shutter_speed and exp_period >= shutter_cycle:
+            logger.info('Shuttered mode')
+            continuous_exp = False
+        else:
+            logger.info('Continuous mode')
+            continuous_exp = True
+
+        dark_counts = []
+        for i in range(len(s_counters)):
+            if log_vals[i]['dark']:
+                dark_counts.append(s_counters[i].get_dark_current())
+            else:
+                dark_counts.append(0)
+
+        extra_vals = []
+
+        det.set_duration_mode(num_frames)
+        det.set_trigger_mode(1)
+        det_exp_time.put(exp_time)
+        det_exp_period.put(exp_period)
+
+        struck.set_measurement_time(exp_time)   #Ignored for external LNE of Struck
+        struck.set_num_measurements(num_frames)
+        struck.set_trigger_mode(0x1)    #Sets internal trigger mode
+
+        if num_frames <= 9999:
+            exp_start_num = '0001'
+
+        elif num_frames > 9999 and num_frames <= 99999:
+            exp_start_num = '00001'
+
+        elif num_frames > 99999:
+            exp_start_num = '000001'
+
+        cur_fprefix = fprefix
+
+        new_fname = '{}_{}.tif'.format(cur_fprefix, exp_start_num)
+
+        if det.get_status() & 0x1 !=0:
+            try:
+                det.abort()
+            except (mp.Device_Action_Failed_Error, mp.Unparseable_String_Error):
+                pass
+            try:
+                det.abort()
+            except (mp.Device_Action_Failed_Error, mp.Unparseable_String_Error):
+                pass
+
+        aborted = False
+
+        struck.stop()
+
+        dio_out9.write(0) # Make sure the NM shutter is closed
+
+        det_datadir.put(data_dir)
+
+        det_filename.put(new_fname)
+
+        dio_out6.write(0) #Open the slow normally closed xia shutter
+
+        if exp_type != 'muscle':
+            self.write_log_header(data_dir, cur_fprefix, log_vals,
+                kwargs['metadata'])
+
+        time.sleep(1)
+
+        if self._abort_event.is_set():
+            self.mar_abort_cleanup(det, dio_out9, dio_out6, exp_time)
+
+            aborted = True
+            return False
+
+        logger.debug('Exposures started')
+        self._exp_event.set()
+
+        last_meas = 0
+
+        timeouts = 0
+
+        if continuous_exp:
+            dio_out9.write(1)
+
+        for i in range(num_frames):
+            for scaler in s_counters:
+                scaler.clear()
+            timer.clear()
+            if timer.is_busy():
+                timer.stop()
+
+            if not continuous_exp:
+                dio_out9.write(1)
+
+            timer.start(exp_time)
+
+            while timer.is_busy() != 0:
+                time.sleep(.01)
+                if self._abort_event.is_set() and not aborted:
+                    self.mar_abort_cleanup(det, dio_out9, dio_out6, exp_time)
+                    aborted = True
+                    break
+
+            if not continuous_exp:
+                dio_out9.write(0)
+
+            result = [str(scaler.read()) for scaler in scalers]
+
+            self.append_log_counters(cvals, prev_meas, current_meas,
+                    data_dir, cur_fprefix, exp_period, num_frames,
+                    dark_counts, log_vals, extra_vals)
+
+            while det.get_status() & 0x1 !=0:
+                time.sleep(0.001)
+                if self._abort_event.is_set() and not aborted:
+                    self.mar_abort_cleanup(det, dio_out9, dio_out6, exp_time)
+                    aborted = True
+                    break
+
+        if continuous_exp:
+            dio_out9.write(0)
+
+        dio_out6.write(1) #Close the slow normally closed xia shutter
+
+
+        logger.info('Exposures done')
+
+        if self._abort_event.is_set():
+            if not aborted:
+                self.fast_mode_abort_cleanup(det, struck, ab_burst, ab_burst_2,
+                    dio_out9, dio_out6, exp_time)
+                aborted = True
+            return False
+
+        self._exp_event.clear()
+
     def write_log_header(self, data_dir, fprefix, log_vals, metadata,
             extra_vals=None):
 
@@ -2013,6 +1944,36 @@ class ExpCommThread(threading.Thread):
 
         if ab_burst_2 is not None:
             ab_burst_2.stop()
+
+        logger.debug('Stopping Struck')
+        struck.stop()
+
+        logger.debug('Closing shutters')
+        dio_out9.write(0) #Close the fast shutter
+        dio_out6.write(1) #Close the slow normally closed xia shutter
+
+    def mar_abort_cleanup(self, det, dio_out9, dio_out6, exp_time):
+        logger.info('Aborting mar exposure')
+
+        if exp_time < 60:
+            logger.debug('Aborting detector')
+            try:
+                det.stop()
+            except (mp.Device_Action_Failed_Error, mp.Unparseable_String_Error):
+                pass
+            try:
+                det.abort()
+            except (mp.Device_Action_Failed_Error, mp.Unparseable_String_Error):
+                pass
+        else:
+            try:
+                det.abort()
+            except (mp.Device_Action_Failed_Error, mp.Unparseable_String_Error):
+                pass
+            try:
+                det.abort()
+            except (mp.Device_Action_Failed_Error, mp.Unparseable_String_Error):
+                pass
 
         logger.debug('Stopping Struck')
         struck.stop()
@@ -2530,8 +2491,6 @@ class ExpPanel(wx.Panel):
         if 'trsaxs_scan' in self.settings['components']:
             self.total_time = comp_settings['trsaxs_scan']['total_time']+1*comp_settings['trsaxs_scan']['num_scans']
             self.exp_cmd_q.append(('start_tr_exp', (exp_values, comp_settings), {}))
-        elif self.settings['tr_muscle_exp']:
-            self.exp_cmd_q.append(('start_ms_exp', (), exp_values))
         elif 'scan' in self.settings['components']:
             self.exp_cmd_q.append(('start_scan_exp', (exp_values, comp_settings), {}))
         else:
@@ -3380,6 +3339,7 @@ if __name__ == '__main__':
         'i0_gain_pv'            : '18ID_D_BPM_Gain:Level-SP'
         'local_dir_root'        : '/nas_data/Pilatus1M',
         'remote_dir_root'       : '/nas_data',
+        'detector'              : 'pilatus',
         'struck_log_vals'       : [{'mx_record': 'mcs3', 'channel': 2, 'name': 'I0',
             'scale': 1, 'offset': 0, 'dark': True, 'norm_time': False}, #Format: (mx_record_name, struck_channel, header_name, scale, offset, use_dark_current, normalize_by_exp_time)
             {'mx_record': 'mcs4', 'channel': 3, 'name': 'I1', 'scale': 1,
