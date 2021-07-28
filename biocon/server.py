@@ -62,8 +62,6 @@ class ControlServer(threading.Thread):
         threading.Thread.__init__(self, name=name)
         self.daemon = True
 
-        logger.info("Initializing control server: %s", self.name)
-
         self.ip = ip
         self.port = port
 
@@ -72,13 +70,19 @@ class ControlServer(threading.Thread):
 
         self._stop_event = threading.Event()
 
+        self.pump_comm_locks = pump_comm_locks
+        self.valve_comm_locks = valve_comm_locks
+
+    def run(self):
+        """
+        Custom run method for the thread.
+        """
+        logger.info("Initializing control server: %s", self.name)
+
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.PAIR)
         self.socket.set(zmq.LINGER, 0)
         self.socket.bind("tcp://{}:{}".format(self.ip, self.port))
-
-        self.pump_comm_locks = pump_comm_locks
-        self.valve_comm_locks = valve_comm_locks
 
         pump_cmd_q = deque()
         pump_return_q = deque()
@@ -128,10 +132,6 @@ class ControlServer(threading.Thread):
 
         self._device_control['valve'] = valve_ctrl
 
-    def run(self):
-        """
-        Custom run method for the thread.
-        """
         while True:
             try:
                 try:
@@ -156,9 +156,11 @@ class ControlServer(threading.Thread):
                     device = command['device']
                     device_cmd = command['command']
                     get_response = command['response']
-                    logger.debug("For device %s, processing cmd '%s' with args: %s and kwargs: %s ", device, device_cmd[0], ', '.join(['{}'.format(a) for a in device_cmd[1]]), ', '.join(['{}:{}'.format(kw, item) for kw, item in device_cmd[2].items()]))
-                    try:
+                    logger.debug("For device %s, processing cmd '%s' with args: %s and kwargs: %s ",
+                        device, device_cmd[0], ', '.join(['{}'.format(a) for a in device_cmd[1]]),
+                        ', '.join(['{}:{}'.format(kw, item) for kw, item in device_cmd[2].items()]))
 
+                    try:
                         if device == 'server':
                             if device_cmd[0] == 'ping':
                                 answer = 'ping received'
@@ -204,21 +206,21 @@ class ControlServer(threading.Thread):
             except Exception:
                 logger.error('Error in server thread:\n{}'.format(traceback.format_exc()))
 
-        if self._stop_event.is_set():
-            self._stop_event.clear()
-        # else:
-        #     self._abort()
-        logger.info("Quitting pump control thread: %s", self.name)
-
-    def stop(self):
-        """Stops the thread cleanly."""
-        # logger.info("Starting to clean up and shut down pump control thread: %s", self.name)
         self.socket.unbind("tcp://{}:{}".format(self.ip, self.port))
         self.socket.close(0)
         self.context.destroy(0)
 
         for device in self._device_control:
             self._device_control[device]['abort'].set()
+
+        if self._stop_event.is_set():
+            self._stop_event.clear()
+
+        logger.info("Quitting control thread: %s", self.name)
+
+    def stop(self):
+        """Stops the thread cleanly."""
+        # logger.info("Starting to clean up and shut down pump control thread: %s", self.name)
 
         self._stop_event.set()
 
