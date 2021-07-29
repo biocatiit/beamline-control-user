@@ -243,7 +243,7 @@ if __name__ == '__main__':
         'sample_vac_pv'         : '18ID:VAC:D:Sample',
         'sc_vac_pv'             : '18ID:VAC:D:ScatterChamber',
         'use_old_i0_gain'       : False,
-        'i0_gain_pv'            : '18ID_D_BPM_Gain:Level-SP'
+        'i0_gain_pv'            : '18ID_D_BPM_Gain:Level-SP',
         'local_dir_root'        : '/nas_data/Pilatus1M',
         'remote_dir_root'       : '/nas_data',
         'detector'              : 'pilatus',
