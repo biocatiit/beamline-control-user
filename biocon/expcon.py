@@ -2602,7 +2602,7 @@ class ExpPanel(wx.Panel):
             self.warning_dialog = utils.WarningMessage(self, msg, 'WARNING')
             self.warning_dialog.Show()
 
-        def _show_timeout_dialog(self, data):
+    def _show_timeout_dialog(self, data):
         old_dir = data[0]
         new_dir = data[1]
         msg = ('BioCon is unable to find the specified data directory: {} . '
