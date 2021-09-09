@@ -1010,11 +1010,13 @@ class ValveFrame(wx.Frame):
             self.valve_sizer.Remove(0)
 
         if setup_valves is None:
+            # setup_valves = [('Injection', 'Rheodyne', 'COM6', [], {'positions' : 2}),
+            #     ('Sample', 'Rheodyne', 'COM7', [], {'positions' : 6}),
+            #     ('Buffer 1', 'Rheodyne', 'COM8', [], {'positions' : 6}),
+            #     ('Buffer 2', 'Rheodyne', 'COM9', [], {'positions' : 6}),
+            #             ]
             setup_valves = [('Injection', 'Rheodyne', 'COM6', [], {'positions' : 2}),
-                ('Sample', 'Rheodyne', 'COM7', [], {'positions' : 6}),
-                ('Buffer 1', 'Rheodyne', 'COM8', [], {'positions' : 6}),
-                ('Buffer 2', 'Rheodyne', 'COM9', [], {'positions' : 6}),
-                        ]
+                ]
 
         logger.info('Initializing %s valves on startup', str(len(setup_valves)))
 
