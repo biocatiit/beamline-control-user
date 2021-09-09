@@ -93,9 +93,7 @@ class ScanProcess(multiprocessing.Process):
         self.motor_name2 = ''
 
         self.np_motor = None
-        self.xps = xps_drivers.XPS()
 
-        mp.set_user_interrupt_function(self._stop_scan)
 
         self._commands = {'start_mxdb'      : self._start_mxdb,
                         'set_scan_params'   : self._set_scan_params,
@@ -114,6 +112,11 @@ class ScanProcess(multiprocessing.Process):
         and then runs them. It is aborted if the abort_event is set. It is stopped
         when the stop_event is set, and that allows the process to end gracefully.
         """
+
+        self.xps = xps_drivers.XPS()
+
+        mp.set_user_interrupt_function(self._stop_scan)
+
         while True:
             try:
                 cmd, args, kwargs = self.command_queue.get_nowait()
@@ -155,7 +158,7 @@ class ScanProcess(multiprocessing.Process):
         self.mx_database = mp.setup_database(self.db_path)
         self.mx_database.set_plot_enable(2)
 
-        self.np_motor = motorcon.NewportXPSMotor('XY', self.xps, '164.54.204.74', 5001, 20, 'XY', 2)
+        self.np_motor = motorcon.NewportXPSMotor('XY', self.xps, '164.54.204.76', 5001, 20, 'XY', 2)
 
     def _get_devices(self):
         """
@@ -257,17 +260,33 @@ class ScanProcess(multiprocessing.Process):
         self.out_path = dir_path
         self.out_name = file_name
 
-        self.device = device
-        self.start = start
-        self.stop = stop
-        self.step = step
-
-        self.device2 = device2
-        self.start2 = start2
-        self.stop2 = stop2
-        self.step2 = step2
-
         self.scan_dim = scan_dim
+
+        if scan_dim == '1D':
+            self.device = device
+            self.start = start
+            self.stop = stop
+            self.step = step
+
+            self.device2 = device2
+            self.start2 = start2
+            self.stop2 = stop2
+            self.step2 = step2
+
+        else:
+            #To be consistent with MX
+            self.device = device2
+            self.start = start2
+            self.stop = stop2
+            self.step = step2
+
+            self.device2 = device
+            self.start2 = start
+            self.stop2 = stop
+            self.step2 = step
+
+
+
         self.scalers = scalers
         self.dwell_time = dwell_time
         self.timer = timer
@@ -305,13 +324,19 @@ class ScanProcess(multiprocessing.Process):
         stop = float(self.stop)
         step = abs(float(self.step))
 
-        if start < stop:
-            mtr1_positions = np.arange(start, stop+step, step)
+        if self.scan_dim == '1D':
+            if start < stop:
+                mtr1_positions = np.arange(start, stop+step, step)
+            else:
+                mtr1_positions = np.arange(stop, start+step, step)
+                mtr1_positions = mtr1_positions[::-1]
         else:
-            mtr1_positions = np.arange(stop, start+step, step)
-            mtr1_positions = mtr1_positions[::-1]
+            if start < stop:
+                mtr1_positions = np.arange(start, stop+step, step)
+            else:
+                mtr1_positions = np.arange(stop, start+step, step)
+                mtr1_positions = mtr1_positions[::-1]
 
-        if self.scan_dim == '2D':
             start2 = float(self.start2)
             stop2 = float(self.stop2)
             step2 = abs(float(self.step2))
@@ -353,9 +378,11 @@ class ScanProcess(multiprocessing.Process):
                 self._measure(scalers, timer, mtr1_pos, num)
 
             elif self.scan_dim == '2D':
+
                 self.np_motor.move_positioner_absolute(self.device2, m2_index, mtr2_positions[0])
 
                 for num2, mtr2_pos in enumerate(mtr2_positions):
+                    # logger.info('Moving motor 2 position to {}'.format(mtr2_pos))
                     if mtr2_pos != mtr2_positions[0]:
                         self.np_motor.move_positioner_absolute(self.device2, m2_index, mtr2_pos)
                     # mtr1.wait_for_motor2_stop()
@@ -895,7 +922,7 @@ class ScanPanel(wx.Panel):
                 num_pos2 = int(abs(math.floor((stop2 - start2)/step2)))+1
 
                 if start < stop:
-                    self.x_pos =  np.arange(start, stop+step, step) #Need 1 extra point for pcolormesh
+                    self.x_pos = np.array([start+i*step for i in range(num_pos+1)]) #Need 1 extra point for pcolormesh
                 else:
                     self.x_pos = np.array([stop-i*step for i in range(num_pos+1)])
 
@@ -907,18 +934,16 @@ class ScanPanel(wx.Panel):
                 self.x_pos = self.x_pos - step/2.
                 self.y_pos = self.y_pos - step2/2.
 
-                # self.plot.set_xlim(self.x_pos[0], self.x_pos[-1])
-                # self.plot.set_ylim(self.y_pos[0], self.y_pos[-1])
+                self.plot.set_xlim(self.x_pos[0], self.x_pos[-1])
+                self.plot.set_ylim(self.y_pos[0], self.y_pos[-1])
 
-                # self.grid = np.meshgrid(self.y_pos, self.x_pos)
+                self.plot.set_xlabel('Position 1')
+                self.plot.set_ylabel('Position 2')
+
+                self.grid = np.meshgrid(self.x_pos, self.y_pos)
                 self.total_points = num_pos*num_pos2
                 self.x_points = num_pos
                 self.y_points = num_pos2
-
-                # print(self.x_points)
-                # print(self.y_points)
-                # print(self.grid[0].shape)
-                # print(self.grid[1].shape)
 
             if scan_params['detector'] is not None:
                 self.det_scan = True
@@ -1020,6 +1045,16 @@ class ScanPanel(wx.Panel):
             wx.MessageBox(msg, "Failed to start scan", wx.OK)
             return None
 
+        if self.motor_name == '':
+            msg = ('Must select a device to scan.')
+            wx.MessageBox(msg, 'Failed to start scan', wx.OK)
+            return None
+
+        if self.motor_name2 == '' and scan_dim == '2D':
+            msg = ('Must select a second device to scan.')
+            wx.MessageBox(msg, 'Failed to start scan', wx.OK)
+            return None
+
         if scan_params['detector'] == 'None':
             scan_params['detector'] = None
 
@@ -1048,6 +1083,7 @@ class ScanPanel(wx.Panel):
                 agwStyle=wx.ICON_EXCLAMATION|wx.YES_NO|wx.CANCEL, wrap=500)
             dialog.SetYesNoCancelLabels('Overwrite', 'Remove old scan', 'Abort')
             result = dialog.ShowModal()
+            dialog.Destroy()
 
             if result == wx.ID_YES:
                 cont = True
@@ -1080,10 +1116,8 @@ class ScanPanel(wx.Panel):
             scan_return = None
 
         if scan_return is not None and scan_return != 'stop_live_plotting':
-            self.live_plt_evt.clear()
-            self.live_thread = threading.Thread(target=self.live_plot, args=(scan_return,))
-            self.live_thread.daemon = True
-            self.live_thread.start()
+            self._start_live_plot(scan_return)
+
         elif scan_return == 'stop_live_plotting':
             self.scan_timer.Stop()
             self.live_plt_evt.set()
@@ -1117,15 +1151,15 @@ class ScanPanel(wx.Panel):
         self.background = self.canvas.copy_from_bbox(self.plot.bbox)
         self.der_background = self.canvas.copy_from_bbox(self.der_plot.bbox)
 
-        self.update_plot()
+        self.update_plot(False)
 
-    def _safe_draw(self):
+    def safe_draw(self):
         """A safe draw call that doesn 't endlessly recurse."""
         self.canvas.mpl_disconnect(self.cid)
         self.canvas.draw()
         self.cid = self.canvas.mpl_connect('draw_event', self._ax_redraw)
 
-    def update_plot(self):
+    def update_plot(self, rescale=True):
         """
         Updates the plot. Is long and complicated because there are many plot
         elements and we blit all of them. It also accounts for the derivative
@@ -1133,13 +1167,17 @@ class ScanPanel(wx.Panel):
         """
 
         if self.scan_dimension == 1:
-            self._update_plot_1d()
+            self._update_plot_1d(rescale)
         elif self.scan_dimension == 2:
-            self._update_plot_2d()
+            self._update_plot_2d(rescale)
 
-    def _update_plot_1d(self):
+    def _update_plot_1d(self, rescale=True):
         get_plt_bkg = False
         get_der_bkg = False
+
+        if self.plt_image is not None:
+            self.plt_image.remove()
+            self.plt_image = None
 
         if self.plt_line is None:
             if (self.plt_x is not None and self.plt_y is not None and
@@ -1205,7 +1243,7 @@ class ScanPanel(wx.Panel):
                 get_der_bkg = True
 
         if get_plt_bkg or get_der_bkg:
-            self._safe_draw()
+            self.safe_draw()
 
             if get_plt_bkg:
                 self.background = self.canvas.copy_from_bbox(self.plot.bbox)
@@ -1263,34 +1301,11 @@ class ScanPanel(wx.Panel):
 
         redraw = False
 
-        if self.plt_line is not None:
-            oldx = self.plot.get_xlim()
-            oldy = self.plot.get_ylim()
-
-            self.plot.relim()
-            self.plot.autoscale_view()
-
-            newx = self.plot.get_xlim()
-            newy = self.plot.get_ylim()
-
-            if newx != oldx or newy != oldy:
-                redraw = True
-
-        if self.der_line is not None and self.show_der.GetValue():
-            oldx = self.der_plot.get_xlim()
-            oldy = self.der_plot.get_ylim()
-
-            self.der_plot.relim()
-            self.der_plot.autoscale_view()
-
-            newx = self.der_plot.get_xlim()
-            newy = self.der_plot.get_ylim()
-
-            if newx != oldx or newy != oldy:
-                redraw = True
+        if rescale:
+            redraw = self.autoscale_plot()
 
         if redraw:
-            self._safe_draw()
+            self.safe_draw()
 
         if self.plt_line is not None:
             self.canvas.restore_region(self.background)
@@ -1326,7 +1341,7 @@ class ScanPanel(wx.Panel):
         if self.show_der.GetValue():
             self.canvas.blit(self.der_plot.bbox)
 
-    def _update_plot_2d(self):
+    def _update_plot_2d(self, rescale=True):
 
         self.z_grid_data = copy.copy(self.plt_z)
         extra_vals = self.total_points - len(self.z_grid_data)
@@ -1341,7 +1356,7 @@ class ScanPanel(wx.Panel):
         #     self.plt_image = self.plot.pcolormesh(self.grid[0], self.grid[1],
         #         self.z_grid_data, animated=True)
 
-        #     self._safe_draw()
+        #     self.safe_draw()
         #     self.background = self.canvas.copy_from_bbox(self.plot.bbox)
         # else:
         #     self.plt_image.set_array(np.array(self.z_grid_data, dtype=float))
@@ -1350,13 +1365,10 @@ class ScanPanel(wx.Panel):
         # self.plot.draw_artist(self.plt_image)
         # self.canvas.blit(self.plot.bbox)
 
-        ##### HERE #####
+        print (self.x_points)
+        print (self.y_points)
 
-        self.z_grid_data = np.array(self.z_grid_data, dtype=float).reshape((self.x_points, self.y_points))
-
-        # print (self.z_grid_data.shape)
-        # print (self.grid[1].shape)
-        # print(self.grid[0].shape)
+        self.z_grid_data = np.array(self.z_grid_data, dtype=float).reshape((self.y_points, self.x_points))
 
         if self.current_scan_params['start'] > self.current_scan_params['stop']:
             self.z_grid_data = self.z_grid_data[:,::-1]
@@ -1367,18 +1379,104 @@ class ScanPanel(wx.Panel):
             self.plt_image.remove()
             self.plt_image = None
 
-        self.plt_image = self.plot.pcolormesh(self.x_pos, self.y_pos,
+        self.plt_image = self.plot.pcolormesh(self.grid[0], self.grid[1],
                 self.z_grid_data)
 
+        if rescale:
+            self.autoscale_plot()
 
-        self._safe_draw()
+        self.safe_draw()
 
-    def live_plot(self, filename):
-        """
-        This does the live plotting. It is intended to be run in its own
-        thread. It first clears all of the plot related variables and clears
-        the plot. It then enters a loop where it reads from the scan file
-        and plots the points as they come in, until the scan ends.
+    def autoscale_plot(self):
+        if self.scan_dimension == 1:
+            redraw = self._autoscale_plot_1d()
+        elif self.scan_dimension == 2:
+            redraw = self._autoscale_plot_2d()
+
+        return redraw
+
+    def _autoscale_plot_1d(self):
+        redraw = False
+
+        old_xlim = self.plot.get_xlim()
+        old_ylim = self.plot.get_ylim()
+
+        old_der_xlim = self.der_plot.get_xlim()
+        old_der_ylim = self.der_plot.get_ylim()
+
+        if self.current_scan_params is not None:
+            if self.current_scan_params['start'] < self.current_scan_params['stop']:
+                self.plot.set_xlim(self.current_scan_params['start'], self.current_scan_params['stop'])
+            else:
+                self.plot.set_xlim(self.current_scan_params['stop'], self.current_scan_params['start'])
+
+            if (self.plt_x is not None and self.plt_y is not None and
+                len(self.plt_x) == len(self.plt_y)) and len(self.plt_x) > 0:
+
+                self.plot.set_ylim(min(self.plt_y)*0.98, max(self.plt_y)*1.02)
+
+
+            if self.show_der.GetValue():
+
+                if self.current_scan_params['start'] < self.current_scan_params['stop']:
+                    self.der_plot.set_xlim(self.current_scan_params['start'],
+                        self.current_scan_params['stop'])
+                else:
+                    self.der_plot.set_xlim(self.current_scan_params['stop'],
+                        self.current_scan_params['start'])
+
+                if (self.plt_x is not None and self.der_y is not None and
+                    len(self.plt_x) == len(self.der_y) and len(self.plt_x) > 1):
+
+                    self.der_plot.set_ylim(min(self.der_y)*0.98, max(self.der_y)*1.02)
+
+
+        if (old_xlim != self.plot.get_xlim() or old_ylim != self.plot.get_ylim()
+            or old_der_xlim != self.der_plot.get_xlim() or old_der_ylim != self.der_plot.get_ylim()):
+            redraw = True
+
+        return redraw
+
+    def _autoscale_plot_2d(self):
+        redraw = False
+
+        old_xlim = self.plot.get_xlim()
+        old_ylim = self.plot.get_ylim()
+
+        old_der_xlim = self.der_plot.get_xlim()
+        old_der_ylim = self.der_plot.get_ylim()
+
+        if self.current_scan_params is not None:
+            self.plot.set_xlim(self.x_pos[0], self.x_pos[-1])
+            self.plot.set_ylim(self.y_pos[0], self.y_pos[-1])
+
+
+            # if self.show_der.GetValue():
+
+            #     if self.current_scan_params['start'] < self.current_scan_params['stop']:
+            #         self.der_plot.set_xlim(self.current_scan_params['start'],
+            #             self.current_scan_params['stop'])
+            #     else:
+            #         self.der_plot.set_xlim(self.current_scan_params['stop'],
+            #             self.current_scan_params['start'])
+
+            #     if (self.plt_x is not None and self.der_y is not None and
+            #         len(self.plt_x) == len(self.der_y) and len(self.plt_x) > 1):
+
+            #         self.der_plot.set_ylim(min(self.der_y)*0.98, max(self.der_y)*1.02)
+
+
+        if (old_xlim != self.plot.get_xlim() or old_ylim != self.plot.get_ylim()
+            or old_der_xlim != self.der_plot.get_xlim() or old_der_ylim != self.der_plot.get_ylim()):
+            redraw = True
+
+        return redraw
+
+    def _start_live_plot(self, filename):
+         """
+        This starts the live plotting. It first clears all of the plot related
+        variables and clears the plot. It then starts a thread that monitors the
+        scan results.
 
         :param str filename: The filename of the scan file to live plot.
         """
@@ -1440,9 +1538,24 @@ class ScanPanel(wx.Panel):
         self.com = None
         self.der_com = None
 
-        wx.CallAfter(self.update_plot)
-        wx.CallAfter(self._update_results)
+        self.update_plot()
+        self._update_results()
         wx.Yield()
+
+        self.live_plt_evt.clear()
+        self.live_thread = threading.Thread(target=self.live_plot, args=(filename,))
+        self.live_thread.daemon = True
+        self.live_thread.start()
+
+    def live_plot(self, filename):
+        """
+        This does the live plotting. It is intended to be run in its own
+        thread. It first clears all of the plot related variables and clears
+        the plot. It then enters a loop where it reads from the scan file
+        and plots the points as they come in, until the scan ends.
+
+        :param str filename: The filename of the scan file to live plot.
+        """
 
         if not os.path.exists(filename):
             time.sleep(0.1)
@@ -1511,8 +1624,8 @@ class ScanPanel(wx.Panel):
                     all_ys = np.arange(len(self.y_pos))
                     ind_y = min(all_ys, key=lambda i: abs(y-self.y_pos[i]))
 
-                    print(ind_x)
-                    print(ind_y)
+                    # print(ind_x)
+                    # print(ind_y)
 
                     if self.x_pos[ind_x] > x:
                         ind_x -= 1
@@ -1524,7 +1637,7 @@ class ScanPanel(wx.Panel):
                     else:
                         z = ''
                 except TypeError as e:
-                    print(e)
+                    # print(e)
                     z = ''
 
                 self.toolbar.set_status('x={}, y={}, z={}'.format(x, y, z))
@@ -1544,7 +1657,7 @@ class ScanPanel(wx.Panel):
         Called when a point on the plot is clicked on. If the click is a right
         click, it opens a context menu.
         """
-        print('in on_pickevent')
+        # print('in on_pickevent')
         artist = event.artist
         button = event.mouseevent.button
 
@@ -1946,9 +2059,10 @@ class ScanPanel(wx.Panel):
 
             if dialog.ShowModal() == wx.ID_OK:
                 path = dialog.GetPath()
+                dialog.Destroy()
             else:
+                dialog.Destroy()
                 return
-            dialog.Destroy()
 
             path=os.path.splitext(path)[0]+'.csv'
 

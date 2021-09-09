@@ -62,8 +62,6 @@ class ControlServer(threading.Thread):
         threading.Thread.__init__(self, name=name)
         self.daemon = True
 
-        logger.info("Initializing control server: %s", self.name)
-
         self.ip = ip
         self.port = port
 
@@ -72,12 +70,19 @@ class ControlServer(threading.Thread):
 
         self._stop_event = threading.Event()
 
-        self.context = zmq.Context()
-        self.socket = self.context.socket(zmq.PAIR)
-        self.socket.bind("tcp://{}:{}".format(self.ip, self.port))
-
         self.pump_comm_locks = pump_comm_locks
         self.valve_comm_locks = valve_comm_locks
+
+    def run(self):
+        """
+        Custom run method for the thread.
+        """
+        logger.info("Initializing control server: %s", self.name)
+
+        self.context = zmq.Context()
+        self.socket = self.context.socket(zmq.PAIR)
+        self.socket.set(zmq.LINGER, 0)
+        self.socket.bind("tcp://{}:{}".format(self.ip, self.port))
 
         pump_cmd_q = deque()
         pump_return_q = deque()
@@ -127,93 +132,95 @@ class ControlServer(threading.Thread):
 
         self._device_control['valve'] = valve_ctrl
 
-    def run(self):
-        """
-        Custom run method for the thread.
-        """
         while True:
             try:
-                if self.socket.poll(10) > 0:
-                    logger.debug("Getting new command")
-                    command = self.socket.recv_json()
-                else:
-                    command = None
-            except Exception:
-                command = None
-
-            # if self._abort_event.is_set():
-            #     logger.debug("Abort event detected")
-            #     self._abort()
-            #     command = None
-
-            if self._stop_event.is_set():
-                logger.debug("Stop event detected")
-                break
-
-            if command is not None:
-                device = command['device']
-                device_cmd = command['command']
-                get_response = command['response']
-                logger.debug("For device %s, processing cmd '%s' with args: %s and kwargs: %s ", device, device_cmd[0], ', '.join(['{}'.format(a) for a in device_cmd[1]]), ', '.join(['{}:{}'.format(kw, item) for kw, item in device_cmd[2].items()]))
                 try:
-
-                    if device == 'server':
-                        if device_cmd[0] == 'ping':
-                            answer = 'ping received'
-                        else:
-                            answer = ''
+                    if self.socket.poll(10) > 0:
+                        logger.debug("Getting new command")
+                        command = self.socket.recv_json()
                     else:
-                        device_q = self._device_control[device]['queue']
-                        device_q.append(device_cmd)
-
-                        if get_response:
-                            answer_q = self._device_control[device]['answer_q']
-
-                            start_time = time.time()
-                            while len(answer_q) == 0 and time.time()-start_time < 5:
-                                time.sleep(0.01)
-
-                            if len(answer_q) == 0:
-                                answer = ''
-                            else:
-                                answer = answer_q.popleft()
-                        else:
-                            answer = 'cmd sent'
-
-                    if answer == '':
-                        logger.exception('No response received from device')
-                    else:
-                        logger.debug('Sending command response: %s', answer)
-                        self.socket.send_json(answer)
-
+                        command = None
                 except Exception:
+                    command = None
+
+                # if self._abort_event.is_set():
+                #     logger.debug("Abort event detected")
+                #     self._abort()
+                #     command = None
+
+                if self._stop_event.is_set():
+                    logger.debug("Stop event detected")
+                    break
+
+                if command is not None:
                     device = command['device']
                     device_cmd = command['command']
-                    msg = ("Device %s failed to run command '%s' "
-                        "with args: %s and kwargs: %s. Exception follows:" %(device, device_cmd[0],
-                        ', '.join(['{}'.format(a) for a in device_cmd[1]]),
-                        ', '.join(['{}:{}'.format(kw, item) for kw, item in device_cmd[2].items()])))
-                    logger.exception(msg)
-                    logger.exception(traceback.print_exc())
+                    get_response = command['response']
+                    logger.debug("For device %s, processing cmd '%s' with args: %s and kwargs: %s ",
+                        device, device_cmd[0], ', '.join(['{}'.format(a) for a in device_cmd[1]]),
+                        ', '.join(['{}:{}'.format(kw, item) for kw, item in device_cmd[2].items()]))
 
-            else:
-                time.sleep(0.01)
+                    try:
+                        if device == 'server':
+                            if device_cmd[0] == 'ping':
+                                answer = 'ping received'
+                            else:
+                                answer = ''
+                        else:
+                            device_q = self._device_control[device]['queue']
+                            device_q.append(device_cmd)
+
+                            if get_response:
+                                answer_q = self._device_control[device]['answer_q']
+
+                                start_time = time.time()
+                                while len(answer_q) == 0 and time.time()-start_time < 5:
+                                    time.sleep(0.01)
+
+                                if len(answer_q) == 0:
+                                    answer = ''
+                                else:
+                                    answer = answer_q.popleft()
+                            else:
+                                answer = 'cmd sent'
+
+                        if answer == '':
+                            logger.exception('No response received from device')
+                        else:
+                            logger.debug('Sending command response: %s', answer)
+                            self.socket.send_json(answer)
+
+                    except Exception:
+                        device = command['device']
+                        device_cmd = command['command']
+                        msg = ("Device %s failed to run command '%s' "
+                            "with args: %s and kwargs: %s. Exception follows:" %(device, device_cmd[0],
+                            ', '.join(['{}'.format(a) for a in device_cmd[1]]),
+                            ', '.join(['{}:{}'.format(kw, item) for kw, item in device_cmd[2].items()])))
+                        logger.exception(msg)
+                        logger.exception(traceback.print_exc())
+
+                else:
+                    time.sleep(0.01)
+
+            except Exception:
+                logger.error('Error in server thread:\n{}'.format(traceback.format_exc()))
+
+        self.socket.unbind("tcp://{}:{}".format(self.ip, self.port))
+        self.socket.close(0)
+        self.context.destroy(0)
+
+        for device in self._device_control:
+            self._device_control[device]['abort'].set()
 
         if self._stop_event.is_set():
             self._stop_event.clear()
-        # else:
-        #     self._abort()
-        logger.info("Quitting pump control thread: %s", self.name)
+
+        logger.info("Quitting control thread: %s", self.name)
 
     def stop(self):
         """Stops the thread cleanly."""
         # logger.info("Starting to clean up and shut down pump control thread: %s", self.name)
-        self.socket.unbind("tcp://{}:{}".format(self.ip, self.port))
-        self.socket.close()
-        self.context.destroy()
-
-        for device in self._device_control:
-            self._device_control[device]['abort'].set()
 
         self._stop_event.set()
 
@@ -246,10 +253,10 @@ if __name__ == '__main__':
     port3 = '5558'
 
     # Coflow
-    # ip = '164.54.204.53'
+    ip = '164.54.204.53'
 
     # TR SAXS
-    ip = '164.54.204.8'
+    # ip = '164.54.204.8'
 
     # Both
 
@@ -273,37 +280,35 @@ if __name__ == '__main__':
 
     # TR SAXS
 
-    control_server3 = ControlServer(ip, port3, name='ValveControlServer',
-        valve_comm_locks = valve_comm_locks)
-    control_server3.start()
+    # control_server3 = ControlServer(ip, port3, name='ValveControlServer',
+    #     valve_comm_locks = valve_comm_locks)
+    # control_server3.start()
 
     # Coflow
 
-    # setup_pumps = [('sheath', 'VICI M50', 'COM3', ['626.2', '9.278'], {}, {}),
-    #     ('outlet', 'VICI M50', 'COM4', ['623.56', '12.222'], {}, {})
-    #     ]
+    setup_pumps = [('sheath', 'VICI M50', 'COM3', ['628.2', '13.051'], {}, {}),
+        ('outlet', 'VICI M50', 'COM4', ['626.36', '10.109'], {}, {})
+        ]
 
-    # pump_local_comm_locks = {'sheath'    : pump_comm_locks[setup_pumps[0][2]],
-    #     'outlet'    : pump_comm_locks[setup_pumps[1][2]]
-    #     }
+    pump_local_comm_locks = {'sheath'    : pump_comm_locks[setup_pumps[0][2]],
+        'outlet'    : pump_comm_locks[setup_pumps[1][2]]
+        }
 
     # TR SAXS
 
-    setup_pumps = [
-        # ('Sample', 'PHD 4400', 'COM4', ['10 mL, Medline P.C.', '1'], {},
-        #     {'flow_rate' : '10', 'refill_rate' : '10'}),
-        ('Sample', 'NE 500', 'COM10', ['3 mL, Medline P.C.', '01'], {},
-                    {'flow_rate' : '0.1', 'refill_rate' : '2'}),
-        ('Buffer 1', 'PHD 4400', 'COM4', ['10 mL, Medline P.C.', '2'], {},
-            {'flow_rate' : '1', 'refill_rate' : '5'}),
-        ('Buffer 2', 'PHD 4400', 'COM4', ['10 mL, Medline P.C.', '3'], {},
-            {'flow_rate' : '1', 'refill_rate' : '5'}),
-        ]
+    # setup_pumps = [
+    #     ('Sample', 'PHD 4400', 'COM4', ['10 mL, Medline P.C.', '1'], {},
+    #         {'flow_rate' : '10', 'refill_rate' : '10'}),
+    #     ('Buffer 1', 'PHD 4400', 'COM4', ['20 mL, Medline P.C.', '2'], {},
+    #         {'flow_rate' : '10', 'refill_rate' : '10'}),
+    #     ('Buffer 2', 'PHD 4400', 'COM4', ['20 mL, Medline P.C.', '3'], {},
+    #         {'flow_rate' : '10', 'refill_rate' : '10'}),
+    #     ]
 
-    pump_local_comm_locks = {'Sample'    : pump_comm_locks[setup_pumps[0][2]],
-        'Buffer 1'    : pump_comm_locks[setup_pumps[1][2]],
-        'Buffer 2'    : pump_comm_locks[setup_pumps[1][2]]
-        }
+    # pump_local_comm_locks = {'Sample'    : pump_comm_locks[setup_pumps[0][2]],
+    #     'Buffer 1'    : pump_comm_locks[setup_pumps[1][2]],
+    #     'Buffer 2'    : pump_comm_locks[setup_pumps[1][2]]
+    #     }
 
     # Both
 
@@ -313,24 +318,33 @@ if __name__ == '__main__':
 
     #TR SAXS
 
-    setup_valves = [
-            ('Injection', 'Rheodyne', 'COM6', [], {'positions' : 2}),
-            ('Sample', 'Rheodyne', 'COM7', [], {'positions' : 6}),
-            ('Buffer 1', 'Rheodyne', 'COM8', [], {'positions' : 6}),
-            ('Buffer 2', 'Rheodyne', 'COM9', [], {'positions' : 6}),
-                    ]
+    # setup_valves = [('Injection', 'Rheodyne', 'COM6', [], {'positions' : 2}),
+    #         ('Sample', 'Rheodyne', 'COM7', [], {'positions' : 6}),
+    #         ('Buffer 1', 'Rheodyne', 'COM8', [], {'positions' : 6}),
+    #         ('Buffer 2', 'Rheodyne', 'COM9', [], {'positions' : 6}),
+    #                 ]
 
-    valve_local_comm_locks = {
-        'Injection'    : valve_comm_locks[setup_valves[0][2]],
-        'Sample'    : valve_comm_locks[setup_valves[1][2]],
-        'Buffer 1'    : valve_comm_locks[setup_valves[2][2]],
-        'Buffer 2'    : valve_comm_locks[setup_valves[3][2]],
+    # valve_local_comm_locks = {'Injection'    : valve_comm_locks[setup_valves[0][2]],
+    #     'Sample'    : valve_comm_locks[setup_valves[1][2]],
+    #     'Buffer 1'    : valve_comm_locks[setup_valves[2][2]],
+    #     'Buffer 2'    : valve_comm_locks[setup_valves[3][2]],
         }
 
+    #     }
+    # valve_frame = valvecon.ValveFrame(valve_local_comm_locks, setup_valves, None,
+    #     title='Valve Control')
+    # valve_frame.Show()
 
-    valve_frame = valvecon.ValveFrame(valve_local_comm_locks, setup_valves, None,
-        title='Valve Control')
+    # Coflow
+
+    setup_valves = [('Coflow Sheath', 'Cheminert', 'COM7', [], {'positions' : 10}),
+        ]
+
+    valve_frame = valvecon.ValveFrame(valve_comm_locks, setup_valves, 
+        None, title='Valve Control')
     valve_frame.Show()
+
+    
 
     app.MainLoop()
 

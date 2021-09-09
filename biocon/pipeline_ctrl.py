@@ -23,17 +23,129 @@ from builtins import object, range, map
 from io import open
 
 import threading
-import logging
-from collections import deque, defaultdict
-import traceback
 import time
+from collections import deque, OrderedDict
+import collections
+import traceback
+import logging
 import sys
+import copy
+import platform
+import os
+import multiprocessing
+
+import zmq
 
 if __name__ != '__main__':
     logger = logging.getLogger(__name__)
 
-import zmq
+pipeline_path = os.path.abspath(os.path.expanduser('~//saxs-pipeline'))
+if pipeline_path not in os.sys.path:
+    os.sys.path.append(pipeline_path)
 
+try:
+    import pipeline.client.ControlClient as Client
+except Exception:
+    pass
+    # This is a hack for python 2! Because the pipeline isn't written to be
+    # pipeline 2 compatible, but MX isn't python 3 compatible yet!
+
+class PipelineControl(object):
+
+    def __init__(self, settings):
+        self.settings = settings
+        self.port = self.settings['server_port']
+        self.ip = self.settings['server_ip']
+
+        self.cmd_q = deque()
+        self.return_q = deque()
+        self.abort_event = threading.Event()
+        self.timeout_event = threading.Event()
+
+        try:
+            self.control_client = Client(self.ip, self.port,
+                self.cmd_q, self.return_q, self.abort_event, self.timeout_event,
+                name='PipelineCtrlClient')
+        except Exception:
+            # This is a hack for python 2! Because the pipeline isn't written to be
+            # pipeline 2 compatible, but MX isn't python 3 compatible yet!
+            self.control_client = ControlClient(self.ip, self.port,
+                self.cmd_q, self.return_q, self.abort_event, self.timeout_event,
+                name='PipelineCtrlClient')
+        self.control_client.start()
+
+        # self.set_raw_settings(self.settings['raw_settings'])
+
+        self.current_expeirment = ''
+
+    def start_experiment(self, exp_name, exp_type, data_dir, fprefix, n_exps,
+        n_sample_exps=0, sample_prefix=''):
+        """
+        Start experiment
+        exp_name - should be unique experiment name (how to guarantee this? Just use fprefix?)
+        exp_type -  'SEC' or 'Batch'
+        data_dir - data directory for images
+        fprefix - Image file prefix
+        n_exps - Number of exposures in the experiment
+
+        In the event of a batch mode experiment, expect fprefix to be the buffer
+        prefix, n_exps to be the buffer number of exposures
+        """
+        self.current_expeirment = exp_name
+
+        if n_sample_exps == 0:
+            n_sample_exps = n_exps
+
+        if sample_prefix == '':
+            sample_prefix = fprefix
+
+        if exp_type == 'SEC':
+            cmd_kwargs = {'num_exps': n_exps}
+
+        elif exp_type == 'Batch':
+            cmd_kwargs = {'num_sample_exps': n_sample_exps,
+            'num_buffer_exps': n_exps, 'sample_prefix': sample_prefix,
+            'buffer_prefix': fprefix}
+
+        elif exp_type == 'Other':
+            cmd_kwargs = {'num_exps': n_exps}
+
+        cmd = ('start_experiment', [exp_name, exp_type, data_dir, fprefix],
+            cmd_kwargs)
+        client_cmd = {'command': cmd, 'response': False}
+        self.cmd_q.append(client_cmd)
+
+    def stop_experiment(self, exp_name):
+        """
+        Stop experiment
+        exp_name - The experiment name to stop data collection for in the pipeline
+        """
+        cmd = ('stop_experiment', [exp_name,])
+        client_cmd = {'command': cmd, 'response': False}
+        self.cmd_q.append(client_cmd)
+
+    def stop_current_experiment(self):
+        if self.current_expeirment != '':
+            cmd = ('stop_experiment', [self.current_expeirment,], {})
+            client_cmd = {'command': cmd, 'response': False}
+            self.cmd_q.append(client_cmd)
+
+    def set_raw_settings(self, settings_file):
+        """
+        Pipeline loads a new RAW settings file
+        settings_file - The settings file to load (must be accessible to pipeline,
+            and path must be on pipeline computer)
+        """
+        cmd = ('load_raw_settings', [settings_file,], {})
+        client_cmd = {'command': cmd, 'response': False}
+        self.cmd_q.append(client_cmd)
+
+    def stop(self):
+        """
+        Stops client cleanly
+        """
+        self.control_client.stop()
+        self.control_client.join()
 
 class ControlClient(threading.Thread):
     """
@@ -43,14 +155,6 @@ class ControlClient(threading.Thread):
     def __init__(self, ip, port, command_queue, answer_queue, abort_event,
         timeout_event, name='ControlClient'):
         """
-        Initializes the custom thread. Important parameters here are the
-        list of known commands ``_commands`` and known pumps ``known_pumps``.
-
-        :param collections.deque command_queue: The queue used to pass commands to
-            the thread.
-
-        :param threading.Event abort_event: An event that is set when the thread
-            needs to abort, and otherwise is not set.
         """
         threading.Thread.__init__(self, name=name)
         self.daemon = True
@@ -71,13 +175,13 @@ class ControlClient(threading.Thread):
         self.last_ping = 0
 
         self.resend_missed_commands_on_reconnect = True
-        self.missed_cmds = deque()
-
+        self.missed_cmds = collections.deque()
 
     def run(self):
         """
         Custom run method for the thread.
         """
+
         logger.info("Connecting to %s on port %s", self.ip, self.port)
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.PAIR)
@@ -110,6 +214,8 @@ class ControlClient(threading.Thread):
                     break
 
                 if command is not None:
+                    # logger.debug("For device %s, processing cmd '%s' with args: %s and kwargs: %s ", device, cmd[0], ', '.join(['{}'.format(a) for a in cmd[1]]), ', '.join(['{}:{}'.format(kw, item) for kw, item in cmd[2].items()]))
+
                     if not self.socket.closed:
                         self._send_cmd(command)
 
@@ -132,15 +238,12 @@ class ControlClient(threading.Thread):
             self.socket.close(0)
 
         self.context.destroy(0)
-
         logger.info("Quitting remote client thread: %s", self.name)
 
-
     def _send_cmd(self, command):
-        device = command['device']
-        device_cmd = command['command']
+        cmd = command['command']
         get_response = command['response']
-        # logger.debug("For device %s, processing cmd '%s' with args: %s and kwargs: %s ", device, device_cmd[0], ', '.join(['{}'.format(a) for a in device_cmd[1]]), ', '.join(['{}:{}'.format(kw, item) for kw, item in device_cmd[2].items()]))
+
         try:
             self.socket.send_json(command)
 
@@ -164,13 +267,11 @@ class ControlClient(threading.Thread):
                 self.answer_queue.append(answer)
 
         except zmq.ZMQError:
-            device = command['device']
-            device_cmd = command['command']
-            msg = ("Device %s failed to run command '%s' "
-                "with args: %s and kwargs: %s. Timeout or other ZMQ "
-                "error." %(device, device_cmd[0],
-                ', '.join(['{}'.format(a) for a in device_cmd[1]]),
-                ', '.join(['{}:{}'.format(kw, item) for kw, item in device_cmd[2].items()])))
+            cmd = command['command']
+            msg = ("Pipeline failed to run command '%s' with args: %s and "
+                "kwargs: %s. Timeout or other ZMQ error." %(cmd[0],
+                ', '.join(['{}'.format(a) for a in cmd[1]]),
+                ', '.join(['{}:{}'.format(kw, item) for kw, item in cmd[2].items()])))
             logger.error(msg)
             self.connect_error += 1
             self._ping()
@@ -180,19 +281,19 @@ class ControlClient(threading.Thread):
             self.missed_cmds.append(command)
 
         except Exception:
-            device = command['device']
-            device_cmd = command['command']
-            msg = ("Device %s failed to run command '%s' "
-                "with args: %s and kwargs: %s. Exception follows:" %(device, device_cmd[0],
-                ', '.join(['{}'.format(a) for a in device_cmd[1]]),
-                ', '.join(['{}:{}'.format(kw, item) for kw, item in device_cmd[2].items()])))
+            cmd = command['command']
+            msg = ("Pipeline failed to run command '%s' with args: %s "
+                "and kwargs: %s. Exception follows:" %(cmd[0],
+                ', '.join(['{}'.format(a) for a in cmd[1]]),
+                ', '.join(['{}:{}'.format(kw, item) for kw, item in cmd[2].items()])))
             logger.error(msg)
             logger.error(traceback.print_exc())
             self.connect_error += 1
 
-        if self.connect_error > 5:
-            msg = ('5 consecutive failures to run a command on device'
-                '%s.'.format(device))
+            self.missed_cmds.append(command)
+
+        if self.connect_error > 5 and not self.timeout_event.is_set():
+            msg = ('5 consecutive failures to run a pipeline command.')
             logger.error(msg)
             logger.error("Connection timed out")
             self.timeout_event.set()
@@ -217,7 +318,7 @@ class ControlClient(threading.Thread):
                     answer = ''
 
                 if answer == 'ping received':
-                    logger.info("Connection to server verified")
+                    logger.debug("Connection to server verified")
                     connect_tries = 5
                 else:
                     logger.error("Could not get a response from the server")
@@ -265,8 +366,9 @@ class ControlClient(threading.Thread):
                 self.socket.disconnect("tcp://{}:{}".format(self.ip, self.port))
                 self.socket.close(0)
 
+
+
     def _abort(self):
-        """Clears the ``command_queue`` and aborts all current pump motions."""
         logger.info("Aborting remote client thread %s current and future commands", self.name)
         self.command_queue.clear()
         self._abort_event.clear()
@@ -279,105 +381,34 @@ class ControlClient(threading.Thread):
         self._stop_event.set()
 
 if __name__ == '__main__':
+    # multiprocessing.set_start_method('spawn')
+
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
     h1 = logging.StreamHandler(sys.stdout)
-    h1.setLevel(logging.DEBUG)
+    # h1.setLevel(logging.INFO)
+    # h1.setLevel(logging.DEBUG)
+    h1.setLevel(logging.ERROR)
+
+    # formatter = logging.Formatter('%(asctime)s - %(message)s')
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
     h1.setFormatter(formatter)
     logger.addHandler(h1)
 
-    port1 = '5556'
-    port2 = '5557'
+    # logger = logging.getLogger('biocon')
+    # logger.setLevel(logging.DEBUG)
+    # h1 = logging.StreamHandler(sys.stdout)
+    # h1.setLevel(logging.INFO)
+    # formatter = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
+    # h1.setFormatter(formatter)
+    # logger.addHandler(h1)
 
-    ip = '164.54.204.37'
+    #Settings
+    settings = {
+        'components'    : ['pipeline'],
+        'server_port'   : '5556',
+        'server_ip'     : '192.168.1.14',
+        # 'raw_settings'  : '../data/UO_SEC/SAXS.cfg',
+        }
 
-    # pump_ctrl_cmd_q = deque()
-    # pump_ctrl_return_q = deque()
-    # pump_ctrl_abort_event = threading.Event()
-    # pump_timeout_event = threading.Event()
-
-    # pump_control_client = ControlClient(ip, port1, pump_ctrl_cmd_q,
-    #     pump_ctrl_return_q, pump_ctrl_abort_event, pump_timeout_event, name='PumpControlClient')
-    # pump_control_client.start()
-
-    # init_cmd = ('connect', ('COM6', 'pump2', 'VICI_M50'),
-    #     {'flow_cal': 626.2, 'backlash_cal': 9.278})
-    # fr_cmd = ('set_flow_rate', ('pump2', 1000), {})
-    # start_cmd = ('start_flow', ('pump2',), {})
-    # stop_cmd = ('stop', ('pump2',), {})
-    # dispense_cmd = ('dispense', ('pump2', 200), {})
-    # aspirate_cmd = ('aspirate', ('pump2', 200), {})
-    # moving_cmd = ('is_moving', ('pump2',), {})
-    # units_cmd = ('set_units', ('pump2', 'uL/min'), {})
-    # disconnect_cmd = ('disconnect', ('pump2', ), {})
-
-    # init_client_cmd = {'device': 'pump', 'command': init_cmd, 'response': False}
-    # fr_client_cmd = {'device': 'pump', 'command': fr_cmd, 'response': False}
-    # start_client_cmd = {'device': 'pump', 'command': start_cmd, 'response': False}
-    # stop_client_cmd = {'device': 'pump', 'command': stop_cmd, 'response': False}
-    # dispense_client_cmd = {'device': 'pump', 'command': dispense_cmd, 'response': False}
-    # aspirate_client_cmd = {'device': 'pump', 'command': aspirate_cmd, 'response': False}
-    # moving_client_cmd = {'device': 'pump', 'command': moving_cmd, 'response': True}
-    # units_client_cmd = {'device': 'pump', 'command': units_cmd, 'response': False}
-    # disconnect_client_cmd = {'device': 'pump', 'command': disconnect_cmd, 'response': False}
-
-    # pump_ctrl_cmd_q.append(init_client_cmd)
-    # pump_ctrl_cmd_q.append(units_client_cmd)
-    # pump_ctrl_cmd_q.append(fr_client_cmd)
-    # pump_ctrl_cmd_q.append(start_client_cmd)
-    # time.sleep(5)
-    # # pump_ctrl_cmd_q.append(dispense_client_cmd)
-    # # pump_ctrl_cmd_q.append(aspirate_client_cmd)
-    # pump_ctrl_cmd_q.append(moving_client_cmd)
-    # while len(pump_ctrl_return_q) == 0:
-    #     time.sleep(0.01)
-    # print(pump_ctrl_return_q.popleft())
-    # pump_ctrl_cmd_q.append(stop_client_cmd)
-    # time.sleep(2)
-    # pump_ctrl_cmd_q.append(disconnect_client_cmd)
-    # time.sleep(2)
-    # pump_control_client.stop()
-
-
-    fm_ctrl_cmd_q = deque()
-    fm_ctrl_return_q = deque()
-    fm_ctrl_abort_event = threading.Event()
-    fm_ctrl_timeout_event = threading.Event()
-
-    fm_control_client = ControlClient(ip, port1, fm_ctrl_cmd_q,
-        fm_ctrl_return_q, fm_ctrl_abort_event, fm_ctrl_timeout_event, name='FMControlClient')
-    fm_control_client.start()
-
-    init_cmd = ('connect', ('COM8', 'bfs1', 'BFS'), {})
-    fr_cmd = ('get_flow_rate', ('bfs1',), {})
-    d_cmd = ('get_density', ('bfs1',), {})
-    t_cmd = ('get_temperature', ('bfs1',), {})
-    units_cmd = ('set_units', ('bfs1', 'mL/min'), {})
-    disconnect_cmd = ('disconnect', ('bfs1', ), {})
-
-    init_client_cmd = {'device': 'fm', 'command': init_cmd, 'response': False}
-    fr_client_cmd = {'device': 'fm', 'command': fr_cmd, 'response': True}
-    d_client_cmd = {'device': 'fm', 'command': d_cmd, 'response': True}
-    t_client_cmd = {'device': 'fm', 'command': t_cmd, 'response': True}
-    units_client_cmd = {'device': 'fm', 'command': units_cmd, 'response': False}
-    disconnect_client_cmd = {'device': 'fm', 'command': disconnect_cmd, 'response': False}
-
-    fm_ctrl_cmd_q.append(init_client_cmd)
-    fm_ctrl_cmd_q.append(fr_client_cmd)
-    while len(fm_ctrl_return_q) == 0:
-        time.sleep(0.01)
-    print(fm_ctrl_return_q.popleft())
-    fm_ctrl_cmd_q.append(d_client_cmd)
-    while len(fm_ctrl_return_q) == 0:
-        time.sleep(0.01)
-    print(fm_ctrl_return_q.popleft())
-    fm_ctrl_cmd_q.append(t_client_cmd)
-    while len(fm_ctrl_return_q) == 0:
-        time.sleep(0.01)
-    print(fm_ctrl_return_q.popleft())
-    fm_ctrl_cmd_q.append(units_client_cmd)
-    fm_ctrl_cmd_q.append(disconnect_client_cmd)
-    time.sleep(2)
-    fm_control_client.stop()
 

@@ -16,12 +16,13 @@ import os
 import sys
 
 sys.path.insert(0, os.path.abspath('../..'))
+sys.path.insert(0, os.path.abspath('../..'))
 sys.path.insert(0, os.path.abspath('../../biocon'))
 
 # -- Project information -----------------------------------------------------
 
 project = 'BioCON'
-copyright = '2018, Jesse Hopkins'
+copyright = '2019, Jesse Hopkins'
 author = 'Jesse Hopkins'
 
 # The short X.Y version

@@ -198,7 +198,7 @@ class Valve(object):
     def get_position(self):
         pass
 
-    def set_position(self):
+    def set_position(self, position):
         pass
 
     def send_command(self):
@@ -206,6 +206,7 @@ class Valve(object):
 
     def stop(self):
         pass
+
 
 class RheodyneValve(Valve):
     """
@@ -333,6 +334,128 @@ class RheodyneValve(Valve):
         return ret, success
 
 
+class CheminertValve(Valve):
+    """
+    A VICI cheminert valve with universal actuator and serial control.
+    """
+
+    def __init__(self, device, name, positions, comm_lock=None):
+        """
+        """
+        Valve.__init__(self, device, name, comm_lock=comm_lock)
+
+        logstr = ("Initializing valve {} on port {}".format(self.name,
+            self.device))
+        logger.info(logstr)
+
+        self.comm_lock.acquire()
+        self.valve_comm = SerialComm(device, 9600)
+        self.comm_lock.release()
+
+        # self.send_command('IFM1', False) #Sets the response mode to basic
+        # self.send_command('SMA', False) #Sets the rotation mode to auto (shortest)
+        # self.send_command('AM3', False) #Sets mode to multiposition valve
+        # self.send_command('HM', False) #Homes valve
+
+        self._positions = int(positions)
+
+
+    def get_position(self):
+        position = self.send_command('CP')[0]
+        position = position.strip().lstrip('CP')
+
+        try:
+            position = '{}'.format(int(position))
+            success = True
+        except Exception:
+            success = False
+
+        if success:
+            logger.debug("Valve %s position %s", self.name, position)
+        else:
+            logger.error('Valve %s could not get position', self.name)
+            position = None
+
+        return position
+
+    def set_position(self, position):
+        position = int(position)
+
+        if position > self._positions:
+            logger.error('Cannot set valve to position %i, maximum position is %i',
+                position, self._positions)
+            success = False
+        elif position < 1:
+            logger.error('Cannot set valve to position %i, minimum position is 1',
+                position)
+            success = False
+
+        else:
+            position = '{}'.format(position)
+
+            ret, success = self.send_command('GO{}'.format(position))
+
+        return success
+
+    def send_command(self, cmd, get_response=True):
+        self.comm_lock.acquire()
+        ret = self.valve_comm.write(cmd, get_response, send_term_char = '\r', term_char='\r')
+        self.comm_lock.release()
+
+        if '' != ret:
+            success = True
+        else:
+            success = True
+
+        return ret, success
+
+class SoftValve(Valve):
+    """
+    This class contains the settings and communication for a generic valve.
+    It is intended to be subclassed by other valve classes, which contain
+    specific information for communicating with a given pump. A valve object
+    can be wrapped in a thread for using a GUI, implimented in :py:class:`ValveCommThread`
+    or it can be used directly from the command line. The :py:class:`M5Pump`
+    documentation contains an example.
+    """
+
+    def __init__(self, device, name, positions, comm_lock=None):
+        """
+        :param str device: The device comport
+
+        :param str name: A unique identifier for the device
+        """
+
+        Valve.__init__(self, device, name, comm_lock=comm_lock)
+
+        self._position = 1
+        self._positions = int(positions)
+
+    def get_status(self):
+        return ''
+
+    def get_error(self):
+        return ''
+
+    def get_position(self):
+        return self._position
+
+    def set_position(self, position):
+        if position > self._positions:
+            logger.error('Cannot set valve to position %i, maximum position is %i',
+                position, self._positions)
+            success = False
+        elif position < 1:
+            logger.error('Cannot set valve to position %i, minimum position is 1',
+                position)
+            success = False
+
+        else:
+            self._position = int(position)
+            success = True
+
+        return success
+
 class ValveCommThread(threading.Thread):
     """
     This class creates a control thread for flow meters attached to the system.
@@ -404,7 +527,9 @@ class ValveCommThread(threading.Thread):
         self.comm_locks = {}
 
         self.known_valves = {'Rheodyne' : RheodyneValve,
-                            }
+            'Soft'  : SoftValve,
+            'Cheminert' : CheminertValve,
+            }
 
     def run(self):
         """
@@ -786,13 +911,17 @@ class ValvePanel(wx.Panel):
         if comport in self.all_comports:
             self.com_ctrl.SetStringSelection(comport)
 
-        if valve_type == 'Rheodyne':
+        if valve_type == 'Rheodyne' or valve_type == 'Soft' or valve_type == 'Cheminert':
             self.valve_position.SetMin(1)
 
             if 'positions' in valve_kwargs.keys():
                 self.positions_ctrl.SetValue(str(valve_kwargs['positions']))
 
         if valve_type in my_valves and comport in self.all_comports:
+            logger.info('Initialized valve %s on startup', self.name)
+            self._connect()
+
+        elif valve_type == 'Soft':
             logger.info('Initialized valve %s on startup', self.name)
             self._connect()
 
@@ -820,7 +949,7 @@ class ValvePanel(wx.Panel):
         # self._send_cmd('connect')
         # self._set_status('Connected')
 
-        if valve == 'Rheodyne':
+        if valve == 'Rheodyne' or valve == 'Soft':
             self.valve_position.SetMin(1)
             self.valve_position.SetMax(int(self.positions_ctrl.GetValue()))
 
@@ -1015,8 +1144,14 @@ class ValveFrame(wx.Frame):
             #     ('Buffer 1', 'Rheodyne', 'COM8', [], {'positions' : 6}),
             #     ('Buffer 2', 'Rheodyne', 'COM9', [], {'positions' : 6}),
             #             ]
-            setup_valves = [('Injection', 'Rheodyne', 'COM6', [], {'positions' : 2}),
-                ]
+
+            # setup_valves = [('Injection', 'Soft', '', [], {'positions' : 2}),
+            #     ('Sample', 'Soft', '', [], {'positions' : 6}),
+            #     ('Buffer 1', 'Soft', '', [], {'positions' : 6}),
+            #     ('Buffer 2', 'Soft', '', [], {'positions' : 6}),
+            #     ]
+
+            setup_valves = [('Buffer', 'Cheminert', 'COM7', [], {'positions': 10})]
 
         logger.info('Initializing %s valves on startup', str(len(setup_valves)))
 
@@ -1114,6 +1249,7 @@ if __name__ == '__main__':
     # my_rv67.get_position()
     # my_rv67.set_position(4)
 
+    # my_vici = CheminertValve('COM3', 'vici1', 10)
 
     # valve_cmd_q = deque()
     # valve_return_q = deque()
@@ -1133,13 +1269,14 @@ if __name__ == '__main__':
     # time.sleep(5)
     # my_valvecon.stop()
 
-    threading.Lock()
+    # threading.Lock()
 
-    comm_locks = {'Injection'   : threading.Lock(),
-        'Sample'    : threading.Lock(),
-        'Buffer 1'  : threading.Lock(),
-        'Buffer 2'  : threading.Lock(),
-        }
+    # comm_locks = {'Injection'   : threading.Lock(),
+    #     'Sample'    : threading.Lock(),
+    #     'Buffer 1'  : threading.Lock(),
+    #     'Buffer 2'  : threading.Lock(),
+    #     }
+    comm_locks = {}
 
     app = wx.App()
     logger.debug('Setting up wx app')

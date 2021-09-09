@@ -102,14 +102,23 @@ class ScanPanel(wx.Panel):
 
         self.SetSizer(self.top_sizer)
 
+    def showMessageDialog(self, parent, msg, title, style):
+        dialog = wx.MessageDialog(parent, msg, title, style=style)
+        dialog.ShowModal()
+        dialog.Destroy()
+
     def _on_add_button(self, evt):
         self._add_motor()
 
     def _add_motor(self):
-        motor_panel = MotorPanel(len(self.scan_motor_panels)+1, self.ctrl_parent)
+        motor_panel = MotorPanel(len(self.scan_motor_panels)+1, self.settings,
+            self, self.ctrl_parent)
         self.scan_motor_panels[motor_panel.number] = motor_panel
         self.motor_sizer.Add(motor_panel, ((motor_panel.number-1)%2, (motor_panel.number-1)//2))
 
+        self.ctrl_parent.Layout()
+        self.Layout()
+        self.Fit()
         self.GetParent().Layout()
         self.GetParent().Fit()
 
@@ -133,7 +142,8 @@ class ScanPanel(wx.Panel):
         all_errors = []
         num_motors = 0
 
-        for num, params in scan_params['motors']:
+        for num in scan_params['motors']:
+            params = scan_params['motors'][num]
             if params['use']:
                 num_motors = num_motors + 1
                 start_valid = True
@@ -187,9 +197,8 @@ class ScanPanel(wx.Panel):
 
             msg = msg + errors
 
-            dialog = wx.MessageDialog(self, msg, 'Error in scan parameters',
-                style=wx.OK|wx.ICON_ERROR)
-            wx.CallAfter(dialog.ShowModal)
+            wx.CallAfter(self.showMessageDialog, self, msg, 'Error in scan parameters',
+                wx.OK|wx.ICON_ERROR)
 
         else:
             all_valid = True
@@ -209,21 +218,29 @@ class ScanPanel(wx.Panel):
                     metadata['Motor {} stop:'.format(num)] = params['stop']
                     metadata['Motor {} step:'.format(num)] = params['step']
                     metadata['Motor {} # steps:'.format(num)] = params['motor']
+        except:
+            pass
+
+        return metadata
+
+    def on_exit(self):
+        pass
 
 class MotorPanel(wx.Panel):
 
-    def __init__(self, number, *args, **kwargs):
+    def __init__(self, number, settings, top_frame, *args, **kwargs):
 
         wx.Panel.__init__(self, *args, **kwargs)
 
         self.number = number
-        self._create_layout()
+        self.top_frame = top_frame
+        self._create_layout(settings)
 
-    def _create_layout(self):
+    def _create_layout(self, settings):
         top_parent = self
 
-        top_sizer = wx.StaticBoxSizer(wx.VERTICAL, top_parent, 'Scan motor {}'.format(self.number))
-        ctrl_parent = top_sizer.GetStaticBox()
+        self.top_sizer = wx.StaticBoxSizer(wx.VERTICAL, top_parent, 'Scan motor {}'.format(self.number))
+        ctrl_parent = self.top_sizer.GetStaticBox()
 
         self.motor = wx.TextCtrl(ctrl_parent, size=(120, -1))
         self.start = wx.TextCtrl(ctrl_parent, size=(60, -1),
@@ -270,12 +287,58 @@ class MotorPanel(wx.Panel):
             flag=wx.ALIGN_CENTER_VERTICAL)
         num_sizer.Add(self.num_steps, flag=wx.ALIGN_CENTER_VERTICAL)
 
-        top_sizer.Add(motor_sizer, flag=wx.LEFT|wx.RIGHT|wx.TOP|wx.EXPAND, border=5)
-        top_sizer.Add(scan_sizer, flag=wx.LEFT|wx.RIGHT|wx.TOP|wx.EXPAND, border=5)
-        top_sizer.Add(num_sizer, flag=wx.LEFT|wx.RIGHT|wx.TOP|wx.EXPAND, border=5)
-        top_sizer.Add(self.use_in_scan, flag=wx.ALL|wx.EXPAND, border=5)
+        self.advanced_options = wx.StaticBoxSizer(wx.VERTICAL, ctrl_parent,
+            'Advanced options')
+        advanced_parent = self.advanced_options.GetStaticBox()
 
-        self.SetSizer(top_sizer)
+        self.motor_type = wx.Choice(advanced_parent, choices=['MX', 'Newport'])
+        self.motor_type.SetSelection(0)
+        self.motor_type.Bind(wx.EVT_CHOICE, self._on_type_change)
+
+        type_sizer = wx.FlexGridSizer(cols=2, vgap=5, hgap=5)
+        type_sizer.Add(wx.StaticText(advanced_parent, label='Motor type:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        type_sizer.Add(self.motor_type, flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT,
+            border=5)
+
+        self.newport_group = wx.TextCtrl(advanced_parent, size=(60,-1))
+        self.newport_index = wx.TextCtrl(advanced_parent, size=(60,-1))
+        self.newport_axes = wx.TextCtrl(advanced_parent, size=(60, -1))
+
+        self.newport_sizer = wx.FlexGridSizer(cols=2, vgap=5, hgap=5)
+        self.newport_sizer.Add(wx.StaticText(advanced_parent, label='Newport group:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        self.newport_sizer.Add(self.newport_group, flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT,
+            border=5)
+        self.newport_sizer.Add(wx.StaticText(advanced_parent, label='Newport index:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        self.newport_sizer.Add(self.newport_index, flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT,
+            border=5)
+        self.newport_sizer.Add(wx.StaticText(advanced_parent, label='Newport axes:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        self.newport_sizer.Add(self.newport_axes, flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT,
+            border=5)
+
+
+        self.advanced_options.Add(type_sizer, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
+            border=5)
+        self.advanced_options.Add(self.newport_sizer, flag=wx.EXPAND|wx.ALL,
+            border=5)
+
+
+
+        self.top_sizer.Add(motor_sizer, flag=wx.LEFT|wx.RIGHT|wx.TOP|wx.EXPAND, border=5)
+        self.top_sizer.Add(scan_sizer, flag=wx.LEFT|wx.RIGHT|wx.TOP|wx.EXPAND, border=5)
+        self.top_sizer.Add(num_sizer, flag=wx.LEFT|wx.RIGHT|wx.TOP|wx.EXPAND, border=5)
+        self.top_sizer.Add(self.use_in_scan, flag=wx.LEFT|wx.RIGHT|wx.TOP|wx.EXPAND, border=5)
+        self.top_sizer.Add(self.advanced_options, flag=wx.ALL|wx.EXPAND, border=5)
+
+        self.top_sizer.Show(self.advanced_options,
+            settings['show_advanced_options'], recursive=True)
+
+        self.advanced_options.Show(self.newport_sizer, False, recursive=True)
+
+        self.SetSizer(self.top_sizer)
         self.Layout()
 
     def _on_scan_range_change(self, evt):
@@ -336,6 +399,10 @@ class MotorPanel(wx.Panel):
         step = self.step.GetValue()
         num_steps = self.num_steps.GetValue()
         use_in_scan = self.use_in_scan.GetValue()
+        motor_type = self.motor_type.GetStringSelection()
+        np_group = self.newport_group.GetValue()
+        np_index = self.newport_index.GetValue()
+        np_axes = self.newport_axes.GetValue()
 
         motor_params = {'motor' : motor,
             'start'     : start,
@@ -343,10 +410,25 @@ class MotorPanel(wx.Panel):
             'step'      : step,
             'num_steps' : num_steps,
             'use'       : use_in_scan,
+            'type'      : motor_type,
+            'np_group'  : np_group,
+            'np_index'  : np_index,
+            'np_axes'   : np_axes,
             }
 
         return motor_params
 
+    def _on_type_change(self, evt):
+        if self.motor_type.GetStringSelection() == 'Newport':
+            if self.top_sizer.IsShown(self.advanced_options):
+                self.advanced_options.Show(self.newport_sizer, True, recursive=True)
+        else:
+            if self.top_sizer.IsShown(self.advanced_options):
+                self.advanced_options.Show(self.newport_sizer, False, recursive=True)
+
+        self.Layout()
+        self.top_frame.Layout()
+        self.top_frame.Fit()
 
 class ScanFrame(wx.Frame):
     """
@@ -413,6 +495,9 @@ if __name__ == '__main__':
 
     settings = {
         'components'            : ['scan'],
+        'newport_ip'            : '164.54.204.76',
+        'newport_port'          : '5001',
+        'show_advanced_options' : True,
         }
 
     app = wx.App()
