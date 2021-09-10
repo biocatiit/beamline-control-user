@@ -1151,7 +1151,7 @@ class ValveFrame(wx.Frame):
             #     ('Buffer 2', 'Soft', '', [], {'positions' : 6}),
             #     ]
 
-            setup_valves = [('Buffer', 'Cheminert', 'COM5', [], {'positions': 10})]
+            setup_valves = [('Buffer', 'Cheminert', 'COM7', [], {'positions': 10})]
 
         logger.info('Initializing %s valves on startup', str(len(setup_valves)))
 

@@ -242,8 +242,11 @@ if __name__ == '__main__':
         'guard_vac_pv'          : '18ID:VAC:D:Guards',
         'sample_vac_pv'         : '18ID:VAC:D:Sample',
         'sc_vac_pv'             : '18ID:VAC:D:ScatterChamber',
+        'use_old_i0_gain'       : False,
+        'i0_gain_pv'            : '18ID_D_BPM_Gain:Level-SP',
         'local_dir_root'        : '/nas_data/Pilatus1M',
         'remote_dir_root'       : '/nas_data',
+        'detector'              : 'pilatus',
         'struck_log_vals'       : [{'mx_record': 'mcs3', 'channel': 2, 'name': 'I0',
             'scale': 1, 'offset': 0, 'dark': True, 'norm_time': False}, #Format: (mx_record_name, struck_channel, header_name, scale, offset, use_dark_current, normalize_by_exp_time)
             {'mx_record': 'mcs4', 'channel': 3, 'name': 'I1', 'scale': 1,
