@@ -192,7 +192,7 @@ if __name__ == '__main__':
 
     h1 = logging.StreamHandler(sys.stdout)
     h1.setLevel(logging.INFO)
-    h1.setLevel(logging.DEBUG)
+    # h1.setLevel(logging.DEBUG)
     formatter = logging.Formatter('%(asctime)s - %(message)s')
     h1.setFormatter(formatter)
 
@@ -444,12 +444,12 @@ if __name__ == '__main__':
 
     components = OrderedDict([
         ('exposure', expcon.ExpPanel),
-        # ('coflow', coflowcon.CoflowPanel),
+        ('coflow', coflowcon.CoflowPanel),
         # ('trsaxs_scan', trcon.TRScanPanel),
         # ('trsaxs_flow', trcon.TRFlowPanel),
         # ('scan',    scancon.ScanPanel),
         ('metadata', metadata.ParamPanel),
-        # ('pipeline', pipeline_ctrl.PipelineControl)
+        ('pipeline', pipeline_ctrl.PipelineControl)
         ])
 
     settings = {
