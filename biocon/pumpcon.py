@@ -2567,7 +2567,7 @@ class PumpPanel(wx.Panel):
         self.vol_gauge.Add(self.syringe_vol_gauge_low,
             flag=wx.ALIGN_CENTER_VERTICAL)
         self.vol_gauge.Add(self.syringe_vol_gauge, 1, border=2,
-            flag=wx.LEFT|wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
+            flag=wx.LEFT|wx.EXPAND)
         self.vol_gauge.Add(self.syringe_vol_gauge_high, border=2,
             flag=wx.LEFT|wx.ALIGN_CENTER_VERTICAL)
 
@@ -3165,8 +3165,6 @@ class PumpPanel(wx.Panel):
         wx.CallAfter(self._set_status_volume, volume)
         wx.CallAfter(self.syringe_vol_gauge.SetValue,
             int(round(float(volume)*1000)))
-
-        print(volume)
 
     def _get_volume_delay(self, delay):
         wx.CallLater(delay*1000, self._get_volume)
