@@ -3448,9 +3448,9 @@ class PumpFrame(wx.Frame):
             self.pump_sizer.Remove(0)
 
         if setup_pumps is None:
-            setup_pumps = [('Sheath', 'VICI M50', 'COM3', ['629.88', '13.381'], {}, {}),
-                        ('Outlet', 'VICI M50', 'COM4', ['626.36', '10.109'], {}, {})
-                        ]
+            # setup_pumps = [('Sheath', 'VICI M50', 'COM3', ['629.88', '13.381'], {}, {}),
+            #             ('Outlet', 'VICI M50', 'COM4', ['626.36', '10.109'], {}, {})
+            #             ]
 
             # setup_pumps = [
             #         # ('Sample', 'PHD 4400', '/dev/ttyUSB6', ['30 mL, EXEL', '2'], {},
@@ -3461,14 +3461,14 @@ class PumpFrame(wx.Frame):
             #         # {'flow_rate' : '30', 'refill_rate' : '30'}),
             #             ]
 
-            # setup_pumps = [
-            #     ('Sample', 'PHD 4400', 'COM3', ['10 mL, Medline P.C.', '1'], {},
-            #         {'flow_rate' : '10', 'refill_rate' : '10'}),
-            #     ('Buffer 1', 'PHD 4400', 'COM3', ['20 mL, Medline P.C.', '2'], {},
-            #         {'flow_rate' : '10', 'refill_rate' : '10'}),
-            #     ('Buffer 2', 'PHD 4400', 'COM3', ['20 mL, Medline P.C.', '3'], {},
-            #         {'flow_rate' : '10', 'refill_rate' : '10'}),
-            #     ]
+            setup_pumps = [
+                ('Sample', 'PHD 4400', 'COM8', ['10 mL, Medline P.C.', '1'], {},
+                    {'flow_rate' : '10', 'refill_rate' : '10'}),
+                # ('Buffer 1', 'PHD 4400', 'COM3', ['20 mL, Medline P.C.', '2'], {},
+                #     {'flow_rate' : '10', 'refill_rate' : '10'}),
+                # ('Buffer 2', 'PHD 4400', 'COM3', ['20 mL, Medline P.C.', '3'], {},
+                #     {'flow_rate' : '10', 'refill_rate' : '10'}),
+                ]
 
             # setup_pumps = [
             #     ('Sample', 'NE 500', '/dev/cu.usbserial-AK06V22M', ['30 mL, EXEL', '02', False], {},
