@@ -252,49 +252,44 @@ if __name__ == '__main__':
     port2 = '5557'
     port3 = '5558'
 
-    # Coflow
-    ip = '164.54.204.53'
-
-    # TR SAXS
-    # ip = '164.54.204.8'
-
     # Both
 
-    pump_comm_locks = {'COM3'   : threading.Lock(),
+    pump_comm_locks = {
+        'COM3'  : threading.Lock(),
         'COM4'  : threading.Lock(),
-        'COM10'   : threading.Lock(),
+        'COM10' : threading.Lock(),
+        'COM11' : threading.Lock(),
         }
 
-    valve_comm_locks = {'COM6'   : threading.Lock(),
+    valve_comm_locks = {
+        'COM6'  : threading.Lock(),
         'COM7'  : threading.Lock(),
         'COM8'  : threading.Lock(),
         'COM9'  : threading.Lock(),
         }
 
-    control_server1 = ControlServer(ip, port1, name='PumpControlServer',
-        pump_comm_locks = pump_comm_locks)
-    control_server1.start()
 
-    control_server2 = ControlServer(ip, port2, name='FMControlServer')
-    control_server2.start()
+    # # Coflow
 
-    # TR SAXS
+    # ip = '164.54.204.53'
 
-    # control_server3 = ControlServer(ip, port3, name='ValveControlServer',
-    #     valve_comm_locks = valve_comm_locks)
-    # control_server3.start()
+    # setup_pumps = [('sheath', 'VICI M50', 'COM3', ['628.2', '13.051'], {}, {}),
+    #     ('outlet', 'VICI M50', 'COM4', ['626.36', '10.109'], {}, {})
+    #     ]
 
-    # Coflow
+    # pump_local_comm_locks = {'sheath'    : pump_comm_locks[setup_pumps[0][2]],
+    #     'outlet'    : pump_comm_locks[setup_pumps[1][2]]
+    #     }
 
-    setup_pumps = [('sheath', 'VICI M50', 'COM3', ['628.2', '13.051'], {}, {}),
-        ('outlet', 'VICI M50', 'COM4', ['626.36', '10.109'], {}, {})
-        ]
+    # setup_valves = [('Coflow Sheath', 'Cheminert', 'COM7', [], {'positions' : 10}),
+    #     ]
 
-    pump_local_comm_locks = {'sheath'    : pump_comm_locks[setup_pumps[0][2]],
-        'outlet'    : pump_comm_locks[setup_pumps[1][2]]
-        }
 
     # TR SAXS
+
+    ip = '164.54.204.8'
+
+    # Chaotic flow
 
     # setup_pumps = [
     #     ('Sample', 'PHD 4400', 'COM4', ['10 mL, Medline P.C.', '1'], {},
@@ -305,10 +300,60 @@ if __name__ == '__main__':
     #         {'flow_rate' : '10', 'refill_rate' : '10'}),
     #     ]
 
-    # pump_local_comm_locks = {'Sample'    : pump_comm_locks[setup_pumps[0][2]],
+    # pump_local_comm_locks = {
+    #     'Sample'    : pump_comm_locks[setup_pumps[0][2]],
     #     'Buffer 1'    : pump_comm_locks[setup_pumps[1][2]],
-    #     'Buffer 2'    : pump_comm_locks[setup_pumps[1][2]]
+    #     'Buffer 2'    : pump_comm_locks[setup_pumps[2][2]]
     #     }
+
+    # setup_valves = [
+    #     ('Injection', 'Rheodyne', 'COM6', [], {'positions' : 2}),
+    #     ('Sample', 'Rheodyne', 'COM9', [], {'positions' : 6}),
+    #     ('Buffer 1', 'Rheodyne', 'COM8', [], {'positions' : 6}),
+    #     ('Buffer 2', 'Rheodyne', 'COM7', [], {'positions' : 6}),
+    #     ]
+
+    # valve_local_comm_locks = {
+    #     'Injection'    : valve_comm_locks[setup_valves[0][2]],
+    #     'Sample'    : valve_comm_locks[setup_valves[1][2]],
+    #     'Buffer 1'    : valve_comm_locks[setup_valves[2][2]],
+    #     'Buffer 2'    : valve_comm_locks[setup_valves[3][2]],
+    #    }
+
+    # Laminar flow
+    setup_pumps = [
+        ('Buffer', 'NE 500', 'COM11', ['20 mL, Medline P.C.', '00'], 
+            {'dual_syringe': 'False'}, {'flow_rate' : '0.1', 'refill_rate' : '10'}),
+        ('Sheath', 'NE 500', 'COM10', ['10 mL, Medline P.C.', '01'],
+            {'dual_syringe': 'False'}, {'flow_rate' : '0.1', 'refill_rate' : '10'}),
+        ('Sample', 'NE 500', 'COM3', ['10 mL, Medline P.C.', '02'], {},
+            {'flow_rate' : '0.1', 'refill_rate' : '10'}),
+        ]
+
+    pump_local_comm_locks = {
+        'Buffer'    : pump_comm_locks[setup_pumps[0][2]],
+        'Sheath'    : pump_comm_locks[setup_pumps[1][2]],
+        'Sample'    : pump_comm_locks[setup_pumps[2][2]]
+        }
+
+    setup_valves = [
+        ('Injection', 'Rheodyne', 'COM6', [], {'positions' : 2}),
+        ('Sample', 'Rheodyne', 'COM9', [], {'positions' : 6}),
+        ('Buffer', 'Rheodyne', 'COM8', [], {'positions' : 6}),
+        ('Sheath', 'Rheodyne', 'COM7', [], {'positions' : 6}),
+        ]
+
+    valve_local_comm_locks = {
+        'Injection'    : valve_comm_locks[setup_valves[0][2]],
+        'Sample'    : valve_comm_locks[setup_valves[1][2]],
+        'Buffer'    : valve_comm_locks[setup_valves[2][2]],
+        'Sheath'    : valve_comm_locks[setup_valves[3][2]],
+       }
+
+    control_server3 = ControlServer(ip, port3, name='ValveControlServer',
+        valve_comm_locks = valve_comm_locks)
+    control_server3.start()
+
 
     # Both
 
@@ -316,35 +361,17 @@ if __name__ == '__main__':
         title='Pump Control')
     pump_frame.Show()
 
-    #TR SAXS
-
-    # setup_valves = [('Injection', 'Rheodyne', 'COM6', [], {'positions' : 2}),
-    #         ('Sample', 'Rheodyne', 'COM7', [], {'positions' : 6}),
-    #         ('Buffer 1', 'Rheodyne', 'COM8', [], {'positions' : 6}),
-    #         ('Buffer 2', 'Rheodyne', 'COM9', [], {'positions' : 6}),
-    #                 ]
-
-    # valve_local_comm_locks = {'Injection'    : valve_comm_locks[setup_valves[0][2]],
-    #     'Sample'    : valve_comm_locks[setup_valves[1][2]],
-    #     'Buffer 1'    : valve_comm_locks[setup_valves[2][2]],
-    #     'Buffer 2'    : valve_comm_locks[setup_valves[3][2]],
-        }
-
-    #     }
-    # valve_frame = valvecon.ValveFrame(valve_local_comm_locks, setup_valves, None,
-    #     title='Valve Control')
-    # valve_frame.Show()
-
-    # Coflow
-
-    setup_valves = [('Coflow Sheath', 'Cheminert', 'COM7', [], {'positions' : 10}),
-        ]
-
-    valve_frame = valvecon.ValveFrame(valve_comm_locks, setup_valves, 
+    valve_frame = valvecon.ValveFrame(valve_local_comm_locks, setup_valves, 
         None, title='Valve Control')
     valve_frame.Show()
 
-    
+    control_server1 = ControlServer(ip, port1, name='PumpControlServer',
+        pump_comm_locks = pump_comm_locks)
+    control_server1.start()
+
+    control_server2 = ControlServer(ip, port2, name='FMControlServer')
+    control_server2.start()
+
 
     app.MainLoop()
 
@@ -358,7 +385,8 @@ if __name__ == '__main__':
         control_server2.stop()
         control_server2.join()
 
-        # control_server3.stop()
-        # control_server3.join()
+        # TR SAXS
+        control_server3.stop()
+        control_server3.join()
 
     logger.info("Quitting server")

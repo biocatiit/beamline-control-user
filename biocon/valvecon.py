@@ -236,9 +236,8 @@ class RheodyneValve(Valve):
             self.device))
         logger.info(logstr)
 
-        self.comm_lock.acquire()
-        self.valve_comm = SerialComm(device, 19200)
-        self.comm_lock.release()
+        with self.comm_lock:
+            self.valve_comm = SerialComm(device, 19200)
 
         self.send_command('M', False) #Homes valve
 
@@ -318,9 +317,8 @@ class RheodyneValve(Valve):
         return success
 
     def send_command(self, cmd, get_response=True):
-        self.comm_lock.acquire()
-        ret = self.valve_comm.write(cmd, get_response, send_term_char = '\r', term_char='\r')
-        self.comm_lock.release()
+        with self.comm_lock:
+            ret = self.valve_comm.write(cmd, get_response, send_term_char = '\r', term_char='\r')
 
         if '*' in ret:
             success = False
