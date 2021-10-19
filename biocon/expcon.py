@@ -1200,7 +1200,7 @@ class ExpCommThread(threading.Thread):
             ab_burst.get_status() #Maybe need to clear this status?
             waiting = True
             while waiting:
-                logger.info(ab_burst.get_status())
+                logger.debug(ab_burst.get_status())
                 waiting = np.any([ab_burst.get_status() == 16777216 for i in range(5)])
                 time.sleep(0.01)
 
@@ -1571,7 +1571,7 @@ class ExpCommThread(threading.Thread):
     def write_log_header(self, data_dir, fprefix, log_vals, metadata,
             extra_vals=None):
 
-        if self.timeout_event.is_set():
+        if self._timeout_event.is_set():
             data_dir = os.path.expanduser('~')
 
         else:
@@ -1581,7 +1581,7 @@ class ExpCommThread(threading.Thread):
             try:
                 subprocess.check_call(['test', '-d', data_dir], timeout=30)
             except Exception:
-                self.timeout_event.set()
+                self._timeout_event.set()
                 self.return_queue.append(['timeout', [data_dir, os.path.expanduser('~')]])
                 data_dir = os.path.expanduser('~')
 
@@ -1601,7 +1601,7 @@ class ExpCommThread(threading.Thread):
             extra_vals=None):
         logger.debug('Appending log counters to file')
 
-        if self.timeout_event.is_set():
+        if self._timeout_event.is_set():
             data_dir = os.path.expanduser('~')
 
         else:
@@ -1611,7 +1611,7 @@ class ExpCommThread(threading.Thread):
             try:
                 subprocess.check_call(['test', '-d', data_dir], timeout=30)
             except Exception:
-                self.timeout_event.set()
+                self._timeout_event.set()
                 self.return_queue.append(['timeout', [data_dir, os.path.expanduser('~')]])
                 data_dir = os.path.expanduser('~')
 
@@ -1638,7 +1638,7 @@ class ExpCommThread(threading.Thread):
     def write_counters_struck(self, cvals, num_frames, data_dir,
             fprefix, exp_period, dark_counts, log_vals, metadata,
             extra_vals=None):
-        if self.timeout_event.is_set():
+        if self._timeout_event.is_set():
             data_dir = os.path.expanduser('~')
 
         else:
@@ -1648,7 +1648,7 @@ class ExpCommThread(threading.Thread):
             try:
                 subprocess.check_call(['test', '-d', data_dir], timeout=30)
             except Exception:
-                self.timeout_event.set()
+                self._timeout_event.set()
                 self.return_queue.append(['timeout', [data_dir, os.path.expanduser('~')]])
                 data_dir = os.path.expanduser('~')
 
@@ -1717,7 +1717,7 @@ class ExpCommThread(threading.Thread):
 
     def write_counters_muscle(self, cvals, num_frames, data_dir, fprefix,
         exp_period, dark_counts, log_vals, metadata, extra_vals=None):
-        if self.timeout_event.is_set():
+        if self._timeout_event.is_set():
             data_dir = os.path.expanduser('~')
 
         else:
@@ -1727,7 +1727,7 @@ class ExpCommThread(threading.Thread):
             try:
                 subprocess.check_call(['test', '-d', data_dir], timeout=30)
             except Exception:
-                self.timeout_event.set()
+                self._timeout_event.set()
                 self.return_queue.append(['timeout', [data_dir, os.path.expanduser('~')]])
                 data_dir = os.path.expanduser('~')
 
@@ -1870,9 +1870,9 @@ class ExpCommThread(threading.Thread):
 
     def _add_metadata(self, metadata):
         if self._settings['use_old_i0_gain']:
-            i0_gain = mx_data['ki0'].get_gain()
+            i0_gain = self._mx_data['ki0'].get_gain()
         else:
-            value = mx_data['ki0'].get()
+            value = self._mx_data['ki0'].get()
             if value == 0:
                 i0_gain = 1e+07
             elif value == 1:
@@ -2487,6 +2487,11 @@ class ExpPanel(wx.Panel):
         self.start_exp_btn.Disable()
         self.stop_exp_btn.Enable()
         self.total_time = exp_values['num_frames']*exp_values['exp_period']
+
+        if self.settings['tr_muscle_exp']:
+            exp_values['exp_type'] = 'muscle'
+        else:
+            exp_values['exp_type'] = 'standard'
 
         if 'trsaxs_scan' in self.settings['components']:
             self.total_time = comp_settings['trsaxs_scan']['total_time']+1*comp_settings['trsaxs_scan']['num_scans']
