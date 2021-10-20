@@ -236,9 +236,8 @@ class RheodyneValve(Valve):
             self.device))
         logger.info(logstr)
 
-        self.comm_lock.acquire()
-        self.valve_comm = SerialComm(device, 19200)
-        self.comm_lock.release()
+        with self.comm_lock:
+            self.valve_comm = SerialComm(device, 19200)
 
         self.send_command('M', False) #Homes valve
 
@@ -318,9 +317,8 @@ class RheodyneValve(Valve):
         return success
 
     def send_command(self, cmd, get_response=True):
-        self.comm_lock.acquire()
-        ret = self.valve_comm.write(cmd, get_response, send_term_char = '\r', term_char='\r')
-        self.comm_lock.release()
+        with self.comm_lock:
+            ret = self.valve_comm.write(cmd, get_response, send_term_char = '\r', term_char='\r')
 
         if '*' in ret:
             success = False
@@ -1151,7 +1149,7 @@ class ValveFrame(wx.Frame):
             #     ('Buffer 2', 'Soft', '', [], {'positions' : 6}),
             #     ]
 
-            setup_valves = [('Buffer', 'Cheminert', 'COM5', [], {'positions': 10})]
+            setup_valves = [('Buffer', 'Cheminert', 'COM7', [], {'positions': 10})]
 
         logger.info('Initializing %s valves on startup', str(len(setup_valves)))
 

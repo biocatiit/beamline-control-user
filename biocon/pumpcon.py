@@ -1286,7 +1286,7 @@ class NE500Pump(Pump):
             logger.debug("Stopping pump %s current motion before aspirating", self.name)
             self.stop()
 
-        if self.max_volume - self.volume > 0:
+        if self.round(self.max_volume - self.volume) > 0:
             self.aspirate(self.max_volume - self.volume)
         else:
             logger.error(("Already at maximum volume, can't aspirate more."))
@@ -2567,7 +2567,7 @@ class PumpPanel(wx.Panel):
         self.vol_gauge.Add(self.syringe_vol_gauge_low,
             flag=wx.ALIGN_CENTER_VERTICAL)
         self.vol_gauge.Add(self.syringe_vol_gauge, 1, border=2,
-            flag=wx.LEFT|wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
+            flag=wx.LEFT|wx.EXPAND)
         self.vol_gauge.Add(self.syringe_vol_gauge_high, border=2,
             flag=wx.LEFT|wx.ALIGN_CENTER_VERTICAL)
 
@@ -3166,8 +3166,6 @@ class PumpPanel(wx.Panel):
         wx.CallAfter(self.syringe_vol_gauge.SetValue,
             int(round(float(volume)*1000)))
 
-        print(volume)
-
     def _get_volume_delay(self, delay):
         wx.CallLater(delay*1000, self._get_volume)
 
@@ -3448,8 +3446,8 @@ class PumpFrame(wx.Frame):
             self.pump_sizer.Remove(0)
 
         if setup_pumps is None:
-            setup_pumps = [('Sheath', 'VICI M50', 'COM3', ['625.84', '12.550'], {}, {}),
-                        ('Outlet', 'VICI M50', 'COM4', ['629.16', '12.354'], {}, {})
+            setup_pumps = [('Sheath', 'VICI M50', 'COM3', ['629.88', '13.381'], {}, {}),
+                        ('Outlet', 'VICI M50', 'COM4', ['626.36', '10.109'], {}, {})
                         ]
 
             # setup_pumps = [
@@ -3461,13 +3459,22 @@ class PumpFrame(wx.Frame):
             #         # {'flow_rate' : '30', 'refill_rate' : '30'}),
             #             ]
 
+            setup_pumps = [
+                ('Sample', 'PHD 4400', 'COM4', ['10 mL, Medline P.C.', '1'], {},
+                    {'flow_rate' : '10', 'refill_rate' : '10'}),
+                ('Buffer 1', 'PHD 4400', 'COM4', ['20 mL, Medline P.C.', '2'], {},
+                    {'flow_rate' : '10', 'refill_rate' : '10'}),
+                ('Buffer 2', 'PHD 4400', 'COM4', ['20 mL, Medline P.C.', '3'], {},
+                    {'flow_rate' : '10', 'refill_rate' : '10'}),
+                ]
+
             # setup_pumps = [
-            #     ('Sample', 'PHD 4400', 'COM3', ['10 mL, Medline P.C.', '1'], {},
-            #         {'flow_rate' : '10', 'refill_rate' : '10'}),
-            #     ('Buffer 1', 'PHD 4400', 'COM3', ['20 mL, Medline P.C.', '2'], {},
-            #         {'flow_rate' : '10', 'refill_rate' : '10'}),
-            #     ('Buffer 2', 'PHD 4400', 'COM3', ['20 mL, Medline P.C.', '3'], {},
-            #         {'flow_rate' : '10', 'refill_rate' : '10'}),
+            #     ('Buffer', 'NE 500', 'COM11', ['20 mL, Medline P.C.', '00'], {},
+            #         {'flow_rate' : '0.1', 'refill_rate' : '10'}),
+            #     ('Sheath', 'NE 500', 'COM10', ['10 mL, Medline P.C.', '01'], {},
+            #         {'flow_rate' : '0.1', 'refill_rate' : '10'}),
+            #     ('Sample', 'NE 500', 'COM3', ['10 mL, Medline P.C.', '02'], {},
+            #         {'flow_rate' : '0.1', 'refill_rate' : '10'}),
             #     ]
 
             # setup_pumps = [
@@ -3618,18 +3625,18 @@ if __name__ == '__main__':
     # #Use this with PHD 4400
     # comm_lock = threading.Lock()
 
-    # comm_locks = {'Sample'   : comm_lock,
-    #     'Buffer 1' : comm_lock,
-    #     'Buffer 2' : comm_lock,
-    #     }
+    comm_locks = {'Sample'   : comm_lock,
+        'Buffer 1' : comm_lock,
+        'Buffer 2' : comm_lock,
+        }
 
     #Use this with M50s
     comm_locks = {'Sheath' : threading.Lock(),
         'Outlet' : threading.Lock(),
         }
 
-    # #Use this with NE 500
-    # # comm_lock = threading.Lock()
+    #Use this with NE 500
+    # comm_lock = threading.Lock()
 
     # # #Otherwise use this:
     comm_locks = {}
