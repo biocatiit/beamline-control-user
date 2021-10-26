@@ -29,6 +29,7 @@ import logging
 import sys
 import copy
 import platform
+import requests
 
 if __name__ != '__main__':
     logger = logging.getLogger(__name__)
@@ -185,25 +186,40 @@ class CoflowPanel(wx.Panel):
             wx.CallAfter(self.showMessageDialog, self, msg, "Connection error",
                 wx.OK|wx.ICON_ERROR)
 
+        if self.settings['use_overflow_control']:
+            self.overflow_monitor_timer = wx.Timer(self)
+            self.Bind(wx.EVT_TIMER, self._on_overflow_monitor_timer,
+                self.overflow_monitor_timer)
+            self.overflow_monitor_timer.Start(10000)
+
+    def _FromDIP(self, size):
+        # This is a hack to provide easy back compatibility with wxpython < 4.1
+        try:
+            return self.FromDIP(size)
+        except Exception:
+            return size
 
     def _create_layout(self):
         """Creates the layout for the panel."""
         units = self.settings['flow_units']
 
-        self.flow_rate = wx.TextCtrl(self, size=(60,-1), value=self.settings['lc_flow_rate'],
+        control_box = wx.StaticBox(self, label='Coflow Controls')
+        coflow_ctrl_sizer = wx.StaticBoxSizer(control_box, wx.VERTICAL)
+
+        self.flow_rate = wx.TextCtrl(control_box, size=(60,-1), value=self.settings['lc_flow_rate'],
             validator=utils.CharValidator('float'))
         fr_label = 'LC flow rate [{}]:'.format(units)
 
         flow_rate_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        flow_rate_sizer.Add(wx.StaticText(self, label=fr_label), border=2,
+        flow_rate_sizer.Add(wx.StaticText(control_box, label=fr_label), border=2,
             flag=wx.ALIGN_CENTER_VERTICAL|wx.RIGHT)
         flow_rate_sizer.Add(self.flow_rate, flag=wx.ALIGN_CENTER_VERTICAL)
 
 
-        self.start_flow_button = wx.Button(self, label='Start Coflow')
-        self.stop_flow_button = wx.Button(self, label='Stop Coflow')
-        self.change_flow_button = wx.Button(self, label='Change Flow Rate')
-        self.auto_flow = wx.CheckBox(self, label='Start/stop coflow automatically with exposure')
+        self.start_flow_button = wx.Button(control_box, label='Start Coflow')
+        self.stop_flow_button = wx.Button(control_box, label='Stop Coflow')
+        self.change_flow_button = wx.Button(control_box, label='Change Flow Rate')
+        self.auto_flow = wx.CheckBox(control_box, label='Start/stop coflow automatically with exposure')
         self.auto_flow.SetValue(False)
 
         self.start_flow_button.Bind(wx.EVT_BUTTON, self._on_startbutton)
@@ -230,12 +246,41 @@ class CoflowPanel(wx.Panel):
             flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT)
         button_sizer.AddStretchSpacer(1)
 
-        coflow_ctrl_sizer = wx.StaticBoxSizer(wx.StaticBox(self,
-            label='Coflow Controls'), wx.VERTICAL)
-        coflow_ctrl_sizer.Add(flow_rate_sizer, border=5, flag=wx.TOP|wx.LEFT|wx.RIGHT)
-        coflow_ctrl_sizer.Add(self.auto_flow, border=5, flag=wx.TOP|wx.LEFT|wx.RIGHT)
-        coflow_ctrl_sizer.Add(button_sizer, border=5,
-            flag=wx.ALL|wx.ALIGN_CENTER_HORIZONTAL|wx.EXPAND)
+        adv_pane = wx.CollapsiblePane(control_box, label="Advanced Settings",
+            style=wx.CP_NO_TLW_RESIZE)
+        adv_pane.Bind(wx.EVT_COLLAPSIBLEPANE_CHANGED, self.on_collapse)
+        adv_win = adv_pane.GetPane()
+
+        adv_sizer = wx.BoxSizer(wx.VERTICAL)
+
+        if self.settings['use_overflow_control']:
+            self.start_overflow = wx.Button(adv_win, label='Start Overflow')
+            self.stop_overflow = wx.Button(adv_win, label='Stop Overflow')
+            self.overflow_status = wx.StaticText(adv_win, label='', style=wx.ST_NO_AUTORESIZE,
+                size=(50, -1))
+
+            self.start_overflow.Bind(wx.EVT_BUTTON, self._on_start_overflow)
+            self.stop_overflow.Bind(wx.EVT_BUTTON, self._on_stop_overflow)
+
+            of_status_sizer = wx.BoxSizer(wx.HORIZONTAL)
+            of_status_sizer.Add(wx.StaticText(adv_win, label='Overflow status:'),
+                flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT, border=self._FromDIP(5))
+            of_status_sizer.Add(self.overflow_status, flag=wx.ALIGN_CENTER_VERTICAL)
+
+            overflow_sizer = wx.GridBagSizer(vgap=self._FromDIP(5), hgap=self._FromDIP(5))
+            overflow_sizer.Add(self.start_overflow, (0,0), flag=wx.ALIGN_CENTER_VERTICAL)
+            overflow_sizer.Add(self.stop_overflow, (0,1), flag=wx.ALIGN_CENTER_VERTICAL)
+            overflow_sizer.Add(of_status_sizer, (1,0), span=(1,2), flag=wx.ALIGN_CENTER_VERTICAL)
+
+            adv_sizer.Add(overflow_sizer, flag=wx.ALL, border=self._FromDIP(5))
+
+        adv_win.SetSizer(adv_sizer)
+
+        coflow_ctrl_sizer.Add(flow_rate_sizer, border=self._FromDIP(5), flag=wx.TOP|wx.LEFT|wx.RIGHT)
+        coflow_ctrl_sizer.Add(self.auto_flow, border=self._FromDIP(5), flag=wx.TOP|wx.LEFT|wx.RIGHT)
+        coflow_ctrl_sizer.Add(button_sizer, border=self._FromDIP(5),
+            flag=wx.TOP|wx.LEFT|wx.RIGHT|wx.EXPAND)
+        coflow_ctrl_sizer.Add(adv_pane, flag=wx.ALL|wx.EXPAND, border=self._FromDIP(5))
 
 
         status_panel = wx.Panel(self)
@@ -288,6 +333,11 @@ class CoflowPanel(wx.Panel):
         top_sizer.Add(status_panel, border=10, flag=wx.EXPAND|wx.TOP)
 
         self.SetSizer(top_sizer)
+
+    def on_collapse(self, event):
+        self.Layout()
+        self.Refresh()
+        self.SendSizeEvent()
 
     def showMessageDialog(self, parent, msg, title, style):
         dialog = wx.MessageDialog(parent, msg, title, style=style)
@@ -453,6 +503,50 @@ class CoflowPanel(wx.Panel):
 
     def _on_changebutton(self, evt):
         self.change_flow(start_monitor=True)
+
+    def _on_start_overflow(self, evt):
+        wx.CallAfter(self._start_overflow)
+
+    def _on_stop_overflow(self, evt):
+        wx.CallAfter(self._stop_overflow)
+
+    def _start_overflow(self):
+        ip = self.settings['remote_overflow_ip']
+        params = {'c':'1','s':'1', 'u':'user'}
+        requests.get('http://{}/?'.format(ip), params=params, timeout=5)
+
+    def _stop_overflow(self):
+        ip = self.settings['remote_overflow_ip']
+        params = {'c':'1','s':'0', 'u':'user'}
+        requests.get('http://{}/?'.format(ip), params=params, timeout=5)
+
+    def _on_overflow_monitor_timer(self, evt):
+        self._check_overflow_status()
+
+    def _check_overflow_status(self):
+        ip = self.settings['remote_overflow_ip']
+        params = {'s':'2', 'u':'user'}
+
+        try:
+            r = requests.get('http://{}/?'.format(ip), params=params, timeout=1)
+
+        except Exception:
+            msg = ('Could not get overflow pump status. Contact your beamline scientist.')
+
+            wx.CallAfter(self.showMessageDialog, self, msg, "Connection error",
+                wx.OK|wx.ICON_ERROR)
+
+            r = None
+
+        if r is not None:
+            res = r.text
+            start = res.find('<status>')
+            if start != -1:
+                res = res[start:]
+                status = res.split(',')[0].lstrip('<status>')
+                status = status.capitalize()
+
+                wx.CallAfter(self.overflow_status.SetLabel, status)
 
     def _onRightMouseButton(self, event):
 
@@ -915,6 +1009,8 @@ class CoflowPanel(wx.Panel):
     def on_exit(self):
         logger.debug('Closing all coflow devices')
 
+        self.overflow_monitor_timer.Stop()
+
         self.stop_get_fr_event.set()
 
         if not self.timeout_event.is_set():
@@ -1285,6 +1381,7 @@ if __name__ == '__main__':
         'remote_pump_port'      : '5556',
         'remote_fm_ip'          : '164.54.204.53',
         'remote_fm_port'        : '5557',
+        'remote_overflow_ip'    : '164.54.204.75',
         'flow_units'            : 'mL/min',
         'sheath_pump'           : ('VICI_M50', 'COM3', [626.2, 9.278], {}),
         'outlet_pump'           : ('VICI_M50', 'COM4', [623.56, 12.222], {}),
@@ -1299,6 +1396,7 @@ if __name__ == '__main__':
         'lc_flow_rate'          : '0.7',
         'show_sheath_warning'   : True,
         'show_outlet_warning'   : True,
+        'use_overflow_control'  : True,
         }
 
     app = wx.App()

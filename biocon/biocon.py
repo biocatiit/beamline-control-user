@@ -293,6 +293,7 @@ if __name__ == '__main__':
         'remote_pump_port'      : '5556',
         'remote_fm_ip'          : '164.54.204.53',
         'remote_fm_port'        : '5557',
+        'remote_overflow_ip'    : '164.54.204.75',
         'flow_units'            : 'mL/min',
         'sheath_pump'           : ('VICI_M50', 'COM3', [628.2, 13.051], {}),
         'outlet_pump'           : ('VICI_M50', 'COM4', [629.16, 12.354], {}),
@@ -306,6 +307,7 @@ if __name__ == '__main__':
         'lc_flow_rate'          : '0.6',
         'show_sheath_warning'   : True,
         'show_outlet_warning'   : True,
+        'use_overflow_control'  : True,
         }
 
     trsaxs_settings = {
