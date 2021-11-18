@@ -400,7 +400,7 @@ class ExpCommThread(threading.Thread):
 
         det.set_data_dir(data_dir)
         det.set_num_frames(num_frames)
-        det.set_trigger_mode(2)
+        det.set_trigger_mode('ext_enable')
         det.set_exp_time(exp_time)
         det.set_exp_period(exp_period)
 
@@ -951,7 +951,7 @@ class ExpCommThread(threading.Thread):
         # det_exp_period.put(exp_period)
 
         det.set_num_frames(num_frames)
-        det.set_trigger_mode(2)
+        det.set_trigger_mode('ext_enable')
         det.set_exp_time(exp_time)
         det.set_exp_period(exp_period)
 
@@ -1107,7 +1107,7 @@ class ExpCommThread(threading.Thread):
         # det_exp_period.put(exp_period)
 
         det.set_num_frames(num_frames)
-        det.set_trigger_mode(2)
+        det.set_trigger_mode('ext_enable')
         det.set_exp_time(exp_time)
         det.set_exp_period(exp_period)
 
@@ -1477,7 +1477,7 @@ class ExpCommThread(threading.Thread):
         # det_exp_period.put(exp_period)
 
         det.set_num_frames(num_frames)
-        det.set_trigger_mode(1)
+        det.set_trigger_mode('int_enable')
         det.set_exp_time(exp_time)
         det.set_exp_period(exp_period)
 
