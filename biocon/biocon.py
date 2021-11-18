@@ -206,13 +206,20 @@ if __name__ == '__main__':
         'exp_time'              : '0.5',
         'exp_period'            : '1',
         'exp_num'               : '2',
-        'exp_time_min'          : 0.00105,
+        # 'exp_time_min'          : 0.00105,  # For Pilatus
+        # 'exp_time_max'          : 5184000,
+        # 'exp_period_min'        : 0.002,
+        # 'exp_period_max'        : 5184000,
+        # 'nframes_max'           : 15000, # For Pilatus: 999999, for Struck: 15000 (set by maxChannels in the driver configuration)
+        # 'nparams_max'           : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
+        # 'exp_period_delta'      : 0.00095,
+        'exp_time_min'          : 0.0001,
         'exp_time_max'          : 5184000,
-        'exp_period_min'        : 0.002,
+        'exp_period_min'        : 0.0018,
         'exp_period_max'        : 5184000,
         'nframes_max'           : 15000, # For Pilatus: 999999, for Struck: 15000 (set by maxChannels in the driver configuration)
         'nparams_max'           : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
-        'exp_period_delta'      : 0.00095,
+        'exp_period_delta'      : 0.000001,
         # 'shutter_speed_open'    : 0.004, #in s      NM vacuum shutter, broken
         # 'shutter_speed_close'   : 0.004, # in s
         # 'shutter_pad'           : 0.002, #padding for shutter related values
@@ -244,13 +251,16 @@ if __name__ == '__main__':
         'sc_vac_pv'             : '18ID:VAC:D:ScatterChamber',
         'use_old_i0_gain'       : True,
         'i0_gain_pv'            : '18ID_D_BPM_Gain:Level-SP',
-        'local_dir_root'        : '/nas_data/Pilatus1M',
+        # 'local_dir_root'        : '/nas_data/Pilatus1M',
+        'local_dir_root'        : '/nas_data/Eiger2xe9M',
         'remote_dir_root'       : '/nas_data',
-        'detector'              : 'pilatus_mx',
-        'det_args'              : {}, #Allows detector specific keyword arguments
-        # 'detector'              : 's18_eiger_biocat:cam1:_epics',
-        # 'det_args'              :  {'use_tiff_writer': True, 'use_file_writer': True,
-        #     'photon_energy' : 12.0,}
+        # 'detector'              : 'pilatus_mx',
+        # 'det_args'              : {}, #Allows detector specific keyword arguments
+        # 'add_file_prefix'       : True,
+        'detector'              : 's18_eiger_biocat:_epics',
+        'det_args'              :  {'use_tiff_writer': False, 'use_file_writer': True,
+            'photon_energy' : 12.0,},
+        'add_file_prefix'       : False,
         'struck_log_vals'       : [{'mx_record': 'mcs3', 'channel': 2, 'name': 'I0',
             'scale': 1, 'offset': 0, 'dark': True, 'norm_time': False}, #Format: (mx_record_name, struck_channel, header_name, scale, offset, use_dark_current, normalize_by_exp_time)
             {'mx_record': 'mcs4', 'channel': 3, 'name': 'I1', 'scale': 1,
@@ -285,7 +295,8 @@ if __name__ == '__main__':
             'thresh': 0.04}, 'guard_vac' : {'check': True, 'thresh': 0.04},
             'sample_vac': {'check': True, 'thresh': 0.04}, 'sc_vac':
             {'check': True, 'thresh':0.04}},
-        'base_data_dir'         : '/nas_data/Pilatus1M/2021_Run3', #CHANGE ME
+        # 'base_data_dir'         : '/nas_data/Pilatus1M/2021_Run3', #CHANGE ME
+        'base_data_dir'         : '/nas_data/Eiger2xe9M/2021_Run3', #CHANGE ME
         }
 
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']

@@ -131,7 +131,7 @@ class MXDetector(Detector):
         self.det_filename.put(filename)
 
     def set_num_frames(self, num_frames):
-        if self.trigger_mdoe == 'ext_enable' or self.trigger_mode == 'int_enable':
+        if self.trigger_mode == 'ext_enable' or self.trigger_mode == 'int_enable':
             self.det.set_duration_mode(num_frames)
         else:
             self.det.set_multiframe_mode(num_frames)
@@ -143,12 +143,12 @@ class MXDetector(Detector):
             tm = 2
         elif mode == 'ext_trig':
             tm = 2
-        elif mode = 'int_trig':
+        elif mode == 'int_trig':
             tm = 1
-        elif mode = 'int_enable':
+        elif mode == 'int_enable':
             tm = 1
 
-        self.det.set_trigger_mode(mode)
+        self.det.set_trigger_mode(tm)
 
     def stop(self):
         self.det.stop()
@@ -218,18 +218,25 @@ class EPICSDetector(object):
         self.use_file_writer = use_file_writer
 
         if self.use_tiff_writer:
-            self.det.put('TIFF1:EnableCallbacks', 1)
-            self.det.put('StreamEnable', 1)
-            self.det.put('TIFF1:FileTemplate', '%s%s_%4.4d.tif')
-            self.det.put('TIFF1:AutoIncrement', 1)
-            self.det.put('TIFF1:AutoSave', 1)
+            self.det.put('TIFF1:EnableCallbacks', 1, timeout=1)
+            self.det.put('cam1:StreamEnable', 1, timeout=1)
+            self.det.put('TIFF1:FileTemplate', '%s%s_%4.4d.tif', timeout=1)
+            self.det.put('TIFF1:AutoIncrement', 1, timeout=1)
+            self.det.put('TIFF1:AutoSave', 1, timeout=1)
+
+        else:
+            self.det.put('TIFF1:EnableCallbacks', 0, timeout=1)
 
         if self.use_file_writer:
-            self.det.put('FWEnable', 1)
-            self.det.put('SaveFiles', 1)
-            self.det.put('FWAutoRemove', 1)
+            self.det.put('cam1:FWEnable', 1, timeout=1)
+            self.det.put('cam1:SaveFiles', 1, timeout=1)
+            self.det.put('cam1:FWAutoRemove', 1, timeout=1)
 
-        self.det.put('PhotonEnergy', photon_enegy*1000)
+        else:
+            self.det.put('cam1:FWEnable', 0, timeout=1)
+
+        self.det.put('cam1:PhotonEnergy', photon_energy*1000, timeout=1)
+
     # def __repr__(self):
     #     return '{}({}, {})'.format(self.__class__.__name__, self.name, self.device)
 
@@ -237,49 +244,51 @@ class EPICSDetector(object):
     #     return '{} {}, connected to {}'.format(self.__class__.__name__, self.name, self.device)
 
     def abort(self):
-        self.det.put("Acquire", 0)
+        self.det.put("cam1:Acquire", 0)
 
     def arm(self):
-        self.det.put("Acquire", 1)
+        self.det.put("cam1:Acquire", 1)
 
     def get_status(self):
-        return self.det.get("DetectorState_RBV")
+        return self.det.get("cam1:DetectorState_RBV")
 
     def set_data_dir(self, data_dir):
         if self.use_tiff_writer:
             self.det.put('TIFF1:FilePath', data_dir)
 
         if self.use_file_writer:
-            self.det.put("FilePath", data_dir)
+            self.det.put("cam1:FilePath", data_dir)
 
     def set_exp_period(self, exp_period):
-        self.det.put('AcquirePeriod', exp_period)
+        self.det.put('cam1:AcquirePeriod', exp_period)
 
     def set_exp_time(self, exp_time):
-        self.det.put('AcquireTime', exp_time)
+        self.det.put('cam1:AcquireTime', exp_time)
 
     def set_filename(self, filename):
         if self.use_tiff_writer:
             self.det.put('TIFF1:FileName', filename)
-            self.det.put('TIFF1:FileNumber', 0)
+            self.det.put('TIFF1:FileNumber', 1)
 
         if self.use_file_writer:
-            self.det.put("FWNamePattern", filename)
+            self.det.put("cam1:FWNamePattern", filename)
 
     def set_num_frames(self, num_frames):
-        trig_mode = self.det.get('TriggerMode_RBV')
+        trig_mode = self.det.get('cam1:TriggerMode_RBV', as_string=True)
+
+        logger.debug('trig_mode')
 
         if trig_mode == 'Internal Series' or trig_mode == 'External Series':
-            self.det.put('NumImages', num_frames)
+            self.det.put('cam1:NumImages', num_frames)
 
         elif trig_mode == 'Internal Enable' or trig_mode == 'External Enable':
-            self.det.put('NumTriggers', num_frames)
+            self.det.put('cam1:NumTriggers', num_frames)
 
         if self.use_file_writer:
             if num_frames < 10000:
-                self.det.put('FWNImagesPerFile', num_frames)
+                self.det.put('cam1:FWNImagesPerFile', num_frames)
             else:
-                self.det.put('FWNImagesPerFile', 10000)
+                self.det.put('cam1:FWNImagesPerFile', 10000)
 
     def set_trigger_mode(self, mode):
         if mode == 'ext_enable':
@@ -294,9 +303,9 @@ class EPICSDetector(object):
             tm = 'Internal Enable'
 
         if mode == 'ext_enable' or mode == 'int_enable':
-            self.det.put('NumImages', 1)
+            self.det.put('cam1:NumImages', 1)
 
-        self.det.put("TriggerMode", tm)
+        self.det.put("cam1:TriggerMode", tm)
 
     def stop(self):
-        self.det.put("Acquire", 0)
+        self.det.put("cam1:Acquire", 0)

@@ -135,11 +135,11 @@ class ExpCommThread(threading.Thread):
             # det_local_datafile_root.put(data_dir_root) #MX record field is read only?
 
         elif self._settings['detector'].lower().split('_')[-1] == 'epics':
-            record_name = self._settings['detector'].lower().rstrip('_mx')
+            record_name = self._settings['detector'].lower().rstrip('_epics')
 
             det_args = self._settings['det_args']
 
-            det = detectorcon.MXDetector(record_name, **det_args)
+            det = detectorcon.EPICSDetector(record_name, **det_args)
 
         logger.debug("Got detector records")
 
@@ -1201,7 +1201,10 @@ class ExpCommThread(threading.Thread):
             else:
                 cur_fprefix = fprefix
 
-            new_fname = '{}_{}.tif'.format(cur_fprefix, exp_start_num)
+            if self._settings['add_file_prefix']:
+                new_fname = '{}_{}.tif'.format(cur_fprefix, exp_start_num)
+            else:
+                new_fname = cur_fprefix
 
             finished = self._inner_fast_exp(det,
                 struck, ab_burst, ab_burst_2, dio_out6, dio_out9, dio_out10,
@@ -3384,9 +3387,11 @@ if __name__ == '__main__':
         'remote_dir_root'       : '/nas_data',
         'detector'              : 'pilatus_mx',
         'det_args'              : {}, #Allows detector specific keyword arguments
+        'add_file_prefix'       : True,
         # 'detector'              : 's18_eiger_biocat:cam1:_epics',
         # 'det_args'              :  {'use_tiff_writer': True, 'use_file_writer': True,
-        #     'photon_energy' : 12.0,}
+        #     'photon_energy' : 12.0,},
+        # 'add_file_prefix'       : False,
         'struck_log_vals'       : [{'mx_record': 'mcs3', 'channel': 2, 'name': 'I0',
             'scale': 1, 'offset': 0, 'dark': True, 'norm_time': False}, #Format: (mx_record_name, struck_channel, header_name, scale, offset, use_dark_current, normalize_by_exp_time)
             {'mx_record': 'mcs4', 'channel': 3, 'name': 'I1', 'scale': 1,
