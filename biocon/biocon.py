@@ -295,7 +295,7 @@ if __name__ == '__main__':
         'remote_fm_port'        : '5557',
         'remote_overflow_ip'    : '164.54.204.75',
         'flow_units'            : 'mL/min',
-        'sheath_pump'           : ('VICI_M50', 'COM3', [628.2, 13.051], {}),
+        'sheath_pump'           : ('VICI_M50', 'COM3', [629.48, 13.442], {}),
         'outlet_pump'           : ('VICI_M50', 'COM4', [629.16, 12.354], {}),
         'sheath_fm'             : ('BFS', 'COM5', [], {}),
         'outlet_fm'             : ('BFS', 'COM6', [], {}),
@@ -451,7 +451,7 @@ if __name__ == '__main__':
         # ('trsaxs_scan', trcon.TRScanPanel),
         # ('trsaxs_flow', trcon.TRFlowPanel),
         # ('scan',    scancon.ScanPanel),
-        ('metadata', metadata.ParamPanel),
+        # ('metadata', metadata.ParamPanel),
         # ('pipeline', pipeline_ctrl.PipelineControl)
         ])
 

@@ -187,6 +187,7 @@ class CoflowPanel(wx.Panel):
                 wx.OK|wx.ICON_ERROR)
 
         if self.settings['use_overflow_control']:
+            self.overflow_connected = True
             self.overflow_monitor_timer = wx.Timer(self)
             self.Bind(wx.EVT_TIMER, self._on_overflow_monitor_timer,
                 self.overflow_monitor_timer)
@@ -246,7 +247,7 @@ class CoflowPanel(wx.Panel):
             flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT)
         button_sizer.AddStretchSpacer(1)
 
-        adv_pane = wx.CollapsiblePane(control_box, label="Advanced Settings",
+        adv_pane = wx.CollapsiblePane(control_box, label="Advanced",
             style=wx.CP_NO_TLW_RESIZE)
         adv_pane.Bind(wx.EVT_COLLAPSIBLEPANE_CHANGED, self.on_collapse)
         adv_win = adv_pane.GetPane()
@@ -264,7 +265,7 @@ class CoflowPanel(wx.Panel):
 
             of_status_sizer = wx.BoxSizer(wx.HORIZONTAL)
             of_status_sizer.Add(wx.StaticText(adv_win, label='Overflow status:'),
-                flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT, border=self._FromDIP(5))
+                flag=wx.ALIGN_CENTER_VERTICAL|wx.RIGHT, border=self._FromDIP(5))
             of_status_sizer.Add(self.overflow_status, flag=wx.ALIGN_CENTER_VERTICAL)
 
             overflow_sizer = wx.GridBagSizer(vgap=self._FromDIP(5), hgap=self._FromDIP(5))
@@ -529,12 +530,16 @@ class CoflowPanel(wx.Panel):
 
         try:
             r = requests.get('http://{}/?'.format(ip), params=params, timeout=1)
+            self.overflow_connected = True
 
         except Exception:
-            msg = ('Could not get overflow pump status. Contact your beamline scientist.')
+            if self.overflow_connected:
+                msg = ('Could not get overflow pump status. Contact your beamline scientist.')
 
-            wx.CallAfter(self.showMessageDialog, self, msg, "Connection error",
-                wx.OK|wx.ICON_ERROR)
+                wx.CallAfter(self.showMessageDialog, self, msg, "Connection error",
+                    wx.OK|wx.ICON_ERROR)
+
+                self.overflow_connected = False
 
             r = None
 
