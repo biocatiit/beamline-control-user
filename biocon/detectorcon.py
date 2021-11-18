@@ -166,12 +166,25 @@ class AD_EigerCamera(Device):
              "BinX", "BinX_RBV", "BinY", "BinY_RBV",
              "ColorMode", "ColorMode_RBV",
              "DataType", "DataType_RBV", "DetectorState_RBV",
-             "Gain", "Gain_RBV", "ImageMode", "ImageMode_RBV",
+             "Gain", "Gain_RBV",
+             "FWAutoRemove", "FWAutoRemove_RBV",
+             "FWEnable", "FWEnable_RBV",
+             "FWNamePattern", "FWNamePattern_RBV",
+             "FWNImagesPerFile", "FWNImagesPerFile_RBV",
+             "ImageMode", "ImageMode_RBV",
              "MaxSizeX_RBV", "MaxSizeY_RBV",
              "MinX", "MinX_RBV", "MinY", "MinY_RBV",
              "NumImages", "NumImagesCounter_RBV", "NumImages_RBV",
              "NumTriggers", "NumTriggers_RBV",
+             "PhotonEnergy", "PhotonEnergy_RBV",
+             "SaveFiles", "SaveFiles_RBV",
              "SizeX", "SizeX_RBV", "SizeY", "SizeY_RBV",
+             "StreamEnable", "StreamEnable_RBV",
+             "TIFF1:AutoIncrement", "TIFF1:AutoIncrement_RBV",
+             "TIFF1:AutoSave", "TIFF1:AutoSave_RBV",
+             "TIFF1:EnableCallbacks", "TIFF1:EnableCallbacks_RBV",
+             "TIFF1:FileName", "TIFF1:FileName_RBV",
+             "TIFF1:FilePath", "TIFF1:FilePath_RBV", "TIFF1:FileTemplate",
              "TimeRemaining_RBV",
              "TriggerMode", "TriggerMode_RBV", "TriggerSoftware")
 
@@ -194,12 +207,29 @@ class AD_EigerCamera(Device):
             self._pvs[attr].put(value, wait=wait)
 
 class EPICSDetector(object):
-    def __init__(self, pv_prefix):
+    def __init__(self, pv_prefix, use_tiff_writer = True,
+        use_file_writer = True, photon_energy = 12.0):
         """
         """
 
         self.det = AD_EigerCamera(pv_prefix)
 
+        self.use_tiff_writer = use_tiff_writer
+        self.use_file_writer = use_file_writer
+
+        if self.use_tiff_writer:
+            self.det.put('TIFF1:EnableCallbacks', 1)
+            self.det.put('StreamEnable', 1)
+            self.det.put('TIFF1:FileTemplate', '%s%s_%4.4d.tif')
+            self.det.put('TIFF1:AutoIncrement', 1)
+            self.det.put('TIFF1:AutoSave', 1)
+
+        if self.use_file_writer:
+            self.det.put('FWEnable', 1)
+            self.det.put('SaveFiles', 1)
+            self.det.put('FWAutoRemove', 1)
+
+        self.det.put('PhotonEnergy', photon_enegy*1000)
     # def __repr__(self):
     #     return '{}({}, {})'.format(self.__class__.__name__, self.name, self.device)
 
@@ -216,7 +246,11 @@ class EPICSDetector(object):
         return self.det.get("DetectorState_RBV")
 
     def set_data_dir(self, data_dir):
-        self.det.put("FilePath", data_dir)
+        if self.use_tiff_writer:
+            self.det.put('TIFF1:FilePath', data_dir)
+
+        if self.use_file_writer:
+            self.det.put("FilePath", data_dir)
 
     def set_exp_period(self, exp_period):
         self.det.put('AcquirePeriod', exp_period)
@@ -225,7 +259,12 @@ class EPICSDetector(object):
         self.det.put('AcquireTime', exp_time)
 
     def set_filename(self, filename):
-        self.det.put("FWNamePattern", filename)
+        if self.use_tiff_writer:
+            self.det.put('TIFF1:FileName', filename)
+            self.det.put('TIFF1:FileNumber', 0)
+
+        if self.use_file_writer:
+            self.det.put("FWNamePattern", filename)
 
     def set_num_frames(self, num_frames):
         trig_mode = self.det.get('TriggerMode_RBV')
@@ -235,6 +274,12 @@ class EPICSDetector(object):
 
         elif trig_mode == 'Internal Enable' or trig_mode == 'External Enable':
             self.det.put('NumTriggers', num_frames)
+
+        if self.use_file_writer:
+            if num_frames < 10000:
+                self.det.put('FWNImagesPerFile', num_frames)
+            else:
+                self.det.put('FWNImagesPerFile', 10000)
 
     def set_trigger_mode(self, mode):
         if mode == 'ext_enable':

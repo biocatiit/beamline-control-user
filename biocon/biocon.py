@@ -247,7 +247,10 @@ if __name__ == '__main__':
         'local_dir_root'        : '/nas_data/Pilatus1M',
         'remote_dir_root'       : '/nas_data',
         'detector'              : 'pilatus_mx',
+        'det_args'              : {}, #Allows detector specific keyword arguments
         # 'detector'              : 's18_eiger_biocat:cam1:_epics',
+        # 'det_args'              :  {'use_tiff_writer': True, 'use_file_writer': True,
+        #     'photon_energy' : 12.0,}
         'struck_log_vals'       : [{'mx_record': 'mcs3', 'channel': 2, 'name': 'I0',
             'scale': 1, 'offset': 0, 'dark': True, 'norm_time': False}, #Format: (mx_record_name, struck_channel, header_name, scale, offset, use_dark_current, normalize_by_exp_time)
             {'mx_record': 'mcs4', 'channel': 3, 'name': 'I1', 'scale': 1,

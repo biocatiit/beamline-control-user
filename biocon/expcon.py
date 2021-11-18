@@ -113,7 +113,9 @@ class ExpCommThread(threading.Thread):
             data_dir_root = copy.deepcopy(self._settings['base_data_dir']).replace(
                 self._settings['local_dir_root'], self._settings['remote_dir_root'], 1)
 
-            det = detectorcon.MXDetector(record_name, mx_database, data_dir_root)
+            det_args = self._settings['det_args']
+
+            det = detectorcon.MXDetector(record_name, mx_database, data_dir_root, **det_args)
 
             # server_record_name = det.get_field('server_record')
             # remote_det_name = det.get_field('remote_record_name')
@@ -131,6 +133,13 @@ class ExpCommThread(threading.Thread):
             # det_local_datafile_root = mp.Net(server_record, det_local_datafile_root_name)
 
             # det_local_datafile_root.put(data_dir_root) #MX record field is read only?
+
+        elif self._settings['detector'].lower().split('_')[-1] == 'epics':
+            record_name = self._settings['detector'].lower().rstrip('_mx')
+
+            det_args = self._settings['det_args']
+
+            det = detectorcon.MXDetector(record_name, **det_args)
 
         logger.debug("Got detector records")
 
@@ -3374,7 +3383,10 @@ if __name__ == '__main__':
         'local_dir_root'        : '/nas_data/Pilatus1M',
         'remote_dir_root'       : '/nas_data',
         'detector'              : 'pilatus_mx',
+        'det_args'              : {}, #Allows detector specific keyword arguments
         # 'detector'              : 's18_eiger_biocat:cam1:_epics',
+        # 'det_args'              :  {'use_tiff_writer': True, 'use_file_writer': True,
+        #     'photon_energy' : 12.0,}
         'struck_log_vals'       : [{'mx_record': 'mcs3', 'channel': 2, 'name': 'I0',
             'scale': 1, 'offset': 0, 'dark': True, 'norm_time': False}, #Format: (mx_record_name, struck_channel, header_name, scale, offset, use_dark_current, normalize_by_exp_time)
             {'mx_record': 'mcs4', 'channel': 3, 'name': 'I1', 'scale': 1,
