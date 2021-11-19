@@ -213,13 +213,13 @@ if __name__ == '__main__':
         # 'nframes_max'           : 15000, # For Pilatus: 999999, for Struck: 15000 (set by maxChannels in the driver configuration)
         # 'nparams_max'           : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
         # 'exp_period_delta'      : 0.00095,
-        'exp_time_min'          : 0.0001,
-        'exp_time_max'          : 5184000,
-        'exp_period_min'        : 0.0018,
-        'exp_period_max'        : 5184000,
-        'nframes_max'           : 15000, # For Pilatus: 999999, for Struck: 15000 (set by maxChannels in the driver configuration)
+        'exp_time_min'          : 0.000000050, #Eiger2 XE 9M
+        'exp_time_max'          : 3600,
+        'exp_period_min'        : 0.001785714286, #There's an 8bit undocumented mode that can go faster, in theory
+        'exp_period_max'        : 5184000, # Not clear there is a maximum, so left it at this
+        'nframes_max'           : 15000, # For Eiger: 2000000000, for Struck: 15000 (set by maxChannels in the driver configuration)
         'nparams_max'           : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
-        'exp_period_delta'      : 0.000001,
+        'exp_period_delta'      : 0.000000200,
         # 'shutter_speed_open'    : 0.004, #in s      NM vacuum shutter, broken
         # 'shutter_speed_close'   : 0.004, # in s
         # 'shutter_pad'           : 0.002, #padding for shutter related values
