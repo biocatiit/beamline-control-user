@@ -206,7 +206,7 @@ class AD_EigerCamera(Device):
         if  self._pvs[rbv_attr].get(as_string=True) != value:
             self._pvs[attr].put(value, wait=wait)
 
-class EPICSDetector(object):
+class EPICSEigerDetector(object):
     def __init__(self, pv_prefix, use_tiff_writer = True,
         use_file_writer = True, photon_energy = 12.0):
         """

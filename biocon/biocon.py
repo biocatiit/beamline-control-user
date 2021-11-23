@@ -206,13 +206,15 @@ if __name__ == '__main__':
         'exp_time'              : '0.5',
         'exp_period'            : '1',
         'exp_num'               : '2',
-        # 'exp_time_min'          : 0.00105,  # For Pilatus
+
+        # 'exp_time_min'          : 0.00105,  # For Pilatus3 X 1M
         # 'exp_time_max'          : 5184000,
         # 'exp_period_min'        : 0.002,
         # 'exp_period_max'        : 5184000,
         # 'nframes_max'           : 15000, # For Pilatus: 999999, for Struck: 15000 (set by maxChannels in the driver configuration)
         # 'nparams_max'           : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
         # 'exp_period_delta'      : 0.00095,
+
         'exp_time_min'          : 0.000000050, #Eiger2 XE 9M
         'exp_time_max'          : 3600,
         'exp_period_min'        : 0.001785714286, #There's an 8bit undocumented mode that can go faster, in theory
@@ -220,22 +222,27 @@ if __name__ == '__main__':
         'nframes_max'           : 15000, # For Eiger: 2000000000, for Struck: 15000 (set by maxChannels in the driver configuration)
         'nparams_max'           : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
         'exp_period_delta'      : 0.000000200,
+
         # 'shutter_speed_open'    : 0.004, #in s      NM vacuum shutter, broken
         # 'shutter_speed_close'   : 0.004, # in s
         # 'shutter_pad'           : 0.002, #padding for shutter related values
         # 'shutter_cycle'         : 0.02, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
+
         'shutter_speed_open'    : 0.001, #in s    Fast shutters
         'shutter_speed_close'   : 0.001, # in s
         'shutter_pad'           : 0.00, #padding for shutter related values
         'shutter_cycle'         : 0.002, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
+
         # 'shutter_speed_open'    : 0.075, #in s      Slow vacuum shutter
         # 'shutter_speed_close'   : 0.075, # in s
         # 'shutter_pad'           : 0.01, #padding for shutter related values
         # 'shutter_cycle'         : 0.2, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
+
         # 'shutter_speed_open'    : 0.0045, #in s      Normal vacuum shutter
         # 'shutter_speed_close'   : 0.004, # in s
         # 'shutter_pad'           : 0.002, #padding for shutter related values
         # 'shutter_cycle'         : 0.1, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
+
         'struck_measurement_time' : '0.001', #in s
         'tr_muscle_exp'         : True,
         'slow_mode_thres'       : 0.1,
@@ -256,11 +263,11 @@ if __name__ == '__main__':
         'remote_dir_root'       : '/nas_data',
         # 'detector'              : 'pilatus_mx',
         # 'det_args'              : {}, #Allows detector specific keyword arguments
-        # 'add_file_prefix'       : True,
+        # 'add_file_postfix'      : True,
         'detector'              : 's18_eiger_biocat:_epics',
         'det_args'              :  {'use_tiff_writer': False, 'use_file_writer': True,
             'photon_energy' : 12.0,},
-        'add_file_prefix'       : False,
+        'add_file_postfix'      : False,
         'struck_log_vals'       : [{'mx_record': 'mcs3', 'channel': 2, 'name': 'I0',
             'scale': 1, 'offset': 0, 'dark': True, 'norm_time': False}, #Format: (mx_record_name, struck_channel, header_name, scale, offset, use_dark_current, normalize_by_exp_time)
             # {'mx_record': 'mcs4', 'channel': 3, 'name': 'I1', 'scale': 1,

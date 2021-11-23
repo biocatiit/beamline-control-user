@@ -139,7 +139,7 @@ class ExpCommThread(threading.Thread):
 
             det_args = self._settings['det_args']
 
-            det = detectorcon.EPICSDetector(record_name, **det_args)
+            det = detectorcon.EPICSEigerDetector(record_name, **det_args)
 
         logger.debug("Got detector records")
 
@@ -684,7 +684,10 @@ class ExpCommThread(threading.Thread):
         else:
             cur_fprefix = fprefix
 
-        new_fname = '{}_{}.tif'.format(cur_fprefix, exp_start_num)
+        if self._settings['add_file_postfix']:
+            new_fname = '{}_{}.tif'.format(cur_fprefix, exp_start_num)
+        else:
+            new_fname = cur_fprefix
 
         # det_filename.put(new_fname)
         det.set_filename(new_fname)
@@ -1025,7 +1028,10 @@ class ExpCommThread(threading.Thread):
                 elif num_frames > 99999:
                     exp_start_num = '000001'
 
-                new_fname = '{}_{}.tif'.format(cur_fprefix, exp_start_num)
+                if self._settings['add_file_postfix']:
+                    new_fname = '{}_{}.tif'.format(cur_fprefix, exp_start_num)
+                else:
+                    new_fname = cur_fprefix
 
                 extra_vals = []
                 for mprefix, pos in motor_positions.items():
@@ -1201,7 +1207,7 @@ class ExpCommThread(threading.Thread):
             else:
                 cur_fprefix = fprefix
 
-            if self._settings['add_file_prefix']:
+            if self._settings['add_file_postfix']:
                 new_fname = '{}_{}.tif'.format(cur_fprefix, exp_start_num)
             else:
                 new_fname = cur_fprefix
@@ -1508,7 +1514,10 @@ class ExpCommThread(threading.Thread):
 
         cur_fprefix = fprefix
 
-        new_fname = '{}_{}.tif'.format(cur_fprefix, exp_start_num)
+        if self._settings['add_file_postfix']:
+            new_fname = '{}_{}.tif'.format(cur_fprefix, exp_start_num)
+        else:
+            new_fname = cur_fprefix
 
         if det.get_status() !=0:
             try:
@@ -1729,8 +1738,14 @@ class ExpCommThread(threading.Thread):
 
     def format_log_value(self, index, fprefix, exp_period, cvals, log_vals, dark_counts,
         extra_vals, zpad):
+
         val = "{0}_{1:0{2}d}.tif\t{3}".format(fprefix, index+1, zpad,
             exp_period*index)
+
+        if self._settings['add_file_postfix']:
+            val = val + ".tif\t{0}".format(exp_period*index)
+        else:
+            val = val + "\t{0}".format(exp_period*index)
 
         exp_time = cvals[0][index]/50.e6
         val = val + "\t{}".format(exp_time)
@@ -1862,7 +1877,10 @@ class ExpCommThread(threading.Thread):
                         data[len(log_vals)+3+k].append(ev[1][i])
 
                 if pil_file:
-                    fname = "{0}_{1:0{2}d}.tif".format(fprefix, filenum, zpad)
+                    fname = "{0}_{1:0{2}d}".format(fprefix, filenum, zpad)
+
+                    if self._settings['add_file_postfix']:
+                        fname = fname + ".tif"
 
                 else:
                     fname = "no_image"
@@ -3358,13 +3376,15 @@ if __name__ == '__main__':
         'exp_time'              : '0.5',
         'exp_period'            : '1',
         'exp_num'               : '2',
-        # 'exp_time_min'          : 0.00105,  # For Pilatus
+
+        # 'exp_time_min'          : 0.00105,  # For Pilatus3 X 1M
         # 'exp_time_max'          : 5184000,
         # 'exp_period_min'        : 0.002,
         # 'exp_period_max'        : 5184000,
         # 'nframes_max'           : 15000, # For Pilatus: 999999, for Struck: 15000 (set by maxChannels in the driver configuration)
         # 'nparams_max'           : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
         # 'exp_period_delta'      : 0.00095,
+
         'exp_time_min'          : 0.000000050, #Eiger2 XE 9M
         'exp_time_max'          : 3600,
         'exp_period_min'        : 0.001785714286, #There's an 8bit undocumented mode that can go faster, in theory
@@ -3372,27 +3392,32 @@ if __name__ == '__main__':
         'nframes_max'           : 15000, # For Eiger: 2000000000, for Struck: 15000 (set by maxChannels in the driver configuration)
         'nparams_max'           : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
         'exp_period_delta'      : 0.000000200,
+
         # 'shutter_speed_open'    : 0.004, #in s      NM vacuum shutter, broken
         # 'shutter_speed_close'   : 0.004, # in s
         # 'shutter_pad'           : 0.002, #padding for shutter related values
         # 'shutter_cycle'         : 0.02, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
-        # 'shutter_speed_open'    : 0.001, #in s    Fast shutters
-        # 'shutter_speed_close'   : 0.001, # in s
-        # 'shutter_pad'           : 0.00, #padding for shutter related values
-        # 'shutter_cycle'         : 0.002, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
+
+        'shutter_speed_open'    : 0.001, #in s    Fast shutters
+        'shutter_speed_close'   : 0.001, # in s
+        'shutter_pad'           : 0.00, #padding for shutter related values
+        'shutter_cycle'         : 0.002, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
+
         # 'shutter_speed_open'    : 0.075, #in s      Slow vacuum shutter
         # 'shutter_speed_close'   : 0.075, # in s
         # 'shutter_pad'           : 0.01, #padding for shutter related values
         # 'shutter_cycle'         : 0.2, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
-        'shutter_speed_open'    : 0.0045, #in s      Normal vacuum shutter
-        'shutter_speed_close'   : 0.004, # in s
-        'shutter_pad'           : 0.002, #padding for shutter related values
-        'shutter_cycle'         : 0.1, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
+
+        # 'shutter_speed_open'    : 0.0045, #in s      Normal vacuum shutter
+        # 'shutter_speed_close'   : 0.004, # in s
+        # 'shutter_pad'           : 0.002, #padding for shutter related values
+        # 'shutter_cycle'         : 0.1, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
+
         'struck_measurement_time' : '0.001', #in s
-        'tr_muscle_exp'         : False,
+        'tr_muscle_exp'         : True,
         'slow_mode_thres'       : 0.1,
         'fast_mode_max_exp_time': 2000,
-        'wait_for_trig'         : False,
+        'wait_for_trig'         : True,
         'num_trig'              : '1',
         'show_advanced_options' : True,
         'fe_shutter_pv'         : 'FE:18:ID:FEshutter',
@@ -3408,11 +3433,11 @@ if __name__ == '__main__':
         'remote_dir_root'       : '/nas_data',
         # 'detector'              : 'pilatus_mx',
         # 'det_args'              : {}, #Allows detector specific keyword arguments
-        # 'add_file_prefix'       : True,
+        # 'add_file_postfix'      : True,
         'detector'              : 's18_eiger_biocat:_epics',
         'det_args'              :  {'use_tiff_writer': False, 'use_file_writer': True,
             'photon_energy' : 12.0,},
-        'add_file_prefix'       : False,
+        'add_file_postfix'      : False,
         'struck_log_vals'       : [{'mx_record': 'mcs3', 'channel': 2, 'name': 'I0',
             'scale': 1, 'offset': 0, 'dark': True, 'norm_time': False}, #Format: (mx_record_name, struck_channel, header_name, scale, offset, use_dark_current, normalize_by_exp_time)
             {'mx_record': 'mcs4', 'channel': 3, 'name': 'I1', 'scale': 1,
