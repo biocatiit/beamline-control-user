@@ -654,7 +654,7 @@ class ExpCommThread(threading.Thread):
         autoinject, autoinject_scan, start_autoinject_event, s_counters, log_vals,
         x_positions, y_positions, comp_settings, tr_scan_settings):
 
-        if det.get_status() & 0x1 !=0:
+        if det.get_status() !=0:
             try:
                 det.abort()
             except (mp.Device_Action_Failed_Error, mp.Unparseable_String_Error):
@@ -828,7 +828,7 @@ class ExpCommThread(threading.Thread):
             cur_fprefix, exp_period, dark_counts, log_vals,
             exp_settings['metadata'], extra_vals)
 
-        while det.get_status() & 0x1 !=0:
+        while det.get_status() !=0:
             time.sleep(0.001)
             if self._abort_event.is_set():
                 self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6,
@@ -1239,7 +1239,7 @@ class ExpCommThread(threading.Thread):
                         dio_out9, dio_out6, exp_time)
                     break
 
-                if (det.get_status() & 0x1) == 0:
+                if det.get_status() == 0:
                     break #In case you miss the srs trigger
 
     def get_experiment_status(self, ab_burst, ab_burst_2, det, timeouts):
@@ -1288,7 +1288,7 @@ class ExpCommThread(threading.Thread):
         dark_counts, cur_trig, exp_time, exp_period, num_frames, struck_num_meas,
         struck_meas_time, kwargs):
 
-        if det.get_status() & 0x1 !=0:
+        if det.get_status() !=0:
             try:
                 det.abort()
             except (mp.Device_Action_Failed_Error, mp.Unparseable_String_Error):
@@ -1421,7 +1421,7 @@ class ExpCommThread(threading.Thread):
 
         ab_burst.get_status() #Maybe need to clear this status?
 
-        while det.get_status() & 0x1 !=0:
+        while det.get_status() !=0:
             time.sleep(0.001)
             if self._abort_event.is_set() and not aborted:
                 self.fast_mode_abort_cleanup(det, struck, ab_burst, ab_burst_2,
@@ -1510,7 +1510,7 @@ class ExpCommThread(threading.Thread):
 
         new_fname = '{}_{}.tif'.format(cur_fprefix, exp_start_num)
 
-        if det.get_status() & 0x1 !=0:
+        if det.get_status() !=0:
             try:
                 det.abort()
             except (mp.Device_Action_Failed_Error, mp.Unparseable_String_Error):
@@ -1585,7 +1585,7 @@ class ExpCommThread(threading.Thread):
                     data_dir, cur_fprefix, exp_period, num_frames,
                     dark_counts, log_vals, extra_vals)
 
-            while det.get_status() & 0x1 !=0:
+            while det.get_status() !=0:
                 time.sleep(0.001)
                 if self._abort_event.is_set() and not aborted:
                     self.mar_abort_cleanup(det, dio_out9, dio_out6, exp_time)
@@ -1837,16 +1837,16 @@ class ExpCommThread(threading.Thread):
 
                     val = val + "\t{}".format(counter)
 
-                    if log['name'] == 'Pilatus_Enable':
-                        if prev_pil_en_ctr < 4.5 and counter > 4.5:
+                    if log['name'] == 'Detector_Enable':
+                        if prev_pil_en_ctr < 3.0 and counter > 3.0:
                             filenum = filenum + 1
                             sum_start = i
 
-                        elif prev_pil_en_ctr > 4.5 and counter < 4.5:
+                        elif prev_pil_en_ctr > 3.0 and counter < 3.0:
                             sum_end = i
                             write_summary = True
 
-                        if counter > 4.5:
+                        if counter > 3.0:
                             pil_file = True
                         else:
                             pil_file = False
@@ -3425,7 +3425,7 @@ if __name__ == '__main__':
             'scale': 5000, 'offset': 0.5, 'dark': False, 'norm_time': True},
             # {'mx_record': 'mcs12', 'channel': 11, 'name': 'Flow_rate',
             # 'scale': 10e6, 'offset': 0, 'dark': True, 'norm_time': True},
-            # {'mx_record': 'mcs7', 'channel': 6, 'name': 'Pilatus_Enable',
+            # {'mx_record': 'mcs7', 'channel': 6, 'name': 'Detector_Enable',
             # 'scale': 1e5, 'offset': 0, 'dark': True, 'norm_time': True},
             # {'mx_record': 'mcs12', 'channel': 11, 'name': 'Length',
             # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
