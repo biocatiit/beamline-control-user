@@ -3144,15 +3144,25 @@ class ExpPanel(wx.Panel):
 
                             errors.append(msg)
 
+                if metadata['Sheath valve position:'] != 1:
+                    msg = ('Sheath valve is in position {}, not the usual '
+                        'position {}.'.format(metadata['Sheath valve position:']))
+
+                    errors.append(msg)
+
+            else:
+                msg = ('Coflow is not on')
+                errors.append(msg)
+
         if len(errors) == 0:
             metadata_valid = True
 
         else:
             msg = ('Your settings may be inconsistent:')
             msg = msg + '\n-'.join(errors)
-            msg = msg + '\n\nDo you wish to continue the exposure?'
+            msg = msg + '\n\nDo you wish to start the exposure?'
 
-            dlg = wx.MessageDialog(self, msg, "Confirm data overwrite",
+            dlg = wx.MessageDialog(self, msg, "Confirm exposure start",
                 wx.YES_NO|wx.ICON_QUESTION|wx.NO_DEFAULT)
             result = dlg.ShowModal()
             dlg.Destroy()

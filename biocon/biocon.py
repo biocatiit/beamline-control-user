@@ -323,6 +323,7 @@ if __name__ == '__main__':
         'outlet_pump'           : ('VICI_M50', 'COM4', [629.16, 12.354], {}),
         'sheath_fm'             : ('BFS', 'COM5', [], {}),
         'outlet_fm'             : ('BFS', 'COM6', [], {}),
+        'sheath_valve'          : ('Cheminert', 'COM6', [], {'positions' : 10}),
         'sheath_ratio'          : 0.3,
         'sheath_excess'         : 1.5,
         'warning_threshold_low' : 0.8,
