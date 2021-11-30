@@ -642,6 +642,7 @@ class CoflowPanel(wx.Panel):
             self.error_dialog = None
             self.monitor_timer = wx.Timer(self)
             self.Bind(wx.EVT_TIMER, self._on_monitor_timer, self.monitor_timer)
+            self.doing_buffer_change = False
 
             self.connection_timer = wx.Timer(self)
             self.Bind(wx.EVT_TIMER, self._on_connection_timer, self.connection_timer)
@@ -807,29 +808,34 @@ class CoflowPanel(wx.Panel):
         control_box = wx.StaticBox(self, label='Coflow Controls')
         coflow_ctrl_sizer = wx.StaticBoxSizer(control_box, wx.VERTICAL)
 
-        self.flow_rate = wx.TextCtrl(control_box, size=(60,-1), value=self.settings['lc_flow_rate'],
-            validator=utils.CharValidator('float'))
+        self.flow_rate = wx.TextCtrl(control_box, size=self._FromDIP((60,-1)),
+            value=self.settings['lc_flow_rate'], validator=utils.CharValidator('float'))
         fr_label = 'LC flow rate [{}]:'.format(units)
+        self.change_flow_button = wx.Button(control_box, label='Change Flow Rate')
 
         flow_rate_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        flow_rate_sizer.Add(wx.StaticText(control_box, label=fr_label), border=2,
+        flow_rate_sizer.Add(wx.StaticText(control_box, label=fr_label), border=self._FromDIP(2),
             flag=wx.ALIGN_CENTER_VERTICAL|wx.RIGHT)
-        flow_rate_sizer.Add(self.flow_rate, flag=wx.ALIGN_CENTER_VERTICAL)
-
+        flow_rate_sizer.Add(self.flow_rate, flag=wx.ALIGN_CENTER_VERTICAL|wx.RIGHT,
+            border=self._FromDIP(2))
+        flow_rate_sizer.Add(self.change_flow_button, flag=wx.ALIGN_CENTER_VERTICAL)
 
         self.start_flow_button = wx.Button(control_box, label='Start Coflow')
         self.stop_flow_button = wx.Button(control_box, label='Stop Coflow')
-        self.change_flow_button = wx.Button(control_box, label='Change Flow Rate')
+        self.change_buffer_button = wx.Button(control_box, label='Change Buffer')
+
         self.auto_flow = wx.CheckBox(control_box, label='Start/stop coflow automatically with exposure')
         self.auto_flow.SetValue(False)
 
         self.start_flow_button.Bind(wx.EVT_BUTTON, self._on_startbutton)
         self.stop_flow_button.Bind(wx.EVT_BUTTON, self._on_stopbutton)
         self.change_flow_button.Bind(wx.EVT_BUTTON, self._on_changebutton)
+        self.change_buffer_button.Bind(wx.EVT_BUTTON, self._on_change_buffer)
 
         self.start_flow_button.Disable()
         self.stop_flow_button.Disable()
         self.change_flow_button.Disable()
+        self.change_buffer_button.Disable()
         self.auto_flow.Disable()
 
         if 'exposure' not in self.settings['components']:
@@ -839,11 +845,11 @@ class CoflowPanel(wx.Panel):
 
         button_sizer = wx.BoxSizer(wx.HORIZONTAL)
         button_sizer.AddStretchSpacer(1)
-        button_sizer.Add(self.start_flow_button, border=5,
+        button_sizer.Add(self.start_flow_button, border=self._FromDIP(5),
             flag=wx.ALIGN_CENTER_VERTICAL|wx.RIGHT)
-        button_sizer.Add(self.stop_flow_button, border=5,
+        button_sizer.Add(self.stop_flow_button, border=self._FromDIP(5),
             flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT|wx.RIGHT)
-        button_sizer.Add(self.change_flow_button, border=5,
+        button_sizer.Add(self.change_buffer_button, border=self._FromDIP(5),
             flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT)
         button_sizer.AddStretchSpacer(1)
 
@@ -858,7 +864,7 @@ class CoflowPanel(wx.Panel):
             self.start_overflow = wx.Button(adv_win, label='Start Overflow')
             self.stop_overflow = wx.Button(adv_win, label='Stop Overflow')
             self.overflow_status = wx.StaticText(adv_win, label='', style=wx.ST_NO_AUTORESIZE,
-                size=(50, -1))
+                size=self._FromDIP((50, -1)))
 
             self.start_overflow.Bind(wx.EVT_BUTTON, self._on_start_overflow)
             self.stop_overflow.Bind(wx.EVT_BUTTON, self._on_stop_overflow)
@@ -951,7 +957,7 @@ class CoflowPanel(wx.Panel):
         sheath_label = wx.StaticText(status_panel, label='Sheath flow [{}]:'.format(units))
         outlet_label = wx.StaticText(status_panel, label='Outlet flow [{}]:'.format(units))
 
-        status_grid_sizer = wx.FlexGridSizer(cols=2, rows=3, vgap=5, hgap=2)
+        status_grid_sizer = wx.FlexGridSizer(cols=2, rows=3, vgap=self._FromDIP(5), hgap=self._FromDIP(2))
         status_grid_sizer.Add(status_label, flag=wx.ALIGN_CENTER_VERTICAL)
         status_grid_sizer.Add(self.status, flag=wx.ALIGN_CENTER_VERTICAL)
         status_grid_sizer.Add(sheath_label, flag=wx.ALIGN_CENTER_VERTICAL)
@@ -961,7 +967,7 @@ class CoflowPanel(wx.Panel):
 
         coflow_status_sizer = wx.StaticBoxSizer(wx.StaticBox(status_panel,
             label='Coflow Status'), wx.HORIZONTAL)
-        coflow_status_sizer.Add(status_grid_sizer, border=5, flag=wx.ALL)
+        coflow_status_sizer.Add(status_grid_sizer, border=self._FromDIP(5), flag=wx.ALL)
 
         coflow_status_sizer.AddStretchSpacer(1)
 
@@ -980,7 +986,7 @@ class CoflowPanel(wx.Panel):
 
         top_sizer = wx.BoxSizer(wx.VERTICAL)
         top_sizer.Add(coflow_ctrl_sizer, flag=wx.EXPAND)
-        top_sizer.Add(status_panel, border=10, flag=wx.EXPAND|wx.TOP)
+        top_sizer.Add(status_panel, border=self._FromDIP(10), flag=wx.EXPAND|wx.TOP)
 
         self.SetSizer(top_sizer)
 
@@ -1013,6 +1019,48 @@ class CoflowPanel(wx.Panel):
 
     def _on_changebutton(self, evt):
         self.change_flow(start_monitor=True)
+
+    def _on_change_buffer(self, evt):
+        self.change_buffer()
+
+    def change_buffer(self, target_valve_pos=1, change_valve_pos=False, interactive=True):
+        #Stop flow
+        self.stop_flow()
+
+        if change_valve_pos:
+            self.set_sheath_valve_position(target_valve_pos)
+
+        valve_pos = self.get_sheath_valve_position()
+
+        if interactive:
+            if valve_pos != target_valve_pos:
+
+                msg = ('The sheath buffer valve position is set to {}. For buffer '
+                    'it is usually 1. Please verify that the valve position '
+                    'is correct before proceeding and change if necessary. '
+                    'Click okay to continue.')
+
+                self.showMessageDialog(self, msg, "Check sheath buffer valve",
+                        wx.OK|wx.ICON_INFORMATION)
+
+            #Change buffer bottle
+            msg = ('Change the buffer bottle in the coflow setup. Click okay to continue. '
+                'Buffer will flow for ~25 mL (~10 minutes) to flush the system.')
+
+            self.showMessageDialog(self, msg, "Change buffer",
+                    wx.OK|wx.ICON_INFORMATION)
+
+        #Change flow rate
+        self._change_flow_rate(self.settings['buffer_change_fr'])
+
+        #Start flow
+        self._start_flow()
+
+        #Start flow timer
+        fr = self.coflow_control.sheath_setpoint
+        time = 60*(self.settings['buffer_change_vol']/fr)
+        self._start_flow_timer(time)
+        self.doing_buffer_change = True
 
     def _on_start_overflow(self, evt):
         wx.CallAfter(self._start_overflow)
@@ -1061,15 +1109,18 @@ class CoflowPanel(wx.Panel):
             flow_time = None
 
         if flow_time is not None:
-            self.flow_timer_run_time = flow_time
-            self.flow_timer_start_time = time.time()
+            self._start_flow_timer(flow_time)
 
-            self.set_flow_timer_time_remaining(self.flow_timer_run_time)
+    def _start_flow_timer(self, flow_time):
+        self.flow_timer_run_time = flow_time
+        self.flow_timer_start_time = time.time()
 
-            self.flow_timer.Start(5000)
+        self.set_flow_timer_time_remaining(self.flow_timer_run_time)
 
-            wx.CallAfter(self.stop_flow_timer_btn.Enable)
-            wx.CallAfter(self.start_flow_timer_btn.Disable)
+        self.flow_timer.Start(5000)
+
+        wx.CallAfter(self.stop_flow_timer_btn.Enable)
+        wx.CallAfter(self.start_flow_timer_btn.Disable)
 
     def _on_stop_flow_timer(self, evt):
         self.stop_flow_timer()
@@ -1079,6 +1130,9 @@ class CoflowPanel(wx.Panel):
 
         wx.CallAFter(self.stop_flow_timer_btn.Disable)
         wx.CallAfter(self.start_flow_timer_btn.Enable)
+
+        # Any time the flow timer stops it interrupts the buffer change sequence
+        self.doing_buffer_change = False
 
     def set_flow_timer_time_remaining(self, tr):
         if tr < 3600:
@@ -1095,8 +1149,24 @@ class CoflowPanel(wx.Panel):
         if self.coflow_control.coflow_on:
             tr = time.time() - self.flow_timer_start_time
             if tr >= self.flow_timer_run_time:
+
+                change_buf = copy.copy(self.doing_buffer_change)
+
                 self.stop_flow()
                 self.stop_flow_timer()
+
+                if change_buf:
+                    msg = ('Buffer change complete. Do you want to restart '
+                        'flow at the previous rate?')
+
+                    dialog = wx.MessageDialog(self, msg, 'Buffer change finished',
+                        style=wx.YES_NO|wx.YES_DEFAULT|wx.ICON_QUESTION)
+
+                    ret = dialog.ShowModal()
+                    dialog.Destroy()
+
+                    if ret == wx.ID_YES:
+                        self.start_flow()
 
             else:
                 self.set_flow_timer_time_remaining(tr)
@@ -1165,11 +1235,14 @@ class CoflowPanel(wx.Panel):
             valid = self.change_flow(validate)
 
             if valid:
-                self.coflow_control.start_flow()
+                self._start_flow()
 
-                self.status.SetLabel('Coflow on')
+    def _start_flow(self):
+        self.coflow_control.start_flow()
 
-                self.monitor_timer.Start(self.settings['settling_time'])
+        self.status.SetLabel('Coflow on')
+
+        self.monitor_timer.Start(self.settings['settling_time'])
 
     def stop_flow(self):
         logger.debug('Stopping flow')
@@ -1214,17 +1287,20 @@ class CoflowPanel(wx.Panel):
             valid = True
 
         if valid:
-
-            if start_monitor:
-                self.monitor_timer.Stop()
-                self.monitor = False
-
-            self.coflow_control.change_flow_rate(flow_rate)
-
-            if start_monitor:
-                self.monitor_timer.Start(self.settings['settling_time'])
+            self._change_flow_rate(flow_rate, start_monitor)
 
         return valid
+
+    def _change_flow_rate(self, flow_rate, start_monitor=False):
+
+        if start_monitor:
+            self.monitor_timer.Stop()
+            self.monitor = False
+
+        self.coflow_control.change_flow_rate(flow_rate)
+
+        if start_monitor:
+            self.monitor_timer.Start(self.settings['settling_time'])
 
     def _validate_flow_rate(self):
         logger.debug('Validating flow rate')
@@ -1920,6 +1996,8 @@ if __name__ == '__main__':
         'show_sheath_warning'   : True,
         'show_outlet_warning'   : True,
         'use_overflow_control'  : True,
+        'buffer_change_fr'      : 2., #in ml/min
+        'buffer_change_vol'     : 25., #in ml
         }
 
     app = wx.App()

@@ -333,6 +333,8 @@ if __name__ == '__main__':
         'show_sheath_warning'   : True,
         'show_outlet_warning'   : True,
         'use_overflow_control'  : True,
+        'buffer_change_fr'      : 2., #in ml/min
+        'buffer_change_vol'     : 25., #in ml
         }
 
     trsaxs_settings = {
