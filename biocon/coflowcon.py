@@ -640,6 +640,7 @@ class CoflowPanel(wx.Panel):
 
             self.warning_dialog = None
             self.error_dialog = None
+            self.air_warning_dialog = None
             self.monitor_timer = wx.Timer(self)
             self.Bind(wx.EVT_TIMER, self._on_monitor_timer, self.monitor_timer)
             self.doing_buffer_change = False
@@ -863,16 +864,18 @@ class CoflowPanel(wx.Panel):
         adv_sizer = wx.BoxSizer(wx.VERTICAL)
 
         if self.settings['use_overflow_control']:
-            self.start_overflow = wx.Button(adv_win, label='Start Overflow')
-            self.stop_overflow = wx.Button(adv_win, label='Stop Overflow')
-            self.overflow_status = wx.StaticText(adv_win, label='', style=wx.ST_NO_AUTORESIZE,
-                size=self._FromDIP((50, -1)))
+            overflow_box = wx.StaticBox(adv_win, label='Overflow')
+            overflow_box_sizer = wx.StaticBoxSizer(overflow_box, wx.HORIZONTAL)
+            self.start_overflow = wx.Button(overflow_box, label='Start Overflow')
+            self.stop_overflow = wx.Button(overflow_box, label='Stop Overflow')
+            self.overflow_status = wx.StaticText(overflow_box, label='',
+                style=wx.ST_NO_AUTORESIZE, size=self._FromDIP((50, -1)))
 
             self.start_overflow.Bind(wx.EVT_BUTTON, self._on_start_overflow)
             self.stop_overflow.Bind(wx.EVT_BUTTON, self._on_stop_overflow)
 
             of_status_sizer = wx.BoxSizer(wx.HORIZONTAL)
-            of_status_sizer.Add(wx.StaticText(adv_win, label='Overflow status:'),
+            of_status_sizer.Add(wx.StaticText(overflow_box, label='Overflow status:'),
                 flag=wx.ALIGN_CENTER_VERTICAL|wx.RIGHT, border=self._FromDIP(5))
             of_status_sizer.Add(self.overflow_status, flag=wx.ALIGN_CENTER_VERTICAL)
 
@@ -885,28 +888,40 @@ class CoflowPanel(wx.Panel):
             overflow_sizer.Add(self.stop_overflow, (1,1),
                 flag=wx.ALIGN_CENTER_VERTICAL)
 
+            overflow_box_sizer.Add(overflow_sizer, flag=wx.ALL, border=self._FromDIP(2))
+            overflow_box_sizer.AddStretchSpacer(1)
 
-            adv_sizer.Add(overflow_sizer, flag=wx.ALL, border=self._FromDIP(5))
+            adv_sizer.Add(overflow_box_sizer, flag=wx.ALL|wx.EXPAND,
+                border=self._FromDIP(2))
 
 
-        self.sheath_valve_pos = utils.IntSpinCtrl(adv_win, min=1,
+        valve_box = wx.StaticBox(adv_win, label='Valves')
+        valve_box_sizer = wx.StaticBoxSizer(valve_box, wx.HORIZONTAL)
+
+        self.sheath_valve_pos = utils.IntSpinCtrl(valve_box, min=1,
             max=self.settings['sheath_valve'][3]['positions'])
         self.sheath_valve_pos.Bind(utils.EVT_MY_SPIN, self._on_sheath_valve_position_change)
 
         valve_sizer = wx.FlexGridSizer(cols=2, hgap=self._FromDIP(5),
             vgap=self._FromDIP(5))
-        valve_sizer.Add(wx.StaticText(adv_win, label='Sheath Valve:'),
+        valve_sizer.Add(wx.StaticText(valve_box, label='Sheath Valve:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
         valve_sizer.Add(self.sheath_valve_pos, flag=wx.ALIGN_CENTER_VERTICAL)
 
-        adv_sizer.Add(valve_sizer, flag=wx.ALL, border=self._FromDIP(5))
+        valve_box_sizer.Add(valve_sizer, flag=wx.ALL, border=self._FromDIP(2))
+        valve_box_sizer.AddStretchSpacer(1)
+
+        adv_sizer.Add(valve_box_sizer, flag=wx.ALL|wx.EXPAND, border=self._FromDIP(2))
 
 
-        self.start_flow_timer_btn = wx.Button(adv_win, label='Start flow timer')
-        self.stop_flow_timer_btn = wx.Button(adv_win, label='Stop flow timer')
-        self.flow_timer_run_time_ctrl = wx.TextCtrl(adv_win, size=self._FromDIP((60, -1)),
+        timer_box = wx.StaticBox(adv_win, label='Run Timer')
+        timer_box_sizer = wx.StaticBoxSizer(timer_box, wx.HORIZONTAL)
+
+        self.start_flow_timer_btn = wx.Button(timer_box, label='Start flow timer')
+        self.stop_flow_timer_btn = wx.Button(timer_box, label='Stop flow timer')
+        self.flow_timer_run_time_ctrl = wx.TextCtrl(timer_box, size=self._FromDIP((60, -1)),
             validator=utils.CharValidator('float'))
-        self.flow_timer_status = wx.StaticText(adv_win, label='Off',
+        self.flow_timer_status = wx.StaticText(timer_box, label='Off',
             style=wx.ST_NO_AUTORESIZE, size=self._FromDIP((100, -1)))
 
         self.start_flow_timer_btn.Bind(wx.EVT_BUTTON, self._on_start_flow_timer)
@@ -919,23 +934,30 @@ class CoflowPanel(wx.Panel):
         ft_button_sizer.Add(self.stop_flow_timer_btn, flag=wx.ALIGN_CENTER_VERTICAL)
 
         ft_sizer = wx.GridBagSizer(vgap=self._FromDIP(5), hgap=self._FromDIP(5))
-        ft_sizer.Add(wx.StaticText(adv_win, label='Flow timer status:'),
+        ft_sizer.Add(wx.StaticText(timer_box, label='Flow timer status:'),
             (0,0), flag=wx.ALIGN_CENTER_VERTICAL|wx.RIGHT)
         ft_sizer.Add(self.flow_timer_status, (0,1),
             flag=wx.ALIGN_CENTER_VERTICAL)
-        ft_sizer.Add(wx.StaticText(adv_win, label='Run time [min]:'), (1,0),
+        ft_sizer.Add(wx.StaticText(timer_box, label='Run time [min]:'), (1,0),
             flag=wx.ALIGN_CENTER_VERTICAL)
         ft_sizer.Add(self.flow_timer_run_time_ctrl, (1,1),
             flag=wx.ALIGN_CENTER_VERTICAL)
         ft_sizer.Add(ft_button_sizer, (2,0), span=(1,2),
             flag=wx.ALIGN_CENTER_VERTICAL)
 
-        adv_sizer.Add(ft_sizer, flag=wx.ALL, border=self._FromDIP(5))
+        timer_box_sizer.Add(ft_sizer, flag=wx.ALL, border=self._FromDIP(2))
+        timer_box_sizer.AddStretchSpacer(1)
 
-        self.put_in_water_btn = wx.Button(adv_win, label='Put in water')
-        self.put_in_ethanol_btn = wx.Button(adv_win, label='Put in ethanol')
-        self.put_in_hellmanex_btn = wx.Button(adv_win, label='Put in hellmanex')
-        self.clean_btn = wx.Button(adv_win, label='Clean')
+        adv_sizer.Add(timer_box_sizer, flag=wx.ALL|wx.EXPAND, border=self._FromDIP(5))
+
+
+        actions_box = wx.StaticBox(adv_win, label='Actions')
+        actions_box_sizer = wx.StaticBoxSizer(actions_box, wx.HORIZONTAL)
+
+        self.put_in_water_btn = wx.Button(actions_box, label='Put in water')
+        self.put_in_ethanol_btn = wx.Button(actions_box, label='Put in ethanol')
+        self.put_in_hellmanex_btn = wx.Button(actions_box, label='Put in hellmanex')
+        self.clean_btn = wx.Button(actions_box, label='Clean')
 
         self.put_in_water_btn.Bind(wx.EVT_BUTTON, self._on_put_in_water)
         self.put_in_hellmanex_btn.Bind(wx.EVT_BUTTON, self._on_put_in_hellmanex)
@@ -948,15 +970,30 @@ class CoflowPanel(wx.Panel):
         aux_btn_sizer.Add(self.put_in_ethanol_btn, flag=wx.ALIGN_CENTER_VERTICAL)
         aux_btn_sizer.Add(self.clean_btn, flag=wx.ALIGN_CENTER_VERTICAL)
 
-        adv_sizer.Add(aux_btn_sizer, flag=wx.ALL, border=self._FromDIP(5))
+        self.air_alarm_action = wx.Choice(actions_box, choices=['None', 'Warn', 'Stop'])
+        self.air_alarm_action.SetStringSelection('Warn')
+
+        air_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        air_sizer.Add(wx.StaticText(actions_box, label='On air alarm:'), border=self._FromDIP(2),
+            flag=wx.ALIGN_CENTER_VERTICAL|wx.RIGHT)
+        air_sizer.Add(self.air_alarm_action)
+
+        actions_top_sizer = wx.BoxSizer(wx.VERTICAL)
+        actions_top_sizer.Add(aux_btn_sizer)
+        actions_top_sizer.Add(air_sizer, flag=wx.TOP, border=self._FromDIP(5))
+
+        actions_box_sizer.Add(actions_top_sizer, flag=wx.ALL, border=self._FromDIP(2))
+        actions_box_sizer.AddStretchSpacer(1)
+
+        adv_sizer.Add(actions_box_sizer, flag=wx.ALL|wx.EXPAND, border=self._FromDIP(2))
 
         adv_win.SetSizer(adv_sizer)
 
-        coflow_ctrl_sizer.Add(flow_rate_sizer, border=self._FromDIP(5), flag=wx.TOP|wx.LEFT|wx.RIGHT)
-        coflow_ctrl_sizer.Add(self.auto_flow, border=self._FromDIP(5), flag=wx.TOP|wx.LEFT|wx.RIGHT)
-        coflow_ctrl_sizer.Add(button_sizer, border=self._FromDIP(5),
+        coflow_ctrl_sizer.Add(flow_rate_sizer, border=self._FromDIP(2), flag=wx.TOP|wx.LEFT|wx.RIGHT)
+        coflow_ctrl_sizer.Add(self.auto_flow, border=self._FromDIP(2), flag=wx.TOP|wx.LEFT|wx.RIGHT)
+        coflow_ctrl_sizer.Add(button_sizer, border=self._FromDIP(2),
             flag=wx.TOP|wx.LEFT|wx.RIGHT|wx.EXPAND)
-        coflow_ctrl_sizer.Add(adv_pane, flag=wx.ALL|wx.EXPAND, border=self._FromDIP(5))
+        coflow_ctrl_sizer.Add(adv_pane, flag=wx.ALL|wx.EXPAND, border=self._FromDIP(2))
 
 
         status_panel = wx.Panel(self)
@@ -1536,6 +1573,17 @@ class CoflowPanel(wx.Panel):
 
                         self.aux_time_list.append(cycle_time-self.start_time)
 
+                    if (sheath_density < self.settings['air_density_thresh']
+                        and outlet_density < self.settings['air_density_thresh']):
+                        wx.CallAfter(self.air_detected, 'both')
+
+                    elif sheath_density < self.settings['air_density_thresh']:
+                        wx.CallAfter(self.air_detected, 'sheath')
+
+                    elif outlet_density < self.settings['air_density_thresh']:
+                        wx.CallAfter(self.air_detected, 'outlet')
+
+
                 if s_type == 'flow_rate' and o_type == 'flow_rate':
                     wx.CallAfter(self.sheath_flow.SetLabel, str(round(sheath_fr, 3)))
                     wx.CallAfter(self.outlet_flow.SetLabel, str(round(outlet_fr,3 )))
@@ -1629,6 +1677,18 @@ class CoflowPanel(wx.Panel):
             self.aux_time_list.clear()
             self.start_time = time.time()
 
+    def air_detected(self, loc):
+        action = self.air_alarm_action.GetStringSelection()
+
+        if action == 'Warn':
+            self._show_air_warning_dialog(loc)
+            logger.warning('Air detected in %s', loc)
+
+        elif action == 'Stop':
+            self._show_air_warning_dialog(loc)
+            self.stop_flow()
+            logger.error('Air detected in %s', loc)
+
     def _show_warning_dialog(self, flow, flow_rate):
         if self.warning_dialog is None:
             msg = ('The {} flow rate is unstable. Contact your beamline '
@@ -1641,6 +1701,16 @@ class CoflowPanel(wx.Panel):
         if self.error_dialog is None:
             self.error_dialog = utils.WarningMessage(self, msg, title)
             self.error_dialog.Show()
+
+    def _show_air_warning_dialog(self, loc):
+        if self.air_warning_dialog is None:
+            if loc == 'both':
+                msg = ('Air detected in both sheath and outlet flows.')
+            else:
+                msg = ('Air detected in the {} flow.')
+
+            self.air_warning_dialog = utils.WarningMessage(self, msg, 'Air detected')
+            self.air_warning_dialog.Show()
 
     def metadata(self):
 
@@ -2048,31 +2118,35 @@ if __name__ == '__main__':
 
     #Settings
     settings = {
-        'show_advanced_options' : False,
-        'device_communication'  : 'remote',
-        'remote_pump_ip'        : '164.54.204.53',
-        'remote_pump_port'      : '5556',
-        'remote_fm_ip'          : '164.54.204.53',
-        'remote_fm_port'        : '5557',
-        'remote_overflow_ip'    : '164.54.204.75',
-        'flow_units'            : 'mL/min',
-        'sheath_pump'           : ('VICI_M50', 'COM3', [626.2, 9.278], {}),
-        'outlet_pump'           : ('VICI_M50', 'COM4', [623.56, 12.222], {}),
-        'sheath_fm'             : ('BFS', 'COM5', [], {}),
-        'outlet_fm'             : ('BFS', 'COM6', [], {}),
-        'sheath_valve'          : ('Cheminert', 'COM6', [], {'positions' : 10}),
-        'components'            : ['coflow'],
-        'sheath_ratio'          : 0.5,
-        'sheath_excess'         : 2.1,
-        'warning_threshold_low' : 0.8,
-        'warning_threshold_high': 1.2,
-        'settling_time'         : 5000, #in ms
-        'lc_flow_rate'          : '0.7',
-        'show_sheath_warning'   : True,
-        'show_outlet_warning'   : True,
-        'use_overflow_control'  : True,
-        'buffer_change_fr'      : 2., #in ml/min
-        'buffer_change_vol'     : 25., #in ml
+        'components'                : ['coflow'],
+        'show_advanced_options'     : False,
+        'device_communication'      : 'remote',
+        'remote_pump_ip'            : '164.54.204.53',
+        'remote_pump_port'          : '5556',
+        'remote_fm_ip'              : '164.54.204.53',
+        'remote_fm_port'            : '5557',
+        'remote_overflow_ip'        : '164.54.204.75',
+        'flow_units'                : 'mL/min',
+        'sheath_pump'               : ('VICI_M50', 'COM3', [629.48, 13.442], {}),
+        'outlet_pump'               : ('VICI_M50', 'COM4', [629.16, 12.354], {}),
+        'sheath_fm'                 : ('BFS', 'COM5', [], {}),
+        'outlet_fm'                 : ('BFS', 'COM6', [], {}),
+        'sheath_valve'              : ('Cheminert', 'COM6', [], {'positions' : 10}),
+        'sheath_ratio'              : 0.3,
+        'sheath_excess'             : 1.5,
+        'warning_threshold_low'     : 0.8,
+        'warning_threshold_high'    : 1.2,
+        'settling_time'             : 5000, #in ms
+        'lc_flow_rate'              : '0.6',
+        'show_sheath_warning'       : True,
+        'show_outlet_warning'       : True,
+        'use_overflow_control'      : True,
+        'buffer_change_fr'          : 2., #in ml/min
+        'buffer_change_vol'         : 25., #in ml
+        'air_density_thresh'        : 700, #g/L
+        'sheath_valve_water_pos'    : 10,
+        'sheath_valve_hellmanex_pos': 8,
+        'sheath_valve_ethanol_pos'  : 9,
         }
 
     app = wx.App()

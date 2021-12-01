@@ -311,30 +311,34 @@ if __name__ == '__main__':
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']
 
     coflow_settings = {
-        'show_advanced_options' : False,
-        'device_communication'  : 'remote',
-        'remote_pump_ip'        : '164.54.204.53',
-        'remote_pump_port'      : '5556',
-        'remote_fm_ip'          : '164.54.204.53',
-        'remote_fm_port'        : '5557',
-        'remote_overflow_ip'    : '164.54.204.75',
-        'flow_units'            : 'mL/min',
-        'sheath_pump'           : ('VICI_M50', 'COM3', [629.48, 13.442], {}),
-        'outlet_pump'           : ('VICI_M50', 'COM4', [629.16, 12.354], {}),
-        'sheath_fm'             : ('BFS', 'COM5', [], {}),
-        'outlet_fm'             : ('BFS', 'COM6', [], {}),
-        'sheath_valve'          : ('Cheminert', 'COM6', [], {'positions' : 10}),
-        'sheath_ratio'          : 0.3,
-        'sheath_excess'         : 1.5,
-        'warning_threshold_low' : 0.8,
-        'warning_threshold_high': 1.2,
-        'settling_time'         : 5000, #in ms
-        'lc_flow_rate'          : '0.6',
-        'show_sheath_warning'   : True,
-        'show_outlet_warning'   : True,
-        'use_overflow_control'  : True,
-        'buffer_change_fr'      : 2., #in ml/min
-        'buffer_change_vol'     : 25., #in ml
+        'show_advanced_options'     : False,
+        'device_communication'      : 'remote',
+        'remote_pump_ip'            : '164.54.204.53',
+        'remote_pump_port'          : '5556',
+        'remote_fm_ip'              : '164.54.204.53',
+        'remote_fm_port'            : '5557',
+        'remote_overflow_ip'        : '164.54.204.75',
+        'flow_units'                : 'mL/min',
+        'sheath_pump'               : ('VICI_M50', 'COM3', [629.48, 13.442], {}),
+        'outlet_pump'               : ('VICI_M50', 'COM4', [629.16, 12.354], {}),
+        'sheath_fm'                 : ('BFS', 'COM5', [], {}),
+        'outlet_fm'                 : ('BFS', 'COM6', [], {}),
+        'sheath_valve'              : ('Cheminert', 'COM6', [], {'positions' : 10}),
+        'sheath_ratio'              : 0.3,
+        'sheath_excess'             : 1.5,
+        'warning_threshold_low'     : 0.8,
+        'warning_threshold_high'    : 1.2,
+        'settling_time'             : 5000, #in ms
+        'lc_flow_rate'              : '0.6',
+        'show_sheath_warning'       : True,
+        'show_outlet_warning'       : True,
+        'use_overflow_control'      : True,
+        'buffer_change_fr'          : 2., #in ml/min
+        'buffer_change_vol'         : 25., #in ml
+        'air_density_thresh'        : 700, #g/L
+        'sheath_valve_water_pos'    : 10,
+        'sheath_valve_hellmanex_pos': 8,
+        'sheath_valve_ethanol_pos'  : 9,
         }
 
     trsaxs_settings = {
