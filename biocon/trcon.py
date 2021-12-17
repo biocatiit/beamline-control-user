@@ -1,4 +1,3 @@
-# coding: utf-8
 #
 #    Project: BioCAT user beamline control software (BioCON)
 #             https://github.com/biocatiit/beamline-control-user
@@ -775,6 +774,8 @@ class TRScanPanel(wx.Panel):
                     # print(traceback.print_exc())
                     return_vals=[['calc_exposure_params_error'],]
 
+                print(return_vals)
+
                 if return_vals and len(return_vals[0]) == 0:
                     num_images = return_vals[1]
                     self.num_images.SetLabel(str(num_images))
@@ -1487,7 +1488,7 @@ class TRScanPanel(wx.Panel):
             try:
                 return_vals = self._calc_exposure_params()
 
-                if len(return_vals[0])>0:
+                if return_vals and len(return_vals[0])>0:
                     errors.extend(return_vals[0])
 
             except Exception:
@@ -1840,6 +1841,10 @@ class TRFlowPanel(wx.Panel):
         self.fm_monitor_interval = 2
         self.fm_monitor_all_interval = 10
 
+        self.pump_ret_lock = threading.Lock()
+        self.valve_ret_lock = threading.Lock()
+        self.fm_ret_lock = threading.Lock()
+
         self._on_flow_change(None)
 
         #For communicating with exposure thread
@@ -1931,8 +1936,7 @@ class TRFlowPanel(wx.Panel):
             except Exception:
                 dual_syringe = False
 
-            if dual_syringe:
-                kwargs['dual_syringe'] = dual_syringe
+            kwargs['dual_syringe'] = dual_syringe
 
             if not self.local_devices:
                 cmd = ('connect_remote', args, kwargs)
@@ -2251,7 +2255,7 @@ class TRFlowPanel(wx.Panel):
         fm_sizer.Add(wx.StaticText(fm_parent, label='Temperature:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
         fm_sizer.Add(self.outlet_T, flag=wx.ALIGN_CENTER_VERTICAL)
-        fm_sizer.Add(wx.StaticText(fm_parent, label='°C'),
+        fm_sizer.Add(wx.StaticText(fm_parent, label='C'),
             flag=wx.ALIGN_CENTER_VERTICAL)
 
         fm_box_sizer.Add(fm_sizer, flag=wx.ALL, border=2)
@@ -2888,7 +2892,6 @@ class TRFlowPanel(wx.Panel):
         wx.CallAfter(self.update_flow_info)
 
     def set_pump_dual_syringe_type(self, pump_name, dual_syringe):
-        print('int set_pump_dual_syringe_type')
         cmd = ('set_pump_dual_syringe', (pump_name, dual_syringe), {})
         self._send_pumpcmd(cmd)
         wx.CallAfter(self._on_flow_change, None)
@@ -3337,17 +3340,18 @@ class TRFlowPanel(wx.Panel):
             self.valve_cmd_q.append(full_cmd)
 
             if response:
-                while len(self.valve_return_q) == 0 and not self.timeout_event.is_set():
-                    time.sleep(0.01)
+                with self.valve_ret_lock:
+                    while len(self.valve_return_q) == 0 and not self.timeout_event.is_set():
+                        time.sleep(0.01)
 
-                if not self.timeout_event.is_set():
-                    ret_val = self.valve_return_q.popleft()
-                else:
-                    msg = ('Lost connection to the flow control server. '
-                        'Contact your beamline scientist.')
-                    wx.CallAfter(self._show_error_dialog, msg, 'Connection error')
+                    if not self.timeout_event.is_set():
+                        ret_val = self.valve_return_q.popleft()
+                    else:
+                        msg = ('Lost connection to the flow control server. '
+                            'Contact your beamline scientist.')
+                        wx.CallAfter(self._show_error_dialog, msg, 'Connection error')
 
-                    self.stop_valve_monitor.set()
+                        self.stop_valve_monitor.set()
 
         else:
             msg = ('No connection to the flow control server. '
@@ -3371,17 +3375,18 @@ class TRFlowPanel(wx.Panel):
             self.pump_cmd_q.append(full_cmd)
 
             if response:
-                while len(self.pump_return_q) == 0 and not self.timeout_event.is_set():
-                    time.sleep(0.01)
+                with self.pump_ret_lock:
+                    while len(self.pump_return_q) == 0 and not self.timeout_event.is_set():
+                        time.sleep(0.01)
 
-                if not self.timeout_event.is_set():
-                    ret_val = self.pump_return_q.popleft()
-                else:
-                    msg = ('Lost connection to the flow control server. '
-                        'Contact your beamline scientist.')
-                    wx.CallAfter(self._show_error_dialog, msg, 'Connection error')
+                    if not self.timeout_event.is_set():
+                        ret_val = self.pump_return_q.popleft()
+                    else:
+                        msg = ('Lost connection to the flow control server. '
+                            'Contact your beamline scientist.')
+                        wx.CallAfter(self._show_error_dialog, msg, 'Connection error')
 
-                    self.stop_pump_monitor.set()
+                        self.stop_pump_monitor.set()
 
         else:
             msg = ('No connection to the flow control server. '
@@ -3411,19 +3416,20 @@ class TRFlowPanel(wx.Panel):
             self.fm_cmd_q.append(full_cmd)
 
             if response:
-                while len(self.fm_return_q) == 0 and not self.timeout_event.is_set():
-                    time.sleep(0.01)
+                with self.fm_ret_lock:
+                    while len(self.fm_return_q) == 0 and not self.timeout_event.is_set():
+                        time.sleep(0.01)
 
-                if not self.timeout_event.is_set():
-                    ret_val = self.fm_return_q.popleft()
+                    if not self.timeout_event.is_set():
+                        ret_val = self.fm_return_q.popleft()
 
-                else:
-                    msg = ('Lost connection to the flow control server. '
-                        'Contact your beamline scientist.')
-                    wx.CallAfter(self.showMessageDialog, self, msg, 'Connection error',
-                        wx.OK|wx.ICON_ERROR)
+                    else:
+                        msg = ('Lost connection to the flow control server. '
+                            'Contact your beamline scientist.')
+                        wx.CallAfter(self.showMessageDialog, self, msg, 'Connection error',
+                            wx.OK|wx.ICON_ERROR)
 
-                    self.stop_fm_monitor.set()
+                        self.stop_fm_monitor.set()
 
         else:
             msg = ('No connection to the flow control server. '
@@ -4069,9 +4075,11 @@ class TRPumpPanel(wx.Panel):
                 self.syringe_volume_val = vol
                 max_vol = self.get_max_volume()
                 set_vol = min(max_vol, vol)
+                gauge_vol = int(round(float(set_vol)*1000))
+                if gauge_vol < 0:
+                    gauge_vol = 0
                 wx.CallAfter(self._set_status_volume, vol)
-                wx.CallAfter(self.syringe_vol_gauge.SetValue,
-                    int(round(float(set_vol)*1000)))
+                wx.CallAfter(self.syringe_vol_gauge.SetValue, gauge_vol)
 
         except ValueError:
             msg = "Volume must be a number."
@@ -4100,7 +4108,10 @@ class TRPumpPanel(wx.Panel):
                 wx.CallAfter(self._set_status_volume, vol)
                 max_vol = self.get_max_volume()
                 set_vol = min(max_vol, vol)
-                wx.CallAfter(self.syringe_vol_gauge.SetValue, int(round(float(set_vol)*1000.)))
+                gauge_vol = int(round(float(set_vol)*1000))
+                if gauge_vol < 0:
+                    gauge_vol = 0
+                wx.CallAfter(self.syringe_vol_gauge.SetValue, gauge_vol)
 
         except ValueError:
             pass
@@ -4127,7 +4138,6 @@ class TRPumpPanel(wx.Panel):
         self.syringe_vol_gauge.SetRange(int(round(float(max_vol)*1000)))
 
     def _on_dual_syringe(self, evt):
-        print('in _on_dual_syringe')
         self.tr_flow_panel.set_pump_dual_syringe_type(self.name,
             self.dual_syringe.GetStringSelection()=='True')
 
@@ -4253,8 +4263,10 @@ if __name__ == '__main__':
         'pco_direction'         : 'x',
         'pco_pulse_width'       : D('10'), #In microseconds, opt: 0.2, 1, 2.5, 10
         'pco_encoder_settle_t'  : D('0.075'), #In microseconds, opt: 0.075, 1, 4, 12
-        'encoder_resolution'    : D('0.000001'), #for ILS50PP, in mm
-        'encoder_precision'     : D(6), #Number of significant decimals in encoder value
+        # 'encoder_resolution'    : D('0.000001'), #for XMS160, in mm
+        # 'encoder_precision'     : 6, #Number of significant decimals in encoder value
+        'encoder_resolution'    : D('0.00001'), #for GS30V, in mm
+        'encoder_precision'     : 5, #Number of significant decimals in encoder value
         'min_off_time'          : D('0.001'),
         'x_range'               : (-80, 80),
         'y_range'               : (-5, 25),
@@ -4266,27 +4278,41 @@ if __name__ == '__main__':
         'remote_fm_port'        : '5557',
         'remote_valve_ip'       : '164.54.204.8',
         'remote_valve_port'     : '5558',
-        # 'device_communication'  : 'remote',
-        # 'injection_valve'       : [('Rheodyne', 'COM6', [], {'positions' : 2}, 'Injection'),],
-        # 'sample_valve'          : [('Rheodyne', 'COM7', [], {'positions' : 6}, 'Sample'),],
-        # 'buffer1_valve'         : [('Rheodyne', 'COM8', [], {'positions' : 6}, 'Buffer 1'),],
-        # 'buffer2_valve'         : [('Rheodyne', 'COM9', [], {'positions' : 6}, 'Buffer 2'),],
-        # 'sample_pump'           : ('Sample', 'PHD 4400', 'COM4',
-        #     ['10 mL, Medline P.C.', '1'], {}, {'flow_rate' : '5',
-        #     'refill_rate' : '5', 'dual_syringe': False}),
-        # 'buffer1_pump'           : ('Buffer 1', 'PHD 4400', 'COM4',
-        #     ['20 mL, Medline P.C.', '2'], {}, {'flow_rate' : '10',
+        'device_communication'  : 'remote',
+        'injection_valve'       : [('Rheodyne', 'COM6', [], {'positions' : 2}, 'Injection'),], #Chaotic flow
+        'sample_valve'          : [('Rheodyne', 'COM9', [], {'positions' : 6}, 'Sample'),],
+        'buffer1_valve'         : [('Rheodyne', 'COM8', [], {'positions' : 6}, 'Buffer 1'),],
+        'buffer2_valve'         : [('Rheodyne', 'COM7', [], {'positions' : 6}, 'Buffer 2'),],
+        'sample_pump'           : ('Sample', 'PHD 4400', 'COM4',
+            ['10 mL, Medline P.C.', '1'], {}, {'flow_rate' : '5',
+            'refill_rate' : '5', 'dual_syringe': False}),
+        'buffer1_pump'           : ('Buffer 1', 'PHD 4400', 'COM4',
+            ['20 mL, Medline P.C.', '2'], {}, {'flow_rate' : '10',
+            'refill_rate' : '10', 'dual_syringe': False}),
+        'buffer2_pump'          : ('Buffer 2', 'PHD 4400', 'COM4',
+            ['20 mL, Medline P.C.', '3'], {}, {'flow_rate' : '10',
+            'refill_rate' : '10', 'dual_syringe': False}),
+        'outlet_fm'             : ('BFS', 'COM5', [], {}),
+        # 'injection_valve'       : [('Rheodyne', 'COM6', [], {'positions' : 2}, 'Injection'),], #Laminar flow
+        # 'sample_valve'          : [('Rheodyne', 'COM9', [], {'positions' : 6}, 'Sample'),],
+        # 'buffer1_valve'         : [('Rheodyne', 'COM8', [], {'positions' : 6}, 'Buffer'),],
+        # 'buffer2_valve'         : [('Rheodyne', 'COM7', [], {'positions' : 6}, 'Sheath'),],
+        # 'buffer1_pump'           : ('Buffer', 'NE 500', 'COM11',
+        #     ['20 mL, Medline P.C.', '00'], {}, {'flow_rate' : '10',
         #     'refill_rate' : '10', 'dual_syringe': False}),
-        # 'buffer2_pump'          : ('Buffer 2', 'PHD 4400', 'COM4',
-        #     ['20 mL, Medline P.C.', '3'], {}, {'flow_rate' : '10',
+        # 'buffer2_pump'          : ('Sheath', 'NE 500', 'COM10',
+        #     ['20 mL, Medline P.C.', '01'], {}, {'flow_rate' : '10',
         #     'refill_rate' : '10', 'dual_syringe': False}),
-        # 'outlet_fm'             : ('BFS', 'COM5', [], {}),
-        'device_communication'  : 'local',
+        # 'sample_pump'           : ('Sample', 'NE 500', 'COM3',
+        #     ['10 mL, Medline P.C.', '02'], {}, {'flow_rate' : '0.1',
+        #     'refill_rate' : '10', 'dual_syringe': False}),
+        # 'outlet_fm'             : ('BFS', 'COM13', [], {}),
+        # 'device_communication'  : 'local',                                                    # Simulated
         # 'injection_valve'       : [('Soft', '', [], {'positions' : 2}, 'Injection'),],
         # 'sample_valve'          : [('Soft', '', [], {'positions' : 6}, 'Sample'),],
         # 'buffer1_valve'         : [('Soft', '', [], {'positions' : 6}, 'Buffer'),],
         # 'buffer2_valve'         : [('Soft', '', [], {'positions' : 6}, 'Sheath'),],
-        # 'sample_pump'           : ('Sample', 'Soft Syringe', '',
+        # 'sample_pump'           : ('Sample', 'Soft Syringe', '',   
         #     ['10 mL, Medline P.C.',], {}, {'flow_rate' : '5',
         #     'refill_rate' : '20', 'dual_syringe' : False}),
         # 'buffer1_pump'           : ('Buffer 1', 'Soft Syringe', '',
@@ -4295,33 +4321,33 @@ if __name__ == '__main__':
         # 'buffer2_pump'          : ('Buffer 2', 'Soft Syringe', '',
         #     ['20 mL, Medline P.C.',], {}, {'flow_rate' : '10',
         #     'refill_rate' : '40', 'dual_syringe' : False}),
-        'injection_valve'       : [('Soft', '', [], {'positions' : 2}, 'Injection'),],
-        'sample_valve'          : [('Soft', '', [], {'positions' : 6}, 'Sample'),],
-        'buffer1_valve'         : [('Soft', '', [], {'positions' : 6}, 'Buffer'),
-                                    ('Soft', '', [], {'positions' : 6}, 'Buffer')],
-        'buffer2_valve'         : [('Soft', '', [], {'positions' : 6}, 'Sheath'),
-                                    ('Soft', '', [], {'positions' : 6}, 'Sheath')],
-        'sample_pump'           : ('Sample', 'Soft Syringe', '',
-            ['10 mL, Medline P.C.',], {}, {'flow_rate' : '5',
-            'refill_rate' : '20', 'dual_syringe' : False}),
-        'buffer1_pump'           : ('Buffer', 'Soft Syringe', '',
-            ['20 mL, Medline P.C.',], {}, {'flow_rate' : '10',
-            'refill_rate' : '40', 'dual_syringe' : True}),
-        'buffer2_pump'          : ('Sheath', 'Soft Syringe', '',
-            ['20 mL, Medline P.C.',], {}, {'flow_rate' : '10',
-            'refill_rate' : '40', 'dual_syringe' : True}),
-        'outlet_fm'             : ('Soft', '', [], {}),
+        # 'injection_valve'       : [('Soft', '', [], {'positions' : 2}, 'Injection'),],
+        # 'sample_valve'          : [('Soft', '', [], {'positions' : 6}, 'Sample'),],
+        # 'buffer1_valve'         : [('Soft', '', [], {'positions' : 6}, 'Buffer'),
+        #                             ('Soft', '', [], {'positions' : 6}, 'Buffer')],
+        # 'buffer2_valve'         : [('Soft', '', [], {'positions' : 6}, 'Sheath'),
+        #                             ('Soft', '', [], {'positions' : 6}, 'Sheath')],
+        # 'sample_pump'           : ('Sample', 'Soft Syringe', '',
+        #     ['10 mL, Medline P.C.',], {}, {'flow_rate' : '5',
+        #     'refill_rate' : '20', 'dual_syringe' : False}),
+        # 'buffer1_pump'           : ('Buffer', 'Soft Syringe', '',
+        #     ['20 mL, Medline P.C.',], {}, {'flow_rate' : '10',
+        #     'refill_rate' : '40', 'dual_syringe' : True}),
+        # 'buffer2_pump'          : ('Sheath', 'Soft Syringe', '',
+        #     ['20 mL, Medline P.C.',], {}, {'flow_rate' : '10',
+        #     'refill_rate' : '40', 'dual_syringe' : True}),
+        # 'outlet_fm'             : ('Soft', '', [], {}),
         'flow_units'            : 'mL/min',
         'total_flow_rate'       : '1.5', # For laminar flow
         # 'total_flow_rate'       : '6', # For chaotic flow
         'dilution_ratio'        : '10', # For chaotic flow
-        'max_flow'              : 8,
-        'max_dilution'          : 50,
+        'max_flow'              : 8, # For chaotic flow
+        'max_dilution'          : 50, # For chaotic flow
         'auto_set_valves'       : True,
-        'valve_start_positions' : {'sample_valve' : 3, 'buffer1_valve': 3,
-            'buffer2_valve' : 3, 'injection_valve' : 1},
-        'valve_refill_positions': {'sample_valve' : 4, 'buffer1_valve': 4,
-            'buffer2_valve' : 4, 'injection_valve' : 1},
+        'valve_start_positions' : {'sample_valve' : 1, 'buffer1_valve': 1,
+            'buffer2_valve' : 1, 'injection_valve' : 1},
+        'valve_refill_positions': {'sample_valve' : 2, 'buffer1_valve': 2,
+            'buffer2_valve' : 2, 'injection_valve' : 1},
         'autostart'             : 'At flow rate',
         'autostart_flow'        : '4.5',
         'autostart_flow_ratio'  : 0.75,
@@ -4332,7 +4358,7 @@ if __name__ == '__main__':
         'mixer_type'            : 'laminar', # laminar or chaotic
         'sample_ratio'          : '0.066', # For laminar flow
         'sheath_ratio'          : '0.032', # For laminar flow
-        'simulated'             : True, # VERY IMPORTANT. MAKE SURE THIS IS FALSE FOR EXPERIMENTS
+        'simulated'             : False, # VERY IMPORTANT. MAKE SURE THIS IS FALSE FOR EXPERIMENTS
         }
 
     app = wx.App()
@@ -4352,7 +4378,7 @@ if __name__ == '__main__':
     # logger.addHandler(h2)
 
     logger.debug('Setting up wx app')
-    frame = TRFrame(settings, 'flow', None, title='TRSAXS Control')
+    frame = TRFrame(settings, 'scan', None, title='TRSAXS Control')
     frame.Show()
     app.MainLoop()
 

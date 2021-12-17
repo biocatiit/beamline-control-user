@@ -217,7 +217,7 @@ class ControlClient(threading.Thread):
                     answer = ''
 
                 if answer == 'ping received':
-                    logger.info("Connection to server verified")
+                    logger.debug("Connection to server verified")
                     connect_tries = 5
                 else:
                     logger.error("Could not get a response from the server")
