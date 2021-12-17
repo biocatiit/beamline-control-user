@@ -3459,23 +3459,23 @@ class PumpFrame(wx.Frame):
             #         # {'flow_rate' : '30', 'refill_rate' : '30'}),
             #             ]
 
-            setup_pumps = [
-                ('Sample', 'PHD 4400', 'COM4', ['10 mL, Medline P.C.', '1'], {},
-                    {'flow_rate' : '10', 'refill_rate' : '10'}),
-                ('Buffer 1', 'PHD 4400', 'COM4', ['20 mL, Medline P.C.', '2'], {},
-                    {'flow_rate' : '10', 'refill_rate' : '10'}),
-                ('Buffer 2', 'PHD 4400', 'COM4', ['20 mL, Medline P.C.', '3'], {},
-                    {'flow_rate' : '10', 'refill_rate' : '10'}),
-                ]
-
             # setup_pumps = [
-            #     ('Buffer', 'NE 500', 'COM11', ['20 mL, Medline P.C.', '00'], {},
-            #         {'flow_rate' : '0.1', 'refill_rate' : '10'}),
-            #     ('Sheath', 'NE 500', 'COM10', ['10 mL, Medline P.C.', '01'], {},
-            #         {'flow_rate' : '0.1', 'refill_rate' : '10'}),
-            #     ('Sample', 'NE 500', 'COM3', ['10 mL, Medline P.C.', '02'], {},
-            #         {'flow_rate' : '0.1', 'refill_rate' : '10'}),
+            #     ('Sample', 'PHD 4400', 'COM4', ['10 mL, Medline P.C.', '1'], {},
+            #         {'flow_rate' : '10', 'refill_rate' : '10'}),
+            #     ('Buffer 1', 'PHD 4400', 'COM4', ['20 mL, Medline P.C.', '2'], {},
+            #         {'flow_rate' : '10', 'refill_rate' : '10'}),
+            #     ('Buffer 2', 'PHD 4400', 'COM4', ['20 mL, Medline P.C.', '3'], {},
+            #         {'flow_rate' : '10', 'refill_rate' : '10'}),
             #     ]
+
+            setup_pumps = [
+                ('Buffer', 'NE 500', 'COM11', ['20 mL, Medline P.C.', '00'], 
+                    {'dual_syringe': 'False'}, {'flow_rate' : '0.1', 'refill_rate' : '10'}),
+                ('Sheath', 'NE 500', 'COM10', ['20 mL, Medline P.C.', '01'],
+                    {'dual_syringe': 'False'}, {'flow_rate' : '0.1', 'refill_rate' : '10'}),
+                ('Sample', 'NE 500', 'COM3', ['20 mL, Medline P.C.', '02'], {},
+                    {'flow_rate' : '0.1', 'refill_rate' : '10'}),
+                ]
 
             # setup_pumps = [
             #     ('Sample', 'NE 500', '/dev/cu.usbserial-AK06V22M', ['30 mL, EXEL', '02', False], {},
@@ -3622,23 +3622,20 @@ if __name__ == '__main__':
     # pmp_cmd_q.append(stop_cmd)
     # my_pumpcon.stop()
 
-    # #Use this with PHD 4400
+    # # #Use this with PHD 4400
     # comm_lock = threading.Lock()
 
-    comm_locks = {'Sample'   : comm_lock,
-        'Buffer 1' : comm_lock,
-        'Buffer 2' : comm_lock,
-        }
+    # comm_locks = {'Sample'   : comm_lock,
+    #     'Buffer 1' : comm_lock,
+    #     'Buffer 2' : comm_lock,
+    #     }
 
-    #Use this with M50s
-    comm_locks = {'Sheath' : threading.Lock(),
-        'Outlet' : threading.Lock(),
-        }
+    # #Use this with M50s
+    # comm_locks = {'Sheath' : threading.Lock(),
+    #     'Outlet' : threading.Lock(),
+    #     }
 
-    #Use this with NE 500
-    # comm_lock = threading.Lock()
-
-    # # #Otherwise use this:
+    #Otherwise use this:
     comm_locks = {}
 
     app = wx.App()

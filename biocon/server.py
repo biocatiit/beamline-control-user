@@ -266,6 +266,8 @@ if __name__ == '__main__':
         'COM7'  : threading.Lock(),
         'COM8'  : threading.Lock(),
         'COM9'  : threading.Lock(),
+        'COM12' : threading.Lock(),
+        'COM14' : threading.Lock(),
         }
 
 
@@ -324,9 +326,9 @@ if __name__ == '__main__':
     setup_pumps = [
         ('Buffer', 'NE 500', 'COM11', ['20 mL, Medline P.C.', '00'], 
             {'dual_syringe': 'False'}, {'flow_rate' : '0.1', 'refill_rate' : '10'}),
-        ('Sheath', 'NE 500', 'COM10', ['10 mL, Medline P.C.', '01'],
+        ('Sheath', 'NE 500', 'COM10', ['20 mL, Medline P.C.', '01'],
             {'dual_syringe': 'False'}, {'flow_rate' : '0.1', 'refill_rate' : '10'}),
-        ('Sample', 'NE 500', 'COM3', ['10 mL, Medline P.C.', '02'], {},
+        ('Sample', 'NE 500', 'COM3', ['20 mL, Medline P.C.', '02'], {},
             {'flow_rate' : '0.1', 'refill_rate' : '10'}),
         ]
 
@@ -338,16 +340,20 @@ if __name__ == '__main__':
 
     setup_valves = [
         ('Injection', 'Rheodyne', 'COM6', [], {'positions' : 2}),
-        ('Sample', 'Rheodyne', 'COM9', [], {'positions' : 6}),
-        ('Buffer', 'Rheodyne', 'COM8', [], {'positions' : 6}),
-        ('Sheath', 'Rheodyne', 'COM7', [], {'positions' : 6}),
+        ('Buffer 1', 'Rheodyne', 'COM12', [], {'positions' : 6}),
+        ('Buffer 2', 'Rheodyne', 'COM14', [], {'positions' : 6}),
+        ('Sheath 1', 'Rheodyne', 'COM9', [], {'positions' : 6}),
+        ('Sheath 2', 'Rheodyne', 'COM8', [], {'positions' : 6}),
+        ('Sample', 'Rheodyne', 'COM7', [], {'positions' : 6}),        
         ]
 
     valve_local_comm_locks = {
         'Injection'    : valve_comm_locks[setup_valves[0][2]],
         'Sample'    : valve_comm_locks[setup_valves[1][2]],
-        'Buffer'    : valve_comm_locks[setup_valves[2][2]],
-        'Sheath'    : valve_comm_locks[setup_valves[3][2]],
+        'Buffer 1'    : valve_comm_locks[setup_valves[2][2]],
+        'Buffer 2'    : valve_comm_locks[setup_valves[2][2]],
+        'Sheath 1'    : valve_comm_locks[setup_valves[3][2]],
+        'Sheath 2'    : valve_comm_locks[setup_valves[3][2]],
        }
 
     control_server3 = ControlServer(ip, port3, name='ValveControlServer',
