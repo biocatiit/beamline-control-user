@@ -2150,6 +2150,8 @@ class PumpCommThread(threading.Thread):
         logger.info("Connecting pump %s", name)
         if device in self.comm_locks:
             kwargs['comm_lock'] = self.comm_locks[device]
+        else:
+            logger.info('creating new comlock!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
 
         new_pump = self.known_pumps[pump_type](device, name, **kwargs)
 
@@ -2523,9 +2525,9 @@ class PumpPanel(wx.Panel):
             'max_rate': 11},
             '6 mL, Medline P.C.': {'diameter': 12.8, 'max_volume': 6,
             'max_rate': 23},
-            '10 mL, Medline P.C.': {'diameter': 16.564, 'max_volume': 10,
+            '10 mL, Medline P.C.': {'diameter': 16.31, 'max_volume': 10,
             'max_rate': 31},
-            '20 mL, Medline P.C.': {'diameter': 20.3, 'max_volume': 20,
+            '20 mL, Medline P.C.': {'diameter': 19.84, 'max_volume': 20,
             'max_rate': 55},
             '0.25 mL, Hamilton Glass': {'diameter': 2.30, 'max_volume': 0.25,
             'max_rate': 11},
@@ -3468,13 +3470,24 @@ class PumpFrame(wx.Frame):
             #         {'flow_rate' : '10', 'refill_rate' : '10'}),
             #     ]
 
+            # setup_pumps = [
+            #     ('Buffer', 'NE 500', 'COM11', ['20 mL, Medline P.C.', '00'], 
+            #         {'dual_syringe': 'False'}, {'flow_rate' : '0.1', 'refill_rate' : '10'}),
+            #     ('Sheath', 'NE 500', 'COM10', ['20 mL, Medline P.C.', '01'],
+            #         {'dual_syringe': 'False'}, {'flow_rate' : '0.1', 'refill_rate' : '10'}),
+            #     ('Sample', 'NE 500', 'COM3', ['20 mL, Medline P.C.', '02'], {},
+            #         {'flow_rate' : '0.1', 'refill_rate' : '10'}),
+            #     ]
+
             setup_pumps = [
-                ('Buffer', 'NE 500', 'COM11', ['20 mL, Medline P.C.', '00'], 
-                    {'dual_syringe': 'False'}, {'flow_rate' : '0.1', 'refill_rate' : '10'}),
+                ('Buffer 1', 'PHD 4400', 'COM4', ['20 mL, Medline P.C.', '1'], {},
+                    {'flow_rate' : '10', 'refill_rate' : '10'}),
+                ('Buffer 2', 'PHD 4400', 'COM4', ['20 mL, Medline P.C.', '2'], {},
+                    {'flow_rate' : '10', 'refill_rate' : '10'}),
                 ('Sheath', 'NE 500', 'COM10', ['20 mL, Medline P.C.', '01'],
                     {'dual_syringe': 'False'}, {'flow_rate' : '0.1', 'refill_rate' : '10'}),
-                ('Sample', 'NE 500', 'COM3', ['20 mL, Medline P.C.', '02'], {},
-                    {'flow_rate' : '0.1', 'refill_rate' : '10'}),
+                ('Sample', 'PHD 4400', 'COM4', ['20 mL, Medline P.C.', '3'], {},
+                    {'flow_rate' : '10', 'refill_rate' : '10'}),
                 ]
 
             # setup_pumps = [
@@ -3538,6 +3551,7 @@ class PumpFrame(wx.Frame):
                 self.pump_answer_q, self.pump_con.known_pumps, pump[0], pump[1],
                 pump[2], pump[3], pump[4], comm_lock, **pump[5])
         else:
+            logger.info('creating new comlock!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
             comm_lock = threading.Lock()
             self.comm_locks[pump[0]] = comm_lock
             new_pump = PumpPanel(self.top_panel, wx.ID_ANY, pump[0], self.ports, self.pump_cmd_q,
@@ -3622,13 +3636,13 @@ if __name__ == '__main__':
     # pmp_cmd_q.append(stop_cmd)
     # my_pumpcon.stop()
 
-    # # #Use this with PHD 4400
-    # comm_lock = threading.Lock()
+    # #Use this with PHD 4400
+    comm_lock = threading.Lock()
 
-    # comm_locks = {'Sample'   : comm_lock,
-    #     'Buffer 1' : comm_lock,
-    #     'Buffer 2' : comm_lock,
-    #     }
+    comm_locks = {'Sample'   : comm_lock,
+        'Buffer 1' : comm_lock,
+        'Buffer 2' : comm_lock,
+        }
 
     # #Use this with M50s
     # comm_locks = {'Sheath' : threading.Lock(),
@@ -3636,7 +3650,7 @@ if __name__ == '__main__':
     #     }
 
     #Otherwise use this:
-    comm_locks = {}
+    # comm_locks = {}
 
     app = wx.App()
     logger.debug('Setting up wx app')

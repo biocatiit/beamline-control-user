@@ -621,6 +621,8 @@ class ValveCommThread(threading.Thread):
         logger.info("Connecting valve %s", name)
         if device in self.comm_locks:
             kwargs['comm_lock'] = self.comm_locks[device]
+        else:
+            logger.info('creating new comlock!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
 
         new_valve = self.known_valves[valve_type](device, name, **kwargs)
         self._connected_valves[name] = new_valve
@@ -1206,9 +1208,10 @@ class ValveFrame(wx.Frame):
         return
 
     def _add_valve(self, valve):
-        if valve[0] in self.comm_locks:
-            comm_lock = self.comm_locks[valve[0]]
+        if valve[2] in self.comm_locks:
+            comm_lock = self.comm_locks[valve[2]]
         else:
+            logger.info('creating new comlock!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
             comm_lock = threading.Lock()
 
         new_valve = ValvePanel(self.top_panel, wx.ID_ANY, valve[0], self.ports,
