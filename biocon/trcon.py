@@ -774,7 +774,7 @@ class TRScanPanel(wx.Panel):
                     # print(traceback.print_exc())
                     return_vals=[['calc_exposure_params_error'],]
 
-                print(return_vals)
+                # print(return_vals)
 
                 if return_vals and len(return_vals[0]) == 0:
                     num_images = return_vals[1]
@@ -3905,16 +3905,16 @@ class TRPumpPanel(wx.Panel):
 
             if self.pump_mode == 'continuous':
                 if mode == 'Fixed volume':
-                    cmd = self.direction_ctrl.GetStringSelection().lower()
+                    cmd = self.pump_direction
                     self.set_status(cmd.capitalize())
                 else:
                     self.set_status('Flowing')
             else:
                 if mode == 'Fixed volume':
-                    cmd = self.direction_ctrl.GetStringSelection().lower()
+                    cmd = self.pump_direction
                     self.set_status(cmd.capitalize())
                 else:
-                    direction = self.direction_ctrl.GetStringSelection().lower()
+                    direction = self.pump_direction
                     self.set_status(direction.capitalize())
 
             self.fr_button.Show()
@@ -3950,7 +3950,7 @@ class TRPumpPanel(wx.Panel):
             wx.MessageBox(msg, "Error setting refill rate")
             cont = False
 
-        if self.direction_ctrl.GetStringSelection().lower() == 'dispense':
+        if self.pump_direction == 'Dispense':
             dispense = True
         else:
             dispense = False
@@ -4147,10 +4147,11 @@ class TRPumpPanel(wx.Panel):
     def set_pump_direction(self, dispense):
         if dispense:
             self.pump_direction = 'Dispense'
-            wx.CallAfter(self.direction_ctrl.SetStringSelection, 'Dispense')
+            ret = wx.CallAfter(self.direction_ctrl.SetStringSelection, 'Dispense')
         else:
             self.pump_direction = 'Aspirate'
-            wx.CallAfter(self.direction_ctrl.SetStringSelection, 'Aspirate')
+            ret = wx.CallAfter(self.direction_ctrl.SetStringSelection, 'Aspirate')
+
 
     def get_pump_direction(self):
         return self.pump_direction

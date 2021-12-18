@@ -1739,13 +1739,14 @@ class ExpCommThread(threading.Thread):
     def format_log_value(self, index, fprefix, exp_period, cvals, log_vals, dark_counts,
         extra_vals, zpad):
 
-        val = "{0}_{1:0{2}d}.tif\t{3}".format(fprefix, index+1, zpad,
-            exp_period*index)
-
         if self._settings['add_file_postfix']:
-            val = val + ".tif\t{0}".format(exp_period*index)
+            val = "{0}_{1:0{2}d}.tif\t{3}".format(fprefix, index+1, zpad,
+                exp_period*index)
         else:
-            val = val + "\t{0}".format(exp_period*index)
+            val = "{0}_{1:0{2}d}.tif\t{3}".format(fprefix, index+1, zpad,
+                exp_period*index)
+        
+        val = val + "\t{0}".format(exp_period*index)
 
         exp_time = cvals[0][index]/50.e6
         val = val + "\t{}".format(exp_time)
