@@ -621,6 +621,8 @@ class ValveCommThread(threading.Thread):
         logger.info("Connecting valve %s", name)
         if device in self.comm_locks:
             kwargs['comm_lock'] = self.comm_locks[device]
+        else:
+            logger.info('creating new comlock!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
 
         new_valve = self.known_valves[valve_type](device, name, **kwargs)
         self._connected_valves[name] = new_valve
@@ -1149,7 +1151,16 @@ class ValveFrame(wx.Frame):
             #     ('Buffer 2', 'Soft', '', [], {'positions' : 6}),
             #     ]
 
-            setup_valves = [('Buffer', 'Cheminert', 'COM7', [], {'positions': 10})]
+            # setup_valves = [('Buffer', 'Cheminert', 'COM7', [], {'positions': 10})]
+
+            setup_valves = [
+                ('Injection', 'Rheodyne', 'COM6', [], {'positions' : 2}),
+                ('Buffer 1', 'Rheodyne', 'COM12', [], {'positions' : 6}),
+                ('Buffer 2', 'Rheodyne', 'COM14', [], {'positions' : 6}),
+                ('Sheath 1', 'Rheodyne', 'COM9', [], {'positions' : 6}),
+                ('Sheath 2', 'Rheodyne', 'COM8', [], {'positions' : 6}),
+                ('Sample', 'Rheodyne', 'COM7', [], {'positions' : 6}),        
+                ]
 
         logger.info('Initializing %s valves on startup', str(len(setup_valves)))
 
@@ -1197,9 +1208,10 @@ class ValveFrame(wx.Frame):
         return
 
     def _add_valve(self, valve):
-        if valve[0] in self.comm_locks:
-            comm_lock = self.comm_locks[valve[0]]
+        if valve[2] in self.comm_locks:
+            comm_lock = self.comm_locks[valve[2]]
         else:
+            logger.info('creating new comlock!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
             comm_lock = threading.Lock()
 
         new_valve = ValvePanel(self.top_panel, wx.ID_ANY, valve[0], self.ports,
