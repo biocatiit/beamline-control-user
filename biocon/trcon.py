@@ -3015,7 +3015,7 @@ class TRFlowPanel(wx.Panel):
 
         if flow_rate is not None:
             try:
-                flow_rate = round(float(flow_rate), 2)
+                flow_rate = round(float(flow_rate), 3)
                 if float(rate_ctrl.GetLabel()) != flow_rate:
                     rate_ctrl.SetLabel('{}'.format(flow_rate))
             except Exception:
@@ -3689,7 +3689,7 @@ class TRPumpPanel(wx.Panel):
         self.connected = False
         self.moving = False
         self.syringe_volume_val = 0
-        self.pump_direction = None
+        self.pump_direction = 'Dispense'
 
         self.known_syringes = {'30 mL, EXEL': {'diameter': 23.5, 'max_volume': 30,
             'max_rate': 70},

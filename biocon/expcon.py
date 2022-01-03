@@ -1740,11 +1740,9 @@ class ExpCommThread(threading.Thread):
         extra_vals, zpad):
 
         if self._settings['add_file_postfix']:
-            val = "{0}_{1:0{2}d}.tif\t{3}".format(fprefix, index+1, zpad,
-                exp_period*index)
+            val = "{0}_{1:0{2}d}.tif".format(fprefix, index+1, zpad)
         else:
-            val = "{0}_{1:0{2}d}.tif\t{3}".format(fprefix, index+1, zpad,
-                exp_period*index)
+            val = "{0}_{1:0{2}d}.tif".format(fprefix, index+1, zpad)
         
         val = val + "\t{0}".format(exp_period*index)
 

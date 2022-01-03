@@ -370,10 +370,10 @@ if __name__ == '__main__':
         'pco_direction'         : 'x',
         'pco_pulse_width'       : D('10'), #In microseconds, opt: 0.2, 1, 2.5, 10
         'pco_encoder_settle_t'  : D('0.075'), #In microseconds, opt: 0.075, 1, 4, 12
-        # 'encoder_resolution'    : D('0.000001'), #for XMS160, in mm
-        # 'encoder_precision'     : 6, #Number of significant decimals in encoder value
-        'encoder_resolution'    : D('0.00001'), #for GS30V, in mm
-        'encoder_precision'     : 5, #Number of significant decimals in encoder value
+        'encoder_resolution'    : D('0.000001'), #for XMS160, in mm
+        'encoder_precision'     : 6, #Number of significant decimals in encoder value
+        # 'encoder_resolution'    : D('0.00001'), #for GS30V, in mm
+        # 'encoder_precision'     : 5, #Number of significant decimals in encoder value
         'min_off_time'          : D('0.001'),
         'x_range'               : (-80, 80),
         'y_range'               : (-5, 25),
@@ -459,7 +459,7 @@ if __name__ == '__main__':
             'buffer2_valve' : 1, 'injection_valve' : 1},
         'autostart'             : 'At flow rate',
         'autostart_flow'        : '4.5',
-        'autostart_flow_ratio'  : 0.75,
+        'autostart_flow_ratio'  : 0.9,
         'autostart_delay'       : '0',
         'autoinject'            : 'After scan',
         'autoinject_scan'       : '5',
