@@ -108,7 +108,8 @@ class ExpCommThread(threading.Thread):
         logger.debug("Initialized mx database")
 
         if self._settings['detector'].lower().split('_')[-1] == 'mx':
-            record_name = self._settings['detector'].lower().rstrip('_mx')
+            logger.debug('Getting mx detector')
+            record_name = self._settings['detector'].rstrip('_mx')
 
             data_dir_root = copy.deepcopy(self._settings['base_data_dir']).replace(
                 self._settings['local_dir_root'], self._settings['remote_dir_root'], 1)
@@ -135,7 +136,8 @@ class ExpCommThread(threading.Thread):
             # det_local_datafile_root.put(data_dir_root) #MX record field is read only?
 
         elif self._settings['detector'].lower().split('_')[-1] == 'epics':
-            record_name = self._settings['detector'].lower().rstrip('_epics')
+            logger.debug('Getting epics detector')
+            record_name = self._settings['detector'].rstrip('_epics')
 
             det_args = self._settings['det_args']
 
@@ -670,14 +672,7 @@ class ExpCommThread(threading.Thread):
         dio_out9.write(0) # Make sure the NM shutter is closed
         dio_out10.write(0) # Make sure the trigger is off
 
-        if num_frames <= 9999:
-            exp_start_num = '0001'
-
-        elif num_frames > 9999 and num_frames <= 99999:
-            exp_start_num = '00001'
-
-        elif num_frames > 99999:
-            exp_start_num = '000001'
+        exp_start_num = '000001'
 
         if wait_for_trig:
             cur_fprefix = '{}_{:04}'.format(fprefix, current_run)
@@ -1019,14 +1014,7 @@ class ExpCommThread(threading.Thread):
                 for mprefix, pos in motor_positions.items():
                     cur_fprefix = cur_fprefix + '_{}_{}'.format(mprefix, pos)
 
-                if num_frames <= 9999:
-                    exp_start_num = '0001'
-
-                elif num_frames > 9999 and num_frames <= 99999:
-                    exp_start_num = '00001'
-
-                elif num_frames > 99999:
-                    exp_start_num = '000001'
+                exp_start_num = '000001'
 
                 if self._settings['add_file_postfix']:
                     new_fname = '{}_{}.tif'.format(cur_fprefix, exp_start_num)
@@ -1193,14 +1181,7 @@ class ExpCommThread(threading.Thread):
             #Runs a loop for each expected trigger signal (internal or external)
             self.return_queue.append(['scan', cur_trig])
 
-            if num_frames <= 9999:
-                exp_start_num = '0001'
-
-            elif num_frames > 9999 and num_frames <= 99999:
-                exp_start_num = '00001'
-
-            elif num_frames > 99999:
-                exp_start_num = '000001'
+            exp_start_num = '000001'
 
             if wait_for_trig and num_trig > 1:
                 cur_fprefix = '{}_{:04}'.format(fprefix, cur_trig)
@@ -1503,14 +1484,7 @@ class ExpCommThread(threading.Thread):
         struck.set_num_measurements(num_frames)
         struck.set_trigger_mode(0x1)    #Sets internal trigger mode
 
-        if num_frames <= 9999:
-            exp_start_num = '0001'
-
-        elif num_frames > 9999 and num_frames <= 99999:
-            exp_start_num = '00001'
-
-        elif num_frames > 99999:
-            exp_start_num = '000001'
+        exp_start_num = '000001'
 
         cur_fprefix = fprefix
 
@@ -1665,14 +1639,7 @@ class ExpCommThread(threading.Thread):
                 self.return_queue.append(['timeout', [data_dir, os.path.expanduser('~')]])
                 data_dir = os.path.expanduser('~')
 
-        if num_frames <= 9999:
-            zpad = 4
-
-        elif num_frames > 9999 and num_frames <= 99999:
-            zpad = 5
-
-        elif num_frames > 99999:
-            zpad = 6
+        zpad = 6
 
         log_file = os.path.join(data_dir, '{}.log'.format(fprefix))
 
@@ -1706,14 +1673,7 @@ class ExpCommThread(threading.Thread):
 
         logger.info(header.split('\n')[-2])
 
-        if num_frames <= 9999:
-            zpad = 4
-
-        elif num_frames > 9999 and num_frames <= 99999:
-            zpad = 5
-
-        elif num_frames > 99999:
-            zpad = 6
+        zpad = 6
 
         log_file = os.path.join(data_dir, '{}.log'.format(fprefix))
 
@@ -1742,7 +1702,7 @@ class ExpCommThread(threading.Thread):
         if self._settings['add_file_postfix']:
             val = "{0}_{1:0{2}d}.tif".format(fprefix, index+1, zpad)
         else:
-            val = "{0}_{1:0{2}d}.tif".format(fprefix, index+1, zpad)
+            val = "{0}_{1:0{2}d}".format(fprefix, index+1, zpad)
         
         val = val + "\t{0}".format(exp_period*index)
 
@@ -1816,14 +1776,7 @@ class ExpCommThread(threading.Thread):
 
         # logger.debug(avg_index)
 
-        if num_frames <= 9999:
-            zpad = 4
-
-        elif num_frames > 9999 and num_frames <= 99999:
-            zpad = 5
-
-        elif num_frames > 99999:
-            zpad = 6
+        zpad = 6
 
         with open(log_file, 'w') as f, open(log_summary_file, 'w') as f_sum:
             f.write(header)
@@ -2491,6 +2444,8 @@ class ExpPanel(wx.Panel):
             return
 
         if self.pipeline_ctrl is not None:
+            exp_type = None
+
             if 'Experiment type:' in exp_values['metadata']:
                 md_exp_type =  exp_values['metadata']['Experiment type:']
 
@@ -3303,7 +3258,7 @@ class ExpPanel(wx.Panel):
                 self.pipeline_warning_shown = True
 
         else:
-            self.pipelin_warning_shown = False
+            self.pipeline_warning_shown = False
 
 
     def on_exit(self):
