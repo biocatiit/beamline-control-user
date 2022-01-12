@@ -417,6 +417,9 @@ if __name__ == '__main__':
         'server_port'   : '5556',
         'server_ip'     : '192.168.1.14',
         # 'raw_settings'  : '../data/UO_SEC/SAXS.cfg',
+        'local_basedir' : '/nas_data/Eiger2xe9M',
+        'data_basedir'  : '/nas_data/Eiger2xe9M',
+        'output_basedir': '/nas_data/SAXS',
         }
 
 
