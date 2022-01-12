@@ -307,7 +307,7 @@ if __name__ == '__main__':
             'sample_vac': {'check': False, 'thresh': 0.04}, 'sc_vac':
             {'check': False, 'thresh':0.04}},
         # 'base_data_dir'         : '/nas_data/Pilatus1M/2021_Run3', #CHANGE ME
-        'base_data_dir'         : '/nas_data/Eiger2xe9M/2022_Run1', #CHANGE ME
+        'base_data_dir'         : '/nas_data/Eiger2xe9M/2022_Run1', #CHANGE ME and pipeline local_basedir
         }
 
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']
@@ -506,6 +506,9 @@ if __name__ == '__main__':
         'server_port'   : '5556',
         'server_ip'     : '164.54.204.82',
         # 'raw_settings'  : '/nas_data/Pilatus1M/2021_Run1/20210129_Hopkins/setup/calibration/pipeline_SAXS.cfg',
+        'local_basedir' : '/nas_data/Eiger2xe9M',
+        'data_basedir'  : '/nas_data/Eiger2xe9M',
+        'output_basedir': '/nas_data/SAXS',
         }
 
     biocon_settings = {}
