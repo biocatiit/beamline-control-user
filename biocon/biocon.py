@@ -520,7 +520,7 @@ if __name__ == '__main__':
         # ('trsaxs_flow', trcon.TRFlowPanel),
         # ('scan',    scancon.ScanPanel),
         ('metadata', metadata.ParamPanel),
-        ('pipeline', pipeline_ctrl.PipelineControl)
+        # ('pipeline', pipeline_ctrl.PipelineControl)
         ])
 
     settings = {

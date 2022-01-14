@@ -186,7 +186,8 @@ class AD_EigerCamera(Device):
              "TIFF1:FileName", "TIFF1:FileName_RBV",
              "TIFF1:FilePath", "TIFF1:FilePath_RBV", "TIFF1:FileTemplate",
              "TimeRemaining_RBV",
-             "TriggerMode", "TriggerMode_RBV", "TriggerSoftware")
+             "TriggerMode", "TriggerMode_RBV", "TriggerSoftware",
+             "Trigger", 'ManualTrigger', 'ManualTrigger_RBV',)
 
 
     _nonpvs = ('_prefix', '_pvs', '_delim')
@@ -249,8 +250,14 @@ class EPICSEigerDetector(object):
     def arm(self):
         self.det.put("cam1:Acquire", 1, wait=True, timeout=1)
 
+    def trigger(self, wait=True):
+        self.det.put("cam1:Trigger", 1, wait=wait, timeout=1)
+
     def get_status(self):
         return self.det.get("cam1:DetectorState_RBV")
+
+    def get_data_dir(self):
+        return self.det.get('cam1:FilePath', as_string=True)
 
     def set_data_dir(self, data_dir):
         if self.use_tiff_writer:
@@ -298,7 +305,7 @@ class EPICSEigerDetector(object):
         elif mode == 'ext_gate':
             tm = 'External Gate'
         elif mode == 'int_trig':
-            tm = 'External Series'
+            tm = 'Internal Series'
         elif mode == 'int_enable':
             tm = 'Internal Enable'
 
@@ -306,6 +313,9 @@ class EPICSEigerDetector(object):
             self.det.put('cam1:NumImages', 1, wait=True, timeout=1)
 
         self.det.put("cam1:TriggerMode", tm, wait=True, timeout=1)
+
+    def set_manual_trigger(self, mode):
+        self.det.put('cam1:ManualTrigger', mode, wait=True, timeout=1)
 
     def stop(self):
         self.det.put("cam1:Acquire", 0, wait=True, timeout=1)
