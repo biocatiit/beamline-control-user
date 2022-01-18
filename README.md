@@ -48,8 +48,6 @@ the MX control system to talk to the devices. It scans two motors, then creates 
 
 wxpython, pyserial, numpy, six, zaber.serial, pyzmq, matplotlib, future, Mp
 
-If using python 2, subprocess32 is also required.
-
 Elveflow SDK: https://www.elveflow.com/microfluidic-flow-control-products/flow-control-system/elveflow-software/
 Unpack and install to c:\Users\biocat\Elvefow_SDK_Vx_xx_xx
 
@@ -67,9 +65,6 @@ Clone the git, then run any of the files in the biocon folder as appropriate.
 Sample commands:
 
 conda install wxpython pyserial numpy six pyzmq matplotlib future
-
-If using python 2:
-conda install subprocess32
 
 pip install zaber.serial
 

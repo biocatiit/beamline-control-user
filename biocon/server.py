@@ -62,6 +62,8 @@ class ControlServer(threading.Thread):
         threading.Thread.__init__(self, name=name)
         self.daemon = True
 
+        logger.info("Initializing control server: %s", self.name)
+
         self.ip = ip
         self.port = port
 
@@ -70,19 +72,13 @@ class ControlServer(threading.Thread):
 
         self._stop_event = threading.Event()
 
-        self.pump_comm_locks = pump_comm_locks
-        self.valve_comm_locks = valve_comm_locks
-
-    def run(self):
-        """
-        Custom run method for the thread.
-        """
-        logger.info("Initializing control server: %s", self.name)
-
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.PAIR)
         self.socket.set(zmq.LINGER, 0)
         self.socket.bind("tcp://{}:{}".format(self.ip, self.port))
+
+        self.pump_comm_locks = pump_comm_locks
+        self.valve_comm_locks = valve_comm_locks
 
         pump_cmd_q = deque()
         pump_return_q = deque()
@@ -132,6 +128,10 @@ class ControlServer(threading.Thread):
 
         self._device_control['valve'] = valve_ctrl
 
+    def run(self):
+        """
+        Custom run method for the thread.
+        """
         while True:
             try:
                 try:
@@ -156,11 +156,9 @@ class ControlServer(threading.Thread):
                     device = command['device']
                     device_cmd = command['command']
                     get_response = command['response']
-                    logger.debug("For device %s, processing cmd '%s' with args: %s and kwargs: %s ",
-                        device, device_cmd[0], ', '.join(['{}'.format(a) for a in device_cmd[1]]),
-                        ', '.join(['{}:{}'.format(kw, item) for kw, item in device_cmd[2].items()]))
-
+                    logger.debug("For device %s, processing cmd '%s' with args: %s and kwargs: %s ", device, device_cmd[0], ', '.join(['{}'.format(a) for a in device_cmd[1]]), ', '.join(['{}:{}'.format(kw, item) for kw, item in device_cmd[2].items()]))
                     try:
+
                         if device == 'server':
                             if device_cmd[0] == 'ping':
                                 answer = 'ping received'
@@ -206,21 +204,21 @@ class ControlServer(threading.Thread):
             except Exception:
                 logger.error('Error in server thread:\n{}'.format(traceback.format_exc()))
 
+        if self._stop_event.is_set():
+            self._stop_event.clear()
+        # else:
+        #     self._abort()
+        logger.info("Quitting pump control thread: %s", self.name)
+
+    def stop(self):
+        """Stops the thread cleanly."""
+        # logger.info("Starting to clean up and shut down pump control thread: %s", self.name)
         self.socket.unbind("tcp://{}:{}".format(self.ip, self.port))
         self.socket.close(0)
         self.context.destroy(0)
 
         for device in self._device_control:
             self._device_control[device]['abort'].set()
-
-        if self._stop_event.is_set():
-            self._stop_event.clear()
-
-        logger.info("Quitting control thread: %s", self.name)
-
-    def stop(self):
-        """Stops the thread cleanly."""
-        # logger.info("Starting to clean up and shut down pump control thread: %s", self.name)
 
         self._stop_event.set()
 
@@ -252,46 +250,46 @@ if __name__ == '__main__':
     port2 = '5557'
     port3 = '5558'
 
+    # Coflow
+    ip = '164.54.204.53'
+
+    # TR SAXS
+    # ip = '164.54.204.8'
+
     # Both
 
-    pump_comm_locks = {
-        'COM3'  : threading.Lock(),
+    pump_comm_locks = {'COM3'   : threading.Lock(),
         'COM4'  : threading.Lock(),
-        'COM10' : threading.Lock(),
-        'COM11' : threading.Lock(),
         }
 
-    valve_comm_locks = {
-        'COM6'  : threading.Lock(),
+    valve_comm_locks = {'COM6'   : threading.Lock(),
         'COM7'  : threading.Lock(),
         'COM8'  : threading.Lock(),
         'COM9'  : threading.Lock(),
-        'COM12' : threading.Lock(),
-        'COM14' : threading.Lock(),
         }
 
+    control_server1 = ControlServer(ip, port1, name='PumpControlServer',
+        pump_comm_locks = pump_comm_locks)
+    control_server1.start()
 
-    # # Coflow
+    control_server2 = ControlServer(ip, port2, name='FMControlServer')
+    control_server2.start()
 
-    # ip = '164.54.204.53'
+    control_server3 = ControlServer(ip, port3, name='ValveControlServer',
+        valve_comm_locks = valve_comm_locks)
+    control_server3.start()
 
-    # setup_pumps = [('sheath', 'VICI M50', 'COM3', ['628.2', '13.051'], {}, {}),
-    #     ('outlet', 'VICI M50', 'COM4', ['626.36', '10.109'], {}, {})
-    #     ]
+    # Coflow
 
-    # pump_local_comm_locks = {'sheath'    : pump_comm_locks[setup_pumps[0][2]],
-    #     'outlet'    : pump_comm_locks[setup_pumps[1][2]]
-    #     }
+    setup_pumps = [('sheath', 'VICI M50', 'COM3', ['629.48', '13.442'], {}, {}),
+        ('outlet', 'VICI M50', 'COM4', ['626.44', '9.834'], {}, {})
+        ]
 
-    # setup_valves = [('Coflow Sheath', 'Cheminert', 'COM7', [], {'positions' : 10}),
-    #     ]
-
+    pump_local_comm_locks = {'sheath'    : pump_comm_locks[setup_pumps[0][2]],
+        'outlet'    : pump_comm_locks[setup_pumps[1][2]]
+        }
 
     # TR SAXS
-
-    ip = '164.54.204.8'
-
-    # Chaotic flow
 
     # setup_pumps = [
     #     ('Sample', 'PHD 4400', 'COM4', ['10 mL, Medline P.C.', '1'], {},
@@ -302,25 +300,34 @@ if __name__ == '__main__':
     #         {'flow_rate' : '10', 'refill_rate' : '10'}),
     #     ]
 
-    # pump_local_comm_locks = {
-    #     'Sample'    : pump_comm_locks[setup_pumps[0][2]],
+    # pump_local_comm_locks = {'Sample'    : pump_comm_locks[setup_pumps[0][2]],
     #     'Buffer 1'    : pump_comm_locks[setup_pumps[1][2]],
-    #     'Buffer 2'    : pump_comm_locks[setup_pumps[2][2]]
+    #     'Buffer 2'    : pump_comm_locks[setup_pumps[1][2]]
     #     }
 
-    # setup_valves = [
-    #     ('Injection', 'Rheodyne', 'COM6', [], {'positions' : 2}),
-    #     ('Sample', 'Rheodyne', 'COM9', [], {'positions' : 6}),
-    #     ('Buffer 1', 'Rheodyne', 'COM8', [], {'positions' : 6}),
-    #     ('Buffer 2', 'Rheodyne', 'COM7', [], {'positions' : 6}),
-    #     ]
+    # Both
 
-    # valve_local_comm_locks = {
-    #     'Injection'    : valve_comm_locks[setup_valves[0][2]],
+    pump_frame = pumpcon.PumpFrame(pump_local_comm_locks, setup_pumps, None,
+        title='Pump Control')
+    pump_frame.Show()
+
+    #TR SAXS
+
+    # setup_valves = [('Injection', 'Rheodyne', 'COM6', [], {'positions' : 2}),
+    #         ('Sample', 'Rheodyne', 'COM7', [], {'positions' : 6}),
+    #         ('Buffer 1', 'Rheodyne', 'COM8', [], {'positions' : 6}),
+    #         ('Buffer 2', 'Rheodyne', 'COM9', [], {'positions' : 6}),
+    #                 ]
+
+    # valve_local_comm_locks = {'Injection'    : valve_comm_locks[setup_valves[0][2]],
     #     'Sample'    : valve_comm_locks[setup_valves[1][2]],
     #     'Buffer 1'    : valve_comm_locks[setup_valves[2][2]],
     #     'Buffer 2'    : valve_comm_locks[setup_valves[3][2]],
-    #    }
+
+    #     }
+    # valve_frame = valvecon.ValveFrame(valve_local_comm_locks, setup_valves, None,
+    #     title='Valve Control')
+    # valve_frame.Show()
 
     # Laminar flow
     setup_pumps = [
@@ -365,13 +372,7 @@ if __name__ == '__main__':
         None, title='Valve Control')
     valve_frame.Show()
 
-    control_server1 = ControlServer(ip, port1, name='PumpControlServer',
-        pump_comm_locks = pump_comm_locks)
-    control_server1.start()
-
-    control_server2 = ControlServer(ip, port2, name='FMControlServer')
-    control_server2.start()
-
+    
 
     app.MainLoop()
 
@@ -385,8 +386,7 @@ if __name__ == '__main__':
         control_server2.stop()
         control_server2.join()
 
-        # TR SAXS
-        control_server3.stop()
-        control_server3.join()
+        # control_server3.stop()
+        # control_server3.join()
 
     logger.info("Quitting server")

@@ -186,8 +186,7 @@ class AD_EigerCamera(Device):
              "TIFF1:FileName", "TIFF1:FileName_RBV",
              "TIFF1:FilePath", "TIFF1:FilePath_RBV", "TIFF1:FileTemplate",
              "TimeRemaining_RBV",
-             "TriggerMode", "TriggerMode_RBV", "TriggerSoftware",
-             "Trigger", 'ManualTrigger', 'ManualTrigger_RBV',)
+             "TriggerMode", "TriggerMode_RBV", "TriggerSoftware")
 
 
     _nonpvs = ('_prefix', '_pvs', '_delim')
@@ -219,24 +218,24 @@ class EPICSEigerDetector(object):
         self.use_file_writer = use_file_writer
 
         if self.use_tiff_writer:
-            self.det.put('TIFF1:EnableCallbacks', 1, wait=True, timeout=1)
-            self.det.put('cam1:StreamEnable', 1, wait=True, timeout=1)
-            self.det.put('TIFF1:FileTemplate', '%s%s_%4.4d.tif', wait=True, timeout=1)
-            self.det.put('TIFF1:AutoIncrement', 1, wait=True, timeout=1)
-            self.det.put('TIFF1:AutoSave', 1, wait=True, timeout=1)
+            self.det.put('TIFF1:EnableCallbacks', 1, timeout=1)
+            self.det.put('cam1:StreamEnable', 1, timeout=1)
+            self.det.put('TIFF1:FileTemplate', '%s%s_%4.4d.tif', timeout=1)
+            self.det.put('TIFF1:AutoIncrement', 1, timeout=1)
+            self.det.put('TIFF1:AutoSave', 1, timeout=1)
 
         else:
-            self.det.put('TIFF1:EnableCallbacks', 0, wait=True, timeout=1)
+            self.det.put('TIFF1:EnableCallbacks', 0, timeout=1)
 
         if self.use_file_writer:
-            self.det.put('cam1:FWEnable', 1, wait=True, timeout=1)
-            self.det.put('cam1:SaveFiles', 1, wait=True, timeout=1)
-            self.det.put('cam1:FWAutoRemove', 1, wait=True, timeout=1)
+            self.det.put('cam1:FWEnable', 1, timeout=1)
+            self.det.put('cam1:SaveFiles', 1, timeout=1)
+            self.det.put('cam1:FWAutoRemove', 1, timeout=1)
 
         else:
-            self.det.put('cam1:FWEnable', 0, wait=True, timeout=1)
+            self.det.put('cam1:FWEnable', 0, timeout=1)
 
-        self.det.put('cam1:PhotonEnergy', photon_energy*1000, wait=True, timeout=1)
+        self.det.put('cam1:PhotonEnergy', photon_energy*1000, timeout=1)
 
     # def __repr__(self):
     #     return '{}({}, {})'.format(self.__class__.__name__, self.name, self.device)
@@ -245,40 +244,34 @@ class EPICSEigerDetector(object):
     #     return '{} {}, connected to {}'.format(self.__class__.__name__, self.name, self.device)
 
     def abort(self):
-        self.det.put("cam1:Acquire", 0, wait=True, timeout=1)
+        self.det.put("cam1:Acquire", 0)
 
     def arm(self):
-        self.det.put("cam1:Acquire", 1, wait=True, timeout=1)
-
-    def trigger(self, wait=True):
-        self.det.put("cam1:Trigger", 1, wait=wait, timeout=1)
+        self.det.put("cam1:Acquire", 1)
 
     def get_status(self):
         return self.det.get("cam1:DetectorState_RBV")
 
-    def get_data_dir(self):
-        return self.det.get('cam1:FilePath', as_string=True)
-
     def set_data_dir(self, data_dir):
         if self.use_tiff_writer:
-            self.det.put('TIFF1:FilePath', data_dir, wait=True, timeout=1)
+            self.det.put('TIFF1:FilePath', data_dir)
 
         if self.use_file_writer:
-            self.det.put("cam1:FilePath", data_dir, wait=True, timeout=1)
+            self.det.put("cam1:FilePath", data_dir)
 
     def set_exp_period(self, exp_period):
-        self.det.put('cam1:AcquirePeriod', exp_period, wait=True, timeout=1)
+        self.det.put('cam1:AcquirePeriod', exp_period)
 
     def set_exp_time(self, exp_time):
-        self.det.put('cam1:AcquireTime', exp_time, wait=True, timeout=1)
+        self.det.put('cam1:AcquireTime', exp_time)
 
     def set_filename(self, filename):
         if self.use_tiff_writer:
-            self.det.put('TIFF1:FileName', filename, wait=True, timeout=1)
-            self.det.put('TIFF1:FileNumber', 1, wait=True, timeout=1)
+            self.det.put('TIFF1:FileName', filename)
+            self.det.put('TIFF1:FileNumber', 1)
 
         if self.use_file_writer:
-            self.det.put("cam1:FWNamePattern", filename, wait=True, timeout=1)
+            self.det.put("cam1:FWNamePattern", filename)
 
     def set_num_frames(self, num_frames):
         trig_mode = self.det.get('cam1:TriggerMode_RBV', as_string=True)
@@ -286,16 +279,16 @@ class EPICSEigerDetector(object):
         logger.debug('trig_mode')
 
         if trig_mode == 'Internal Series' or trig_mode == 'External Series':
-            self.det.put('cam1:NumImages', num_frames, wait=True, timeout=1)
+            self.det.put('cam1:NumImages', num_frames)
 
         elif trig_mode == 'Internal Enable' or trig_mode == 'External Enable':
-            self.det.put('cam1:NumTriggers', num_frames, wait=True, timeout=1)
+            self.det.put('cam1:NumTriggers', num_frames)
 
         if self.use_file_writer:
             if num_frames < 10000:
-                self.det.put('cam1:FWNImagesPerFile', num_frames, wait=True, timeout=1)
+                self.det.put('cam1:FWNImagesPerFile', num_frames)
             else:
-                self.det.put('cam1:FWNImagesPerFile', 10000, wait=True, timeout=1)
+                self.det.put('cam1:FWNImagesPerFile', 10000)
 
     def set_trigger_mode(self, mode):
         if mode == 'ext_enable':
@@ -305,17 +298,14 @@ class EPICSEigerDetector(object):
         elif mode == 'ext_gate':
             tm = 'External Gate'
         elif mode == 'int_trig':
-            tm = 'Internal Series'
+            tm = 'External Series'
         elif mode == 'int_enable':
             tm = 'Internal Enable'
 
         if mode == 'ext_enable' or mode == 'int_enable':
-            self.det.put('cam1:NumImages', 1, wait=True, timeout=1)
+            self.det.put('cam1:NumImages', 1)
 
-        self.det.put("cam1:TriggerMode", tm, wait=True, timeout=1)
-
-    def set_manual_trigger(self, mode):
-        self.det.put('cam1:ManualTrigger', mode, wait=True, timeout=1)
+        self.det.put("cam1:TriggerMode", tm)
 
     def stop(self):
-        self.det.put("cam1:Acquire", 0, wait=True, timeout=1)
+        self.det.put("cam1:Acquire", 0)

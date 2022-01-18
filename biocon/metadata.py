@@ -330,7 +330,7 @@ class MusclePanel(wx.Panel):
         self.top_sizer = wx.StaticBoxSizer(wx.VERTICAL, top_parent, "Muscle Parameters")
         ctrl_parent = self.top_sizer.GetStaticBox()
 
-        self.system = wx.ComboBox(ctrl_parent, choices=['Mouse', 'Rat', 'Pig', 'Human', 'Insect'],
+        self.system = wx.ComboBox(ctrl_parent, choices=['Mouse', 'Rat'],
             size=(150, -1))
         self.muscle_type = wx.ComboBox(ctrl_parent, choices=['Cardiac', 'Skeletal'],
             size=(150, -1))
