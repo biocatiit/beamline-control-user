@@ -206,29 +206,54 @@ if __name__ == '__main__':
         'exp_time'              : '0.5',
         'exp_period'            : '1',
         'exp_num'               : '2',
-        'exp_time_min'          : 0.00105,
-        'exp_time_max'          : 5184000,
-        'exp_period_min'        : 0.002,
-        'exp_period_max'        : 5184000,
-        'nframes_max'           : 15000, # For Pilatus: 999999, for Struck: 15000 (set by maxChannels in the driver configuration)
+
+        # 'exp_time_min'          : 0.00105,  # For Pilatus3 X 1M
+        # 'exp_time_max'          : 5184000,
+        # 'exp_period_min'        : 0.002,
+        # 'exp_period_max'        : 5184000,
+        # 'nframes_max'           : 15000, # For Pilatus: 999999, for Struck: 15000 (set by maxChannels in the driver configuration)
+        # 'nparams_max'           : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
+        # 'exp_period_delta'      : 0.00095,
+        # 'local_dir_root'        : '/nas_data/Pilatus1M',
+        # 'remote_dir_root'       : '/nas_data',
+        # 'detector'              : 'pilatus_mx',
+        # 'det_args'              : {}, #Allows detector specific keyword arguments
+        # 'add_file_postfix'      : True,
+
+        'exp_time_min'          : 0.000000050, #Eiger2 XE 9M
+        'exp_time_max'          : 3600,
+        'exp_period_min'        : 0.001785714286, #There's an 8bit undocumented mode that can go faster, in theory
+        'exp_period_max'        : 5184000, # Not clear there is a maximum, so left it at this
+        'nframes_max'           : 15000, # For Eiger: 2000000000, for Struck: 15000 (set by maxChannels in the driver configuration)
         'nparams_max'           : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
-        'exp_period_delta'      : 0.00095,
+        'exp_period_delta'      : 0.000000200,
+        'local_dir_root'        : '/nas_data/Eiger2xe9M',
+        'remote_dir_root'       : '/nas_data',
+        'detector'              : '18ID:EIG2:_epics',
+        'det_args'              :  {'use_tiff_writer': False, 'use_file_writer': True,
+            'photon_energy' : 12.0,},
+        'add_file_postfix'      : False,
+
         # 'shutter_speed_open'    : 0.004, #in s      NM vacuum shutter, broken
         # 'shutter_speed_close'   : 0.004, # in s
         # 'shutter_pad'           : 0.002, #padding for shutter related values
         # 'shutter_cycle'         : 0.02, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
+
         # 'shutter_speed_open'    : 0.001, #in s    Fast shutters
         # 'shutter_speed_close'   : 0.001, # in s
         # 'shutter_pad'           : 0.00, #padding for shutter related values
         # 'shutter_cycle'         : 0.002, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
+
         # 'shutter_speed_open'    : 0.075, #in s      Slow vacuum shutter
         # 'shutter_speed_close'   : 0.075, # in s
         # 'shutter_pad'           : 0.01, #padding for shutter related values
         # 'shutter_cycle'         : 0.2, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
+
         'shutter_speed_open'    : 0.0045, #in s      Normal vacuum shutter
         'shutter_speed_close'   : 0.004, # in s
         'shutter_pad'           : 0.002, #padding for shutter related values
         'shutter_cycle'         : 0.1, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
+
         'struck_measurement_time' : '0.001', #in s
         'tr_muscle_exp'         : False,
         'slow_mode_thres'       : 0.1,
@@ -242,8 +267,9 @@ if __name__ == '__main__':
         'guard_vac_pv'          : '18ID:VAC:D:Guards',
         'sample_vac_pv'         : '18ID:VAC:D:Sample',
         'sc_vac_pv'             : '18ID:VAC:D:ScatterChamber',
-        'local_dir_root'        : '/nas_data/Pilatus1M',
-        'remote_dir_root'       : '/nas_data',
+        'use_old_i0_gain'       : True,
+        'i0_gain_pv'            : '18ID_D_BPM_Gain:Level-SP',
+
         'struck_log_vals'       : [{'mx_record': 'mcs3', 'channel': 2, 'name': 'I0',
             'scale': 1, 'offset': 0, 'dark': True, 'norm_time': False}, #Format: (mx_record_name, struck_channel, header_name, scale, offset, use_dark_current, normalize_by_exp_time)
             {'mx_record': 'mcs4', 'channel': 3, 'name': 'I1', 'scale': 1,
@@ -256,9 +282,11 @@ if __name__ == '__main__':
             'scale': 5000, 'offset': 0.5, 'dark': False, 'norm_time': True},
             # {'mx_record': 'mcs12', 'channel': 11, 'name': 'Flow_rate',
             # 'scale': 10e6, 'offset': 0, 'dark': True, 'norm_time': True},
-            # {'mx_record': 'mcs7', 'channel': 6, 'name': 'Pilatus_Enable',
+            # {'mx_record': 'mcs7', 'channel': 6, 'name': 'Detector_Enable',
             # 'scale': 1e5, 'offset': 0, 'dark': True, 'norm_time': True},
-            # {'mx_record': 'mcs12', 'channel': 11, 'name': 'Length',
+            # {'mx_record': 'mcs12', 'channel': 11, 'name': 'Length_Out',
+            # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
+            # {'mx_record': 'mcs13', 'channel': 13, 'name': 'Length_In',
             # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
             # {'mx_record': 'mcs13', 'channel': 12, 'name': 'Force',
             # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
@@ -276,9 +304,10 @@ if __name__ == '__main__':
             ],
         'warnings'              : {'shutter' : True, 'col_vac' : {'check': True,
             'thresh': 0.04}, 'guard_vac' : {'check': True, 'thresh': 0.04},
-            'sample_vac': {'check': True, 'thresh': 0.04}, 'sc_vac':
-            {'check': True, 'thresh':0.04}},
-        'base_data_dir'         : '/nas_data/Pilatus1M/2021_Run2', #CHANGE ME
+            'sample_vac': {'check': False, 'thresh': 0.04}, 'sc_vac':
+            {'check': False, 'thresh':0.04}},
+        # 'base_data_dir'         : '/nas_data/Pilatus1M/2021_Run3', #CHANGE ME
+        'base_data_dir'         : '/nas_data/Eiger2xe9M/2022_Run1', #CHANGE ME and pipeline local_basedir
         }
 
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']
@@ -332,10 +361,10 @@ if __name__ == '__main__':
         'pco_direction'         : 'x',
         'pco_pulse_width'       : D('10'), #In microseconds, opt: 0.2, 1, 2.5, 10
         'pco_encoder_settle_t'  : D('0.075'), #In microseconds, opt: 0.075, 1, 4, 12
-        # 'encoder_resolution'    : D('0.000001'), #for XMS160, in mm
-        # 'encoder_precision'     : 6, #Number of significant decimals in encoder value
-        'encoder_resolution'    : D('0.00001'), #for GS30V, in mm
-        'encoder_precision'     : 5, #Number of significant decimals in encoder value
+        'encoder_resolution'    : D('0.000001'), #for XMS160, in mm
+        'encoder_precision'     : 6, #Number of significant decimals in encoder value
+        # 'encoder_resolution'    : D('0.00001'), #for GS30V, in mm
+        # 'encoder_precision'     : 5, #Number of significant decimals in encoder value
         'min_off_time'          : D('0.001'),
         'x_range'               : (-80, 80),
         'y_range'               : (-5, 25),
@@ -348,21 +377,50 @@ if __name__ == '__main__':
         'remote_valve_ip'       : '164.54.204.8',
         'remote_valve_port'     : '5558',
         'device_communication'  : 'remote',
-        'injection_valve'       : [('Rheodyne', 'COM6', [], {'positions' : 2}, 'Injection'),],
+        # 'injection_valve'       : [('Rheodyne', 'COM6', [], {'positions' : 2}, 'Injection'),], #Chaotic flow
+        # 'sample_valve'          : [('Rheodyne', 'COM9', [], {'positions' : 6}, 'Sample'),],
+        # 'buffer1_valve'         : [('Rheodyne', 'COM8', [], {'positions' : 6}, 'Buffer 1'),],
+        # 'buffer2_valve'         : [('Rheodyne', 'COM7', [], {'positions' : 6}, 'Buffer 2'),],
+        # 'sample_pump'           : ('Sample', 'PHD 4400', 'COM4',
+        #     ['10 mL, Medline P.C.', '1'], {}, {'flow_rate' : '5',
+        #     'refill_rate' : '5', 'dual_syringe': False}),
+        # 'buffer1_pump'           : ('Buffer 1', 'PHD 4400', 'COM4',
+        #     ['20 mL, Medline P.C.', '2'], {}, {'flow_rate' : '10',
+        #     'refill_rate' : '10', 'dual_syringe': False}),
+        # 'buffer2_pump'          : ('Buffer 2', 'PHD 4400', 'COM4',
+        #     ['20 mL, Medline P.C.', '3'], {}, {'flow_rate' : '10',
+        #     'refill_rate' : '10', 'dual_syringe': False}),
+        # 'outlet_fm'             : ('BFS', 'COM5', [], {}),
+        'injection_valve'       : [('Rheodyne', 'COM6', [], {'positions' : 2}, 'Injection'),], #Laminar flow
         'sample_valve'          : [('Rheodyne', 'COM7', [], {'positions' : 6}, 'Sample'),],
-        'buffer1_valve'         : [('Rheodyne', 'COM8', [], {'positions' : 6}, 'Buffer 1'),],
-        'buffer2_valve'         : [('Rheodyne', 'COM9', [], {'positions' : 6}, 'Buffer 2'),],
-        'sample_pump'           : ('Sample', 'NE 500', 'COM10',
-            ['3 mL, Medline P.C.', '1'], {}, {'flow_rate' : '0.6',
-            'refill_rate' : '2', 'dual_syringe' : False}),
-        'buffer1_pump'           : ('Buffer 1', 'PHD 4400', 'COM4',
-            ['10 mL, Medline P.C.', '2'], {}, {'flow_rate' : '2.4',
-            'refill_rate' : '5', 'dual_syringe' : False}),
-        'buffer2_pump'          : ('Buffer 2', 'PHD 4400', 'COM4',
-            ['10 mL, Medline P.C.', '3'], {}, {'flow_rate' : '2.4',
-            'refill_rate' : '5', 'dual_syringe' : False}),
-        'outlet_fm'             : ('BFS', 'COM5', [], {}),
-        # 'device_communication'  : 'local',
+        'buffer1_valve'         : [('Rheodyne', 'COM12', [], {'positions' : 6}, 'Buffer'),
+                                    ('Rheodyne', 'COM14', [], {'positions' : 6}, 'Buffer')],
+        'buffer2_valve'         : [('Rheodyne', 'COM9', [], {'positions' : 6}, 'Sheath'),
+                                    ('Rheodyne', 'COM8', [], {'positions' : 6}, 'Sheath')],
+        'buffer1_pump'           : ('Buffer', 'PHD 4400', 'COM4',
+            ['10 mL, Medline P.C.', '2'], {}, {'flow_rate' : '0.1',
+            'refill_rate' : '5', 'dual_syringe': True}),
+        'buffer2_pump'          : ('Sheath', 'NE 500', 'COM10',
+            ['3 mL, Medline P.C.', '01'], {}, {'flow_rate' : '0.1',
+            'refill_rate' : '1.5', 'dual_syringe': True}),
+        'sample_pump'           : ('Sample', 'PHD 4400', 'COM4',
+            ['3 mL, Medline P.C.', '3'], {}, {'flow_rate' : '0.1',
+            'refill_rate' : '1.5', 'dual_syringe': False}),
+        'outlet_fm'             : ('BFS', 'COM13', [], {}),
+        # 'device_communication'  : 'local',                                                    # Simulated
+        # 'injection_valve'       : [('Soft', '', [], {'positions' : 2}, 'Injection'),],
+        # 'sample_valve'          : [('Soft', '', [], {'positions' : 6}, 'Sample'),],
+        # 'buffer1_valve'         : [('Soft', '', [], {'positions' : 6}, 'Buffer'),],
+        # 'buffer2_valve'         : [('Soft', '', [], {'positions' : 6}, 'Sheath'),],
+        # 'sample_pump'           : ('Sample', 'Soft Syringe', '',   
+        #     ['10 mL, Medline P.C.',], {}, {'flow_rate' : '5',
+        #     'refill_rate' : '20', 'dual_syringe' : False}),
+        # 'buffer1_pump'           : ('Buffer 1', 'Soft Syringe', '',
+        #     ['20 mL, Medline P.C.',], {}, {'flow_rate' : '10',
+        #     'refill_rate' : '40', 'dual_syringe' : False}),
+        # 'buffer2_pump'          : ('Buffer 2', 'Soft Syringe', '',
+        #     ['20 mL, Medline P.C.',], {}, {'flow_rate' : '10',
+        #     'refill_rate' : '40', 'dual_syringe' : False}),
         # 'injection_valve'       : [('Soft', '', [], {'positions' : 2}, 'Injection'),],
         # 'sample_valve'          : [('Soft', '', [], {'positions' : 6}, 'Sample'),],
         # 'buffer1_valve'         : [('Soft', '', [], {'positions' : 6}, 'Buffer'),
@@ -385,18 +443,18 @@ if __name__ == '__main__':
         'max_flow'              : 8,
         'max_dilution'          : 50,
         'auto_set_valves'       : True,
-        'valve_start_positions' : {'sample_valve' : 1, 'buffer1_valve': 1,
-            'buffer2_valve' : 1, 'injection_valve' : 1},
-        'valve_refill_positions': {'sample_valve' : 2, 'buffer1_valve': 2,
+        'valve_start_positions' : {'sample_valve' : 2, 'buffer1_valve': 2,
             'buffer2_valve' : 2, 'injection_valve' : 1},
+        'valve_refill_positions': {'sample_valve' : 1, 'buffer1_valve': 1,
+            'buffer2_valve' : 1, 'injection_valve' : 1},
         'autostart'             : 'At flow rate',
         'autostart_flow'        : '4.5',
-        'autostart_flow_ratio'  : 0.75,
+        'autostart_flow_ratio'  : 0.9,
         'autostart_delay'       : '0',
         'autoinject'            : 'After scan',
         'autoinject_scan'       : '5',
         'autoinject_valve_pos'  : 2,
-        'mixer_type'            : 'chaotic', # laminar or chaotic
+        'mixer_type'            : 'laminar', # laminar or chaotic
         'sample_ratio'          : '0.066', # For laminar flow
         'sheath_ratio'          : '0.032', # For laminar flow
         'simulated'             : False, # VERY IMPORTANT. MAKE SURE THIS IS FALSE FOR EXPERIMENTS
@@ -438,6 +496,9 @@ if __name__ == '__main__':
         'server_port'   : '5556',
         'server_ip'     : '164.54.204.82',
         # 'raw_settings'  : '/nas_data/Pilatus1M/2021_Run1/20210129_Hopkins/setup/calibration/pipeline_SAXS.cfg',
+        'local_basedir' : '/nas_data/Eiger2xe9M',
+        'data_basedir'  : '/nas_data/Eiger2xe9M',
+        'output_basedir': '/nas_data/SAXS',
         }
 
     biocon_settings = {}

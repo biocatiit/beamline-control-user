@@ -58,7 +58,7 @@ class CoflowPanel(wx.Panel):
     ``bfs_pump_sizer`` is constructed in the :py:func:`_create_layout` function,
     and then add in type switching in the :py:func:`_on_type` function.
     """
-    def __init__(self, settings, *args, **kwargs):
+    def __init__(self, settings, connect=True, *args, **kwargs):
         """
         Initializes the custom thread. Important parameters here are the
         list of known commands ``_commands`` and known pumps ``known_fms``.
@@ -1220,7 +1220,7 @@ class CoflowFrame(wx.Frame):
     Only meant to be used when the pumpcon module is run directly,
     rather than when it is imported into another program.
     """
-    def __init__(self, settings, *args, **kwargs):
+    def __init__(self, settings, connect=True, *args, **kwargs):
         """
         Initializes the pump frame. Takes args and kwargs for the wx.Frame class.
         """

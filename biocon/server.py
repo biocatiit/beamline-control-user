@@ -329,10 +329,44 @@ if __name__ == '__main__':
     #     title='Valve Control')
     # valve_frame.Show()
 
-    # Coflow
-
-    setup_valves = [('Coflow Sheath', 'Cheminert', 'COM7', [], {'positions' : 10}),
+    # Laminar flow
+    setup_pumps = [
+        ('Buffer 1', 'PHD 4400', 'COM4', ['10 mL, Medline P.C.', '1'], {},
+            {'flow_rate' : '0.068', 'refill_rate' : '5'}),
+        ('Buffer 2', 'PHD 4400', 'COM4', ['10 mL, Medline P.C.', '2'], {},
+            {'flow_rate' : '0.068', 'refill_rate' : '5'}),
+        ('Sheath', 'NE 500', 'COM10', ['3 mL, Medline P.C.', '01'],
+            {'dual_syringe': 'False'}, {'flow_rate' : '0.002', 'refill_rate' : '1.5'}),
+        ('Sample', 'PHD 4400', 'COM4', ['3 mL, Medline P.C.', '3'], {},
+            {'flow_rate' : '0.009', 'refill_rate' : '1.5'}),
         ]
+
+    pump_local_comm_locks = {
+        'Buffer 1'    : pump_comm_locks[setup_pumps[0][2]],
+        'Buffer 2'    : pump_comm_locks[setup_pumps[1][2]],
+        'Sheath'    : pump_comm_locks[setup_pumps[2][2]],
+        'Sample'    : pump_comm_locks[setup_pumps[3][2]]
+        }
+
+    setup_valves = [
+        ('Injection', 'Rheodyne', 'COM6', [], {'positions' : 2}),
+        ('Buffer 1', 'Rheodyne', 'COM12', [], {'positions' : 6}),
+        ('Buffer 2', 'Rheodyne', 'COM14', [], {'positions' : 6}),
+        ('Sheath 1', 'Rheodyne', 'COM9', [], {'positions' : 6}),
+        ('Sheath 2', 'Rheodyne', 'COM8', [], {'positions' : 6}),
+        ('Sample', 'Rheodyne', 'COM7', [], {'positions' : 6}),        
+        ]
+
+    control_server3 = ControlServer(ip, port3, name='ValveControlServer',
+        valve_comm_locks = valve_comm_locks)
+    control_server3.start()
+
+
+    # Both
+
+    pump_frame = pumpcon.PumpFrame(pump_local_comm_locks, setup_pumps, None,
+        title='Pump Control')
+    pump_frame.Show()
 
     valve_frame = valvecon.ValveFrame(valve_comm_locks, setup_valves, 
         None, title='Valve Control')

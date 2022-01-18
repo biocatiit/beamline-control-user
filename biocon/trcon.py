@@ -775,6 +775,8 @@ class TRScanPanel(wx.Panel):
                     # print(traceback.print_exc())
                     return_vals=[['calc_exposure_params_error'],]
 
+                # print(return_vals)
+
                 if return_vals and len(return_vals[0]) == 0:
                     num_images = return_vals[1]
                     self.num_images.SetLabel(str(num_images))
@@ -2251,7 +2253,7 @@ class TRFlowPanel(wx.Panel):
         fm_sizer.Add(wx.StaticText(fm_parent, label='Temperature:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
         fm_sizer.Add(self.outlet_T, flag=wx.ALIGN_CENTER_VERTICAL)
-        fm_sizer.Add(wx.StaticText(fm_parent, label='Â°C'),
+        fm_sizer.Add(wx.StaticText(fm_parent, label='°C'),
             flag=wx.ALIGN_CENTER_VERTICAL)
 
         fm_box_sizer.Add(fm_sizer, flag=wx.ALL, border=2)
@@ -3012,7 +3014,7 @@ class TRFlowPanel(wx.Panel):
 
         if flow_rate is not None:
             try:
-                flow_rate = round(float(flow_rate), 2)
+                flow_rate = round(float(flow_rate), 3)
                 if float(rate_ctrl.GetLabel()) != flow_rate:
                     rate_ctrl.SetLabel('{}'.format(flow_rate))
             except Exception:
@@ -3683,7 +3685,7 @@ class TRPumpPanel(wx.Panel):
         self.connected = False
         self.moving = False
         self.syringe_volume_val = 0
-        self.pump_direction = None
+        self.pump_direction = 'Dispense'
 
         self.known_syringes = {'30 mL, EXEL': {'diameter': 23.5, 'max_volume': 30,
             'max_rate': 70},
@@ -3899,16 +3901,16 @@ class TRPumpPanel(wx.Panel):
 
             if self.pump_mode == 'continuous':
                 if mode == 'Fixed volume':
-                    cmd = self.direction_ctrl.GetStringSelection().lower()
+                    cmd = self.pump_direction
                     self.set_status(cmd.capitalize())
                 else:
                     self.set_status('Flowing')
             else:
                 if mode == 'Fixed volume':
-                    cmd = self.direction_ctrl.GetStringSelection().lower()
+                    cmd = self.pump_direction
                     self.set_status(cmd.capitalize())
                 else:
-                    direction = self.direction_ctrl.GetStringSelection().lower()
+                    direction = self.pump_direction
                     self.set_status(direction.capitalize())
 
             self.fr_button.Show()
@@ -3944,7 +3946,7 @@ class TRPumpPanel(wx.Panel):
             wx.MessageBox(msg, "Error setting refill rate")
             cont = False
 
-        if self.direction_ctrl.GetStringSelection().lower() == 'dispense':
+        if self.pump_direction == 'Dispense':
             dispense = True
         else:
             dispense = False
@@ -4137,10 +4139,11 @@ class TRPumpPanel(wx.Panel):
     def set_pump_direction(self, dispense):
         if dispense:
             self.pump_direction = 'Dispense'
-            wx.CallAfter(self.direction_ctrl.SetStringSelection, 'Dispense')
+            ret = wx.CallAfter(self.direction_ctrl.SetStringSelection, 'Dispense')
         else:
             self.pump_direction = 'Aspirate'
-            wx.CallAfter(self.direction_ctrl.SetStringSelection, 'Aspirate')
+            ret = wx.CallAfter(self.direction_ctrl.SetStringSelection, 'Aspirate')
+
 
     def get_pump_direction(self):
         return self.pump_direction

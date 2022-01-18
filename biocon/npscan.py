@@ -94,6 +94,11 @@ class ScanProcess(multiprocessing.Process):
 
         self.np_motor = None
 
+        self.shutter1_name = 'do_9'
+        self.shutter2_name =  'do_6'
+
+        self.shutter1 = None
+        self.shutter2 = None
 
         self._commands = {'start_mxdb'      : self._start_mxdb,
                         'set_scan_params'   : self._set_scan_params,
@@ -104,6 +109,8 @@ class ScanProcess(multiprocessing.Process):
                         'move_abs'          : self._move_abs,
                         'move_abs2'         : self._move_abs2,
                         'get_det_params'    : self._get_det_params,
+                        'open_shutters'     : self._open_shutters,
+                        'close_shutters'    : self._close_shutters,
                         }
 
     def run(self):
@@ -157,6 +164,7 @@ class ScanProcess(multiprocessing.Process):
         self.db_path = db_path
         self.mx_database = mp.setup_database(self.db_path)
         self.mx_database.set_plot_enable(2)
+        self.mx_database.set_program_name("npscancon")
 
         self.np_motor = motorcon.NewportXPSMotor('XY', self.xps, '164.54.204.76', 5001, 20, 'XY', 2)
 
@@ -231,6 +239,24 @@ class ScanProcess(multiprocessing.Process):
             index = 1
 
         self.np_motor.move_positioner_absolute(self.motor_name2, index, position)
+
+    def _open_shutters(self):
+        if self.shutter1 is None:
+            self.shutter1 = self.mx_database.get_record(self.shutter1_name)
+        if self.shutter2 is None:
+            self.shutter2 = self.mx_database.get_record(self.shutter2_name)
+
+        self.shutter1.write(1)
+        self.shutter2.write(0)
+
+    def _close_shutters(self):
+        if self.shutter1 is None:
+            self.shutter1 = self.mx_database.get_record(self.shutter1_name)
+        if self.shutter2 is None:
+            self.shutter2 = self.mx_database.get_record(self.shutter2_name)
+
+        self.shutter1.write(0)
+        self.shutter2.write(1)
 
     def _set_scan_params(self, device, start, stop, step, device2, start2,
         stop2, step2, scalers, dwell_time, timer, scan_dim='1D', detector=None,
@@ -367,7 +393,7 @@ class ScanProcess(multiprocessing.Process):
                 # logger.info('Moving motor 1 position to {}'.format(mtr1_pos))
                 self.np_motor.move_positioner_absolute(self.device, m1_index, mtr1_pos)
             # mtr1.wait_for_motor_stop()
-            while self.np_motor.positioner_is_moving(self.device):
+            while self.np_motor.positioner_is_moving('XY'):
                 time.sleep(0.01)
                 if self._abort_event.is_set():
                     self.motor.stop()
@@ -386,7 +412,7 @@ class ScanProcess(multiprocessing.Process):
                     if mtr2_pos != mtr2_positions[0]:
                         self.np_motor.move_positioner_absolute(self.device2, m2_index, mtr2_pos)
                     # mtr1.wait_for_motor2_stop()
-                    while self.np_motor.positioner_is_moving(self.device2):
+                    while self.np_motor.positioner_is_moving('XY'):
                         time.sleep(0.01)
                         if self._abort_event.is_set():
                             self.motor2.stop()
@@ -420,14 +446,14 @@ class ScanProcess(multiprocessing.Process):
         for scaler in scalers:
             scaler.clear()
         timer.clear()
-        timer.stop()
+        if timer.is_busy():
+            timer.stop()
         timer.start(self.dwell_time)
 
         while timer.is_busy() != 0:
             time.sleep(.01)
             if self._abort_event.is_set():
                 timer.stop()
-                self.return_queue.put_nowait(['stop_live_plotting'])
                 return
 
         result = [str(scaler.read()) for scaler in scalers]
@@ -604,6 +630,9 @@ class ScanPanel(wx.Panel):
         count_grid.Add(self.detector)
         count_grid.AddGrowableCol(1)
 
+        self.shutter = wx.CheckBox(self, label='Scan actuates shutter')
+        self.shutter.SetValue(True)
+
         self.start_btn = wx.Button(self, label='Start')
         self.start_btn.Bind(wx.EVT_BUTTON, self._on_start)
 
@@ -621,6 +650,7 @@ class ScanPanel(wx.Panel):
         self.ctrl_sizer.Add(mv_grid, border=5, flag=wx.EXPAND|wx.TOP)
         self.ctrl_sizer.Add(self.mv_grid2, border=5, flag=wx.EXPAND|wx.TOP)
         self.ctrl_sizer.Add(count_grid, border=5, flag=wx.EXPAND|wx.TOP)
+        self.ctrl_sizer.Add(self.shutter, border=5, flag=wx.EXPAND|wx.TOP)
         self.ctrl_sizer.Add(ctrl_btn_sizer, border=5, flag=wx.ALIGN_CENTER_HORIZONTAL|wx.TOP)
 
         self.ctrl_sizer.Hide(self.mv_grid2, recursive=True)
@@ -966,12 +996,15 @@ class ScanPanel(wx.Panel):
                     self.initial_position2 = float(self.pos2.GetLabel())
                 self.scan_timer.Start(10)
 
+                if self.shutter.IsChecked():
+                    self.cmd_q.put_nowait(['open_shutters', [], {}])
+
                 self.cmd_q.put_nowait(['scan', [], {}])
 
             else:
                 self.start_btn.Enable()
                 self.stop_btn.Disable()
-                self.update_timer.Start()
+                self.update_timer.Start(100)
 
     def _on_stop(self, evt):
         """
@@ -1129,6 +1162,9 @@ class ScanPanel(wx.Panel):
                 self.abort_event)
             self.scan_proc.start()
             self._start_scan_mxdb()
+
+            if self.shutter.IsChecked():
+                self.cmd_q.put_nowait(['close_shutters', [], {}])
 
             self.cmd_q.put_nowait(['get_position', [self.motor_name], {}])
             pos = self.return_q.get()[0]
@@ -1473,7 +1509,7 @@ class ScanPanel(wx.Panel):
         return redraw
 
     def _start_live_plot(self, filename):
-         """
+        """
         This starts the live plotting. It first clears all of the plot related
         variables and clears the plot. It then starts a thread that monitors the
         scan results.
@@ -1556,12 +1592,6 @@ class ScanPanel(wx.Panel):
 
         :param str filename: The filename of the scan file to live plot.
         """
-
-        if not os.path.exists(filename):
-            time.sleep(0.1)
-        time.sleep(2)
-
-
         while True:
             if self.live_plt_evt.is_set():
                 break
@@ -1577,6 +1607,23 @@ class ScanPanel(wx.Panel):
                 else:
                     x, y, z = val
                     self._update_plot_vals(x, y, z)
+
+        while True:
+            try:
+                val = self.return_val_q.get_nowait()
+            except queue.Empty:
+                val = None
+
+            if val is not None:
+                if self.scan_dimension == 1:
+                    x, y = val
+                    self._update_plot_vals(x, y)
+                else:
+                    x, y, z = val
+                    self._update_plot_vals(x, y, z)
+
+            else:
+                break
 
 
     def _update_plot_vals(self, x, y, z=None):

@@ -99,7 +99,9 @@ class ExpCommThread(threading.Thread):
 
         logger.debug("Initialized mx database")
 
-        det = mx_database.get_record('pilatus')
+        if self._settings['detector'].lower().split('_')[-1] == 'mx':
+            logger.debug('Getting mx detector')
+            record_name = self._settings['detector'].rstrip('_mx')
 
         server_record_name = det.get_field('server_record')
         remote_det_name = det.get_field('remote_record_name')
@@ -120,6 +122,33 @@ class ExpCommThread(threading.Thread):
             self._settings['local_dir_root'], self._settings['remote_dir_root'], 1)
 
         det_local_datafile_root.put(data_dir_root) #MX record field is read only?
+
+            det = detectorcon.MXDetector(record_name, mx_database, data_dir_root, **det_args)
+
+            # server_record_name = det.get_field('server_record')
+            # remote_det_name = det.get_field('remote_record_name')
+            # server_record = mx_database.get_record(server_record_name)
+            # det_datadir_name = '{}.datafile_directory'.format(remote_det_name)
+            # det_datafile_name = '{}.datafile_pattern'.format(remote_det_name)
+            # det_exp_time_name = '{}.ext_enable_time'.format(remote_det_name)
+            # det_exp_period_name = '{}.ext_enable_period'.format(remote_det_name)
+            # det_local_datafile_root_name = '{}.local_datafile_user'.format(remote_det_name)
+
+            # det_datadir = mp.Net(server_record, det_datadir_name)
+            # det_filename = mp.Net(server_record, det_datafile_name)
+            # det_exp_time = mp.Net(server_record, det_exp_time_name)
+            # det_exp_period = mp.Net(server_record, det_exp_period_name)
+            # det_local_datafile_root = mp.Net(server_record, det_local_datafile_root_name)
+
+            # det_local_datafile_root.put(data_dir_root) #MX record field is read only?
+
+        elif self._settings['detector'].lower().split('_')[-1] == 'epics':
+            logger.debug('Getting epics detector')
+            record_name = self._settings['detector'].rstrip('_epics')
+
+            det_args = self._settings['det_args']
+
+            det = detectorcon.EPICSEigerDetector(record_name, **det_args)
 
         logger.debug("Got detector records")
 
@@ -852,13 +881,6 @@ class ExpCommThread(threading.Thread):
         dio_out9.write(0) # Make sure the NM shutter is closed
         dio_out10.write(0) # Make sure the trigger is off
 
-        if num_frames <= 9999:
-            exp_start_num = '0001'
-
-        elif num_frames > 9999 and num_frames <= 99999:
-            exp_start_num = '00001'
-
-        elif num_frames > 99999:
             exp_start_num = '000001'
 
         if wait_for_trig:
@@ -1191,13 +1213,6 @@ class ExpCommThread(threading.Thread):
                 for mprefix, pos in motor_positions.items():
                     cur_fprefix = cur_fprefix + '_{}_{}'.format(mprefix, pos)
 
-                if num_frames <= 9999:
-                    exp_start_num = '0001'
-
-                elif num_frames > 9999 and num_frames <= 99999:
-                    exp_start_num = '00001'
-
-                elif num_frames > 99999:
                     exp_start_num = '000001'
 
                 new_fname = '{}_{}.tif'.format(cur_fprefix, exp_start_num)
@@ -1290,6 +1305,11 @@ class ExpCommThread(threading.Thread):
         det_exp_time.put(exp_time)
         det_exp_period.put(exp_period)
 
+        det.set_trigger_mode('ext_enable')
+        det.set_num_frames(num_frames)
+        det.set_exp_time(exp_time)
+        det.set_exp_period(exp_period)
+
         if exp_type == 'muscle':
             struck.set_measurement_time(struck_meas_time)   #Ignored for external LNE of Struck
             struck.set_num_measurements(struck_num_meas)
@@ -1357,13 +1377,6 @@ class ExpCommThread(threading.Thread):
             #Runs a loop for each expected trigger signal (internal or external)
             self.return_queue.append(['scan', cur_trig])
 
-            if num_frames <= 9999:
-                exp_start_num = '0001'
-
-            elif num_frames > 9999 and num_frames <= 99999:
-                exp_start_num = '00001'
-
-            elif num_frames > 99999:
                 exp_start_num = '000001'
 
             if wait_for_trig and num_trig > 1:
@@ -1604,6 +1617,171 @@ class ExpCommThread(threading.Thread):
 
         return True
 
+    def mar_exposure(self, data_dir, fprefix, num_frames, exp_time, exp_period,
+        exp_type='mar', **kwargs):
+        logger.debug('Setting up %s exposure', exp_type)
+        det = self._mx_data['det']          #Detector
+
+        struck = self._mx_data['struck']    #Struck SIS3820
+        s_counters = self._mx_data['struck_ctrs']
+
+        dio_out6 = self._mx_data['dio'][6]      #Xia/wharberton shutter N.C.
+        dio_out9 = self._mx_data['dio'][9]      #Shutter control signal (alt.)
+        dio_out10 = self._mx_data['dio'][10]    #SRS DG645 trigger
+
+        # det_datadir = self._mx_data['det_datadir']
+        # det_filename = self._mx_data['det_filename']
+        # det_exp_time = self._mx_data['det_exp_time']
+        # det_exp_period = self._mx_data['det_exp_period']
+
+        shutter_speed_open = kwargs['shutter_speed_open']
+        shutter_speed_close = kwargs['shutter_speed_close']
+        shutter_pad = kwargs['shutter_pad']
+        shutter_cycle = kwargs['shutter_cycle']
+
+        total_shutter_speed = shutter_speed_open+shutter_speed_close+shutter_pad
+        s_open_time = shutter_speed_open + shutter_pad
+
+        log_vals = kwargs['struck_log_vals']
+
+        if exp_period > exp_time + total_shutter_speed and exp_period >= shutter_cycle:
+            logger.info('Shuttered mode')
+            continuous_exp = False
+        else:
+            logger.info('Continuous mode')
+            continuous_exp = True
+
+        dark_counts = []
+        for i in range(len(s_counters)):
+            if log_vals[i]['dark']:
+                dark_counts.append(s_counters[i].get_dark_current())
+            else:
+                dark_counts.append(0)
+
+        extra_vals = []
+
+        # det.set_duration_mode(num_frames)
+        # det.set_trigger_mode(1)
+        # det_exp_time.put(exp_time)
+        # det_exp_period.put(exp_period)
+
+        det.set_num_frames(num_frames)
+        det.set_trigger_mode('int_enable')
+        det.set_exp_time(exp_time)
+        det.set_exp_period(exp_period)
+
+        struck.set_measurement_time(exp_time)   #Ignored for external LNE of Struck
+        struck.set_num_measurements(num_frames)
+        struck.set_trigger_mode(0x1)    #Sets internal trigger mode
+
+        exp_start_num = '000001'
+
+        cur_fprefix = fprefix
+
+        if self._settings['add_file_postfix']:
+            new_fname = '{}_{}.tif'.format(cur_fprefix, exp_start_num)
+        else:
+            new_fname = cur_fprefix
+
+        if det.get_status() !=0:
+            try:
+                det.abort()
+            except (mp.Device_Action_Failed_Error, mp.Unparseable_String_Error):
+                pass
+            try:
+                det.abort()
+            except (mp.Device_Action_Failed_Error, mp.Unparseable_String_Error):
+                pass
+
+        aborted = False
+
+        struck.stop()
+
+        dio_out9.write(0) # Make sure the NM shutter is closed
+
+        # det_datadir.put(data_dir)
+
+        # det_filename.put(new_fname)
+
+        det.set_data_dir(data_dir)
+        det.set_filename(new_fname)
+
+        dio_out6.write(0) #Open the slow normally closed xia shutter
+
+        if exp_type != 'muscle':
+            self.write_log_header(data_dir, cur_fprefix, log_vals,
+                kwargs['metadata'])
+
+        time.sleep(1)
+
+        if self._abort_event.is_set():
+            self.mar_abort_cleanup(det, dio_out9, dio_out6, exp_time)
+
+            aborted = True
+            return False
+
+        logger.debug('Exposures started')
+        self._exp_event.set()
+
+        last_meas = 0
+
+        timeouts = 0
+
+        if continuous_exp:
+            dio_out9.write(1)
+
+        for i in range(num_frames):
+            for scaler in s_counters:
+                scaler.clear()
+            timer.clear()
+            if timer.is_busy():
+                timer.stop()
+
+            if not continuous_exp:
+                dio_out9.write(1)
+
+            timer.start(exp_time)
+
+            while timer.is_busy() != 0:
+                time.sleep(.01)
+                if self._abort_event.is_set() and not aborted:
+                    self.mar_abort_cleanup(det, dio_out9, dio_out6, exp_time)
+                    aborted = True
+                    break
+
+            if not continuous_exp:
+                dio_out9.write(0)
+
+            result = [str(scaler.read()) for scaler in scalers]
+
+            self.append_log_counters(cvals, prev_meas, current_meas,
+                    data_dir, cur_fprefix, exp_period, num_frames,
+                    dark_counts, log_vals, extra_vals)
+
+            while det.get_status() !=0:
+                time.sleep(0.001)
+                if self._abort_event.is_set() and not aborted:
+                    self.mar_abort_cleanup(det, dio_out9, dio_out6, exp_time)
+                    aborted = True
+                    break
+
+        if continuous_exp:
+            dio_out9.write(0)
+
+        dio_out6.write(1) #Close the slow normally closed xia shutter
+
+
+        logger.info('Exposures done')
+
+        if self._abort_event.is_set():
+            if not aborted:
+                self.fast_mode_abort_cleanup(det, struck, ab_burst, ab_burst_2,
+                    dio_out9, dio_out6, exp_time)
+                aborted = True
+            return False
+
+        self._exp_event.clear()
+
     def write_log_header(self, data_dir, fprefix, log_vals, metadata,
             extra_vals=None):
         data_dir = data_dir.replace(self._settings['remote_dir_root'],
@@ -1625,13 +1803,6 @@ class ExpCommThread(threading.Thread):
         data_dir = data_dir.replace(self._settings['remote_dir_root'],
             self._settings['local_dir_root'], 1)
 
-        if num_frames <= 9999:
-            zpad = 4
-
-        elif num_frames > 9999 and num_frames <= 99999:
-            zpad = 5
-
-        elif num_frames > 99999:
             zpad = 6
 
         log_file = os.path.join(data_dir, '{}.log'.format(fprefix))
@@ -1655,13 +1826,6 @@ class ExpCommThread(threading.Thread):
 
         logger.info(header.split('\n')[-2])
 
-        if num_frames <= 9999:
-            zpad = 4
-
-        elif num_frames > 9999 and num_frames <= 99999:
-            zpad = 5
-
-        elif num_frames > 99999:
             zpad = 6
 
         log_file = os.path.join(data_dir, '{}.log'.format(fprefix))
@@ -1687,8 +1851,12 @@ class ExpCommThread(threading.Thread):
 
     def format_log_value(self, index, fprefix, exp_period, cvals, log_vals, dark_counts,
         extra_vals, zpad):
-        val = "{0}_{1:0{2}d}.tif\t{3}".format(fprefix, index+1, zpad,
-            exp_period*index)
+        if self._settings['add_file_postfix']:
+            val = "{0}_{1:0{2}d}.tif".format(fprefix, index+1, zpad)
+        else:
+            val = "{0}_{1:0{2}d}".format(fprefix, index+1, zpad)
+        
+        val = val + "\t{0}".format(exp_period*index)
 
         exp_time = cvals[0][index]/50.e6
         val = val + "\t{}".format(exp_time)
@@ -1748,13 +1916,6 @@ class ExpCommThread(threading.Thread):
 
         # logger.debug(avg_index)
 
-        if num_frames <= 9999:
-            zpad = 4
-
-        elif num_frames > 9999 and num_frames <= 99999:
-            zpad = 5
-
-        elif num_frames > 99999:
             zpad = 6
 
         with open(log_file, 'w') as f, open(log_summary_file, 'w') as f_sum:
@@ -2372,6 +2533,8 @@ class ExpPanel(wx.Panel):
             return
 
         if self.pipeline_ctrl is not None:
+            exp_type = None
+
             if 'Experiment type:' in exp_values['metadata']:
                 md_exp_type =  exp_values['metadata']['Experiment type:']
 
@@ -3159,7 +3322,7 @@ class ExpPanel(wx.Panel):
                 self.pipeline_warning_shown = True
 
         else:
-            self.pipelin_warning_shown = False
+            self.pipeline_warning_shown = False
 
 
     def on_exit(self):
