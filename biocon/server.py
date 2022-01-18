@@ -275,11 +275,9 @@ if __name__ == '__main__':
     control_server2 = ControlServer(ip, port2, name='FMControlServer')
     control_server2.start()
 
-    # TR SAXS
-
-    # control_server3 = ControlServer(ip, port3, name='ValveControlServer',
-    #     valve_comm_locks = valve_comm_locks)
-    # control_server3.start()
+    control_server3 = ControlServer(ip, port3, name='ValveControlServer',
+        valve_comm_locks = valve_comm_locks)
+    control_server3.start()
 
     # Coflow
 
