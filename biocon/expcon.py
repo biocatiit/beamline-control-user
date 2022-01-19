@@ -3098,9 +3098,9 @@ class ExpPanel(wx.Panel):
 
                             errors.append(msg)
 
-                if metadata['Sheath valve position:'] != 1:
+                if int(metadata['Sheath valve position:']) != 1:
                     msg = ('Sheath valve is in position {}, not the usual '
-                        'position {}.'.format(metadata['Sheath valve position:']))
+                        'position 1.'.format(metadata['Sheath valve position:']))
 
                     errors.append(msg)
 
@@ -3112,7 +3112,7 @@ class ExpPanel(wx.Panel):
             metadata_valid = True
 
         else:
-            msg = ('Your settings may be inconsistent:')
+            msg = ('Your settings may be inconsistent:\n')
             msg = msg + '\n-'.join(errors)
             msg = msg + '\n\nDo you wish to start the exposure?'
 
