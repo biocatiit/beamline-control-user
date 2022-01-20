@@ -157,37 +157,37 @@ class AD_EigerCamera(Device):
     """
     Basic AreaDetector Camera Device
     """
-    attrs = ("Acquire", "AcquirePeriod", "AcquirePeriod_RBV",
-             "AcquireTime", "AcquireTime_RBV",
-             "AcquireState_RBV",
-             "ArrayCallbacks", "ArrayCallbacks_RBV",
-             "ArrayCounter", "ArrayCounter_RBV", "ArrayRate_RBV",
-             "ArraySizeX_RBV", "ArraySizeY_RBV", "ArraySize_RBV",
-             "BinX", "BinX_RBV", "BinY", "BinY_RBV",
-             "ColorMode", "ColorMode_RBV",
-             "DataType", "DataType_RBV", "DetectorState_RBV",
-             "Gain", "Gain_RBV",
-             "FWAutoRemove", "FWAutoRemove_RBV",
-             "FWEnable", "FWEnable_RBV",
-             "FWNamePattern", "FWNamePattern_RBV",
-             "FWNImagesPerFile", "FWNImagesPerFile_RBV",
-             "ImageMode", "ImageMode_RBV",
-             "MaxSizeX_RBV", "MaxSizeY_RBV",
-             "MinX", "MinX_RBV", "MinY", "MinY_RBV",
-             "NumImages", "NumImagesCounter_RBV", "NumImages_RBV",
-             "NumTriggers", "NumTriggers_RBV",
-             "PhotonEnergy", "PhotonEnergy_RBV",
-             "SaveFiles", "SaveFiles_RBV",
-             "SizeX", "SizeX_RBV", "SizeY", "SizeY_RBV",
-             "StreamEnable", "StreamEnable_RBV",
+    attrs = ("cam1:Acquire", "cam1:AcquirePeriod", "cam1:AcquirePeriod_RBV",
+             "cam1:AcquireTime", "cam1:AcquireTime_RBV",
+             "cam1:AcquireState_RBV",
+             "cam1:ArrayCallbacks", "cam1:ArrayCallbacks_RBV",
+             "cam1:ArrayCounter", "cam1:ArrayCounter_RBV", "cam1:ArrayRate_RBV",
+             "cam1:ArraySizeX_RBV", "cam1:ArraySizeY_RBV", "cam1:ArraySize_RBV",
+             "cam1:BinX", "cam1:BinX_RBV", "cam1:BinY", "cam1:BinY_RBV",
+             "cam1:ColorMode", "cam1:ColorMode_RBV",
+             "cam1:DataType", "cam1:DataType_RBV", "cam1:DetectorState_RBV",
+             "cam1:Gain", "cam1:Gain_RBV",
+             "cam1:FWAutoRemove", "cam1:FWAutoRemove_RBV",
+             "cam1:FWEnable", "cam1:FWEnable_RBV",
+             "cam1:FWNamePattern", "cam1:FWNamePattern_RBV",
+             "cam1:FWNImagesPerFile", "cam1:FWNImagesPerFile_RBV",
+             "cam1:ImageMode", "cam1:ImageMode_RBV",
+             "cam1:MaxSizeX_RBV", "cam1:MaxSizeY_RBV",
+             "cam1:MinX", "cam1:MinX_RBV", "cam1:MinY", "cam1:MinY_RBV",
+             "cam1:NumImages", "cam1:NumImagesCounter_RBV", "cam1:NumImages_RBV",
+             "cam1:NumTriggers", "cam1:NumTriggers_RBV",
+             "cam1:PhotonEnergy", "cam1:PhotonEnergy_RBV",
+             "cam1:SaveFiles", "cam1:SaveFiles_RBV",
+             "cam1:SizeX", "cam1:SizeX_RBV", "cam1:SizeY", "cam1:SizeY_RBV",
+             "cam1:StreamEnable", "cam1:StreamEnable_RBV",
              "TIFF1:AutoIncrement", "TIFF1:AutoIncrement_RBV",
              "TIFF1:AutoSave", "TIFF1:AutoSave_RBV",
              "TIFF1:EnableCallbacks", "TIFF1:EnableCallbacks_RBV",
              "TIFF1:FileName", "TIFF1:FileName_RBV",
              "TIFF1:FilePath", "TIFF1:FilePath_RBV", "TIFF1:FileTemplate",
-             "TimeRemaining_RBV",
-             "TriggerMode", "TriggerMode_RBV", "TriggerSoftware",
-             "Trigger", 'ManualTrigger', 'ManualTrigger_RBV',)
+             "cam1:TimeRemaining_RBV",
+             "cam1:TriggerMode", "cam1:TriggerMode_RBV", "cam1:TriggerSoftware",
+             "cam1:Trigger", 'cam1:ManualTrigger', 'cam1:ManualTrigger_RBV',)
 
 
     _nonpvs = ('_prefix', '_pvs', '_delim')
@@ -318,4 +318,8 @@ class EPICSEigerDetector(object):
         self.det.put('cam1:ManualTrigger', mode, wait=True, timeout=1)
 
     def stop(self):
-        self.det.put("cam1:Acquire", 0, wait=True, timeout=1)
+        # self.det.put("cam1:Acquire", 0, wait=True, timeout=1)
+        self.det.put('cam1:Acquire', 0, timeout=1)
+        # For some reason this is much faster without the wait=True, in terms of EPICS response
+        # So going with that for now. Maybe it's a bug that's been fixed in mroe
+        # Recent versions of pyepics? I should try when I convert to python 3.
