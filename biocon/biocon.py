@@ -228,7 +228,7 @@ if __name__ == '__main__':
         'nparams_max'           : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
         'exp_period_delta'      : 0.000000200,
         'local_dir_root'        : '/nas_data/Eiger2xe9M',
-        'remote_dir_root'       : '/nas_data',
+        'remote_dir_root'       : '/nas_data/Eiger2xe9M',
         'detector'              : '18ID:EIG2:_epics',
         'det_args'              :  {'use_tiff_writer': False, 'use_file_writer': True,
             'photon_energy' : 12.0,},
@@ -506,7 +506,7 @@ if __name__ == '__main__':
     pipeline_settings = {
         'components'    : ['pipeline'],
         'server_port'   : '5556',
-        'server_ip'     : '164.54.204.82',
+        'server_ip'     : '164.54.204.142',
         # 'raw_settings'  : '/nas_data/Pilatus1M/2021_Run1/20210129_Hopkins/setup/calibration/pipeline_SAXS.cfg',
         'local_basedir' : '/nas_data/Eiger2xe9M',
         'data_basedir'  : '/nas_data/Eiger2xe9M',
@@ -522,7 +522,7 @@ if __name__ == '__main__':
         # ('trsaxs_flow', trcon.TRFlowPanel),
         # ('scan',    scancon.ScanPanel),
         ('metadata', metadata.ParamPanel),
-        # ('pipeline', pipeline_ctrl.PipelineControl)
+        ('pipeline', pipeline_ctrl.PipelineControl)
         ])
 
     settings = {
