@@ -1383,6 +1383,400 @@ class NE500Pump(Pump):
         self.pump_comm.ser.close()
 
 
+class SSINextGenPump(Pump):
+    """
+    .. todo:: This class doesn't know when the pump is done dispensing. This leads
+        to unncessary stop signals being sent to the pump, and makes the log harder
+        to follow. This could be fixed, when I have time.
+
+    This class contains information for initializing and communicating with
+    a VICI M50 Pump using an MForce Controller. Below is an example that
+    initializes an M50 pump, starts a flow of 2000 uL/min, and then stops the flow. ::
+
+        >>> my_pump = M50Pump('COM6', 'pump2', flow_cal=626.2, backlash_cal=9.278)
+        >>> my_pump.flow_rate = 2000
+        >>> my_pump.start_flow()
+        >>> my_pump.stop_flow()
+    """
+
+    def __init__(self, device, name, comm_lock=threading.Lock()):
+        """
+        This makes the initial serial connection, and then sets the MForce
+        controller parameters to the correct values.
+
+        :param device: The device comport as sent to pyserial
+        :type device: str
+
+        :param name: A unique identifier for the pump
+        :type name: str
+        """
+        Pump.__init__(self, device, name)
+
+        logstr = ("Initializing pump {} on serial port {}".format(self.name,
+            self.device, flow_cal, backlash_cal))
+        logger.info(logstr)
+
+        self.comm_lock = comm_lock
+
+        self.comm_lock.acquire()
+        self.pump_comm = SerialComm(device)
+        self.comm_lock.release()
+
+        self.keypad_enable(False)
+
+        # All internal variables are stored in mL/min and psi, regardless of user/pump units
+        self._units = 'mL/min'
+        self.presure_unit = 'psi'
+        self._pump_pressure_unit = 'psi'
+        self._flow_rate = 0 #Current set flow rate
+        self._max_perssure = 10000 #Upper pressure limit
+        self._min_pressure = 0 #Lower pressure limit
+        self._is_flowing = False
+        self._max_flow_rate = 10
+        self._min_flow_rate = 0
+        self.motor_stall_fault = False
+        self.upl_fault = False
+        self.lpl_fault = False
+        self.leak_fault = False
+        self.fault = False
+
+        #Make sure parameters are set right
+        ret = self.send_cmd('MF') #Max flow rate for the pump
+        if ret.startswith('OK') and ret.endswith('/'):
+            self._pump_max_flow_rate = float(ret.split(':')[-1].strip('/'))
+        else:
+            self._pump_max_flow_rate = -1
+
+        ret = self.send_cmd('PR') #Max presure for the pump
+        if ret.startswith('OK') and ret.endswith('/'):
+            self._pump_max_pressure = float(ret.split(',')[-1].strip('/'))
+        else:
+            self._pump_max_pressure = -1
+
+        ret = self.send_cmd('PU') #Pressure unit for the pump
+        if ret.startswith('OK') and ret.endswith('/'):
+            self._pump_pressure_unit = ret.split(',')[-1].strip('/')
+
+        if self._pump_pressure_unit.lower() == 'mpa':
+            if self._pump_max_pressure != -1:
+                self._pump_max_pressure *= 145.038
+
+        elif self._pump_pressure_unit == 'bar':
+            if self._pump_max_pressure != -1:
+                self._pump_max_pressure *= 14.5038
+
+        if self._pump_max_pressure != -1:
+            self._max_perssure = self._pump_max_pressure
+
+        ret = self.send_cmd('LP')
+        if ret.startswith('OK') and ret.endswith('/'):
+            val = loat(ret.split(':')[-1].strip('/'))
+
+            if self._pump_pressure_unit == 'mpa':
+                val *= 145.038
+            elif self._pump_pressure_unit =='bar':
+                val *= 14.5038
+
+            self._min_pressure = val
+
+        ret = self.send_cmd('UP')
+        if ret.startswith('OK') and ret.endswith('/'):
+            val = loat(ret.split(':')[-1].strip('/'))
+
+            if self._pump_pressure_unit == 'mpa':
+                val *= 145.038
+            elif self._pump_pressure_unit =='bar':
+                val *= 14.5038
+
+            self._max_perssure = val
+
+
+        ret = self.send_cmd('LM1') #Detected leak does not cause fault
+
+
+
+        self.get_status()
+        self.get_faults()
+
+    @property
+    def flow_rate(self):
+        rate = self._flow_rate
+
+        if self.units.split('/')[0] == 'uL':
+            rate = rate*1000.
+        elif self.units.split('/')[0] == 'nL':
+            rate = rate*1.e6
+
+        if self.units.split('/')[1] == 's':
+            rate = rate/60.
+
+        return rate
+
+    @flow_rate.setter
+    def flow_rate(self, rate):
+        logger.info("Setting pump %s flow rate to %f %s", self.name, rate, self.units)
+
+        if self.units.split('/')[0] == 'uL':
+            rate = rate/1000.
+        elif self.units.split('/')[0] == 'nL':
+            rate = rate/1.e6
+
+        if self.units.split('/')[1] == 's':
+            rate = rate*60.
+
+        #Maximum continuous flow rate is 25 mL/min
+        if rate>self.max_flow_rate:
+            rate = self.max_flow_rate
+            logger.warning("Requested flow rate > %f %s, setting pump %s flow rate to %f %s",
+                self.max_flow_rate, self.units, self.name, self.max_flow_rate, self.units)
+
+        self._flow_rate = rate
+
+        self.send_cmd('FI{}'.format(self.round_vals(rate, 5)))
+
+    @property
+    def max_flow_rate(self):
+        rate = self._max_flow_rate
+
+        if self.units.split('/')[0] == 'uL':
+            rate = rate*1000.
+        elif self.units.split('/')[0] == 'nL':
+            rate = rate*1.e6
+
+        if self.units.split('/')[1] == 's':
+            rate = rate/60.
+
+        return rate
+
+    @max_flow_rate.setter
+    def max_flow_rate(self, rate):
+        logger.info("Setting pump %s max flow rate to %f %s", self.name, rate, self.units)
+
+        if self.units.split('/')[0] == 'uL':
+            rate = rate/1000.
+        elif self.units.split('/')[0] == 'nL':
+            rate = rate/1.e6
+
+        if self.units.split('/')[1] == 's':
+            rate = rate*60.
+
+        if self._pump_max_flow_rate != -1 and rate > self._pump_max_flow_rate:
+            rate = self._pump_max_flow_rate
+            logger.warning('Requested max flow rate %f is greater than the pump maximum '
+                'flow rate %f. Setting the maximum flow rate the pump maximum', rate,
+                self._pump_max_flow_rate)
+
+        self._max_flow_rate = rate
+
+        if self._flow_rate > rate:
+            self.flow_rate = rate
+
+    @property
+    def max_pressure(self):
+        pressure = self._max_perssure
+
+        if self.pressure_unit.lower == 'mpa':
+            pressure = pressure/145.038
+        elif self.pressure_unit == 'bar':
+            pressure = pressure/14.5038
+
+        return pressure
+
+    @max_pressure.setter
+    def max_pressure(self, input_pressure):
+        logger.info("Setting pump %s max pressure to %f %s", self.name, input_pressure, self.pressure_units)
+
+        if self.pressure_unit.lower == 'mpa':
+            pressure = input_pressure*145.038
+        elif self.pressure_unit == 'bar':
+            pressure = input_pressure*14.5038
+
+        if self._pump_max_pressure != -1 and pressure > self._pump_max_pressure:
+            pressure = self._pump_max_pressure
+            logger.warning('Requested max flow rate %f is greater than the pump maximum '
+                'flow rate %f. Setting the maximum flow rate the pump maximum', rate,
+                self._pump_max_pressure)
+
+        self._max_perssure = pressure
+
+        if self._pump_pressure_unit.lower == 'mpa':
+            pressure = pressure*100/145.038 #There's weirdness in how you send the pressure command
+        elif self._pump_pressure_unit == 'bar':
+            pressure = pressure*10/14.5038
+
+        self.send_cmd('UP{}'.format(self.round_vals(pressure, 5)))
+
+    @property
+    def min_pressure(self):
+        pressure = self._min_pressure
+
+        if self.pressure_unit.lower == 'mpa':
+            pressure = pressure/145.038
+        elif self.pressure_unit == 'bar':
+            pressure = pressure/14.5038
+
+        return pressure
+
+    @min_pressure.setter
+    def min_pressure(self, input_pressure):
+        logger.info("Setting pump %s min pressure to %f %s", self.name, input_pressure, self.pressure_units)
+
+        if self.pressure_unit.lower == 'mpa':
+            pressure = input_pressure*145.038
+        elif self.pressure_unit == 'bar':
+            pressure = input_pressure*14.5038
+
+        self._min_pressure = min(0, pressure)
+
+        if self._pump_pressure_unit.lower == 'mpa':
+            pressure = pressure*100/145.038 #There's weirdness in how you send the pressure command
+        elif self._pump_pressure_unit == 'bar':
+            pressure = pressure*10/14.5038
+
+        self.send_cmd('LP{}'.format(self.round_vals(pressure, 5)))
+
+    def send_cmd(self, cmd, get_response=True):
+        """
+        Sends a command to the pump.
+
+        :param cmd: The command to send to the pump.
+        :type cmd: str, bytes
+
+        :param get_response: Whether the program should get a response from the pump
+        :type get_response: bool
+        """
+        logger.debug("Sending pump %s cmd %r", self.name, cmd)
+
+        self.comm_lock.acquire()
+        ret = self.pump_comm.write(cmd, get_response, '\r', '/')
+        self.comm_lock.release()
+
+        if get_response:
+            logger.debug("Pump %s returned %r", self.name, ret)
+
+        return ret
+
+
+    def is_moving(self):
+        status = self.send_cmd("PR MV")
+
+        status = status.split('\r\n')[-2][-1]
+        status = bool(int(status))
+
+        logger.debug("Pump %s moving: %s", self.name, str(status))
+
+        return status
+
+    def start_flow(self):
+        logger.info("Pump %s starting continuous flow at %f %s", self.name, self.flow_rate, self.units)
+        self.send_cmd("RU")
+
+        while not self._is_flowing:
+            self.get_status()
+
+    def stop(self):
+        logger.info("Pump %s stopping all motions", self.name)
+        self.send_cmd("ST")
+
+        while self._is_flowing:
+            self.get_status()
+
+    def disconnect(self):
+        logger.debug("Closing pump %s serial connection", self.name)
+        self.pump_comm.ser.close()
+
+    def round_vals(self, val, places):
+        if val < 10:
+            dec = max(0, places-2)
+            rounded = round(val, dec)
+        elif val > 10 and val < 100:
+            dec = max(0, places-3)
+            rounded = round(val, dec)
+        elif val >= 100 and val < 1000:
+            dec = max(0, places-4)
+            rounded = round(val, dec)
+        elif val >= 1000 and < 10000:
+            dec = max(0, places-5)
+            rounded = round(val, dec)
+        elif val >= 10000:
+            dec = max(0, places-6)
+            rounded = round(val, dec)
+
+        return '{:0{size}}'.format(rounded, size=places)
+
+    def get_status(self):
+        ret = self.send_cmd('CS')
+
+        if ret.startswith('OK') and ret.endswith('/'):
+            vals = ret.split(',')
+            self._flow_rate = float(vals[1])
+            self._max_perssure = float(vals[2])
+
+            if self._pump_pressure_unit == 'mpa':
+                self._max_perssure *= 145.038
+            elif self._pump_pressure_unit =='bar':
+                self._max_perssure *= 14.5038
+
+            self._min_pressure = float(vals[3])
+
+            if self._pump_pressure_unit == 'mpa':
+                self._min_perssure *= 145.038
+            elif self._pump_pressure_unit =='bar':
+                self._min_perssure *= 14.5038
+
+            self._pressure_unit = vals[4]
+
+            if vals[6] == '0':
+                self._is_flowing = False
+            else:
+                self._is_flowing = True
+
+    def get_faults(self):
+        ret = self.send_cmd('RF')
+
+        if ret.startswith('OK') and ret.endswith('/'):
+            vals = ret.split(',')
+
+            if vals[1] == '0':
+                self.motor_stall_fault = False
+            else:
+                self.motor_stall_fault = True
+
+            if vals[2] == '0':
+                self.upl_fault = False
+            else:
+                self.upl_fault = True
+
+            if vals[3] == '0':
+                self.lpl_fault = False
+            else:
+                self.lpl_fault = True
+
+        ret = self.send_cmd('LS')
+
+        if ret.startswith('OK') and ret.endswith('/'):
+            val = int(ret.split(':').strip('/'))
+
+            if val == '0':
+                self.leak_fault = False
+            else:
+                self.leak_fault = True
+
+        self.fault = self.motor_stall_fault or self.upl_fault or self.lpl_fault or self.leak_fault
+
+    def clear_faults(self):
+        self.send_cmd('#')
+        self.send_cmd('CF')
+        self.get_faults()
+
+    def keypad_enable(self, enable):
+        if enable:
+            self.send_cmd('KE')
+        else:
+            self.send_cmd('KD')
+
+
+
 class SoftPump(Pump):
     """
     This class contains the settings and communication for a generic pump.
@@ -3471,7 +3865,7 @@ class PumpFrame(wx.Frame):
             #     ]
 
             # setup_pumps = [
-            #     ('Buffer', 'NE 500', 'COM11', ['20 mL, Medline P.C.', '00'], 
+            #     ('Buffer', 'NE 500', 'COM11', ['20 mL, Medline P.C.', '00'],
             #         {'dual_syringe': 'False'}, {'flow_rate' : '0.1', 'refill_rate' : '10'}),
             #     ('Sheath', 'NE 500', 'COM10', ['20 mL, Medline P.C.', '01'],
             #         {'dual_syringe': 'False'}, {'flow_rate' : '0.1', 'refill_rate' : '10'}),
