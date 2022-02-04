@@ -1430,7 +1430,7 @@ class SSINextGenPump(Pump):
         self._units = 'mL/min'
         self._pressure_units = 'psi'
         self._pump_pressure_unit = 'psi'
-        self._flow_rate = 0 #Current set flow rate
+        self._flow_rate_val = 0 #Current set flow rate
         self._max_pressure = 10000 #Upper pressure limit
         self._min_pressure = 0 #Lower pressure limit
         self._pressure = 0
@@ -1443,6 +1443,11 @@ class SSINextGenPump(Pump):
         self.leak_fault = False
         self.fault = False
         self._flow_rate_decimals = 3
+        self._flow_rate_acceleration = 0.1 #Set to 0 for instant (as fast as the pump can) flow rate change
+        self._accel_stop = threading.Event()
+        self._flow_rate_lock = threading.Lock()
+        self._ramping_flow = False
+        self._stop_flow_after_ramp = False
 
         #Make sure parameters are set right
         ret = self.send_cmd('MF') #Max flow rate for the pump
@@ -1521,7 +1526,7 @@ class SSINextGenPump(Pump):
 
         if units in ['psi', 'bar', 'MPa']:
             self._pressure_units = units
-            
+
             logger.info("Changed pump %s pressure units from %s to %s", self.name, old_units, units)
         else:
             logger.warning("Failed to change pump %s pressure units, units supplied were invalid: %s", self.name, units)
@@ -1567,16 +1572,27 @@ class SSINextGenPump(Pump):
             logger.warning("Requested flow rate is smaller than the precision of the pump, "
                 "so flow rate will be set to zero.")
 
-        rate = round(rate, self._flow_rate_decimals)
-        self._flow_rate = rate
+        if not self.is_moving():
+            self._send_flow_rate_cmd(rate)
 
-        if '.' in str(rate):
-            rate_dec = '{:0<{fill}}'.format(str(rate).split('.')[-1], fill=self._flow_rate_decimals)
         else:
-            rate_dec = ''.zfill(self._flow_rate_decimals)
-        rate_str = '{:0>5}'.format('{}{}'.format(str(rate).split('.')[0], rate_dec))
+            if self._ramping_flow:
+                self._accel_stop.set()
+            while self._ramping_flow:
+                time.sleep(0.001)
 
-        self.send_cmd('FI{}'.format(rate_str))
+            self.get_status()
+            current_flow = copy.copy(self._flow_rate)
+            ramp_thread = threading.Thread(target=self._ramp_flow, args=(current_flow, rate))
+
+    @property
+    def _flow_rate(self):
+        return self._flow_rate_val
+
+    @_flow_rate.setter
+    def _flow_rate(self, rate):
+        with self._flow_Rate_lock:
+            self._flow_rate_val = rate
 
     @property
     def max_flow_rate(self):
@@ -1605,7 +1621,7 @@ class SSINextGenPump(Pump):
             rate = rate*60.
 
         if self._pump_max_flow_rate != -1 and rate > self._pump_max_flow_rate:
-            
+
             logger.warning('Requested max flow rate %f is greater than the pump maximum '
                 'flow rate %f. Setting the maximum flow rate the pump maximum', rate,
                 self._pump_max_flow_rate)
@@ -1616,11 +1632,38 @@ class SSINextGenPump(Pump):
 
         if self._flow_rate > rate:
             logger.warning('Requested max flow rate %f is less than the current '
-                'flow rate %f. Setting the flow rate to the new maximum', 
+                'flow rate %f. Setting the flow rate to the new maximum',
                 self._max_flow_rate, self._flow_rate)
 
-            self._flow_rate = rate
             self.flow_rate = self.flow_rate
+
+    @property
+    def flow_rate_acceleration(self):
+        rate = self._flow_rate_acceleration
+
+        if self.units.split('/')[0] == 'uL':
+            rate = rate*1000.
+        elif self.units.split('/')[0] == 'nL':
+            rate = rate*1.e6
+
+        if self.units.split('/')[1] == 's':
+            rate = rate/60.
+
+        return rate
+
+    @flow_rate_acceleration.setter
+    def flow_rate_acceleration(self, rate):
+        logger.info("Setting pump %s flow rate acceleration to %f %s", self.name, rate, self.units)
+
+        if self.units.split('/')[0] == 'uL':
+            rate = rate/1000.
+        elif self.units.split('/')[0] == 'nL':
+            rate = rate/1.e6
+
+        if self.units.split('/')[1] == 's':
+            rate = rate*60.
+
+        self._flow_rate_acceleration = rate
 
     @property
     def max_pressure(self):
@@ -1718,29 +1761,123 @@ class SSINextGenPump(Pump):
 
     def start_flow(self, wait=True):
         logger.info("Pump %s starting continuous flow at %f %s", self.name, self.flow_rate, self.units)
-        self.send_cmd("RU")
 
-        start = time.time()
-        if wait:
-            while not self._is_flowing:
-                self.get_status()
+        if not self.is_moving():
+            target_flow_rate = copy.copy(self.flow_rate)
+            self.flow_rate = 0
+            self.send_cmd("RU")
 
-                if time.time() - start > self.timeout:
-                    break
-                    logger.error('TImed out waiting for pump %s to start', self.name)
+            start = time.time()
+            if wait:
+                while not self._is_flowing:
+                    self.get_status()
+
+                    if time.time() - start > self.timeout:
+                        break
+                        logger.error('TImed out waiting for pump %s to start', self.name)
+
+            ramp_thread = threading.Thread(target=self._ramp_flow, args=(self.flow_rate, target_flow_rate))
+
+        else:
+            self.send_cmd("RU")
+
+            start = time.time()
+            if wait:
+                while not self._is_flowing:
+                    self.get_status()
+
+                    if time.time() - start > self.timeout:
+                        break
+                        logger.error('TImed out waiting for pump %s to start', self.name)
+
 
     def stop(self, wait=True):
         logger.info("Pump %s stopping all motions", self.name)
+
+        if self.is_moving():
+            self._stop_flow_after_ramp = True
+            self.flow_rate = 0
+
+        else:
+            self.send_cmd("ST")
+
+            start = time.time()
+            if wait:
+                while self._is_flowing:
+                    self.get_status()
+
+                    if time.time() - start > self.timeout:
+                        break
+                        logger.error('TImed out waiting for pump %s to start', self.name)
+
+    def abort(self):
         self.send_cmd("ST")
 
-        start = time.time()
-        if wait:
-            while self._is_flowing:
-                self.get_status()
+    def _ramp_flow(self, current_flow_rate, target_flow_rate):
+        # Input flow rates should be in pump base units, e.g. ml/min for SSI pumps
+        self._ramping_flow = True
 
-                if time.time() - start > self.timeout:
+        while self._accel_stop.is_set():
+            time.sleep(0.001)
+
+        if target_flow_rate > current_flow_rate:
+            mult = 1
+        else:
+            mult = -1
+
+        starting_flow_rate = copy.copy(current_flow_rate)
+
+        start_time = time.time()
+        prev_time = time.time()
+
+        if self._flow_rate_acceleration == 0:
+            self._send_flow_rate_cmd(target_flow_rate)
+
+        else:
+            while target_flow_rate != current_flow_rate:
+                if self._accel_stop.is_set():
                     break
-                    logger.error('TImed out waiting for pump %s to start', self.name)
+
+                current_time = time.time()
+
+                time_since_start = current_time - start_time
+                time_since_prev = current_time - prev_time
+
+                expected_flow_rate = starting_flow_rate + mult*self._flow_rate_acceleration*time_since_start/60
+                flow_rate_inc = mult*self._flow_rate_acceleration*time_since_prev/60
+
+                if expected_flow_rate - current_flow_rate > flow_rate_inc*1.1:
+                    next_flow_rate = flow_rate_inc*1.1
+                else:
+                    next_flow_rate = expected_flow_rate
+
+                if mult > 0 and next_flow_rate > target_flow_rate:
+                    next_flow_rate = target_flow_rate
+                elif mult < 0 and next_flow_rate < target_flow_rate:
+                    next_flow_rate = target_flow_rate
+
+                self._send_flow_rate_cmd(next_flow_rate)
+
+                current_flow_rate = next_flow_rate
+
+        self._ramping_flow = False
+        self._accel_stop.clear()
+
+        if self._stop_flow_after_ramp:
+            self.send_cmd("ST")
+            self._stop_flow_after_ramp = False
+
+    def _send_flow_rate_cmd(self, rate):
+        rate = round(rate, self._flow_rate_decimals)
+        self._flow_rate = rate
+
+        if '.' in str(rate):
+            rate_dec = '{:0<{fill}}'.format(str(rate).split('.')[-1], fill=self._flow_rate_decimals)
+        else:
+            rate_dec = ''.zfill(self._flow_rate_decimals)
+        rate_str = '{:0>5}'.format('{}{}'.format(str(rate).split('.')[0], rate_dec))
+
+        self.send_cmd('FI{}'.format(rate_str))
 
     def disconnect(self):
         logger.debug("Closing pump %s serial connection", self.name)
