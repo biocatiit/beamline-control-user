@@ -1431,6 +1431,7 @@ class SSINextGenPump(Pump):
         self._flow_rate = 0 #Current set flow rate
         self._max_perssure = 10000 #Upper pressure limit
         self._min_pressure = 0 #Lower pressure limit
+        self._pressure = 0
         self._is_flowing = False
         self._max_flow_rate = 10
         self._min_flow_rate = 0
@@ -1763,6 +1764,27 @@ class SSINextGenPump(Pump):
                 self.leak_fault = True
 
         self.fault = self.motor_stall_fault or self.upl_fault or self.lpl_fault or self.leak_fault
+
+    def get_pressure(self):
+        ret = self.send_cmd('PR')
+
+        if ret.startswith('OK') and ret.endswith('/'):
+            val = float(ret.split(',')[-1].strip('/'))
+
+            if self._pump_pressure_unit == 'mpa':
+                val *= 145.038
+            elif self._pump_pressure_unit =='bar':
+                val *= 14.5038
+
+            if self.pressure_unit.lower == 'mpa':
+                pressure = val*145.038
+            elif self.pressure_unit == 'bar':
+                pressure = val*14.5038
+
+        else:
+            pressure = -1
+
+        return pressure
 
     def clear_faults(self):
         self.send_cmd('#')
