@@ -1826,6 +1826,8 @@ class SSINextGenPump(Pump):
     def stop(self, wait=True):
         logger.info("Pump %s stopping all motions", self.name)
 
+        self._is_dispensing = False
+
         if self.is_moving():
             if self._ramping_flow:
                 self._accel_stop.set()
@@ -1849,6 +1851,8 @@ class SSINextGenPump(Pump):
 
     def abort(self):
         self.send_cmd("ST")
+
+        self._is_dispensing = False
 
         if self._ramping_flow:
             self._accel_stop.set()
@@ -1928,7 +1932,40 @@ class SSINextGenPump(Pump):
 
         self.send_cmd('FI{}'.format(rate_str))
 
+    def dispense(self, vol, units='mL'):
+        if units == 'uL':
+            vol = vol*1000
+        elif units == 'nL':
+            vol = vol*1e6
 
+        self._dispensing_volume = vol
+        self._is_dispensing = True
+
+        self.start_flow()
+
+        dispense_thread = threading.Thread(target=self._rrun_dispense)
+        dispense_thread.start()
+
+    def _run_dispense(self):
+        previous_time = time.time()
+        previous_fr = self._flow_rate
+
+        while self._is_flowing and self._is_dispensing:
+            current_fr = copy.copy(self._flow_rate)
+            current_time = time.time()
+            delta_vol = ((current_fr + previous_fr)/2./60.)*(current_time-previous_time)
+
+            self._dispensing_volume -= delta_vol
+
+            stop_vol = (current_fr/self._flow_rate_acceleration)*(current_fr/2.)
+
+            previous_time = current_time
+            previous_fr = current_fr
+
+            if self._dispensing_volume - stop_vol <= 0:
+                self.stop()
+
+            time.sleep(0.1)
 
     def get_status(self):
         ret = self.send_cmd('CS')
@@ -2030,6 +2067,10 @@ class SSINextGenPump(Pump):
     def disconnect(self):
         logger.debug("Closing pump %s serial connection", self.name)
         self.keypad_enable(True)
+
+        self._is_dispensing = False
+        self._accel_stop.set()
+
         self.pump_comm.ser.close()
 
 class SoftPump(Pump):
@@ -2672,6 +2713,7 @@ class PumpCommThread(threading.Thread):
         self._commands = {'connect'     : self._connect_pump,
                         'set_flow_rate' : self._set_flow_rate,
                         'set_refill_rate': self._set_refill_rate,
+                        'set_flow_accel': self._set_flow_acceleration,
                         'set_units'     : self._set_units,
                         'start_flow'    : self._start_flow,
                         'stop'          : self._stop_flow,
@@ -2700,6 +2742,7 @@ class PumpCommThread(threading.Thread):
         self.known_pumps = {'VICI_M50'      : M50Pump,
                             'PHD_4400'      : PHD4400Pump,
                             'NE_500'        : NE500Pump,
+                            'SSI_Next_Gen'  : SSINextGenPump,
                             'Soft'          : SoftPump,
                             'Soft_Syringe'  : SoftSyringePump,
                             }
@@ -2843,6 +2886,20 @@ class PumpCommThread(threading.Thread):
         pump = self._connected_pumps[name]
         pump.flow_rate = flow_rate
         logger.debug("Pump %s flow rate set", name)
+
+    def _set_flow_acceleration(self, name, acceleration):
+        """
+        This method sets the flow rate for a pump.
+
+        :param str name: The unique identifier for a pump that was used in the
+            :py:func:`_connect_pump` method.
+
+        :param float flow_rate: The flow rate for the pump.
+        """
+        logger.info("Setting pump %s flow rate acceleration", name)
+        pump = self._connected_pumps[name]
+        pump.flow_rate_acceleration = acceleration
+        logger.debug("Pump %s flow rate acceleration set", name)
 
     def _set_refill_rate(self, name, refill_rate):
         """
@@ -3248,16 +3305,27 @@ class PumpPanel(wx.Panel):
 
         self.mode_ctrl = wx.Choice(self, choices=['Continuous flow', 'Fixed volume'])
         self.mode_ctrl.SetSelection(0)
+        self.direction_lbl = wx.StaticText(self, label='Direction:')
         self.direction_ctrl = wx.Choice(self, choices=['Dispense', 'Aspirate'])
         self.direction_ctrl.SetSelection(0)
         self.flow_rate_ctrl = wx.TextCtrl(self, value=flow_rate, size=(60,-1))
         self.flow_units_lbl = wx.StaticText(self, label='mL/min')
+        self.flow_accel_lbl = wx.StaticText(self, label='Flow accel.:')
+        self.flow_accel_ctrl = wx.TextCtrl(self, value=flow_rate, size=(60,-1))
+        self.flow_accel_units_lbl = wx.StaticText(self, label='mL/min^2')
         self.refill_rate_lbl = wx.StaticText(self, label='Refill rate:')
         self.refill_rate_ctrl = wx.TextCtrl(self, value=refill_rate, size=(60,-1))
-        self.refill_rate_units = wx.StaticText(self, label='mL')
+        self.refill_units_lbl = wx.StaticText(self, label='mL/min')
         self.volume_lbl = wx.StaticText(self, label='Volume:')
         self.volume_ctrl = wx.TextCtrl(self, size=(60,-1))
         self.vol_units_lbl = wx.StaticText(self, label='mL')
+
+
+        #Only turn on for the SSI pump
+        self.flow_accel_lbl.Hide()
+        self.flow_accel_ctrl.Hide()
+        self.flow_accel_units_lbl.Hide()
+
 
         self.mode_ctrl.Bind(wx.EVT_CHOICE, self._on_mode)
 
@@ -3266,7 +3334,7 @@ class PumpPanel(wx.Panel):
             flag=wx.ALIGN_CENTER_VERTICAL)
         basic_ctrl_sizer.Add(self.mode_ctrl, (0,1), span=(1,2),
             flag=wx.ALIGN_CENTER_VERTICAL)
-        basic_ctrl_sizer.Add(wx.StaticText(self, label='Direction:'), (1,0),
+        basic_ctrl_sizer.Add(self.direction_lbl, (1,0),
             flag=wx.ALIGN_CENTER_VERTICAL)
         basic_ctrl_sizer.Add(self.direction_ctrl, (1,1), span=(1,2),
             flag=wx.ALIGN_CENTER_VERTICAL)
@@ -3276,17 +3344,23 @@ class PumpPanel(wx.Panel):
             flag=wx.ALIGN_CENTER_VERTICAL)
         basic_ctrl_sizer.Add(self.flow_units_lbl, (2,2),
             flag=wx.ALIGN_CENTER_VERTICAL|wx.ALIGN_LEFT)
-        basic_ctrl_sizer.Add(self.refill_rate_lbl, (3,0),
+        basic_ctrl_sizer.Add(self.flow_accel_lbl, (3,0),
             flag=wx.ALIGN_CENTER_VERTICAL)
-        basic_ctrl_sizer.Add(self.refill_rate_ctrl, (3,1),
+        basic_ctrl_sizer.Add(self.flow_accel_ctrl, (3,1),
             flag=wx.ALIGN_CENTER_VERTICAL)
-        basic_ctrl_sizer.Add(self.refill_rate_units, (3,2),
+        basic_ctrl_sizer.Add(self.flow_accel_units_lbl, (3,2),
             flag=wx.ALIGN_CENTER_VERTICAL|wx.ALIGN_LEFT)
-        basic_ctrl_sizer.Add(self.volume_lbl, (4,0),
+        basic_ctrl_sizer.Add(self.refill_rate_lbl, (4,0),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        basic_ctrl_sizer.Add(self.refill_rate_ctrl, (4,1),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        basic_ctrl_sizer.Add(self.refill_units_lbl, (4,2),
+            flag=wx.ALIGN_CENTER_VERTICAL|wx.ALIGN_LEFT)
+        basic_ctrl_sizer.Add(self.volume_lbl, (5,0),
             flag=wx.RESERVE_SPACE_EVEN_IF_HIDDEN|wx.ALIGN_CENTER_VERTICAL)
-        basic_ctrl_sizer.Add(self.volume_ctrl, (4,1),
+        basic_ctrl_sizer.Add(self.volume_ctrl, (5,1),
             flag=wx.RESERVE_SPACE_EVEN_IF_HIDDEN|wx.ALIGN_CENTER_VERTICAL)
-        basic_ctrl_sizer.Add(self.vol_units_lbl, (4,2),
+        basic_ctrl_sizer.Add(self.vol_units_lbl, (5,2),
             flag=wx.RESERVE_SPACE_EVEN_IF_HIDDEN|wx.ALIGN_CENTER_VERTICAL|wx.ALIGN_LEFT)
         basic_ctrl_sizer.AddGrowableCol(1)
         basic_ctrl_sizer.SetEmptyCellSize((0,0))
@@ -3317,7 +3391,7 @@ class PumpPanel(wx.Panel):
         self.vol_unit_ctrl.Bind(wx.EVT_CHOICE, self._on_units)
         self.time_unit_ctrl.Bind(wx.EVT_CHOICE, self._on_units)
 
-        gen_settings_sizer = wx.FlexGridSizer(rows=4, cols=2, vgap=2, hgap=2)
+        gen_settings_sizer = wx.FlexGridSizer(cols=2, vgap=2, hgap=2)
         gen_settings_sizer.AddGrowableCol(1)
         gen_settings_sizer.Add(wx.StaticText(self, label='Pump type:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
@@ -3436,6 +3510,16 @@ class PumpPanel(wx.Panel):
             self.settings_box_sizer.Show(self.soft_syringe_settings_sizer, recursive=True)
             self.pump_mode = 'syringe'
 
+        elif self.type_ctrl.GetStringSelection() == 'SSI Next Gen':
+            self.flow_accel_lbl.Show()
+            self.flow_accel_ctrl.Show()
+            self.flow_accel_units_lbl.Show()
+
+            self.direction_lbl.Hide()
+            self.direction_ctrl.Hide()
+
+            self.pump_mode = 'continuous'
+
         if self.pump_mode == 'continuous':
             self.status_sizer.Hide(self.vol_gauge, recursive=True)
             self.syringe_volume.Hide()
@@ -3444,14 +3528,14 @@ class PumpPanel(wx.Panel):
             self.set_syringe_volume.Hide()
             self.refill_rate_ctrl.Hide()
             self.refill_rate_lbl.Hide()
-            self.refill_rate_units.Hide()
+            self.refill_units_lbl.Hide()
 
         vol_unit = self.vol_unit_ctrl.GetStringSelection()
         t_unit = self.time_unit_ctrl.GetStringSelection()
         self.flow_units_lbl.SetLabel('{}/{}'.format(vol_unit, t_unit))
         self.vol_units_lbl.SetLabel(vol_unit)
         self.syringe_volume_units.SetLabel(vol_unit)
-        self.refill_rate_units.SetLabel('{}/{}'.format(vol_unit, t_unit))
+        self.refill_units_lbl.SetLabel('{}/{}'.format(vol_unit, t_unit))
         self.Refresh()
 
         return top_sizer
@@ -3557,6 +3641,23 @@ class PumpPanel(wx.Panel):
             self.settings_box_sizer.Hide(self.phd4400_settings_sizer, recursive=True)
             self.settings_box_sizer.Show(self.soft_syringe_settings_sizer, recursive=True)
             self.pump_mode = 'syringe'
+        elif pump == 'SSI Next Gen':
+            self.flow_accel_lbl.Show()
+            self.flow_accel_ctrl.Show()
+            self.flow_accel_units_lbl.Show()
+            self.direction_lbl.Hide()
+            self.direction_ctrl.Hide()
+            self.settings_box_sizer.Hide(self.m50_settings_sizer, recursive=True)
+            self.settings_box_sizer.Hide(self.phd4400_settings_sizer, recursive=True)
+            self.settings_box_sizer.Hide(self.soft_syringe_settings_sizer, recursive=True)
+            self.pump_mode = 'continuous'
+
+        if pump != 'SSI Next Gen':
+            self.flow_accel_lbl.Hide()
+            self.flow_accel_ctrl.Hide()
+            self.flow_accel_units_lbl.Hide()
+            self.direction_lbl.Show()
+            self.direction_ctrl.Show()
 
         if self.pump_mode == 'continuous':
             self.status_sizer.Hide(self.vol_gauge, recursive=True)
@@ -3566,7 +3667,7 @@ class PumpPanel(wx.Panel):
             self.set_syringe_volume.Hide()
             self.refill_rate_ctrl.Hide()
             self.refill_rate_lbl.Hide()
-            self.refill_rate_units.Hide()
+            self.refill_units_lbl.Hide()
         else:
             self.status_sizer.Show(self.vol_gauge, recursive=True)
             self.syringe_volume.Show()
@@ -3575,7 +3676,7 @@ class PumpPanel(wx.Panel):
             self.set_syringe_volume.Show()
             self.refill_rate_ctrl.Show()
             self.refill_rate_lbl.Show()
-            self.refill_rate_units.Show()
+            self.refill_units_lbl.Show()
 
         self.Layout()
 
@@ -3590,6 +3691,7 @@ class PumpPanel(wx.Panel):
         self.vol_units_lbl.SetLabel(vol_unit)
         self.syringe_volume_units.SetLabel(vol_unit)
         self.refill_units_lbl.SetLabel('{}/{}'.format(vol_unit, t_unit))
+        self.flow_accel_units_lbl.SetLabel('{}/{}^2'.format(vol_unit, t_unit))
 
         try:
             flow_rate = float(self.flow_rate_ctrl.GetValue())
@@ -3621,8 +3723,6 @@ class PumpPanel(wx.Panel):
         except ValueError:
             refill_rate = 0
 
-        old_vol, old_t = old_units.split('/')
-
         if old_vol != vol_unit:
             if (old_vol == 'nL' and vol_unit == 'uL') or (old_vol == 'uL' and vol_unit == 'mL'):
                 refill_rate = refill_rate/1000.
@@ -3640,6 +3740,105 @@ class PumpPanel(wx.Panel):
 
         if refill_rate != 0:
             self.refill_rate_ctrl.ChangeValue('{0:.3f}'.format(refill_rate))
+
+        try:
+            flow_rate_accel = float(self.flow_accel_ctrl.GetValue())
+        except ValueError:
+            flow_rate_accel = 0
+
+        if old_vol != vol_unit:
+            if (old_vol == 'nL' and vol_unit == 'uL') or (old_vol == 'uL' and vol_unit == 'mL'):
+                flow_rate_accel = flow_rate_accel/1000.
+            elif old_vol == 'nL' and vol_unit == 'mL':
+                flow_rate_accel = flow_rate_accel/1000000.
+            elif (old_vol == 'mL' and vol_unit == 'uL') or (old_vol == 'uL' and vol_unit == 'nL'):
+                flow_rate_accel = flow_rate_accel*1000.
+            elif old_vol == 'mL' and vol_unit == 'nL':
+                flow_rate_accel = flow_rate_accel*1000000.
+        if old_t != t_unit:
+            if old_t == 'min':
+                flow_rate_accel = flow_rate_accel/(60**2)
+            else:
+                flow_rate_accel = flow_rate_accel*(60**2)
+
+        if flow_rate_accel != 0:
+            self.flow_accel_ctrl.ChangeValue('{0:.3f}'.format(flow_rate_accel))
+
+
+        try:
+            syringe_vol = float(self.syringe_volume.GetLabel())
+        except ValueError:
+            syringe_vol = 0
+
+        if old_vol != vol_unit:
+            if (old_vol == 'nL' and vol_unit == 'uL') or (old_vol == 'uL' and vol_unit == 'mL'):
+                syringe_vol = syringe_vol/1000.
+            elif old_vol == 'nL' and vol_unit == 'mL':
+                syringe_vol = syringe_vol/1000000.
+            elif (old_vol == 'mL' and vol_unit == 'uL') or (old_vol == 'uL' and vol_unit == 'nL'):
+                syringe_vol = syringe_vol*1000.
+            elif old_vol == 'mL' and vol_unit == 'nL':
+                syringe_vol = syringe_vol*1000000.
+
+        if syringe_vol != 0:
+            self.syringe_volume.SetLabel('{0:.3f}'.format(syringe_vol))
+
+
+        try:
+            syringe_vol_gauge_high = float(self.syringe_vol_gauge_high.GetLabel())
+        except ValueError:
+            syringe_vol_gauge_high = 0
+
+        if old_vol != vol_unit:
+            if (old_vol == 'nL' and vol_unit == 'uL') or (old_vol == 'uL' and vol_unit == 'mL'):
+                syringe_vol_gauge_high = syringe_vol_gauge_high/1000.
+            elif old_vol == 'nL' and vol_unit == 'mL':
+                syringe_vol_gauge_high = syringe_vol_gauge_high/1000000.
+            elif (old_vol == 'mL' and vol_unit == 'uL') or (old_vol == 'uL' and vol_unit == 'nL'):
+                syringe_vol_gauge_high = syringe_vol_gauge_high*1000.
+            elif old_vol == 'mL' and vol_unit == 'nL':
+                syringe_vol_gauge_high = syringe_vol_gauge_high*1000000.
+
+        if syringe_vol_gauge_high != 0:
+            self.syringe_vol_gauge_high.SetLabel('{0:.3f}'.format(syringe_vol_gauge_high))
+
+
+        try:
+            syringe_vol_gauge = float(self.syringe_vol_gauge.GetValue())
+        except ValueError:
+            syringe_vol_gauge = 0
+
+        if old_vol != vol_unit:
+            if (old_vol == 'nL' and vol_unit == 'uL') or (old_vol == 'uL' and vol_unit == 'mL'):
+                syringe_vol_gauge = syringe_vol_gauge/1000.
+            elif old_vol == 'nL' and vol_unit == 'mL':
+                syringe_vol_gauge = syringe_vol_gauge/1000000.
+            elif (old_vol == 'mL' and vol_unit == 'uL') or (old_vol == 'uL' and vol_unit == 'nL'):
+                syringe_vol_gauge = syringe_vol_gauge*1000.
+            elif old_vol == 'mL' and vol_unit == 'nL':
+                syringe_vol_gauge = syringe_vol_gauge*1000000.
+
+        if syringe_vol_gauge != 0:
+            self.syringe_vol_gauge.ChangeValue('{0:.3f}'.format(syringe_vol_gauge))
+
+
+        try:
+            volume = float(self.volume_ctrl.GetValue())
+        except ValueError:
+            volume = 0
+
+        if old_vol != vol_unit:
+            if (old_vol == 'nL' and vol_unit == 'uL') or (old_vol == 'uL' and vol_unit == 'mL'):
+                volume = volume/1000.
+            elif old_vol == 'nL' and vol_unit == 'mL':
+                volume = volume/1000000.
+            elif (old_vol == 'mL' and vol_unit == 'uL') or (old_vol == 'uL' and vol_unit == 'nL'):
+                volume = volume*1000.
+            elif old_vol == 'mL' and vol_unit == 'nL':
+                volume = volume*1000000.
+
+        if volume != 0:
+            self.volume_ctrl.ChangeValue('{0:.3f}'.format(volume))
 
         logger.debug('Changed the pump units to %s and %s for pump %s', vol_unit, t_unit, self.name)
 
@@ -3842,6 +4041,8 @@ class PumpPanel(wx.Panel):
         """
         self._send_cmd('set_units')
 
+        self._set_flowaccel()
+
         if self.type_ctrl.GetStringSelection() == 'NE 500':
             if self.direction_ctrl.GetStringSelection() == 'Dispense':
                 try:
@@ -3892,6 +4093,19 @@ class PumpPanel(wx.Panel):
                     logger.debug('Failed to set pump %s refill rate', self.name)
 
         return success
+
+    def _set_flowaccel(self):
+        if self.type_ctrl.GetStringSelection() == 'SSI Next Gen':
+            try:
+                fr = float(self.flow_accel_ctrl.GetValue())
+                self._send_cmd('set_flow_accel')
+                success = True
+                logger.debug('Set pump %s flow accelration to %s', self.name, str(fr))
+            except Exception:
+                msg = "Flow rate acceleration must be a number."
+                wx.MessageBox(msg, "Error setting flow rate acceleration")
+                success = False
+                logger.debug('Failed to set pump %s flow rate acceleration', self.name)
 
     def _monitor_flow(self):
         """
@@ -3960,6 +4174,9 @@ class PumpPanel(wx.Panel):
                 mult = 1
             fr = mult*float(self.flow_rate_ctrl.GetValue())
             self.pump_cmd_q.append(('set_flow_rate', (self.name, fr), {}))
+        elif cmd == 'set_flow_accel':
+            accel = float(self.flow_accel_ctrl.GetValue())
+            self.pump_cmd_q.append(('set_flow_accel', (self.name, accel), {}))
         elif cmd == 'set_refill_rate':
             fr = float(self.refill_rate_ctrl.GetValue())
             self.pump_cmd_q.append(('set_refill_rate', (self.name, fr), {}))
@@ -4093,10 +4310,11 @@ class PumpFrame(wx.Frame):
         are defined in the :py:func:`PumpPanel._initpump` function, and depends
         on the pump type.
         """
-        if not self.pumps:
-            self.pump_sizer.Remove(0)
 
         if setup_pumps is None:
+            if not self.pumps:
+                self.pump_sizer.Remove(0)
+
             setup_pumps = [('Sheath', 'VICI M50', 'COM3', ['629.88', '13.381'], {}, {}),
                         ('Outlet', 'VICI M50', 'COM4', ['626.36', '10.109'], {}, {})
                         ]
@@ -4155,6 +4373,10 @@ class PumpFrame(wx.Frame):
 
             # setup_pumps = [('Pump 2', 'VICI M50', 'COM6', ['626.8', '11.935'], {}, {}),
                         # ]
+
+        elif len(setup_pumps) > 0:
+            if not self.pumps:
+                self.pump_sizer.Remove(0)
 
         logger.info('Initializing %s pumps on startup', str(len(setup_pumps)))
 
@@ -4247,7 +4469,7 @@ if __name__ == '__main__':
 
     # my_pump = M50Pump('COM6', '2')
 
-    my_pump = SSINextGenPump('COM15', 'test')
+    # my_pump = SSINextGenPump('COM15', 'test')
     # comm_lock = threading.Lock()
 
     # my_pump = PHD4400Pump('COM4', 'H1', '1', 23.5, 30, 30, '30 mL', comm_lock)
@@ -4300,13 +4522,13 @@ if __name__ == '__main__':
     # #     'Outlet' : threading.Lock(),
     # #     }
 
-    # #Otherwise use this:
-    # # comm_locks = {}
+    #Otherwise use this:
+    comm_locks = {}
 
-    # app = wx.App()
-    # logger.debug('Setting up wx app')
-    # frame = PumpFrame(comm_locks, None, None, title='Pump Control')
-    # frame.Show()
-    # app.MainLoop()
+    app = wx.App()
+    logger.debug('Setting up wx app')
+    frame = PumpFrame(comm_locks, [], None, title='Pump Control')
+    frame.Show()
+    app.MainLoop()
 
 
