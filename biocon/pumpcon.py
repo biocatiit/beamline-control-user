@@ -3257,6 +3257,13 @@ class PumpPanel(wx.Panel):
 
         self.SetSizer(self.top_sizer)
 
+        self._current_move_status = False
+        self._current_flow_rate = 0
+        self._current_refill_rate = 0
+        self._current_flow_accel = 0
+        self._current_volume = 0
+        self._current_pressure = 0
+
         self._initpump(pump_type, comport, pump_args, pump_kwargs)
 
 
@@ -3273,6 +3280,10 @@ class PumpPanel(wx.Panel):
             style=wx.GA_HORIZONTAL|wx.GA_SMOOTH)
         self.syringe_vol_gauge_low = wx.StaticText(self, label='0')
         self.syringe_vol_gauge_high = wx.StaticText(self, label='')
+        self.pressure_label = wx.StaticText(self, label='Pressure:')
+        self.pressure = wx.StaticText(self, label='', size=(40, -1),
+            style=wx.ST_NO_AUTORESIZE)
+        self.pressure_units = wx.StaticText(self, label='psi')
 
         self.vol_gauge = wx.BoxSizer(wx.HORIZONTAL)
         self.vol_gauge.Add(self.syringe_vol_gauge_low,
@@ -3301,6 +3312,18 @@ class PumpPanel(wx.Panel):
             flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
         status_grid.Add(self.set_syringe_volume, (4,1), span=(1,2),
             flag=wx.LEFT|wx.ALIGN_RIGHT|wx.ALIGN_CENTER_VERTICAL)
+        tatus_grid.Add(self.pressure_label, (4,0),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        status_grid.Add(self.pressure, (4,1),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        status_grid.Add(self.pressure_units, (4,2),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+
+
+        self.pressure_label.Hide()
+        self.pressure.Hide()
+        self.pressure_units.Hide()
+
 
         self.status_sizer = wx.StaticBoxSizer(wx.StaticBox(self, label='Info'),
             wx.VERTICAL)
@@ -3518,6 +3541,10 @@ class PumpPanel(wx.Panel):
             self.flow_accel_ctrl.Show()
             self.flow_accel_units_lbl.Show()
 
+            self.pressure_label.Show()
+            self.pressure.Show()
+            self.pressure_units.Show()
+
             self.direction_lbl.Hide()
             self.direction_ctrl.Hide()
 
@@ -3650,6 +3677,9 @@ class PumpPanel(wx.Panel):
             self.flow_accel_units_lbl.Show()
             self.direction_lbl.Hide()
             self.direction_ctrl.Hide()
+            self.pressure_label.Show()
+            self.pressure.Show()
+            self.pressure_units.Show()
             self.settings_box_sizer.Hide(self.m50_settings_sizer, recursive=True)
             self.settings_box_sizer.Hide(self.phd4400_settings_sizer, recursive=True)
             self.settings_box_sizer.Hide(self.soft_syringe_settings_sizer, recursive=True)
@@ -3661,6 +3691,9 @@ class PumpPanel(wx.Panel):
             self.flow_accel_units_lbl.Hide()
             self.direction_lbl.Show()
             self.direction_ctrl.Show()
+            self.pressure_label.Hide()
+            self.pressure.Hide()
+            self.pressure_units.Hide()
 
         if self.pump_mode == 'continuous':
             self.status_sizer.Hide(self.vol_gauge, recursive=True)
@@ -3907,7 +3940,6 @@ class PumpPanel(wx.Panel):
 
                 self.run_button.SetLabel('Start')
                 self.fr_button.Hide()
-                self.monitor_flow_evt.clear()
 
                 self._set_status('Done')
 
@@ -4004,40 +4036,7 @@ class PumpPanel(wx.Panel):
         self.connected = True
         self.connect_button.SetLabel('Reconnect')
 
-        try:
-            self._get_volume()
-        except Exception:
-            pass
-
-        wx.CallAfter(self.flow_rate_ctrl.SetValue, str(self.pump.flow_rate))
-        try:
-            wx.CallAfter(self.flow_accel_ctrl.SetValue, str(self.pump.flow_rate_acceleration))
-        except Exception:
-            pass
-
-        try:
-            wx.CallAfter(self.refill_rate_ctrl.SetValue, str(self.pump.refill_rate))
-        except Exception:
-            pass
-
-        is_moving = self.pump.is_moving()
-        # self.comm_lock.release()
-
-        if is_moving:
-            wx.CallAfter(self.run_button.SetLabel, 'Stop')
-            wx.CallAfter(self.fr_button.Show)
-
-            if self.pump_mode == 'continuous':
-                if self.mode_ctrl.GetStringSelection() == 'Fixed volume':
-                    cmd = self.direction_ctrl.GetStringSelection().lower()
-                    self._set_status(cmd.capitalize())
-                    self.start_callback()
-                else:
-                    self._set_status('Flowing')
-            else:
-                cmd = self.direction_ctrl.GetStringSelection().lower()
-                self._set_status(cmd.capitalize())
-                self.start_callback()
+        self.monitor_flow_evt.set()
 
         return
 
@@ -4050,12 +4049,94 @@ class PumpPanel(wx.Panel):
         volume = self.pump.volume
         # self.comm_lock.release()
 
-        wx.CallAfter(self._set_status_volume, volume)
-        wx.CallAfter(self.syringe_vol_gauge.SetValue,
-            int(round(float(volume)*1000)))
+        if volume != self._current_volume:
+            wx.CallAfter(self._set_status_volume, volume)
+            wx.CallAfter(self.syringe_vol_gauge.SetValue,
+                int(round(float(volume)*1000)))
+            self._current_volume = volume
 
     def _get_volume_delay(self, delay):
         wx.CallLater(delay*1000, self._get_volume)
+
+    def _get_flow_rate(self):
+
+        fr = self.pump.flow_rate
+        if fr != self._current_flow_rate:
+            wx.CallAfter(self.flow_rate_ctrl.SetValue, str(fr))
+            self._current_flow_rate = fr
+
+        try:
+            accel = self.pump.flow_rate_acceleration
+            if accel != self._current_flow_accel:
+                wx.CallAfter(self.flow_accel_ctrl.SetValue, str(accel))
+                self._current_flow_accel = accel
+
+        except Exception:
+            pass
+
+        try:
+            rr = self.pump.refill_rate
+            if rr != self._current_refill_rate:
+                wx.CallAfter(self.refill_rate_ctrl.SetValue, str(rr))
+                self._current_refill_rate = rr
+
+        except Exception:
+            pass
+
+    def _get_pressure(self):
+
+        try:
+            pressure = self.pump.pressure
+
+            if pressure != self._current_pressure:
+                wx.CallAfter(self.pressure.SetLabel, str(pressure))
+                self._current_pressure = pressure
+
+        except Exception:
+            pass
+
+    def _get_pump_moving(self):
+
+        is_moving = self.pump.is_moving()
+        # self.comm_lock.release()
+
+        if is_moving and not self._current_move_status:
+            wx.CallAfter(self.run_button.SetLabel, 'Stop')
+            wx.CallAfter(self.fr_button.Show)
+
+            if self.pump_mode == 'continuous':
+                if self.mode_ctrl.GetStringSelection() == 'Fixed volume':
+                    cmd = self.direction_ctrl.GetStringSelection().lower()
+                    self._set_status(cmd.capitalize())
+                else:
+                    self._set_status('Flowing')
+            else:
+                cmd = self.direction_ctrl.GetStringSelection().lower()
+                self._set_status(cmd.capitalize())
+
+            self._current_move_status = is_moving
+
+        elif not is_moving and self._current_move_status:
+                wx.CallAfter(self.run_button.SetLabel, 'Start')
+                wx.CallAfter(self.fr_button.Hide)
+                wx.CallAfter(self._set_status, 'Done')
+
+                self._current_move_status = is_moving
+
+                if self.pump_mode == 'syringe':
+                    self._send_cmd('stop')
+
+    def _get_pump_status(self):
+        try:
+            self._get_volume()
+        except Exception:
+            pass
+
+        self._get_flow_rate()
+
+        self._get_pump_moving()
+
+        self._get_pressure()
 
     def _set_status(self, status):
         """
@@ -4153,26 +4234,9 @@ class PumpPanel(wx.Panel):
         """
         while True:
             self.monitor_flow_evt.wait()
-            # self.comm_lock.acquire()
-            is_moving = self.pump.is_moving()
-            # self.comm_lock.release()
-
-            if not is_moving:
-                wx.CallAfter(self.run_button.SetLabel, 'Start')
-                wx.CallAfter(self.fr_button.Hide)
-                wx.CallAfter(self._set_status, 'Done')
-                self.monitor_flow_evt.clear()
-
-                if self.pump_mode == 'syringe':
-                    self._send_cmd('stop')
-
-            if self.pump_mode == 'syringe':
-                self._get_volume()
+            self._get_pump_status
 
             time.sleep(1)
-
-            if not is_moving and self.pump_mode == 'syringe':
-                wx.CallAfter(self._get_volume_delay, 2)
 
     def _send_cmd(self, cmd, args=None):
         """
@@ -4186,21 +4250,21 @@ class PumpPanel(wx.Panel):
         if cmd == 'is_moving':
             self.pump_cmd_q.append(('is_moving', (self.name), {}))
         elif cmd == 'start_flow':
-            self.pump_cmd_q.append(('start_flow', (self.name, self.start_callback), {}))
+            self.pump_cmd_q.append(('start_flow', (self.name), {}))
         elif cmd == 'stop':
             self.pump_cmd_q.append(('stop', (self.name,), {}))
         elif cmd == 'dispense':
             units = self.flow_units_lbl.GetLabel()
             vol = float(self.volume_ctrl.GetValue())
-            self.pump_cmd_q.append(('dispense', (self.name, vol, self.start_callback, units), {}))
+            self.pump_cmd_q.append(('dispense', (self.name, vol, units), {}))
         elif cmd == 'aspirate':
             units = self.flow_units_lbl.GetLabel()
             vol = float(self.volume_ctrl.GetValue())
-            self.pump_cmd_q.append(('aspirate', (self.name, vol, self.start_callback, units), {}))
+            self.pump_cmd_q.append(('aspirate', (self.name, vol, units), {}))
         elif cmd == 'dispense_all':
-            self.pump_cmd_q.append(('dispense_all', (self.name, self.start_callback), {}))
+            self.pump_cmd_q.append(('dispense_all', (self.name), {}))
         elif cmd == 'aspirate_all':
-            self.pump_cmd_q.append(('aspirate_all', (self.name, self.start_callback), {}))
+            self.pump_cmd_q.append(('aspirate_all', (self.name), {}))
         elif cmd == 'set_flow_rate':
             direction = self.direction_ctrl.GetStringSelection().lower()
             if self.pump_mode == 'continuous':
@@ -4260,6 +4324,9 @@ class PumpPanel(wx.Panel):
             args = (self.pump, self.name)
 
             self.pump_cmd_q.append(('add_pump', args, {}))
+
+    def clean_up(self):
+        self.monitor_flow_evt.clear()
 
 
 class PumpFrame(wx.Frame):
@@ -4489,6 +4556,9 @@ class PumpFrame(wx.Frame):
     def _on_exit(self, evt):
         """Stops all current pump motions and then closes the frame."""
         logger.debug('Closing the PumpFrame')
+        for pump_panel in self.pumps:
+            pump_panel.clean_up()
+
         self.pump_con.stop()
         self.pump_con.join()
         while self.pump_con.is_alive():
