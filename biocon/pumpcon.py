@@ -1424,7 +1424,7 @@ class SSINextGenPump(Pump):
 
         self.timeout=1 #Timeout to wait for response in s
 
-        # self.keypad_enable(False)
+        self.keypad_enable(False)
 
         # All internal variables are stored in mL/min and psi, regardless of user/pump units
         self._units = 'mL/min'
@@ -1943,7 +1943,7 @@ class SSINextGenPump(Pump):
 
         self.start_flow()
 
-        dispense_thread = threading.Thread(target=self._rrun_dispense)
+        dispense_thread = threading.Thread(target=self._run_dispense)
         dispense_thread.start()
 
     def _run_dispense(self):
@@ -2765,7 +2765,6 @@ class PumpCommThread(threading.Thread):
 
             if self._stop_event.is_set():
                 logger.debug("Stop event detected")
-                self._abort()
                 break
 
             if command is not None:
@@ -2791,6 +2790,10 @@ class PumpCommThread(threading.Thread):
             self._stop_event.clear()
         else:
             self._abort()
+
+        for name, pump in self._connected_pumps.items():
+            pump.disconnect()
+
         logger.info("Quitting pump control thread: %s", self.name)
 
     def _connect_pump(self, device, name, pump_type, **kwargs):
@@ -4001,6 +4004,41 @@ class PumpPanel(wx.Panel):
         self.connected = True
         self.connect_button.SetLabel('Reconnect')
 
+        try:
+            self._get_volume()
+        except Exception:
+            pass
+
+        wx.CallAfter(self.flow_rate_ctrl.SetValue, str(self.pump.flow_rate))
+        try:
+            wx.CallAfter(self.flow_accel_ctrl.SetValue, str(self.pump.flow_rate_acceleration))
+        except Exception:
+            pass
+
+        try:
+            wx.CallAfter(self.refill_rate_ctrl.SetValue, str(self.pump.refill_rate))
+        except Exception:
+            pass
+
+        is_moving = self.pump.is_moving()
+        # self.comm_lock.release()
+
+        if is_moving:
+            wx.CallAfter(self.run_button.SetLabel, 'Stop')
+            wx.CallAfter(self.fr_button.Show)
+
+            if self.pump_mode == 'continuous':
+                if self.mode_ctrl.GetStringSelection() == 'Fixed volume':
+                    cmd = self.direction_ctrl.GetStringSelection().lower()
+                    self._set_status(cmd.capitalize())
+                    self.start_callback()
+                else:
+                    self._set_status('Flowing')
+            else:
+                cmd = self.direction_ctrl.GetStringSelection().lower()
+                self._set_status(cmd.capitalize())
+                self.start_callback()
+
         return
 
     def start_callback(self):
@@ -4371,8 +4409,8 @@ class PumpFrame(wx.Frame):
             #     'refill_rate' : '10'}),
                         # ]
 
-            # setup_pumps = [('Pump 2', 'VICI M50', 'COM6', ['626.8', '11.935'], {}, {}),
-                        # ]
+            setup_pumps = [('Pump 2', 'SSI Next Gen', 'COM18', [], {}, {}),
+                        ]
 
         elif len(setup_pumps) > 0:
             if not self.pumps:
@@ -4469,7 +4507,7 @@ if __name__ == '__main__':
 
     # my_pump = M50Pump('COM6', '2')
 
-    # my_pump = SSINextGenPump('COM15', 'test')
+    my_pump = SSINextGenPump('COM18', 'test')
     # comm_lock = threading.Lock()
 
     # my_pump = PHD4400Pump('COM4', 'H1', '1', 23.5, 30, 30, '30 mL', comm_lock)
@@ -4527,7 +4565,7 @@ if __name__ == '__main__':
 
     app = wx.App()
     logger.debug('Setting up wx app')
-    frame = PumpFrame(comm_locks, [], None, title='Pump Control')
+    frame = PumpFrame(comm_locks, None, None, title='Pump Control')
     frame.Show()
     app.MainLoop()
 
