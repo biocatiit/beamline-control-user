@@ -157,36 +157,37 @@ class AD_EigerCamera(Device):
     """
     Basic AreaDetector Camera Device
     """
-    attrs = ("Acquire", "AcquirePeriod", "AcquirePeriod_RBV",
-             "AcquireTime", "AcquireTime_RBV",
-             "AcquireState_RBV",
-             "ArrayCallbacks", "ArrayCallbacks_RBV",
-             "ArrayCounter", "ArrayCounter_RBV", "ArrayRate_RBV",
-             "ArraySizeX_RBV", "ArraySizeY_RBV", "ArraySize_RBV",
-             "BinX", "BinX_RBV", "BinY", "BinY_RBV",
-             "ColorMode", "ColorMode_RBV",
-             "DataType", "DataType_RBV", "DetectorState_RBV",
-             "Gain", "Gain_RBV",
-             "FWAutoRemove", "FWAutoRemove_RBV",
-             "FWEnable", "FWEnable_RBV",
-             "FWNamePattern", "FWNamePattern_RBV",
-             "FWNImagesPerFile", "FWNImagesPerFile_RBV",
-             "ImageMode", "ImageMode_RBV",
-             "MaxSizeX_RBV", "MaxSizeY_RBV",
-             "MinX", "MinX_RBV", "MinY", "MinY_RBV",
-             "NumImages", "NumImagesCounter_RBV", "NumImages_RBV",
-             "NumTriggers", "NumTriggers_RBV",
-             "PhotonEnergy", "PhotonEnergy_RBV",
-             "SaveFiles", "SaveFiles_RBV",
-             "SizeX", "SizeX_RBV", "SizeY", "SizeY_RBV",
-             "StreamEnable", "StreamEnable_RBV",
+    attrs = ("cam1:Acquire", "cam1:AcquirePeriod", "cam1:AcquirePeriod_RBV",
+             "cam1:AcquireTime", "cam1:AcquireTime_RBV",
+             "cam1:AcquireState_RBV",
+             "cam1:ArrayCallbacks", "cam1:ArrayCallbacks_RBV",
+             "cam1:ArrayCounter", "cam1:ArrayCounter_RBV", "cam1:ArrayRate_RBV",
+             "cam1:ArraySizeX_RBV", "cam1:ArraySizeY_RBV", "cam1:ArraySize_RBV",
+             "cam1:BinX", "cam1:BinX_RBV", "cam1:BinY", "cam1:BinY_RBV",
+             "cam1:ColorMode", "cam1:ColorMode_RBV",
+             "cam1:DataType", "cam1:DataType_RBV", "cam1:DetectorState_RBV",
+             "cam1:Gain", "cam1:Gain_RBV",
+             "cam1:FWAutoRemove", "cam1:FWAutoRemove_RBV",
+             "cam1:FWEnable", "cam1:FWEnable_RBV",
+             "cam1:FWNamePattern", "cam1:FWNamePattern_RBV",
+             "cam1:FWNImagesPerFile", "cam1:FWNImagesPerFile_RBV",
+             "cam1:ImageMode", "cam1:ImageMode_RBV",
+             "cam1:MaxSizeX_RBV", "cam1:MaxSizeY_RBV",
+             "cam1:MinX", "cam1:MinX_RBV", "cam1:MinY", "cam1:MinY_RBV",
+             "cam1:NumImages", "cam1:NumImagesCounter_RBV", "cam1:NumImages_RBV",
+             "cam1:NumTriggers", "cam1:NumTriggers_RBV",
+             "cam1:PhotonEnergy", "cam1:PhotonEnergy_RBV",
+             "cam1:SaveFiles", "cam1:SaveFiles_RBV",
+             "cam1:SizeX", "cam1:SizeX_RBV", "cam1:SizeY", "cam1:SizeY_RBV",
+             "cam1:StreamEnable", "cam1:StreamEnable_RBV",
              "TIFF1:AutoIncrement", "TIFF1:AutoIncrement_RBV",
              "TIFF1:AutoSave", "TIFF1:AutoSave_RBV",
              "TIFF1:EnableCallbacks", "TIFF1:EnableCallbacks_RBV",
              "TIFF1:FileName", "TIFF1:FileName_RBV",
              "TIFF1:FilePath", "TIFF1:FilePath_RBV", "TIFF1:FileTemplate",
-             "TimeRemaining_RBV",
-             "TriggerMode", "TriggerMode_RBV", "TriggerSoftware")
+             "cam1:TimeRemaining_RBV",
+             "cam1:TriggerMode", "cam1:TriggerMode_RBV", "cam1:TriggerSoftware",
+             "cam1:Trigger", 'cam1:ManualTrigger', 'cam1:ManualTrigger_RBV',)
 
 
     _nonpvs = ('_prefix', '_pvs', '_delim')
@@ -218,24 +219,24 @@ class EPICSEigerDetector(object):
         self.use_file_writer = use_file_writer
 
         if self.use_tiff_writer:
-            self.det.put('TIFF1:EnableCallbacks', 1, timeout=1)
-            self.det.put('cam1:StreamEnable', 1, timeout=1)
-            self.det.put('TIFF1:FileTemplate', '%s%s_%4.4d.tif', timeout=1)
-            self.det.put('TIFF1:AutoIncrement', 1, timeout=1)
-            self.det.put('TIFF1:AutoSave', 1, timeout=1)
+            self.det.put('TIFF1:EnableCallbacks', 1, wait=True, timeout=1)
+            self.det.put('cam1:StreamEnable', 1, wait=True, timeout=1)
+            self.det.put('TIFF1:FileTemplate', '%s%s_%4.4d.tif', wait=True, timeout=1)
+            self.det.put('TIFF1:AutoIncrement', 1, wait=True, timeout=1)
+            self.det.put('TIFF1:AutoSave', 1, wait=True, timeout=1)
 
         else:
-            self.det.put('TIFF1:EnableCallbacks', 0, timeout=1)
+            self.det.put('TIFF1:EnableCallbacks', 0, wait=True, timeout=1)
 
         if self.use_file_writer:
-            self.det.put('cam1:FWEnable', 1, timeout=1)
-            self.det.put('cam1:SaveFiles', 1, timeout=1)
-            self.det.put('cam1:FWAutoRemove', 1, timeout=1)
+            self.det.put('cam1:FWEnable', 1, wait=True, timeout=1)
+            self.det.put('cam1:SaveFiles', 1, wait=True, timeout=1)
+            self.det.put('cam1:FWAutoRemove', 1, wait=True, timeout=1)
 
         else:
-            self.det.put('cam1:FWEnable', 0, timeout=1)
+            self.det.put('cam1:FWEnable', 0, wait=True, timeout=1)
 
-        self.det.put('cam1:PhotonEnergy', photon_energy*1000, timeout=1)
+        self.det.put('cam1:PhotonEnergy', photon_energy*1000, wait=True, timeout=1)
 
     # def __repr__(self):
     #     return '{}({}, {})'.format(self.__class__.__name__, self.name, self.device)
@@ -244,34 +245,40 @@ class EPICSEigerDetector(object):
     #     return '{} {}, connected to {}'.format(self.__class__.__name__, self.name, self.device)
 
     def abort(self):
-        self.det.put("cam1:Acquire", 0)
+        self.det.put("cam1:Acquire", 0, wait=True, timeout=1)
 
     def arm(self):
-        self.det.put("cam1:Acquire", 1)
+        self.det.put("cam1:Acquire", 1, wait=True, timeout=1)
+
+    def trigger(self, wait=True):
+        self.det.put("cam1:Trigger", 1, wait=wait, timeout=1)
 
     def get_status(self):
         return self.det.get("cam1:DetectorState_RBV")
 
+    def get_data_dir(self):
+        return self.det.get('cam1:FilePath', as_string=True)
+
     def set_data_dir(self, data_dir):
         if self.use_tiff_writer:
-            self.det.put('TIFF1:FilePath', data_dir)
+            self.det.put('TIFF1:FilePath', data_dir, wait=True, timeout=1)
 
         if self.use_file_writer:
-            self.det.put("cam1:FilePath", data_dir)
+            self.det.put("cam1:FilePath", data_dir, wait=True, timeout=1)
 
     def set_exp_period(self, exp_period):
-        self.det.put('cam1:AcquirePeriod', exp_period)
+        self.det.put('cam1:AcquirePeriod', exp_period, wait=True, timeout=1)
 
     def set_exp_time(self, exp_time):
-        self.det.put('cam1:AcquireTime', exp_time)
+        self.det.put('cam1:AcquireTime', exp_time, wait=True, timeout=1)
 
     def set_filename(self, filename):
         if self.use_tiff_writer:
-            self.det.put('TIFF1:FileName', filename)
-            self.det.put('TIFF1:FileNumber', 1)
+            self.det.put('TIFF1:FileName', filename, wait=True, timeout=1)
+            self.det.put('TIFF1:FileNumber', 1, wait=True, timeout=1)
 
         if self.use_file_writer:
-            self.det.put("cam1:FWNamePattern", filename)
+            self.det.put("cam1:FWNamePattern", filename, wait=True, timeout=1)
 
     def set_num_frames(self, num_frames):
         trig_mode = self.det.get('cam1:TriggerMode_RBV', as_string=True)
@@ -279,16 +286,16 @@ class EPICSEigerDetector(object):
         logger.debug('trig_mode')
 
         if trig_mode == 'Internal Series' or trig_mode == 'External Series':
-            self.det.put('cam1:NumImages', num_frames)
+            self.det.put('cam1:NumImages', num_frames, wait=True, timeout=1)
 
         elif trig_mode == 'Internal Enable' or trig_mode == 'External Enable':
-            self.det.put('cam1:NumTriggers', num_frames)
+            self.det.put('cam1:NumTriggers', num_frames, wait=True, timeout=1)
 
         if self.use_file_writer:
             if num_frames < 10000:
-                self.det.put('cam1:FWNImagesPerFile', num_frames)
+                self.det.put('cam1:FWNImagesPerFile', num_frames, wait=True, timeout=1)
             else:
-                self.det.put('cam1:FWNImagesPerFile', 10000)
+                self.det.put('cam1:FWNImagesPerFile', 10000, wait=True, timeout=1)
 
     def set_trigger_mode(self, mode):
         if mode == 'ext_enable':
@@ -298,14 +305,21 @@ class EPICSEigerDetector(object):
         elif mode == 'ext_gate':
             tm = 'External Gate'
         elif mode == 'int_trig':
-            tm = 'External Series'
+            tm = 'Internal Series'
         elif mode == 'int_enable':
             tm = 'Internal Enable'
 
         if mode == 'ext_enable' or mode == 'int_enable':
-            self.det.put('cam1:NumImages', 1)
+            self.det.put('cam1:NumImages', 1, wait=True, timeout=1)
 
-        self.det.put("cam1:TriggerMode", tm)
+        self.det.put("cam1:TriggerMode", tm, wait=True, timeout=1)
+
+    def set_manual_trigger(self, mode):
+        self.det.put('cam1:ManualTrigger', mode, wait=True, timeout=1)
 
     def stop(self):
-        self.det.put("cam1:Acquire", 0)
+        # self.det.put("cam1:Acquire", 0, wait=True, timeout=1)
+        self.det.put('cam1:Acquire', 0, timeout=1)
+        # For some reason this is much faster without the wait=True, in terms of EPICS response
+        # So going with that for now. Maybe it's a bug that's been fixed in mroe
+        # Recent versions of pyepics? I should try when I convert to python 3.

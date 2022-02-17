@@ -1383,6 +1383,696 @@ class NE500Pump(Pump):
         self.pump_comm.ser.close()
 
 
+class SSINextGenPump(Pump):
+    """
+    .. todo:: This class doesn't know when the pump is done dispensing. This leads
+        to unncessary stop signals being sent to the pump, and makes the log harder
+        to follow. This could be fixed, when I have time.
+
+    This class contains information for initializing and communicating with
+    a VICI M50 Pump using an MForce Controller. Below is an example that
+    initializes an M50 pump, starts a flow of 2000 uL/min, and then stops the flow. ::
+
+        >>> my_pump = M50Pump('COM6', 'pump2', flow_cal=626.2, backlash_cal=9.278)
+        >>> my_pump.flow_rate = 2000
+        >>> my_pump.start_flow()
+        >>> my_pump.stop_flow()
+    """
+
+    def __init__(self, device, name, comm_lock=threading.Lock()):
+        """
+        This makes the initial serial connection, and then sets the MForce
+        controller parameters to the correct values.
+
+        :param device: The device comport as sent to pyserial
+        :type device: str
+
+        :param name: A unique identifier for the pump
+        :type name: str
+        """
+        Pump.__init__(self, device, name)
+
+        logstr = ("Initializing pump {} on serial port {}".format(self.name,
+            self.device))
+        logger.info(logstr)
+
+        self.comm_lock = comm_lock
+
+        self.comm_lock.acquire()
+        self.pump_comm = SerialComm(device)
+        self.comm_lock.release()
+
+        self.timeout=1 #Timeout to wait for response in s
+
+        self.keypad_enable(False)
+
+        # All internal variables are stored in mL/min and psi, regardless of user/pump units
+        self._units = 'mL/min'
+        self._pressure_units = 'psi'
+        self._pump_pressure_unit = 'psi'
+        self._flow_rate_val = 0 #Current set flow rate
+        self._max_pressure = 10000 #Upper pressure limit
+        self._min_pressure = 0 #Lower pressure limit
+        self._pressure = 0
+        self._is_flowing = False
+        self._max_flow_rate = 10
+        self._min_flow_rate = 0
+        self.motor_stall_fault = False
+        self.upl_fault = False
+        self.lpl_fault = False
+        self.leak_fault = False
+        self.fault = False
+        self._flow_rate_decimals = 3
+        self._flow_rate_acceleration = 0.1 #Set to 0 for instant (as fast as the pump can) flow rate change
+        self._accel_stop = threading.Event()
+        self._flow_rate_lock = threading.Lock()
+        self._ramping_flow = False
+        self._stop_flow_after_ramp = False
+
+        #Make sure parameters are set right
+        ret = self.send_cmd('MF') #Max flow rate for the pump
+        if ret.startswith('OK') and ret.endswith('/'):
+            val = ret.split(':')[-1].strip('/')
+            self._pump_max_flow_rate = float(val)
+            self._max_flow_rate = self._pump_max_flow_rate
+            self._flow_rate_decimals = len(val.split('.')[-1])
+        else:
+            self._pump_max_flow_rate = -1
+
+        ret = self.send_cmd('MP') #Max pressure for the pump
+        if ret.startswith('OK') and ret.endswith('/'):
+            self._pump_max_pressure = float(ret.split(':')[-1].strip('/'))
+        else:
+            self._pump_max_pressure = -1
+
+        ret = self.send_cmd('PU') #Pressure unit for the pump
+        if ret.startswith('OK') and ret.endswith('/'):
+            self._pump_pressure_unit = ret.split(',')[-1].strip('/')
+
+        if self._pump_pressure_unit.lower() == 'mpa':
+            if self._pump_max_pressure != -1:
+                self._pump_max_pressure *= 145.038
+
+        elif self._pump_pressure_unit == 'bar':
+            if self._pump_max_pressure != -1:
+                self._pump_max_pressure *= 14.5038
+
+        if self._pump_max_pressure != -1:
+            self._max_pressure = self._pump_max_pressure
+
+        ret = self.send_cmd('LP')
+        if ret.startswith('OK') and ret.endswith('/'):
+            val = float(ret.split(':')[-1].strip('/'))
+
+            if self._pump_pressure_unit == 'mpa':
+                val *= 145.038
+            elif self._pump_pressure_unit =='bar':
+                val *= 14.5038
+
+            self._min_pressure = val
+
+        ret = self.send_cmd('UP')
+        if ret.startswith('OK') and ret.endswith('/'):
+            val = float(ret.split(':')[-1].strip('/'))
+
+            if self._pump_pressure_unit == 'mpa':
+                val *= 145.038
+            elif self._pump_pressure_unit =='bar':
+                val *= 14.5038
+
+            self._max_pressure = val
+
+
+        ret = self.send_cmd('LM1') #Detected leak does not cause fault
+
+        self.get_status()
+        self.get_faults()
+
+    @property
+    def pressure_units(self):
+        """
+        Sets and returns the pump flow rate units. This can be set to:
+        nL/s, nL/min, uL/s, uL/min, mL/s, mL/min. Changing units keeps the
+        flow rate constant, i.e. if the flow rate was set to 100 uL/min, and
+        the units are changed to mL/min, the flow rate is set to 0.1 mL/min.
+
+        :type: str
+        """
+        return self._pressure_units
+
+    @pressure_units.setter
+    def pressure_units(self, units):
+        old_units = self._pressure_units
+
+        if units in ['psi', 'bar', 'MPa']:
+            self._pressure_units = units
+
+            logger.info("Changed pump %s pressure units from %s to %s", self.name, old_units, units)
+        else:
+            logger.warning("Failed to change pump %s pressure units, units supplied were invalid: %s", self.name, units)
+
+    @property
+    def flow_rate(self):
+        rate = self._flow_rate
+
+        if self.units.split('/')[0] == 'uL':
+            rate = rate*1000.
+        elif self.units.split('/')[0] == 'nL':
+            rate = rate*1.e6
+
+        if self.units.split('/')[1] == 's':
+            rate = rate/60.
+
+        return rate
+
+    @flow_rate.setter
+    def flow_rate(self, rate):
+        logger.info("Setting pump %s flow rate to %f %s", self.name, rate, self.units)
+
+        if self.units.split('/')[0] == 'uL':
+            rate = rate/1000.
+        elif self.units.split('/')[0] == 'nL':
+            rate = rate/1.e6
+
+        if self.units.split('/')[1] == 's':
+            rate = rate*60.
+
+        #Maximum continuous flow rate is 25 mL/min
+        if rate>self.max_flow_rate:
+            rate = self.max_flow_rate
+            logger.warning("Requested flow rate > %f %s, setting pump %s flow rate to %f %s",
+                self.max_flow_rate, self.units, self.name, self.max_flow_rate, self.units)
+
+        if rate < self._min_flow_rate:
+            rate = self._min_flow_rate
+            logger.warning("Requested flow rate < %f %s, setting pump %s flow rate to %f %s",
+                self._min_flow_rate, self.units, self.name, self._min_flow_rate, self.units)
+
+        if round(rate, self._flow_rate_decimals) == 0 and rate != 0:
+            logger.warning("Requested flow rate is smaller than the precision of the pump, "
+                "so flow rate will be set to zero.")
+
+        if not self.is_moving():
+            logger.debug('here')
+            self._send_flow_rate_cmd(rate)
+
+        else:
+            logger.debug('here 2')
+            if self._ramping_flow:
+                self._accel_stop.set()
+            while self._ramping_flow:
+                time.sleep(0.001)
+
+            self.get_status()
+            current_flow = copy.copy(self._flow_rate)
+
+            if self._is_flowing:
+                ramp_thread = threading.Thread(target=self._ramp_flow, args=(current_flow, rate))
+                ramp_thread.start()
+            else:
+                self._send_flow_rate_cmd(rate)
+
+    @property
+    def _flow_rate(self):
+        return self._flow_rate_val
+
+    @_flow_rate.setter
+    def _flow_rate(self, rate):
+        with self._flow_rate_lock:
+            self._flow_rate_val = rate
+
+    @property
+    def max_flow_rate(self):
+        rate = self._max_flow_rate
+
+        if self.units.split('/')[0] == 'uL':
+            rate = rate*1000.
+        elif self.units.split('/')[0] == 'nL':
+            rate = rate*1.e6
+
+        if self.units.split('/')[1] == 's':
+            rate = rate/60.
+
+        return rate
+
+    @max_flow_rate.setter
+    def max_flow_rate(self, rate):
+        logger.info("Setting pump %s max flow rate to %f %s", self.name, rate, self.units)
+
+        if self.units.split('/')[0] == 'uL':
+            rate = rate/1000.
+        elif self.units.split('/')[0] == 'nL':
+            rate = rate/1.e6
+
+        if self.units.split('/')[1] == 's':
+            rate = rate*60.
+
+        if self._pump_max_flow_rate != -1 and rate > self._pump_max_flow_rate:
+
+            logger.warning('Requested max flow rate %f is greater than the pump maximum '
+                'flow rate %f. Setting the maximum flow rate the pump maximum', rate,
+                self._pump_max_flow_rate)
+
+            rate = self._pump_max_flow_rate
+
+        self._max_flow_rate = rate
+
+        if self._flow_rate > rate:
+            logger.warning('Requested max flow rate %f is less than the current '
+                'flow rate %f. Setting the flow rate to the new maximum',
+                self._max_flow_rate, self._flow_rate)
+
+            self.flow_rate = self.flow_rate
+
+    @property
+    def flow_rate_acceleration(self):
+        rate = self._flow_rate_acceleration
+
+        if self.units.split('/')[0] == 'uL':
+            rate = rate*1000.
+        elif self.units.split('/')[0] == 'nL':
+            rate = rate*1.e6
+
+        if self.units.split('/')[1] == 's':
+            rate = rate/60.
+
+        return rate
+
+    @flow_rate_acceleration.setter
+    def flow_rate_acceleration(self, rate):
+        logger.info("Setting pump %s flow rate acceleration to %f %s", self.name, rate, self.units)
+
+        if self.units.split('/')[0] == 'uL':
+            rate = rate/1000.
+        elif self.units.split('/')[0] == 'nL':
+            rate = rate/1.e6
+
+        if self.units.split('/')[1] == 's':
+            rate = rate*60.
+
+        self._flow_rate_acceleration = rate
+
+    @property
+    def max_pressure(self):
+        pressure = self._max_pressure
+
+        if self.pressure_units.lower() == 'mpa':
+            pressure = pressure/145.038
+        elif self.pressure_units == 'bar':
+            pressure = pressure/14.5038
+
+        return pressure
+
+    @max_pressure.setter
+    def max_pressure(self, input_pressure):
+        logger.info("Setting pump %s max pressure to %f %s", self.name, input_pressure, self.pressure_units)
+
+        if self.pressure_units.lower() == 'mpa':
+            pressure = input_pressure*145.038
+        elif self.pressure_units == 'bar':
+            pressure = input_pressure*14.5038
+        else:
+            pressure = input_pressure
+
+        if self._pump_max_pressure != -1 and pressure > self._pump_max_pressure:
+            logger.warning('Requested max pressure %f is greater than the pump maximum '
+                'pressure %f. Setting the maximum pressure to the pump maximum', pressure,
+                self._pump_max_pressure)
+            pressure = self._pump_max_pressure
+
+        self._max_pressure = pressure
+
+        if self._pump_pressure_unit.lower == 'mpa':
+            pressure = pressure*100/145.038 #There's weirdness in how you send the pressure command
+        elif self._pump_pressure_unit == 'bar':
+            pressure = pressure*10/14.5038
+
+        self.send_cmd('UP{:0>5}'.format(int(round(pressure+0.00000001))))
+
+    @property
+    def min_pressure(self):
+        pressure = self._min_pressure
+
+        if self.pressure_units.lower() == 'mpa':
+            pressure = pressure/145.038
+        elif self.pressure_units == 'bar':
+            pressure = pressure/14.5038
+
+        return pressure
+
+    @min_pressure.setter
+    def min_pressure(self, input_pressure):
+        logger.info("Setting pump %s min pressure to %f %s", self.name, input_pressure, self.pressure_units)
+
+        if self.pressure_units.lower() == 'mpa':
+            pressure = input_pressure*145.038
+        elif self.pressure_units == 'bar':
+            pressure = input_pressure*14.5038
+        else:
+            pressure = input_pressure
+
+        self._min_pressure = max(0, pressure)
+
+        if self._pump_pressure_unit.lower == 'mpa':
+            pressure = pressure*100/145.038 #There's weirdness in how you send the pressure command
+        elif self._pump_pressure_unit == 'bar':
+            pressure = pressure*10/14.5038
+
+        self.send_cmd('LP{:0>5}'.format(int(round(pressure+0.00000001))))
+
+    def send_cmd(self, cmd, get_response=True):
+        """
+        Sends a command to the pump.
+
+        :param cmd: The command to send to the pump.
+        :type cmd: str, bytes
+
+        :param get_response: Whether the program should get a response from the pump
+        :type get_response: bool
+        """
+        logger.debug("Sending pump %s cmd %r", self.name, cmd)
+
+        self.comm_lock.acquire()
+        ret = self.pump_comm.write(cmd, get_response, '\r', '/')
+        self.comm_lock.release()
+
+        if get_response:
+            logger.debug("Pump %s returned %r", self.name, ret)
+
+        return ret
+
+    def is_moving(self):
+        ret = self.send_cmd('CS')
+
+        if ret.startswith('OK') and ret.endswith('/'):
+            vals = ret.split(',')
+
+            if vals[6] == '0':
+                self._is_flowing = False
+            else:
+                self._is_flowing = True
+
+        return self._is_flowing
+
+    def start_flow(self, wait=True):
+        logger.info("Pump %s starting continuous flow at %f %s", self.name, self.flow_rate, self.units)
+
+        if not self.is_moving():
+            logger.debug('pump is not moving')
+            target_flow_rate = copy.copy(self.flow_rate)
+            self.flow_rate = 0
+            self.send_cmd("RU")
+
+            start = time.time()
+            if wait:
+                while not self.is_moving():
+                    time.sleep(0.01)
+
+                    if time.time() - start > self.timeout:
+                        break
+                        logger.error('TImed out waiting for pump %s to start', self.name)
+
+            ramp_thread = threading.Thread(target=self._ramp_flow, args=(self.flow_rate, target_flow_rate))
+            ramp_thread.start()
+
+        else:
+            logger.debug('pump is moving')
+            self.send_cmd("RU")
+
+            start = time.time()
+            if wait:
+                while not self.is_moving():
+                    time.sleep(0.01)
+
+                    if time.time() - start > self.timeout:
+                        break
+                        logger.error('TImed out waiting for pump %s to start', self.name)
+
+    def start_immediate(self, wait=True):
+        # Starts with no ramp! Really should only be used for testing!
+        logger.info("Pump %s starting continuous flow at %f %s", self.name, self.flow_rate, self.units)
+
+        self.send_cmd("RU")
+
+        start = time.time()
+        if wait:
+            while not self._is_flowing:
+                self.get_status()
+
+                if time.time() - start > self.timeout:
+                    break
+                    logger.error('TImed out waiting for pump %s to start', self.name)
+
+    def stop(self, wait=True):
+        logger.info("Pump %s stopping all motions", self.name)
+
+        self._is_dispensing = False
+
+        if self.is_moving():
+            if self._ramping_flow:
+                self._accel_stop.set()
+            while self._ramping_flow:
+                time.sleep(0.01)
+
+            self._stop_flow_after_ramp = True
+            self.flow_rate = 0
+
+        else:
+            self.send_cmd("ST")
+
+            start = time.time()
+            if wait:
+                while self._is_flowing:
+                    self.get_status()
+
+                    if time.time() - start > self.timeout:
+                        break
+                        logger.error('TImed out waiting for pump %s to start', self.name)
+
+    def abort(self):
+        self.send_cmd("ST")
+
+        self._is_dispensing = False
+
+        if self._ramping_flow:
+            self._accel_stop.set()
+        while self._ramping_flow:
+            time.sleep(0.01)
+
+        self.get_status()
+
+    def _ramp_flow(self, current_flow_rate, target_flow_rate):
+        # Input flow rates should be in pump base units, e.g. ml/min for SSI pumps
+        logger.info('Ramping flow for pump %s from %f to %f at %f ml/min',
+            self.name, current_flow_rate, target_flow_rate, self._flow_rate_acceleration)
+        self._ramping_flow = True
+
+        while self._accel_stop.is_set():
+            time.sleep(0.001)
+
+        if target_flow_rate > current_flow_rate:
+            mult = 1
+        else:
+            mult = -1
+
+        starting_flow_rate = copy.copy(current_flow_rate)
+
+        start_time = time.time()
+        prev_time = time.time()
+
+        if self._flow_rate_acceleration == 0:
+            self._send_flow_rate_cmd(target_flow_rate)
+
+        else:
+            while target_flow_rate != current_flow_rate:
+                if self._accel_stop.is_set():
+                    break
+
+                current_time = time.time()
+
+                time_since_start = current_time - start_time
+                time_since_prev = current_time - prev_time
+
+                expected_flow_rate = starting_flow_rate + mult*self._flow_rate_acceleration*time_since_start/60
+                flow_rate_inc = mult*self._flow_rate_acceleration*time_since_prev/60
+
+                if abs(expected_flow_rate - current_flow_rate) > abs(flow_rate_inc*1.1):
+                    next_flow_rate = current_flow_rate + flow_rate_inc*1.1
+                else:
+                    next_flow_rate = expected_flow_rate
+
+                if mult > 0 and next_flow_rate > target_flow_rate:
+                    next_flow_rate = target_flow_rate
+                elif mult < 0 and next_flow_rate < target_flow_rate:
+                    next_flow_rate = target_flow_rate
+
+                self._send_flow_rate_cmd(next_flow_rate)
+
+                current_flow_rate = next_flow_rate
+
+        self._ramping_flow = False
+        self._accel_stop.clear()
+        logger.info('Finished ramping flow for pump %s', self.name)
+
+        if self._stop_flow_after_ramp:
+            logger.info('Stopping pump %s after ramp', self.name)
+            self.send_cmd("ST")
+            self._stop_flow_after_ramp = False
+
+    def _send_flow_rate_cmd(self, rate):
+        logger.debug('sending flow rate command')
+        rate = round(rate, self._flow_rate_decimals)
+        self._flow_rate = rate
+
+        if '.' in str(rate):
+            rate_dec = '{:0<{fill}}'.format(str(rate).split('.')[-1], fill=self._flow_rate_decimals)
+        else:
+            rate_dec = ''.zfill(self._flow_rate_decimals)
+        rate_str = '{:0>5}'.format('{}{}'.format(str(rate).split('.')[0], rate_dec))
+
+        self.send_cmd('FI{}'.format(rate_str))
+
+    def dispense(self, vol, units='mL'):
+        if units == 'uL':
+            vol = vol*1000
+        elif units == 'nL':
+            vol = vol*1e6
+
+        self._dispensing_volume = vol
+        self._is_dispensing = True
+
+        self.start_flow()
+
+        dispense_thread = threading.Thread(target=self._run_dispense)
+        dispense_thread.start()
+
+    def _run_dispense(self):
+        previous_time = time.time()
+        previous_fr = self._flow_rate
+
+        while self._is_flowing and self._is_dispensing:
+            current_fr = copy.copy(self._flow_rate)
+            current_time = time.time()
+            delta_vol = ((current_fr + previous_fr)/2./60.)*(current_time-previous_time)
+
+            self._dispensing_volume -= delta_vol
+
+            stop_vol = (current_fr/self._flow_rate_acceleration)*(current_fr/2.)
+
+            previous_time = current_time
+            previous_fr = current_fr
+
+            if self._dispensing_volume - stop_vol <= 0:
+                self.stop()
+
+            time.sleep(0.1)
+
+    def get_status(self):
+        ret = self.send_cmd('CS')
+
+        if ret.startswith('OK') and ret.endswith('/'):
+            vals = ret.split(',')
+            self._flow_rate = float(vals[1])
+            self._max_pressure = float(vals[2])
+
+            if self._pump_pressure_unit == 'mpa':
+                self._max_pressure *= 145.038
+            elif self._pump_pressure_unit =='bar':
+                self._max_pressure *= 14.5038
+
+            self._min_pressure = float(vals[3])
+
+            if self._pump_pressure_unit == 'mpa':
+                self._min_perssure *= 145.038
+            elif self._pump_pressure_unit =='bar':
+                self._min_perssure *= 14.5038
+
+            self._pressure_unit = vals[4]
+
+            if vals[6] == '0':
+                self._is_flowing = False
+            else:
+                self._is_flowing = True
+
+    def get_faults(self):
+        ret = self.send_cmd('RF')
+
+        if ret.startswith('OK') and ret.endswith('/'):
+            vals = ret.split(',')
+
+            if vals[1] == '0':
+                self.motor_stall_fault = False
+            else:
+                self.motor_stall_fault = True
+
+            if vals[2] == '0':
+                self.upl_fault = False
+            else:
+                self.upl_fault = True
+
+            if vals[3] == '0':
+                self.lpl_fault = False
+            else:
+                self.lpl_fault = True
+
+        ret = self.send_cmd('LS')
+
+        if ret.startswith('OK') and ret.endswith('/'):
+            val = ret.split(':')[-1].strip('/')
+
+            if val == '0':
+                self.leak_fault = False
+            else:
+                self.leak_fault = True
+
+        self.fault = self.motor_stall_fault or self.upl_fault or self.lpl_fault or self.leak_fault
+
+    def get_pressure(self):
+        ret = self.send_cmd('PR')
+
+        if ret.startswith('OK') and ret.endswith('/'):
+            val = float(ret.split(',')[-1].strip('/'))
+
+            if self._pump_pressure_unit == 'mpa':
+                val *= 145.038
+            elif self._pump_pressure_unit =='bar':
+                val *= 14.5038
+
+            if self.pressure_units.lower() == 'mpa':
+                pressure = val*145.038
+            elif self.pressure_units == 'bar':
+                pressure = val*14.5038
+            else:
+                pressure = val
+
+        else:
+            pressure = -1
+
+        return pressure
+
+    def is_ramping(self):
+        return self._ramping_flow
+
+    def clear_faults(self):
+        self.send_cmd('#', False)
+        self.send_cmd('CF')
+        self.get_faults()
+
+    def keypad_enable(self, enable):
+        if enable:
+            self.send_cmd('KE')
+        else:
+            self.send_cmd('KD')
+
+    def disconnect(self):
+        logger.debug("Closing pump %s serial connection", self.name)
+        self.keypad_enable(True)
+
+        self._is_dispensing = False
+        self._accel_stop.set()
+
+        self.pump_comm.ser.close()
+
 class SoftPump(Pump):
     """
     This class contains the settings and communication for a generic pump.
@@ -2023,6 +2713,7 @@ class PumpCommThread(threading.Thread):
         self._commands = {'connect'     : self._connect_pump,
                         'set_flow_rate' : self._set_flow_rate,
                         'set_refill_rate': self._set_refill_rate,
+                        'set_flow_accel': self._set_flow_acceleration,
                         'set_units'     : self._set_units,
                         'start_flow'    : self._start_flow,
                         'stop'          : self._stop_flow,
@@ -2051,6 +2742,7 @@ class PumpCommThread(threading.Thread):
         self.known_pumps = {'VICI_M50'      : M50Pump,
                             'PHD_4400'      : PHD4400Pump,
                             'NE_500'        : NE500Pump,
+                            'SSI_Next_Gen'  : SSINextGenPump,
                             'Soft'          : SoftPump,
                             'Soft_Syringe'  : SoftSyringePump,
                             }
@@ -2073,7 +2765,6 @@ class PumpCommThread(threading.Thread):
 
             if self._stop_event.is_set():
                 logger.debug("Stop event detected")
-                self._abort()
                 break
 
             if command is not None:
@@ -2099,6 +2790,10 @@ class PumpCommThread(threading.Thread):
             self._stop_event.clear()
         else:
             self._abort()
+
+        for name, pump in self._connected_pumps.items():
+            pump.disconnect()
+
         logger.info("Quitting pump control thread: %s", self.name)
 
     def _connect_pump(self, device, name, pump_type, **kwargs):
@@ -2194,6 +2889,20 @@ class PumpCommThread(threading.Thread):
         pump = self._connected_pumps[name]
         pump.flow_rate = flow_rate
         logger.debug("Pump %s flow rate set", name)
+
+    def _set_flow_acceleration(self, name, acceleration):
+        """
+        This method sets the flow rate for a pump.
+
+        :param str name: The unique identifier for a pump that was used in the
+            :py:func:`_connect_pump` method.
+
+        :param float flow_rate: The flow rate for the pump.
+        """
+        logger.info("Setting pump %s flow rate acceleration", name)
+        pump = self._connected_pumps[name]
+        pump.flow_rate_acceleration = acceleration
+        logger.debug("Pump %s flow rate acceleration set", name)
 
     def _set_refill_rate(self, name, refill_rate):
         """
@@ -2548,6 +3257,13 @@ class PumpPanel(wx.Panel):
 
         self.SetSizer(self.top_sizer)
 
+        self._current_move_status = False
+        self._current_flow_rate = 0
+        self._current_refill_rate = 0
+        self._current_flow_accel = 0
+        self._current_volume = 0
+        self._current_pressure = 0
+
         self._initpump(pump_type, comport, pump_args, pump_kwargs)
 
 
@@ -2564,6 +3280,10 @@ class PumpPanel(wx.Panel):
             style=wx.GA_HORIZONTAL|wx.GA_SMOOTH)
         self.syringe_vol_gauge_low = wx.StaticText(self, label='0')
         self.syringe_vol_gauge_high = wx.StaticText(self, label='')
+        self.pressure_label = wx.StaticText(self, label='Pressure:')
+        self.pressure = wx.StaticText(self, label='', size=(40, -1),
+            style=wx.ST_NO_AUTORESIZE)
+        self.pressure_units = wx.StaticText(self, label='psi')
 
         self.vol_gauge = wx.BoxSizer(wx.HORIZONTAL)
         self.vol_gauge.Add(self.syringe_vol_gauge_low,
@@ -2592,6 +3312,18 @@ class PumpPanel(wx.Panel):
             flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
         status_grid.Add(self.set_syringe_volume, (4,1), span=(1,2),
             flag=wx.LEFT|wx.ALIGN_RIGHT|wx.ALIGN_CENTER_VERTICAL)
+        tatus_grid.Add(self.pressure_label, (4,0),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        status_grid.Add(self.pressure, (4,1),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        status_grid.Add(self.pressure_units, (4,2),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+
+
+        self.pressure_label.Hide()
+        self.pressure.Hide()
+        self.pressure_units.Hide()
+
 
         self.status_sizer = wx.StaticBoxSizer(wx.StaticBox(self, label='Info'),
             wx.VERTICAL)
@@ -2599,16 +3331,27 @@ class PumpPanel(wx.Panel):
 
         self.mode_ctrl = wx.Choice(self, choices=['Continuous flow', 'Fixed volume'])
         self.mode_ctrl.SetSelection(0)
+        self.direction_lbl = wx.StaticText(self, label='Direction:')
         self.direction_ctrl = wx.Choice(self, choices=['Dispense', 'Aspirate'])
         self.direction_ctrl.SetSelection(0)
         self.flow_rate_ctrl = wx.TextCtrl(self, value=flow_rate, size=(60,-1))
         self.flow_units_lbl = wx.StaticText(self, label='mL/min')
+        self.flow_accel_lbl = wx.StaticText(self, label='Flow accel.:')
+        self.flow_accel_ctrl = wx.TextCtrl(self, value=flow_rate, size=(60,-1))
+        self.flow_accel_units_lbl = wx.StaticText(self, label='mL/min^2')
         self.refill_rate_lbl = wx.StaticText(self, label='Refill rate:')
         self.refill_rate_ctrl = wx.TextCtrl(self, value=refill_rate, size=(60,-1))
-        self.refill_rate_units = wx.StaticText(self, label='mL')
+        self.refill_units_lbl = wx.StaticText(self, label='mL/min')
         self.volume_lbl = wx.StaticText(self, label='Volume:')
         self.volume_ctrl = wx.TextCtrl(self, size=(60,-1))
         self.vol_units_lbl = wx.StaticText(self, label='mL')
+
+
+        #Only turn on for the SSI pump
+        self.flow_accel_lbl.Hide()
+        self.flow_accel_ctrl.Hide()
+        self.flow_accel_units_lbl.Hide()
+
 
         self.mode_ctrl.Bind(wx.EVT_CHOICE, self._on_mode)
 
@@ -2617,7 +3360,7 @@ class PumpPanel(wx.Panel):
             flag=wx.ALIGN_CENTER_VERTICAL)
         basic_ctrl_sizer.Add(self.mode_ctrl, (0,1), span=(1,2),
             flag=wx.ALIGN_CENTER_VERTICAL)
-        basic_ctrl_sizer.Add(wx.StaticText(self, label='Direction:'), (1,0),
+        basic_ctrl_sizer.Add(self.direction_lbl, (1,0),
             flag=wx.ALIGN_CENTER_VERTICAL)
         basic_ctrl_sizer.Add(self.direction_ctrl, (1,1), span=(1,2),
             flag=wx.ALIGN_CENTER_VERTICAL)
@@ -2627,17 +3370,23 @@ class PumpPanel(wx.Panel):
             flag=wx.ALIGN_CENTER_VERTICAL)
         basic_ctrl_sizer.Add(self.flow_units_lbl, (2,2),
             flag=wx.ALIGN_CENTER_VERTICAL|wx.ALIGN_LEFT)
-        basic_ctrl_sizer.Add(self.refill_rate_lbl, (3,0),
+        basic_ctrl_sizer.Add(self.flow_accel_lbl, (3,0),
             flag=wx.ALIGN_CENTER_VERTICAL)
-        basic_ctrl_sizer.Add(self.refill_rate_ctrl, (3,1),
+        basic_ctrl_sizer.Add(self.flow_accel_ctrl, (3,1),
             flag=wx.ALIGN_CENTER_VERTICAL)
-        basic_ctrl_sizer.Add(self.refill_rate_units, (3,2),
+        basic_ctrl_sizer.Add(self.flow_accel_units_lbl, (3,2),
             flag=wx.ALIGN_CENTER_VERTICAL|wx.ALIGN_LEFT)
-        basic_ctrl_sizer.Add(self.volume_lbl, (4,0),
+        basic_ctrl_sizer.Add(self.refill_rate_lbl, (4,0),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        basic_ctrl_sizer.Add(self.refill_rate_ctrl, (4,1),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        basic_ctrl_sizer.Add(self.refill_units_lbl, (4,2),
+            flag=wx.ALIGN_CENTER_VERTICAL|wx.ALIGN_LEFT)
+        basic_ctrl_sizer.Add(self.volume_lbl, (5,0),
             flag=wx.RESERVE_SPACE_EVEN_IF_HIDDEN|wx.ALIGN_CENTER_VERTICAL)
-        basic_ctrl_sizer.Add(self.volume_ctrl, (4,1),
+        basic_ctrl_sizer.Add(self.volume_ctrl, (5,1),
             flag=wx.RESERVE_SPACE_EVEN_IF_HIDDEN|wx.ALIGN_CENTER_VERTICAL)
-        basic_ctrl_sizer.Add(self.vol_units_lbl, (4,2),
+        basic_ctrl_sizer.Add(self.vol_units_lbl, (5,2),
             flag=wx.RESERVE_SPACE_EVEN_IF_HIDDEN|wx.ALIGN_CENTER_VERTICAL|wx.ALIGN_LEFT)
         basic_ctrl_sizer.AddGrowableCol(1)
         basic_ctrl_sizer.SetEmptyCellSize((0,0))
@@ -2668,7 +3417,7 @@ class PumpPanel(wx.Panel):
         self.vol_unit_ctrl.Bind(wx.EVT_CHOICE, self._on_units)
         self.time_unit_ctrl.Bind(wx.EVT_CHOICE, self._on_units)
 
-        gen_settings_sizer = wx.FlexGridSizer(rows=4, cols=2, vgap=2, hgap=2)
+        gen_settings_sizer = wx.FlexGridSizer(cols=2, vgap=2, hgap=2)
         gen_settings_sizer.AddGrowableCol(1)
         gen_settings_sizer.Add(wx.StaticText(self, label='Pump type:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
@@ -2787,6 +3536,20 @@ class PumpPanel(wx.Panel):
             self.settings_box_sizer.Show(self.soft_syringe_settings_sizer, recursive=True)
             self.pump_mode = 'syringe'
 
+        elif self.type_ctrl.GetStringSelection() == 'SSI Next Gen':
+            self.flow_accel_lbl.Show()
+            self.flow_accel_ctrl.Show()
+            self.flow_accel_units_lbl.Show()
+
+            self.pressure_label.Show()
+            self.pressure.Show()
+            self.pressure_units.Show()
+
+            self.direction_lbl.Hide()
+            self.direction_ctrl.Hide()
+
+            self.pump_mode = 'continuous'
+
         if self.pump_mode == 'continuous':
             self.status_sizer.Hide(self.vol_gauge, recursive=True)
             self.syringe_volume.Hide()
@@ -2795,14 +3558,14 @@ class PumpPanel(wx.Panel):
             self.set_syringe_volume.Hide()
             self.refill_rate_ctrl.Hide()
             self.refill_rate_lbl.Hide()
-            self.refill_rate_units.Hide()
+            self.refill_units_lbl.Hide()
 
         vol_unit = self.vol_unit_ctrl.GetStringSelection()
         t_unit = self.time_unit_ctrl.GetStringSelection()
         self.flow_units_lbl.SetLabel('{}/{}'.format(vol_unit, t_unit))
         self.vol_units_lbl.SetLabel(vol_unit)
         self.syringe_volume_units.SetLabel(vol_unit)
-        self.refill_rate_units.SetLabel('{}/{}'.format(vol_unit, t_unit))
+        self.refill_units_lbl.SetLabel('{}/{}'.format(vol_unit, t_unit))
         self.Refresh()
 
         return top_sizer
@@ -2908,6 +3671,29 @@ class PumpPanel(wx.Panel):
             self.settings_box_sizer.Hide(self.phd4400_settings_sizer, recursive=True)
             self.settings_box_sizer.Show(self.soft_syringe_settings_sizer, recursive=True)
             self.pump_mode = 'syringe'
+        elif pump == 'SSI Next Gen':
+            self.flow_accel_lbl.Show()
+            self.flow_accel_ctrl.Show()
+            self.flow_accel_units_lbl.Show()
+            self.direction_lbl.Hide()
+            self.direction_ctrl.Hide()
+            self.pressure_label.Show()
+            self.pressure.Show()
+            self.pressure_units.Show()
+            self.settings_box_sizer.Hide(self.m50_settings_sizer, recursive=True)
+            self.settings_box_sizer.Hide(self.phd4400_settings_sizer, recursive=True)
+            self.settings_box_sizer.Hide(self.soft_syringe_settings_sizer, recursive=True)
+            self.pump_mode = 'continuous'
+
+        if pump != 'SSI Next Gen':
+            self.flow_accel_lbl.Hide()
+            self.flow_accel_ctrl.Hide()
+            self.flow_accel_units_lbl.Hide()
+            self.direction_lbl.Show()
+            self.direction_ctrl.Show()
+            self.pressure_label.Hide()
+            self.pressure.Hide()
+            self.pressure_units.Hide()
 
         if self.pump_mode == 'continuous':
             self.status_sizer.Hide(self.vol_gauge, recursive=True)
@@ -2917,7 +3703,7 @@ class PumpPanel(wx.Panel):
             self.set_syringe_volume.Hide()
             self.refill_rate_ctrl.Hide()
             self.refill_rate_lbl.Hide()
-            self.refill_rate_units.Hide()
+            self.refill_units_lbl.Hide()
         else:
             self.status_sizer.Show(self.vol_gauge, recursive=True)
             self.syringe_volume.Show()
@@ -2926,7 +3712,7 @@ class PumpPanel(wx.Panel):
             self.set_syringe_volume.Show()
             self.refill_rate_ctrl.Show()
             self.refill_rate_lbl.Show()
-            self.refill_rate_units.Show()
+            self.refill_units_lbl.Show()
 
         self.Layout()
 
@@ -2941,6 +3727,7 @@ class PumpPanel(wx.Panel):
         self.vol_units_lbl.SetLabel(vol_unit)
         self.syringe_volume_units.SetLabel(vol_unit)
         self.refill_units_lbl.SetLabel('{}/{}'.format(vol_unit, t_unit))
+        self.flow_accel_units_lbl.SetLabel('{}/{}^2'.format(vol_unit, t_unit))
 
         try:
             flow_rate = float(self.flow_rate_ctrl.GetValue())
@@ -2972,8 +3759,6 @@ class PumpPanel(wx.Panel):
         except ValueError:
             refill_rate = 0
 
-        old_vol, old_t = old_units.split('/')
-
         if old_vol != vol_unit:
             if (old_vol == 'nL' and vol_unit == 'uL') or (old_vol == 'uL' and vol_unit == 'mL'):
                 refill_rate = refill_rate/1000.
@@ -2991,6 +3776,105 @@ class PumpPanel(wx.Panel):
 
         if refill_rate != 0:
             self.refill_rate_ctrl.ChangeValue('{0:.3f}'.format(refill_rate))
+
+        try:
+            flow_rate_accel = float(self.flow_accel_ctrl.GetValue())
+        except ValueError:
+            flow_rate_accel = 0
+
+        if old_vol != vol_unit:
+            if (old_vol == 'nL' and vol_unit == 'uL') or (old_vol == 'uL' and vol_unit == 'mL'):
+                flow_rate_accel = flow_rate_accel/1000.
+            elif old_vol == 'nL' and vol_unit == 'mL':
+                flow_rate_accel = flow_rate_accel/1000000.
+            elif (old_vol == 'mL' and vol_unit == 'uL') or (old_vol == 'uL' and vol_unit == 'nL'):
+                flow_rate_accel = flow_rate_accel*1000.
+            elif old_vol == 'mL' and vol_unit == 'nL':
+                flow_rate_accel = flow_rate_accel*1000000.
+        if old_t != t_unit:
+            if old_t == 'min':
+                flow_rate_accel = flow_rate_accel/(60**2)
+            else:
+                flow_rate_accel = flow_rate_accel*(60**2)
+
+        if flow_rate_accel != 0:
+            self.flow_accel_ctrl.ChangeValue('{0:.3f}'.format(flow_rate_accel))
+
+
+        try:
+            syringe_vol = float(self.syringe_volume.GetLabel())
+        except ValueError:
+            syringe_vol = 0
+
+        if old_vol != vol_unit:
+            if (old_vol == 'nL' and vol_unit == 'uL') or (old_vol == 'uL' and vol_unit == 'mL'):
+                syringe_vol = syringe_vol/1000.
+            elif old_vol == 'nL' and vol_unit == 'mL':
+                syringe_vol = syringe_vol/1000000.
+            elif (old_vol == 'mL' and vol_unit == 'uL') or (old_vol == 'uL' and vol_unit == 'nL'):
+                syringe_vol = syringe_vol*1000.
+            elif old_vol == 'mL' and vol_unit == 'nL':
+                syringe_vol = syringe_vol*1000000.
+
+        if syringe_vol != 0:
+            self.syringe_volume.SetLabel('{0:.3f}'.format(syringe_vol))
+
+
+        try:
+            syringe_vol_gauge_high = float(self.syringe_vol_gauge_high.GetLabel())
+        except ValueError:
+            syringe_vol_gauge_high = 0
+
+        if old_vol != vol_unit:
+            if (old_vol == 'nL' and vol_unit == 'uL') or (old_vol == 'uL' and vol_unit == 'mL'):
+                syringe_vol_gauge_high = syringe_vol_gauge_high/1000.
+            elif old_vol == 'nL' and vol_unit == 'mL':
+                syringe_vol_gauge_high = syringe_vol_gauge_high/1000000.
+            elif (old_vol == 'mL' and vol_unit == 'uL') or (old_vol == 'uL' and vol_unit == 'nL'):
+                syringe_vol_gauge_high = syringe_vol_gauge_high*1000.
+            elif old_vol == 'mL' and vol_unit == 'nL':
+                syringe_vol_gauge_high = syringe_vol_gauge_high*1000000.
+
+        if syringe_vol_gauge_high != 0:
+            self.syringe_vol_gauge_high.SetLabel('{0:.3f}'.format(syringe_vol_gauge_high))
+
+
+        try:
+            syringe_vol_gauge = float(self.syringe_vol_gauge.GetValue())
+        except ValueError:
+            syringe_vol_gauge = 0
+
+        if old_vol != vol_unit:
+            if (old_vol == 'nL' and vol_unit == 'uL') or (old_vol == 'uL' and vol_unit == 'mL'):
+                syringe_vol_gauge = syringe_vol_gauge/1000.
+            elif old_vol == 'nL' and vol_unit == 'mL':
+                syringe_vol_gauge = syringe_vol_gauge/1000000.
+            elif (old_vol == 'mL' and vol_unit == 'uL') or (old_vol == 'uL' and vol_unit == 'nL'):
+                syringe_vol_gauge = syringe_vol_gauge*1000.
+            elif old_vol == 'mL' and vol_unit == 'nL':
+                syringe_vol_gauge = syringe_vol_gauge*1000000.
+
+        if syringe_vol_gauge != 0:
+            self.syringe_vol_gauge.ChangeValue('{0:.3f}'.format(syringe_vol_gauge))
+
+
+        try:
+            volume = float(self.volume_ctrl.GetValue())
+        except ValueError:
+            volume = 0
+
+        if old_vol != vol_unit:
+            if (old_vol == 'nL' and vol_unit == 'uL') or (old_vol == 'uL' and vol_unit == 'mL'):
+                volume = volume/1000.
+            elif old_vol == 'nL' and vol_unit == 'mL':
+                volume = volume/1000000.
+            elif (old_vol == 'mL' and vol_unit == 'uL') or (old_vol == 'uL' and vol_unit == 'nL'):
+                volume = volume*1000.
+            elif old_vol == 'mL' and vol_unit == 'nL':
+                volume = volume*1000000.
+
+        if volume != 0:
+            self.volume_ctrl.ChangeValue('{0:.3f}'.format(volume))
 
         logger.debug('Changed the pump units to %s and %s for pump %s', vol_unit, t_unit, self.name)
 
@@ -3056,7 +3940,6 @@ class PumpPanel(wx.Panel):
 
                 self.run_button.SetLabel('Start')
                 self.fr_button.Hide()
-                self.monitor_flow_evt.clear()
 
                 self._set_status('Done')
 
@@ -3153,6 +4036,8 @@ class PumpPanel(wx.Panel):
         self.connected = True
         self.connect_button.SetLabel('Reconnect')
 
+        self.monitor_flow_evt.set()
+
         return
 
     def start_callback(self):
@@ -3164,12 +4049,94 @@ class PumpPanel(wx.Panel):
         volume = self.pump.volume
         # self.comm_lock.release()
 
-        wx.CallAfter(self._set_status_volume, volume)
-        wx.CallAfter(self.syringe_vol_gauge.SetValue,
-            int(round(float(volume)*1000)))
+        if volume != self._current_volume:
+            wx.CallAfter(self._set_status_volume, volume)
+            wx.CallAfter(self.syringe_vol_gauge.SetValue,
+                int(round(float(volume)*1000)))
+            self._current_volume = volume
 
     def _get_volume_delay(self, delay):
         wx.CallLater(delay*1000, self._get_volume)
+
+    def _get_flow_rate(self):
+
+        fr = self.pump.flow_rate
+        if fr != self._current_flow_rate:
+            wx.CallAfter(self.flow_rate_ctrl.SetValue, str(fr))
+            self._current_flow_rate = fr
+
+        try:
+            accel = self.pump.flow_rate_acceleration
+            if accel != self._current_flow_accel:
+                wx.CallAfter(self.flow_accel_ctrl.SetValue, str(accel))
+                self._current_flow_accel = accel
+
+        except Exception:
+            pass
+
+        try:
+            rr = self.pump.refill_rate
+            if rr != self._current_refill_rate:
+                wx.CallAfter(self.refill_rate_ctrl.SetValue, str(rr))
+                self._current_refill_rate = rr
+
+        except Exception:
+            pass
+
+    def _get_pressure(self):
+
+        try:
+            pressure = self.pump.pressure
+
+            if pressure != self._current_pressure:
+                wx.CallAfter(self.pressure.SetLabel, str(pressure))
+                self._current_pressure = pressure
+
+        except Exception:
+            pass
+
+    def _get_pump_moving(self):
+
+        is_moving = self.pump.is_moving()
+        # self.comm_lock.release()
+
+        if is_moving and not self._current_move_status:
+            wx.CallAfter(self.run_button.SetLabel, 'Stop')
+            wx.CallAfter(self.fr_button.Show)
+
+            if self.pump_mode == 'continuous':
+                if self.mode_ctrl.GetStringSelection() == 'Fixed volume':
+                    cmd = self.direction_ctrl.GetStringSelection().lower()
+                    self._set_status(cmd.capitalize())
+                else:
+                    self._set_status('Flowing')
+            else:
+                cmd = self.direction_ctrl.GetStringSelection().lower()
+                self._set_status(cmd.capitalize())
+
+            self._current_move_status = is_moving
+
+        elif not is_moving and self._current_move_status:
+                wx.CallAfter(self.run_button.SetLabel, 'Start')
+                wx.CallAfter(self.fr_button.Hide)
+                wx.CallAfter(self._set_status, 'Done')
+
+                self._current_move_status = is_moving
+
+                if self.pump_mode == 'syringe':
+                    self._send_cmd('stop')
+
+    def _get_pump_status(self):
+        try:
+            self._get_volume()
+        except Exception:
+            pass
+
+        self._get_flow_rate()
+
+        self._get_pump_moving()
+
+        self._get_pressure()
 
     def _set_status(self, status):
         """
@@ -3192,6 +4159,8 @@ class PumpPanel(wx.Panel):
         :rtype: bool
         """
         self._send_cmd('set_units')
+
+        self._set_flowaccel()
 
         if self.type_ctrl.GetStringSelection() == 'NE 500':
             if self.direction_ctrl.GetStringSelection() == 'Dispense':
@@ -3244,6 +4213,19 @@ class PumpPanel(wx.Panel):
 
         return success
 
+    def _set_flowaccel(self):
+        if self.type_ctrl.GetStringSelection() == 'SSI Next Gen':
+            try:
+                fr = float(self.flow_accel_ctrl.GetValue())
+                self._send_cmd('set_flow_accel')
+                success = True
+                logger.debug('Set pump %s flow accelration to %s', self.name, str(fr))
+            except Exception:
+                msg = "Flow rate acceleration must be a number."
+                wx.MessageBox(msg, "Error setting flow rate acceleration")
+                success = False
+                logger.debug('Failed to set pump %s flow rate acceleration', self.name)
+
     def _monitor_flow(self):
         """
         Called every second when the pump is moving in fixed volume mode.
@@ -3252,26 +4234,9 @@ class PumpPanel(wx.Panel):
         """
         while True:
             self.monitor_flow_evt.wait()
-            # self.comm_lock.acquire()
-            is_moving = self.pump.is_moving()
-            # self.comm_lock.release()
-
-            if not is_moving:
-                wx.CallAfter(self.run_button.SetLabel, 'Start')
-                wx.CallAfter(self.fr_button.Hide)
-                wx.CallAfter(self._set_status, 'Done')
-                self.monitor_flow_evt.clear()
-
-                if self.pump_mode == 'syringe':
-                    self._send_cmd('stop')
-
-            if self.pump_mode == 'syringe':
-                self._get_volume()
+            self._get_pump_status
 
             time.sleep(1)
-
-            if not is_moving and self.pump_mode == 'syringe':
-                wx.CallAfter(self._get_volume_delay, 2)
 
     def _send_cmd(self, cmd, args=None):
         """
@@ -3285,21 +4250,21 @@ class PumpPanel(wx.Panel):
         if cmd == 'is_moving':
             self.pump_cmd_q.append(('is_moving', (self.name), {}))
         elif cmd == 'start_flow':
-            self.pump_cmd_q.append(('start_flow', (self.name, self.start_callback), {}))
+            self.pump_cmd_q.append(('start_flow', (self.name), {}))
         elif cmd == 'stop':
             self.pump_cmd_q.append(('stop', (self.name,), {}))
         elif cmd == 'dispense':
             units = self.flow_units_lbl.GetLabel()
             vol = float(self.volume_ctrl.GetValue())
-            self.pump_cmd_q.append(('dispense', (self.name, vol, self.start_callback, units), {}))
+            self.pump_cmd_q.append(('dispense', (self.name, vol, units), {}))
         elif cmd == 'aspirate':
             units = self.flow_units_lbl.GetLabel()
             vol = float(self.volume_ctrl.GetValue())
-            self.pump_cmd_q.append(('aspirate', (self.name, vol, self.start_callback, units), {}))
+            self.pump_cmd_q.append(('aspirate', (self.name, vol, units), {}))
         elif cmd == 'dispense_all':
-            self.pump_cmd_q.append(('dispense_all', (self.name, self.start_callback), {}))
+            self.pump_cmd_q.append(('dispense_all', (self.name), {}))
         elif cmd == 'aspirate_all':
-            self.pump_cmd_q.append(('aspirate_all', (self.name, self.start_callback), {}))
+            self.pump_cmd_q.append(('aspirate_all', (self.name), {}))
         elif cmd == 'set_flow_rate':
             direction = self.direction_ctrl.GetStringSelection().lower()
             if self.pump_mode == 'continuous':
@@ -3311,6 +4276,9 @@ class PumpPanel(wx.Panel):
                 mult = 1
             fr = mult*float(self.flow_rate_ctrl.GetValue())
             self.pump_cmd_q.append(('set_flow_rate', (self.name, fr), {}))
+        elif cmd == 'set_flow_accel':
+            accel = float(self.flow_accel_ctrl.GetValue())
+            self.pump_cmd_q.append(('set_flow_accel', (self.name, accel), {}))
         elif cmd == 'set_refill_rate':
             fr = float(self.refill_rate_ctrl.GetValue())
             self.pump_cmd_q.append(('set_refill_rate', (self.name, fr), {}))
@@ -3356,6 +4324,9 @@ class PumpPanel(wx.Panel):
             args = (self.pump, self.name)
 
             self.pump_cmd_q.append(('add_pump', args, {}))
+
+    def clean_up(self):
+        self.monitor_flow_evt.clear()
 
 
 class PumpFrame(wx.Frame):
@@ -3444,10 +4415,11 @@ class PumpFrame(wx.Frame):
         are defined in the :py:func:`PumpPanel._initpump` function, and depends
         on the pump type.
         """
-        if not self.pumps:
-            self.pump_sizer.Remove(0)
 
         if setup_pumps is None:
+            if not self.pumps:
+                self.pump_sizer.Remove(0)
+
             setup_pumps = [('Sheath', 'VICI M50', 'COM3', ['629.88', '13.381'], {}, {}),
                         ('Outlet', 'VICI M50', 'COM4', ['626.36', '10.109'], {}, {})
                         ]
@@ -3471,7 +4443,7 @@ class PumpFrame(wx.Frame):
             #     ]
 
             # setup_pumps = [
-            #     ('Buffer', 'NE 500', 'COM11', ['20 mL, Medline P.C.', '00'], 
+            #     ('Buffer', 'NE 500', 'COM11', ['20 mL, Medline P.C.', '00'],
             #         {'dual_syringe': 'False'}, {'flow_rate' : '0.1', 'refill_rate' : '10'}),
             #     ('Sheath', 'NE 500', 'COM10', ['20 mL, Medline P.C.', '01'],
             #         {'dual_syringe': 'False'}, {'flow_rate' : '0.1', 'refill_rate' : '10'}),
@@ -3504,8 +4476,12 @@ class PumpFrame(wx.Frame):
             #     'refill_rate' : '10'}),
                         # ]
 
-            # setup_pumps = [('Pump 2', 'VICI M50', 'COM6', ['626.8', '11.935'], {}, {}),
-                        # ]
+            setup_pumps = [('Pump 2', 'SSI Next Gen', 'COM18', [], {}, {}),
+                        ]
+
+        elif len(setup_pumps) > 0:
+            if not self.pumps:
+                self.pump_sizer.Remove(0)
 
         logger.info('Initializing %s pumps on startup', str(len(setup_pumps)))
 
@@ -3580,6 +4556,9 @@ class PumpFrame(wx.Frame):
     def _on_exit(self, evt):
         """Stops all current pump motions and then closes the frame."""
         logger.debug('Closing the PumpFrame')
+        for pump_panel in self.pumps:
+            pump_panel.clean_up()
+
         self.pump_con.stop()
         self.pump_con.join()
         while self.pump_con.is_alive():
@@ -3597,6 +4576,8 @@ if __name__ == '__main__':
     logger.addHandler(h1)
 
     # my_pump = M50Pump('COM6', '2')
+
+    my_pump = SSINextGenPump('COM18', 'test')
     # comm_lock = threading.Lock()
 
     # my_pump = PHD4400Pump('COM4', 'H1', '1', 23.5, 30, 30, '30 mL', comm_lock)
@@ -3636,21 +4617,21 @@ if __name__ == '__main__':
     # pmp_cmd_q.append(stop_cmd)
     # my_pumpcon.stop()
 
-    # #Use this with PHD 4400
-    comm_lock = threading.Lock()
+    # # #Use this with PHD 4400
+    # comm_lock = threading.Lock()
 
-    comm_locks = {'Sample'   : comm_lock,
-        'Buffer 1' : comm_lock,
-        'Buffer 2' : comm_lock,
-        }
-
-    # #Use this with M50s
-    # comm_locks = {'Sheath' : threading.Lock(),
-    #     'Outlet' : threading.Lock(),
+    # comm_locks = {'Sample'   : comm_lock,
+    #     'Buffer 1' : comm_lock,
+    #     'Buffer 2' : comm_lock,
     #     }
 
+    # # #Use this with M50s
+    # # comm_locks = {'Sheath' : threading.Lock(),
+    # #     'Outlet' : threading.Lock(),
+    # #     }
+
     #Otherwise use this:
-    # comm_locks = {}
+    comm_locks = {}
 
     app = wx.App()
     logger.debug('Setting up wx app')

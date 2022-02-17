@@ -110,7 +110,15 @@ class PipelineControl(object):
         elif exp_type == 'Other':
             cmd_kwargs = {'num_exps': n_exps}
 
-        cmd = ('start_experiment', [exp_name, exp_type, data_dir, fprefix],
+        pipeline_data_dir = data_dir.replace(self.settings['local_basedir'], 
+                self.settings['data_basedir'], 1)
+
+        output_dir = os.path.split(data_dir)[0]
+        pipeline_output_dir = output_dir.replace(self.settings['local_basedir'], 
+                self.settings['output_basedir'], 1)
+
+        cmd = ('start_experiment', [exp_name, exp_type, pipeline_data_dir, fprefix, 
+            pipeline_output_dir],
             cmd_kwargs)
         client_cmd = {'command': cmd, 'response': False}
         self.cmd_q.append(client_cmd)
@@ -409,6 +417,9 @@ if __name__ == '__main__':
         'server_port'   : '5556',
         'server_ip'     : '192.168.1.14',
         # 'raw_settings'  : '../data/UO_SEC/SAXS.cfg',
+        'local_basedir' : '/nas_data/Eiger2xe9M',
+        'data_basedir'  : '/nas_data/Eiger2xe9M',
+        'output_basedir': '/nas_data/SAXS',
         }
 
 
