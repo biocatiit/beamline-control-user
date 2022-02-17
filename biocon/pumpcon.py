@@ -1673,6 +1673,21 @@ class SSINextGenPump(Pump):
         self._flow_rate_acceleration = rate
 
     @property
+    def pressure(self):
+        pressure = self._pressure
+
+        if self.pressure_units.lower() == 'mpa':
+            pressure = pressure/145.038
+        elif self.pressure_units == 'bar':
+            pressure = pressure/14.5038
+
+        return pressure
+
+    @pressure.setter
+    def pressure(self, input_pressure):
+        pass
+
+    @property
     def max_pressure(self):
         pressure = self._max_pressure
 
@@ -1861,6 +1876,9 @@ class SSINextGenPump(Pump):
 
         self.get_status()
 
+    def is_ramping(self):
+        return self._ramping_flow
+
     def _ramp_flow(self, current_flow_rate, target_flow_rate):
         # Input flow rates should be in pump base units, e.g. ml/min for SSI pumps
         logger.info('Ramping flow for pump %s from %f to %f at %f ml/min',
@@ -1914,10 +1932,14 @@ class SSINextGenPump(Pump):
         self._accel_stop.clear()
         logger.info('Finished ramping flow for pump %s', self.name)
 
-        if self._stop_flow_after_ramp:
+        if self._stop_flow_after_ramp and current_flow_rate <= 0:
             logger.info('Stopping pump %s after ramp', self.name)
             self.send_cmd("ST")
-            self._stop_flow_after_ramp = False
+
+        else:
+            self._flow_rate = current_flow_rate
+
+        self._stop_flow_after_ramp = False
 
     def _send_flow_rate_cmd(self, rate):
         logger.debug('sending flow rate command')
@@ -3258,11 +3280,11 @@ class PumpPanel(wx.Panel):
         self.SetSizer(self.top_sizer)
 
         self._current_move_status = False
-        self._current_flow_rate = 0
-        self._current_refill_rate = 0
-        self._current_flow_accel = 0
-        self._current_volume = 0
-        self._current_pressure = 0
+        self._current_flow_rate = -1
+        self._current_refill_rate = -1
+        self._current_flow_accel = -1
+        self._current_volume = -1
+        self._current_pressure = -1
 
         self._initpump(pump_type, comport, pump_args, pump_kwargs)
 
@@ -3284,6 +3306,9 @@ class PumpPanel(wx.Panel):
         self.pressure = wx.StaticText(self, label='', size=(40, -1),
             style=wx.ST_NO_AUTORESIZE)
         self.pressure_units = wx.StaticText(self, label='psi')
+        self.flow_readback_label = wx.StaticText(self, label='Flow Rate:')
+        self.flow_readback = wx.StaticText(self, label='')
+        self.flow_readback_units = wx.StaticText(self, label='mL/min')
 
         self.vol_gauge = wx.BoxSizer(wx.HORIZONTAL)
         self.vol_gauge.Add(self.syringe_vol_gauge_low,
@@ -3312,22 +3337,20 @@ class PumpPanel(wx.Panel):
             flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
         status_grid.Add(self.set_syringe_volume, (4,1), span=(1,2),
             flag=wx.LEFT|wx.ALIGN_RIGHT|wx.ALIGN_CENTER_VERTICAL)
-        tatus_grid.Add(self.pressure_label, (4,0),
-            flag=wx.ALIGN_CENTER_VERTICAL)
-        status_grid.Add(self.pressure, (4,1),
-            flag=wx.ALIGN_CENTER_VERTICAL)
-        status_grid.Add(self.pressure_units, (4,2),
-            flag=wx.ALIGN_CENTER_VERTICAL)
 
 
-        self.pressure_label.Hide()
-        self.pressure.Hide()
-        self.pressure_units.Hide()
-
+        self.ssi_status_sizer = wx.FlexGridSizer(cols=3, vgap=5, hgap=5)
+        self.ssi_status_sizer.Add(self.pressure_label, flag=wx.ALIGN_CENTER_VERTICAL)
+        self.ssi_status_sizer.Add(self.pressure, flag=wx.ALIGN_CENTER_VERTICAL)
+        self.ssi_status_sizer.Add(self.pressure_units, flag=wx.ALIGN_CENTER_VERTICAL)
+        self.ssi_status_sizer.Add(self.flow_readback_label, flag=wx.ALIGN_CENTER_VERTICAL)
+        self.ssi_status_sizer.Add(self.flow_readback, flag=wx.ALIGN_CENTER_VERTICAL)
+        self.ssi_status_sizer.Add(self.flow_readback_units, flag=wx.ALIGN_CENTER_VERTICAL)
 
         self.status_sizer = wx.StaticBoxSizer(wx.StaticBox(self, label='Info'),
             wx.VERTICAL)
         self.status_sizer.Add(status_grid, 1, wx.EXPAND)
+        self.status_sizer.Add(self.ssi_status_sizer, flag=wx.EXPAND)
 
         self.mode_ctrl = wx.Choice(self, choices=['Continuous flow', 'Fixed volume'])
         self.mode_ctrl.SetSelection(0)
@@ -3519,6 +3542,7 @@ class PumpPanel(wx.Panel):
         self.settings_box_sizer.Hide(self.m50_settings_sizer, recursive=True)
         self.settings_box_sizer.Hide(self.phd4400_settings_sizer, recursive=True)
         self.settings_box_sizer.Hide(self.soft_syringe_settings_sizer, recursive=True)
+        self.status_sizer.Hide(self.ssi_status_sizer, recursive=True)
 
         if self.type_ctrl.GetStringSelection() == 'VICI M50':
             self.settings_box_sizer.Show(self.m50_settings_sizer, recursive=True)
@@ -3541,9 +3565,7 @@ class PumpPanel(wx.Panel):
             self.flow_accel_ctrl.Show()
             self.flow_accel_units_lbl.Show()
 
-            self.pressure_label.Show()
-            self.pressure.Show()
-            self.pressure_units.Show()
+            self.status_sizer.Show(self.ssi_status_sizer, recursive=True)
 
             self.direction_lbl.Hide()
             self.direction_ctrl.Hide()
@@ -3677,9 +3699,7 @@ class PumpPanel(wx.Panel):
             self.flow_accel_units_lbl.Show()
             self.direction_lbl.Hide()
             self.direction_ctrl.Hide()
-            self.pressure_label.Show()
-            self.pressure.Show()
-            self.pressure_units.Show()
+            self.status_sizer.Show(self.ssi_status_sizer, recursive=True)
             self.settings_box_sizer.Hide(self.m50_settings_sizer, recursive=True)
             self.settings_box_sizer.Hide(self.phd4400_settings_sizer, recursive=True)
             self.settings_box_sizer.Hide(self.soft_syringe_settings_sizer, recursive=True)
@@ -3691,9 +3711,7 @@ class PumpPanel(wx.Panel):
             self.flow_accel_units_lbl.Hide()
             self.direction_lbl.Show()
             self.direction_ctrl.Show()
-            self.pressure_label.Hide()
-            self.pressure.Hide()
-            self.pressure_units.Hide()
+            self.status_sizer.Hide(self.ssi_status_sizer, recursive=True)
 
         if self.pump_mode == 'continuous':
             self.status_sizer.Hide(self.vol_gauge, recursive=True)
@@ -4061,9 +4079,18 @@ class PumpPanel(wx.Panel):
     def _get_flow_rate(self):
 
         fr = self.pump.flow_rate
+
         if fr != self._current_flow_rate:
-            wx.CallAfter(self.flow_rate_ctrl.SetValue, str(fr))
-            self._current_flow_rate = fr
+            if self.type_ctrl.GetStringSelection() == 'SSI Next Gen':
+                wx.CallAfter(self.flow_readback.SetLabel, str(fr))
+
+                if not self.pump.is_ramping() and self._current_move_status:
+                    wx.CallAfter(self.flow_rate_ctrl.SetValue, str(fr))
+                    self._current_flow_rate = fr
+
+            else:
+                wx.CallAfter(self.flow_rate_ctrl.SetValue, str(fr))
+                self._current_flow_rate = fr
 
         try:
             accel = self.pump.flow_rate_acceleration
@@ -4086,7 +4113,7 @@ class PumpPanel(wx.Panel):
     def _get_pressure(self):
 
         try:
-            pressure = self.pump.pressure
+            pressure = self.pump.get_pressure()
 
             if pressure != self._current_pressure:
                 wx.CallAfter(self.pressure.SetLabel, str(pressure))
@@ -4132,9 +4159,9 @@ class PumpPanel(wx.Panel):
         except Exception:
             pass
 
-        self._get_flow_rate()
-
         self._get_pump_moving()
+
+        self._get_flow_rate()
 
         self._get_pressure()
 
@@ -4234,7 +4261,7 @@ class PumpPanel(wx.Panel):
         """
         while True:
             self.monitor_flow_evt.wait()
-            self._get_pump_status
+            self._get_pump_status()
 
             time.sleep(1)
 
@@ -4248,9 +4275,9 @@ class PumpPanel(wx.Panel):
         """
         logger.debug('Sending pump %s command %s', self.name, cmd)
         if cmd == 'is_moving':
-            self.pump_cmd_q.append(('is_moving', (self.name), {}))
+            self.pump_cmd_q.append(('is_moving', (self.name,), {}))
         elif cmd == 'start_flow':
-            self.pump_cmd_q.append(('start_flow', (self.name), {}))
+            self.pump_cmd_q.append(('start_flow', (self.name,), {}))
         elif cmd == 'stop':
             self.pump_cmd_q.append(('stop', (self.name,), {}))
         elif cmd == 'dispense':
@@ -4262,9 +4289,9 @@ class PumpPanel(wx.Panel):
             vol = float(self.volume_ctrl.GetValue())
             self.pump_cmd_q.append(('aspirate', (self.name, vol, units), {}))
         elif cmd == 'dispense_all':
-            self.pump_cmd_q.append(('dispense_all', (self.name), {}))
+            self.pump_cmd_q.append(('dispense_all', (self.name,), {}))
         elif cmd == 'aspirate_all':
-            self.pump_cmd_q.append(('aspirate_all', (self.name), {}))
+            self.pump_cmd_q.append(('aspirate_all', (self.name,), {}))
         elif cmd == 'set_flow_rate':
             direction = self.direction_ctrl.GetStringSelection().lower()
             if self.pump_mode == 'continuous':
@@ -4476,7 +4503,10 @@ class PumpFrame(wx.Frame):
             #     'refill_rate' : '10'}),
                         # ]
 
-            setup_pumps = [('Pump 2', 'SSI Next Gen', 'COM18', [], {}, {}),
+            setup_pumps = [
+                ('Pump 4', 'SSI Next Gen', 'COM17', [], {}, {}),
+                ('Pump 3', 'SSI Next Gen', 'COM15', [], {}, {}),
+                ('Pump 2', 'SSI Next Gen', 'COM18', [], {}, {}),
                         ]
 
         elif len(setup_pumps) > 0:
@@ -4577,7 +4607,7 @@ if __name__ == '__main__':
 
     # my_pump = M50Pump('COM6', '2')
 
-    my_pump = SSINextGenPump('COM18', 'test')
+    my_pump = SSINextGenPump('COM15', 'test')
     # comm_lock = threading.Lock()
 
     # my_pump = PHD4400Pump('COM4', 'H1', '1', 23.5, 30, 30, '30 mL', comm_lock)
