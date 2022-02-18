@@ -4504,9 +4504,9 @@ class PumpFrame(wx.Frame):
                         # ]
 
             setup_pumps = [
-                ('Pump 4', 'SSI Next Gen', 'COM17', [], {}, {}),
-                ('Pump 3', 'SSI Next Gen', 'COM15', [], {}, {}),
-                ('Pump 2', 'SSI Next Gen', 'COM18', [], {}, {}),
+                ('Pump', 'SSI Next Gen', 'COM5', [], {}, {}),
+                # ('Pump 3', 'SSI Next Gen', 'COM15', [], {}, {}),
+                # ('Pump 2', 'SSI Next Gen', 'COM18', [], {}, {}),
                         ]
 
         elif len(setup_pumps) > 0:
@@ -4607,7 +4607,7 @@ if __name__ == '__main__':
 
     # my_pump = M50Pump('COM6', '2')
 
-    my_pump = SSINextGenPump('COM15', 'test')
+    # my_pump = SSINextGenPump('COM15', 'test')
     # comm_lock = threading.Lock()
 
     # my_pump = PHD4400Pump('COM4', 'H1', '1', 23.5, 30, 30, '30 mL', comm_lock)
