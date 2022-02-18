@@ -4283,7 +4283,7 @@ class PumpPanel(wx.Panel):
         elif cmd == 'dispense':
             units = self.flow_units_lbl.GetLabel()
             vol = float(self.volume_ctrl.GetValue())
-            self.pump_cmd_q.append(('dispense', (self.name, vol, units), {}))
+            self.pump_cmd_q.append(('dispense', (self.name, vol, None, units), {}))
         elif cmd == 'aspirate':
             units = self.flow_units_lbl.GetLabel()
             vol = float(self.volume_ctrl.GetValue())
