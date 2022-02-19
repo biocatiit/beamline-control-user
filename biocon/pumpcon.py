@@ -1979,7 +1979,10 @@ class SSINextGenPump(Pump):
 
             self._dispensing_volume -= delta_vol
 
-            stop_vol = (current_fr/self._flow_rate_acceleration)*(current_fr/2.)
+            if self._flow_rate_acceleration > 0:
+                stop_vol = (current_fr/self._flow_rate_acceleration)*(current_fr/2.)
+            else:
+                stop_vol = 0
 
             previous_time = current_time
             previous_fr = current_fr
