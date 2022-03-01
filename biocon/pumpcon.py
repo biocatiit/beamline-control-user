@@ -1445,6 +1445,7 @@ class SSINextGenPump(Pump):
         self._flow_rate_decimals = 3
         self._flow_rate_acceleration = 0.1 #Set to 0 for instant (as fast as the pump can) flow rate change
         self._accel_stop = threading.Event()
+        self._accel_change = threading.Event()
         self._flow_rate_lock = threading.Lock()
         self._ramping_flow = False
         self._stop_flow_after_ramp = False
@@ -1573,11 +1574,9 @@ class SSINextGenPump(Pump):
                 "so flow rate will be set to zero.")
 
         if not self.is_moving():
-            logger.debug('here')
             self._send_flow_rate_cmd(rate)
 
         else:
-            logger.debug('here 2')
             if self._ramping_flow:
                 self._accel_stop.set()
             while self._ramping_flow:
@@ -1655,6 +1654,13 @@ class SSINextGenPump(Pump):
 
         if self.units.split('/')[1] == 's':
             rate = rate/60.
+
+        if self._ramping_flow:
+            self._accel_change.set()
+            while self._accel_change.is_set():
+                time.sleep(0.001)
+
+
 
         return rate
 
@@ -1900,11 +1906,17 @@ class SSINextGenPump(Pump):
 
         if self._flow_rate_acceleration == 0:
             self._send_flow_rate_cmd(target_flow_rate)
+            current_flow_rate = target_flow_rate
 
         else:
             while target_flow_rate != current_flow_rate:
                 if self._accel_stop.is_set():
                     break
+
+                if self._accel_change.is_set():
+                    starting_flow_rate = current_flow_rate
+                    start_time = time.time()
+                    self._accel_change.clear()
 
                 current_time = time.time()
 
@@ -4095,6 +4107,10 @@ class PumpPanel(wx.Panel):
                 wx.CallAfter(self.flow_rate_ctrl.SetValue, str(fr))
                 self._current_flow_rate = fr
 
+        else:
+            if self.type_ctrl.GetStringSelection() == 'SSI Next Gen' and fr != float(self.flow_readback.GetLabel()):
+                wx.CallAfter(self.flow_readback.SetLabel, str(fr))
+
         try:
             accel = self.pump.flow_rate_acceleration
             if accel != self._current_flow_accel:
@@ -4507,9 +4523,9 @@ class PumpFrame(wx.Frame):
                         # ]
 
             setup_pumps = [
-                ('Pump', 'SSI Next Gen', 'COM5', [], {}, {}),
-                # ('Pump 3', 'SSI Next Gen', 'COM15', [], {}, {}),
-                # ('Pump 2', 'SSI Next Gen', 'COM18', [], {}, {}),
+                ('Pump 4', 'SSI Next Gen', 'COM17', [], {}, {}),
+                ('Pump 3', 'SSI Next Gen', 'COM15', [], {}, {}),
+                ('Pump 2', 'SSI Next Gen', 'COM18', [], {}, {}),
                         ]
 
         elif len(setup_pumps) > 0:
@@ -4604,6 +4620,7 @@ if __name__ == '__main__':
     h1 = logging.StreamHandler(sys.stdout)
     h1.setLevel(logging.DEBUG)
     h1.setLevel(logging.INFO)
+    h1.setLevel(logging.WARNING)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
     h1.setFormatter(formatter)
     logger.addHandler(h1)
