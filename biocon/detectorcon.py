@@ -210,7 +210,7 @@ class AD_EigerCamera(Device):
 
 class EPICSEigerDetector(object):
     def __init__(self, pv_prefix, use_tiff_writer = True,
-        use_file_writer = True, photon_energy = 12.0):
+        use_file_writer = True, photon_energy = 12.0, images_per_file=100):
         """
         """
 
@@ -218,6 +218,7 @@ class EPICSEigerDetector(object):
 
         self.use_tiff_writer = use_tiff_writer
         self.use_file_writer = use_file_writer
+        self.images_per_file = images_per_file
 
         if self.use_tiff_writer:
             self.det.put('TIFF1:EnableCallbacks', 1, wait=True, timeout=1)
@@ -255,7 +256,12 @@ class EPICSEigerDetector(object):
         self.det.put("cam1:Trigger", 1, wait=wait, timeout=1)
 
     def get_status(self):
-        return self.det.get("cam1:DetectorState_RBV")
+        status = self.det.get("cam1:DetectorState_RBV")
+
+        if status == 10:
+            status = 0
+
+        return status 
 
     def get_data_dir(self):
         return self.det.get('cam1:FilePath', as_string=True)
@@ -298,10 +304,10 @@ class EPICSEigerDetector(object):
             self.det.put('cam1:NumTriggers', num_frames, wait=True, timeout=1)
 
         if self.use_file_writer:
-            if num_frames < 100:
+            if num_frames < self.images_per_file:
                 self.det.put('cam1:FWNImagesPerFile', num_frames, wait=True, timeout=1)
             else:
-                self.det.put('cam1:FWNImagesPerFile', 100, wait=True, timeout=1)
+                self.det.put('cam1:FWNImagesPerFile', self.images_per_file, wait=True, timeout=1)
 
     def set_trigger_mode(self, mode):
         if mode == 'ext_enable':

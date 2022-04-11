@@ -231,7 +231,7 @@ if __name__ == '__main__':
         'remote_dir_root'       : '/nas_data/Eiger2xe9M',
         'detector'              : '18ID:EIG2:_epics',
         'det_args'              :  {'use_tiff_writer': False, 'use_file_writer': True,
-            'photon_energy' : 12.0,},
+                                    'photon_energy' : 12.0, 'images_per_file': 300},
         'add_file_postfix'      : False,
 
         # 'shutter_speed_open'    : 0.004, #in s      NM vacuum shutter, broken
@@ -239,26 +239,26 @@ if __name__ == '__main__':
         # 'shutter_pad'           : 0.002, #padding for shutter related values
         # 'shutter_cycle'         : 0.02, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
 
-        # 'shutter_speed_open'    : 0.001, #in s    Fast shutters
-        # 'shutter_speed_close'   : 0.001, # in s
-        # 'shutter_pad'           : 0.00, #padding for shutter related values
-        # 'shutter_cycle'         : 0.002, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
+        'shutter_speed_open'    : 0.001, #in s    Fast shutters
+        'shutter_speed_close'   : 0.001, # in s
+        'shutter_pad'           : 0.00, #padding for shutter related values
+        'shutter_cycle'         : 0.002, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
 
         # 'shutter_speed_open'    : 0.075, #in s      Slow vacuum shutter
         # 'shutter_speed_close'   : 0.075, # in s
         # 'shutter_pad'           : 0.01, #padding for shutter related values
         # 'shutter_cycle'         : 0.2, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
 
-        'shutter_speed_open'    : 0.0045, #in s      Normal vacuum shutter
-        'shutter_speed_close'   : 0.004, # in s
-        'shutter_pad'           : 0.002, #padding for shutter related values
-        'shutter_cycle'         : 0.1, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
+        # 'shutter_speed_open'    : 0.0045, #in s      Normal vacuum shutter
+        # 'shutter_speed_close'   : 0.004, # in s
+        # 'shutter_pad'           : 0.002, #padding for shutter related values
+        # 'shutter_cycle'         : 0.1, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
 
         'struck_measurement_time' : '0.001', #in s
         'tr_muscle_exp'         : False,
         'slow_mode_thres'       : 0.1,
         'fast_mode_max_exp_time': 2000,
-        'wait_for_trig'         : False,
+        'wait_for_trig'         : True,
         'num_trig'              : '1',
         'show_advanced_options' : True,
         'fe_shutter_pv'         : 'FE:18:ID:FEshutter',
@@ -270,10 +270,13 @@ if __name__ == '__main__':
         'use_old_i0_gain'       : True,
         'i0_gain_pv'            : '18ID_D_BPM_Gain:Level-SP',
 
-        'struck_log_vals'       : [{'mx_record': 'mcs3', 'channel': 2, 'name': 'I0',
-            'scale': 1, 'offset': 0, 'dark': True, 'norm_time': False}, #Format: (mx_record_name, struck_channel, header_name, scale, offset, use_dark_current, normalize_by_exp_time)
-            {'mx_record': 'mcs4', 'channel': 3, 'name': 'I1', 'scale': 1,
-            'offset': 0, 'dark': True, 'norm_time': False},
+        'struck_log_vals'       : [
+            # Format: (mx_record_name, struck_channel, header_name, 
+            # scale, offset, use_dark_current, normalize_by_exp_time)
+            {'mx_record': 'mcs3', 'channel': 2, 'name': 'I0',
+            'scale': 1, 'offset': 0, 'dark': True, 'norm_time': False},
+            # {'mx_record': 'mcs4', 'channel': 3, 'name': 'I1', 'scale': 1,
+            # 'offset': 0, 'dark': True, 'norm_time': False},
             # {'mx_record': 'mcs5', 'channel': 4, 'name': 'I2', 'scale': 1,
             # 'offset': 0, 'dark': True, 'norm_time': False},
             # {'mx_record': 'mcs6', 'channel': 5, 'name': 'I3', 'scale': 1,
@@ -282,14 +285,14 @@ if __name__ == '__main__':
             'scale': 5000, 'offset': 0.5, 'dark': False, 'norm_time': True},
             # {'mx_record': 'mcs12', 'channel': 11, 'name': 'Flow_rate',
             # 'scale': 10e6, 'offset': 0, 'dark': True, 'norm_time': True},
-            # {'mx_record': 'mcs7', 'channel': 6, 'name': 'Detector_Enable',
-            # 'scale': 1e5, 'offset': 0, 'dark': True, 'norm_time': True},
-            # {'mx_record': 'mcs12', 'channel': 11, 'name': 'Length_Out',
-            # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
+            {'mx_record': 'mcs7', 'channel': 6, 'name': 'Detector_Enable',
+            'scale': 1e5, 'offset': 0, 'dark': True, 'norm_time': True},
+            {'mx_record': 'mcs12', 'channel': 11, 'name': 'Length_Out',
+            'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
             # {'mx_record': 'mcs13', 'channel': 13, 'name': 'Length_In',
             # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
-            # {'mx_record': 'mcs13', 'channel': 12, 'name': 'Force',
-            # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
+            {'mx_record': 'mcs13', 'channel': 12, 'name': 'Force',
+            'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
             ],
         'joerger_log_vals'      : [{'mx_record': 'j3', 'name': 'I0',
             'scale': 1, 'offset': 0, 'norm_time': False}, #Format: (mx_record_name, struck_channel, header_name, scale, offset, use_dark_current, normalize_by_exp_time)
@@ -324,7 +327,7 @@ if __name__ == '__main__':
         'remote_valve_port'         : '5558',
         'flow_units'                : 'mL/min',
         'sheath_pump'               : ('VICI_M50', 'COM3', [629.48, 13.442], {}),
-        'outlet_pump'               : ('VICI_M50', 'COM4', [629.16, 12.354], {}),
+        'outlet_pump'               : ('VICI_M50', 'COM4', [625.28, 7.905], {}),
         'sheath_fm'                 : ('BFS', 'COM5', [], {}),
         'outlet_fm'                 : ('BFS', 'COM6', [], {}),
         'sheath_valve'              : ('Cheminert', 'COM7', [], {'positions' : 10}),
@@ -500,7 +503,8 @@ if __name__ == '__main__':
                                 'preparation'   : 'Intact',
                                 'notes'         : '',
                                 },
-        'metadata_type'     : 'auto',
+        # 'metadata_type'     : 'auto',
+        'metadata_type'     : 'muscle',
         }
 
     pipeline_settings = {
@@ -517,12 +521,12 @@ if __name__ == '__main__':
 
     components = OrderedDict([
         ('exposure', expcon.ExpPanel),
-        ('coflow', coflowcon.CoflowPanel),
+        # ('coflow', coflowcon.CoflowPanel),
         # ('trsaxs_scan', trcon.TRScanPanel),
         # ('trsaxs_flow', trcon.TRFlowPanel),
         # ('scan',    scancon.ScanPanel),
         ('metadata', metadata.ParamPanel),
-        ('pipeline', pipeline_ctrl.PipelineControl)
+        # ('pipeline', pipeline_ctrl.PipelineControl)
         ])
 
     settings = {
