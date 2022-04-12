@@ -276,7 +276,7 @@ if __name__ == '__main__':
     ip = '164.54.204.53'
 
     setup_pumps = [('sheath', 'VICI M50', 'COM3', ['629.48', '13.442'], {}, {}),
-        ('outlet', 'VICI M50', 'COM4', ['629.16', '12.354'], {}, {})
+        ('outlet', 'VICI M50', 'COM4', ['625.28', '7.905'], {}, {})
         ]
 
     pump_local_comm_locks = {'sheath'    : pump_comm_locks[setup_pumps[0][2]],

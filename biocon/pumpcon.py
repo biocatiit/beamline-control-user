@@ -3448,8 +3448,8 @@ class PumpFrame(wx.Frame):
             self.pump_sizer.Remove(0)
 
         if setup_pumps is None:
-            setup_pumps = [('Sheath', 'VICI M50', 'COM3', ['629.88', '13.381'], {}, {}),
-                        ('Outlet', 'VICI M50', 'COM4', ['626.36', '10.109'], {}, {})
+            setup_pumps = [('Sheath', 'VICI M50', 'COM3', ['629.48', '13.442'], {}, {}),
+                        ('Outlet', 'VICI M50', 'COM4', ['629.16', '12.354'], {}, {})
                         ]
 
             # setup_pumps = [
@@ -3479,16 +3479,16 @@ class PumpFrame(wx.Frame):
             #         {'flow_rate' : '0.1', 'refill_rate' : '10'}),
             #     ]
 
-            setup_pumps = [
-                ('Buffer 1', 'PHD 4400', 'COM4', ['20 mL, Medline P.C.', '1'], {},
-                    {'flow_rate' : '10', 'refill_rate' : '10'}),
-                ('Buffer 2', 'PHD 4400', 'COM4', ['20 mL, Medline P.C.', '2'], {},
-                    {'flow_rate' : '10', 'refill_rate' : '10'}),
-                ('Sheath', 'NE 500', 'COM10', ['20 mL, Medline P.C.', '01'],
-                    {'dual_syringe': 'False'}, {'flow_rate' : '0.1', 'refill_rate' : '10'}),
-                ('Sample', 'PHD 4400', 'COM4', ['20 mL, Medline P.C.', '3'], {},
-                    {'flow_rate' : '10', 'refill_rate' : '10'}),
-                ]
+            # setup_pumps = [
+            #     ('Buffer 1', 'PHD 4400', 'COM4', ['20 mL, Medline P.C.', '1'], {},
+            #         {'flow_rate' : '10', 'refill_rate' : '10'}),
+            #     ('Buffer 2', 'PHD 4400', 'COM4', ['20 mL, Medline P.C.', '2'], {},
+            #         {'flow_rate' : '10', 'refill_rate' : '10'}),
+            #     ('Sheath', 'NE 500', 'COM10', ['20 mL, Medline P.C.', '01'],
+            #         {'dual_syringe': 'False'}, {'flow_rate' : '0.1', 'refill_rate' : '10'}),
+            #     ('Sample', 'PHD 4400', 'COM4', ['20 mL, Medline P.C.', '3'], {},
+            #         {'flow_rate' : '10', 'refill_rate' : '10'}),
+            #     ]
 
             # setup_pumps = [
             #     ('Sample', 'NE 500', '/dev/cu.usbserial-AK06V22M', ['30 mL, EXEL', '02', False], {},
@@ -3644,10 +3644,10 @@ if __name__ == '__main__':
         'Buffer 2' : comm_lock,
         }
 
-    # #Use this with M50s
-    # comm_locks = {'Sheath' : threading.Lock(),
-    #     'Outlet' : threading.Lock(),
-    #     }
+    #Use this with M50s
+    comm_locks = {'Sheath' : threading.Lock(),
+        'Outlet' : threading.Lock(),
+        }
 
     #Otherwise use this:
     # comm_locks = {}
