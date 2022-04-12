@@ -3158,8 +3158,8 @@ class PumpCommThread(threading.Thread):
         self.return_queue.append((names, 'multi_status', status))
 
     def _get_pump_status(self, name):
-        pump = self._connected_pumps[name]
-        is_moving = pump.is_moving()
+            pump = self._connected_pumps[name]
+            is_moving = pump.is_moving()
 
         try:
             volume = pump.volume
@@ -4125,9 +4125,9 @@ class PumpPanel(wx.Panel):
         # self.comm_lock.release()
 
         if volume != self._current_volume:
-            wx.CallAfter(self._set_status_volume, volume)
-            wx.CallAfter(self.syringe_vol_gauge.SetValue,
-                int(round(float(volume)*1000)))
+        wx.CallAfter(self._set_status_volume, volume)
+        wx.CallAfter(self.syringe_vol_gauge.SetValue,
+            int(round(float(volume)*1000)))
             self._current_volume = volume
 
     def _get_volume_delay(self, delay):
@@ -4505,11 +4505,11 @@ class PumpFrame(wx.Frame):
         """
 
         if setup_pumps is None:
-            if not self.pumps:
-                self.pump_sizer.Remove(0)
+        if not self.pumps:
+            self.pump_sizer.Remove(0)
 
-            setup_pumps = [('Sheath', 'VICI M50', 'COM3', ['629.88', '13.381'], {}, {}),
-                        ('Outlet', 'VICI M50', 'COM4', ['626.36', '10.109'], {}, {})
+            setup_pumps = [('Sheath', 'VICI M50', 'COM3', ['629.48', '13.442'], {}, {}),
+                        ('Outlet', 'VICI M50', 'COM4', ['629.16', '12.354'], {}, {})
                         ]
 
             # setup_pumps = [
@@ -4539,16 +4539,16 @@ class PumpFrame(wx.Frame):
             #         {'flow_rate' : '0.1', 'refill_rate' : '10'}),
             #     ]
 
-            setup_pumps = [
-                ('Buffer 1', 'PHD 4400', 'COM4', ['20 mL, Medline P.C.', '1'], {},
-                    {'flow_rate' : '10', 'refill_rate' : '10'}),
-                ('Buffer 2', 'PHD 4400', 'COM4', ['20 mL, Medline P.C.', '2'], {},
-                    {'flow_rate' : '10', 'refill_rate' : '10'}),
-                ('Sheath', 'NE 500', 'COM10', ['20 mL, Medline P.C.', '01'],
-                    {'dual_syringe': 'False'}, {'flow_rate' : '0.1', 'refill_rate' : '10'}),
-                ('Sample', 'PHD 4400', 'COM4', ['20 mL, Medline P.C.', '3'], {},
-                    {'flow_rate' : '10', 'refill_rate' : '10'}),
-                ]
+            # setup_pumps = [
+            #     ('Buffer 1', 'PHD 4400', 'COM4', ['20 mL, Medline P.C.', '1'], {},
+            #         {'flow_rate' : '10', 'refill_rate' : '10'}),
+            #     ('Buffer 2', 'PHD 4400', 'COM4', ['20 mL, Medline P.C.', '2'], {},
+            #         {'flow_rate' : '10', 'refill_rate' : '10'}),
+            #     ('Sheath', 'NE 500', 'COM10', ['20 mL, Medline P.C.', '01'],
+            #         {'dual_syringe': 'False'}, {'flow_rate' : '0.1', 'refill_rate' : '10'}),
+            #     ('Sample', 'PHD 4400', 'COM4', ['20 mL, Medline P.C.', '3'], {},
+            #         {'flow_rate' : '10', 'refill_rate' : '10'}),
+            #     ]
 
             # setup_pumps = [
             #     ('Sample', 'NE 500', '/dev/cu.usbserial-AK06V22M', ['30 mL, EXEL', '02', False], {},
@@ -4662,7 +4662,7 @@ if __name__ == '__main__':
     h1 = logging.StreamHandler(sys.stdout)
     h1.setLevel(logging.DEBUG)
     h1.setLevel(logging.INFO)
-    h1.setLevel(logging.WARNING)
+    # h1.setLevel(logging.WARNING)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
     h1.setFormatter(formatter)
     logger.addHandler(h1)
@@ -4717,13 +4717,13 @@ if __name__ == '__main__':
     #     'Buffer 2' : comm_lock,
     #     }
 
-    # # #Use this with M50s
-    # # comm_locks = {'Sheath' : threading.Lock(),
-    # #     'Outlet' : threading.Lock(),
-    # #     }
+    #Use this with M50s
+    comm_locks = {'Sheath' : threading.Lock(),
+        'Outlet' : threading.Lock(),
+        }
 
     #Otherwise use this:
-    comm_locks = {}
+    # comm_locks = {}
 
     app = wx.App()
     logger.debug('Setting up wx app')
