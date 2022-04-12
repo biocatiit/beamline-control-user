@@ -3174,8 +3174,8 @@ class PumpCommThread(threading.Thread):
         self.return_queue.append((names, 'multi_status', status))
 
     def _get_pump_status(self, name):
-            pump = self._connected_pumps[name]
-            is_moving = pump.is_moving()
+        pump = self._connected_pumps[name]
+        is_moving = pump.is_moving()
 
         try:
             volume = pump.volume
@@ -4141,9 +4141,9 @@ class PumpPanel(wx.Panel):
         # self.comm_lock.release()
 
         if volume != self._current_volume:
-        wx.CallAfter(self._set_status_volume, volume)
-        wx.CallAfter(self.syringe_vol_gauge.SetValue,
-            int(round(float(volume)*1000)))
+            wx.CallAfter(self._set_status_volume, volume)
+            wx.CallAfter(self.syringe_vol_gauge.SetValue,
+                int(round(float(volume)*1000)))
             self._current_volume = volume
 
     def _get_volume_delay(self, delay):
@@ -4521,8 +4521,8 @@ class PumpFrame(wx.Frame):
         """
 
         if setup_pumps is None:
-        if not self.pumps:
-            self.pump_sizer.Remove(0)
+            if not self.pumps:
+                self.pump_sizer.Remove(0)
 
             setup_pumps = [('Sheath', 'VICI M50', 'COM3', ['629.48', '13.442'], {}, {}),
                         ('Outlet', 'VICI M50', 'COM4', ['629.16', '12.354'], {}, {})
