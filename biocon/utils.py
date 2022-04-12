@@ -443,7 +443,7 @@ class WarningMessage(wx.Frame):
         ok_button = wx.Button(msg_panel, label='OK')
         ok_button.Bind(wx.EVT_BUTTON, self._on_exit)
 
-        button_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        button_sizer = wx.BoxSizer(wx.VERTICAL)
         button_sizer.Add(ok_button, flag=wx.ALIGN_CENTER_HORIZONTAL)
 
 
