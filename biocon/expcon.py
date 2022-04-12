@@ -3140,8 +3140,12 @@ class ExpPanel(wx.Panel):
             metadata['Exposure time/frame [s]:'] = self.current_exposure_values['exp_time']
             metadata['Exposure period/frame [s]:'] = self.current_exposure_values['exp_period']
             metadata['Wait for trigger:'] = self.current_exposure_values['wait_for_trig']
+
             if self.current_exposure_values['wait_for_trig']:
                 metadata['Number of triggers:'] = self.current_exposure_values['num_trig']
+
+            if 'eig' in self.settings['detector'].lower():
+                metadata['Number of images per file:'] = self.settings['det_args']['images_per_file']
 
             try:
                 if self.fe_shutter_pv is not None:
@@ -3325,8 +3329,8 @@ if __name__ == '__main__':
     logger.setLevel(logging.DEBUG)
 
     h1 = logging.StreamHandler(sys.stdout)
-    # h1.setLevel(logging.INFO)
-    h1.setLevel(logging.DEBUG)
+    h1.setLevel(logging.INFO)
+    # h1.setLevel(logging.DEBUG)
     formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
     h1.setFormatter(formatter)
 
@@ -3398,7 +3402,7 @@ if __name__ == '__main__':
         # 'detector'              : 'pilatus_mx',
         # 'det_args'              : {}, #Allows detector specific keyword arguments
         # 'add_file_postfix'      : True,
-        'detector'              : 's18_eiger_biocat:_epics',
+        'detector'              :  '18ID:EIG2:_epics',
         'det_args'              :  {'use_tiff_writer': False, 'use_file_writer': True,
             'photon_energy' : 12.0,},
         'add_file_postfix'      : False,
