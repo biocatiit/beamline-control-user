@@ -4620,7 +4620,7 @@ if __name__ == '__main__':
     h1 = logging.StreamHandler(sys.stdout)
     h1.setLevel(logging.DEBUG)
     h1.setLevel(logging.INFO)
-    h1.setLevel(logging.WARNING)
+    # h1.setLevel(logging.WARNING)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
     h1.setFormatter(formatter)
     logger.addHandler(h1)
