@@ -1917,7 +1917,11 @@ class TRFlowPanel(wx.Panel):
             name = pump[1][0]
             ptype = pump[1][1].replace(' ', '_')
             com = pump[1][2]
-            syringe = pump[1][3][0]
+
+            try:
+                syringe = pump[1][3][0]
+            except Exception:
+                syringe = None
 
             try:
                 address = pump[1][3][1]
@@ -1925,8 +1929,12 @@ class TRFlowPanel(wx.Panel):
                 address = None
 
             args = (com, name, ptype)
-            kwargs = copy.deepcopy(self.sample_pump_panel.known_syringes[syringe])
-            kwargs['syringe_id'] = syringe
+
+            if syringe is not None:
+                kwargs = copy.deepcopy(self.sample_pump_panel.known_syringes[syringe])
+                kwargs['syringe_id'] = syringe
+            else:
+                kwargs = {}
 
             if address is not None:
                 kwargs['pump_address'] = address
@@ -1934,9 +1942,10 @@ class TRFlowPanel(wx.Panel):
             try:
                 dual_syringe = pump[1][3][2]
             except Exception:
-                dual_syringe = False
+                dual_syringe = None
 
-            kwargs['dual_syringe'] = dual_syringe
+            if dual_syringe is not None:
+                kwargs['dual_syringe'] = dual_syringe
 
             if not self.local_devices:
                 cmd = ('connect_remote', args, kwargs)
@@ -2211,62 +2220,20 @@ class TRFlowPanel(wx.Panel):
         pump_box_sizer = wx.StaticBoxSizer(wx.VERTICAL, ctrl_parent, "Pumps")
         pump_parent = pump_box_sizer.GetStaticBox()
 
-        if self.settings['sample_pump'][6]:
-            #Continuous flow
-             self.sample_pump_panel = TRPumpPanel(pump_parent, self,
-                self.settings['sample_pump'][0],
-                self.settings['sample_pump'][0], self.settings['sample_pump'][1],
-                flow_rate=self.settings['sample_pump'][5]['flow_rate'],
-                refill_rate=self.settings['sample_pump'][5]['refill_rate'],
-                continuous_flow=self.settings['sample_pump'][6])
-        else:
-            #Syringe
-            self.sample_pump_panel = TRPumpPanel(pump_parent, self,
-                self.settings['sample_pump'][0],
-                self.settings['sample_pump'][0], self.settings['sample_pump'][1],
-                flow_rate=self.settings['sample_pump'][5]['flow_rate'],
-                refill_rate=self.settings['sample_pump'][5]['refill_rate'],
-                syringe=self.settings['sample_pump'][3][0],
-                dual_syringe=self.settings['sample_pump'][5]['dual_syringe'],
-                continuous_flow=self.settings['sample_pump'][6])
+        self.sample_pump_panel = TRPumpPanel(pump_parent, self,
+            self.settings['sample_pump'][0],
+            self.settings['sample_pump'][0], self.settings['sample_pump'][1],
+            **self.settings['sample_pump'][5])
 
-        if self.settings['buffer1_pump'][6]:
-            #Continuous flow
-             self.buffer1_pump_panel = TRPumpPanel(pump_parent, self,
-                self.settings['buffer1_pump'][0],
-                self.settings['buffer1_pump'][0], self.settings['buffer1_pump'][1],
-                flow_rate=self.settings['buffer1_pump'][5]['flow_rate'],
-                refill_rate=self.settings['buffer1_pump'][5]['refill_rate'],
-                continuous_flow=self.settings['buffer1_pump'][6])
-        else:
-            #Syringe
-            self.buffer1_pump_panel = TRPumpPanel(pump_parent, self,
-                self.settings['buffer1_pump'][0],
-                self.settings['buffer1_pump'][0], self.settings['buffer1_pump'][1],
-                flow_rate=self.settings['buffer1_pump'][5]['flow_rate'],
-                refill_rate=self.settings['buffer1_pump'][5]['refill_rate'],
-                syringe=self.settings['buffer1_pump'][3][0],
-                dual_syringe=self.settings['buffer1_pump'][5]['dual_syringe'],
-                continuous_flow=self.settings['buffer1_pump'][6])
+        self.buffer1_pump_panel = TRPumpPanel(pump_parent, self,
+            self.settings['buffer1_pump'][0],
+            self.settings['buffer1_pump'][0], self.settings['buffer1_pump'][1],
+            **self.settings['buffer1_pump'][5])
 
-        if self.settings['buffer2_pump'][6]:
-            #Continuous flow
-             self.buffer2_pump_panel = TRPumpPanel(pump_parent, self,
-                self.settings['buffer2_pump'][0],
-                self.settings['buffer2_pump'][0], self.settings['buffer2_pump'][1],
-                flow_rate=self.settings['buffer2_pump'][5]['flow_rate'],
-                refill_rate=self.settings['buffer2_pump'][5]['refill_rate'],
-                continuous_flow=self.settings['buffer2_pump'][6])
-        else:
-            #Syringe
-            self.buffer2_pump_panel = TRPumpPanel(pump_parent, self,
-                self.settings['buffer2_pump'][0],
-                self.settings['buffer2_pump'][0], self.settings['buffer2_pump'][1],
-                flow_rate=self.settings['buffer2_pump'][5]['flow_rate'],
-                refill_rate=self.settings['buffer2_pump'][5]['refill_rate'],
-                syringe=self.settings['buffer2_pump'][3][0],
-                dual_syringe=self.settings['buffer2_pump'][5]['dual_syringe'],
-                continuous_flow=self.settings['buffer2_pump'][6])
+        self.buffer2_pump_panel = TRPumpPanel(pump_parent, self,
+            self.settings['buffer2_pump'][0],
+            self.settings['buffer2_pump'][0], self.settings['buffer2_pump'][1],
+            **self.settings['buffer2_pump'][5])
 
         self.pump_panels = {}
         self.pump_panels[self.settings['sample_pump'][0]] = self.sample_pump_panel
@@ -4158,12 +4125,15 @@ class TRPumpPanel(wx.Panel):
             wx.MessageBox(msg, "Error setting flow rate")
             cont = False
 
-        try:
-            refillr = float(self.refill_rate_ctrl.GetValue())
-        except Exception:
-            msg = "Refill rate must be a number."
-            wx.MessageBox(msg, "Error setting refill rate")
-            cont = False
+        refillr = self.refill_rate_ctrl.GetValue()
+
+        if refillr != '':
+            try:
+                refillr = float(refillr)
+            except Exception:
+                msg = "Refill rate must be a number."
+                wx.MessageBox(msg, "Error setting refill rate")
+                cont = False
 
         accel = self.flow_accel_ctrl.GetValue()
 
@@ -4171,7 +4141,7 @@ class TRPumpPanel(wx.Panel):
             try:
                 accel = float(accel)
             except Exception:
-                msg = "Flow rate must be a number."
+                msg = "Flow acceleration must be a number."
                 wx.MessageBox(msg, "Error setting flow rate")
                 cont = False
 
@@ -4192,7 +4162,12 @@ class TRPumpPanel(wx.Panel):
                     success = self.tr_flow_panel.set_flow_rate(self.name, flowr,
                         self.pump_mode, dispense)
                 else:
-                    if self.pump_type == 'NE 500':
+                    if refillr == '':
+                        msg = "Refill rate must be a number."
+                        wx.MessageBox(msg, "Error setting refill rate")
+                        success = False
+
+                    if self.pump_type == 'NE 500' and success:
                         if dispense:
                             success = self.tr_flow_panel.set_flow_rate(self.name,
                                 flowr, self.pump_mode, dispense)
@@ -4200,7 +4175,7 @@ class TRPumpPanel(wx.Panel):
                             success = self.tr_flow_panel.set_refill_rate(self.name,
                                 refillr, self.pump_mode, dispense)
 
-                    else:
+                    elif success:
                         success = self.tr_flow_panel.set_flow_rate(self.name,
                             flowr, self.pump_mode, dispense)
                         success = self.tr_flow_panel.set_refill_rate(self.name,
@@ -4606,10 +4581,15 @@ if __name__ == '__main__':
         'remote_valve_ip'       : '164.54.204.8',
         'remote_valve_port'     : '5558',
         'device_communication'  : 'remote',
-        # 'injection_valve'       : [('Rheodyne', 'COM6', [], {'positions' : 2}, 'Injection'),], #Chaotic flow
+        # valve definition: ('Valve type', 'Port', [args], {kwargs}, 'Name')
+        'injection_valve'       : [('Rheodyne', 'COM6', [], {'positions' : 2}, 'Injection'),], #Chaotic flow
         # 'sample_valve'          : [('Rheodyne', 'COM9', [], {'positions' : 6}, 'Sample'),],
         # 'buffer1_valve'         : [('Rheodyne', 'COM8', [], {'positions' : 6}, 'Buffer 1'),],
         # 'buffer2_valve'         : [('Rheodyne', 'COM7', [], {'positions' : 6}, 'Buffer 2'),],
+        'sample_valve'          : [],
+        'buffer1_valve'         : [],
+        'buffer2_valve'         : [],
+        # pump definition: ('Name', 'Pump type', 'Port', [args], {kwargs}, {gui kwargs}, continuous_flow)
         # 'sample_pump'           : ('Sample', 'PHD 4400', 'COM4',
         #     ['10 mL, Medline P.C.', '1'], {}, {'flow_rate' : '5',
         #     'refill_rate' : '5', 'dual_syringe': False}),
@@ -4619,7 +4599,13 @@ if __name__ == '__main__':
         # 'buffer2_pump'          : ('Buffer 2', 'PHD 4400', 'COM4',
         #     ['20 mL, Medline P.C.', '3'], {}, {'flow_rate' : '10',
         #     'refill_rate' : '10', 'dual_syringe': False}),
-        # 'outlet_fm'             : ('BFS', 'COM5', [], {}),
+        'sample_pump'           : ('Sample', 'SSI Next Gen', 'COM17',
+            [], {}, {'continuous_flow': True, 'flow_accel': 0.0},  True),
+        'buffer1_pump'           : ('Buffer 1', 'SSI Next Gen', 'COM15',
+            [], {}, {'continuous_flow': True, 'flow_accel': 0.0}, True),
+        'buffer2_pump'          : ('Buffer 2', 'SSI Next Gen', 'COM18',
+            [], {}, {'continuous_flow': True, 'flow_accel': 0.0}, True),
+        'outlet_fm'             : ('BFS', 'COM5', [], {}),
         # 'injection_valve'       : [('Rheodyne', 'COM6', [], {'positions' : 2}, 'Injection'),], #Laminar flow
         # 'sample_valve'          : [('Rheodyne', 'COM9', [], {'positions' : 6}, 'Sample'),],
         # 'buffer1_valve'         : [('Rheodyne', 'COM8', [], {'positions' : 6}, 'Buffer'),],
@@ -4634,7 +4620,7 @@ if __name__ == '__main__':
         #     ['10 mL, Medline P.C.', '02'], {}, {'flow_rate' : '0.1',
         #     'refill_rate' : '10', 'dual_syringe': False}),
         # 'outlet_fm'             : ('BFS', 'COM13', [], {}),
-        'device_communication'  : 'local',                                                  # Simulated
+        # 'device_communication'  : 'local',                                                  # Simulated
         # 'injection_valve'       : [('Soft', '', [], {'positions' : 2}, 'Injection'),],    # Simulated Chaotic w/syringe
         # 'sample_valve'          : [('Soft', '', [], {'positions' : 6}, 'Sample'),],
         # 'buffer1_valve'         : [('Soft', '', [], {'positions' : 6}, 'Buffer'),],
@@ -4648,21 +4634,21 @@ if __name__ == '__main__':
         # 'buffer2_pump'          : ('Buffer 2', 'Soft Syringe', '',
         #     ['20 mL, Medline P.C.',], {}, {'flow_rate' : '10',
         #     'refill_rate' : '40', 'dual_syringe' : False}),
-        'outlet_fm'             : ('Soft', '', [], {}),                                   # Simulated Chaotic w/continuous pump
-        'injection_valve'       : [('Soft', '', [], {'positions' : 2}, 'Injection'),],
-        'sample_valve'          : [],
-        'buffer1_valve'         : [],
-        'buffer2_valve'         : [],
-        'sample_pump'           : ('Sample', 'Soft Syringe', '',
-            ['10 mL, Medline P.C.',], {}, {'flow_rate' : '5',
-            'refill_rate' : '20', 'dual_syringe' : False}, True),
-        'buffer1_pump'           : ('Buffer 1', 'Soft Syringe', '',
-            ['20 mL, Medline P.C.',], {}, {'flow_rate' : '10',
-            'refill_rate' : '40', 'dual_syringe' : False}, True),
-        'buffer2_pump'          : ('Buffer 2', 'Soft Syringe', '',
-            ['20 mL, Medline P.C.',], {}, {'flow_rate' : '10',
-            'refill_rate' : '40', 'dual_syringe' : False}, True),
-        'outlet_fm'             : ('Soft', '', [], {}),
+        # 'outlet_fm'             : ('Soft', '', [], {}),                                   # Simulated Chaotic w/continuous pump
+        # 'injection_valve'       : [('Soft', '', [], {'positions' : 2}, 'Injection'),],
+        # 'sample_valve'          : [],
+        # 'buffer1_valve'         : [],
+        # 'buffer2_valve'         : [],
+        # 'sample_pump'           : ('Sample', 'Soft Syringe', '',
+        #     ['10 mL, Medline P.C.',], {}, {'flow_rate' : '5',
+        #     'refill_rate' : '20', 'dual_syringe' : False}, True),
+        # 'buffer1_pump'           : ('Buffer 1', 'Soft Syringe', '',
+        #     ['20 mL, Medline P.C.',], {}, {'flow_rate' : '10',
+        #     'refill_rate' : '40', 'dual_syringe' : False}, True),
+        # 'buffer2_pump'          : ('Buffer 2', 'Soft Syringe', '',
+        #     ['20 mL, Medline P.C.',], {}, {'flow_rate' : '10',
+        #     'refill_rate' : '40', 'dual_syringe' : False}, True),
+        # 'outlet_fm'             : ('Soft', '', [], {}),
         # 'injection_valve'       : [('Soft', '', [], {'positions' : 2}, 'Injection'),],
         # 'sample_valve'          : [('Soft', '', [], {'positions' : 6}, 'Sample'),],
         # 'buffer1_valve'         : [('Soft', '', [], {'positions' : 6}, 'Buffer'),
@@ -4701,7 +4687,7 @@ if __name__ == '__main__':
         'mixer_type'            : 'chaotic', # laminar or chaotic
         'sample_ratio'          : '0.066', # For laminar flow
         'sheath_ratio'          : '0.032', # For laminar flow
-        'simulated'             : True, # VERY IMPORTANT. MAKE SURE THIS IS FALSE FOR EXPERIMENTS
+        'simulated'             : False, # VERY IMPORTANT. MAKE SURE THIS IS FALSE FOR EXPERIMENTS
         }
 
     app = wx.App()

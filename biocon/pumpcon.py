@@ -1455,7 +1455,6 @@ class SSINextGenPump(Pump):
         self._flow_rate_val = 0 #Current set flow rate
         self._max_pressure = 10000 #Upper pressure limit
         self._min_pressure = 0 #Lower pressure limit
-        self._pressure = 0
         self._is_flowing = False
         self._max_flow_rate = 10
         self._min_flow_rate = 0
@@ -1699,21 +1698,6 @@ class SSINextGenPump(Pump):
             rate = rate*60.
 
         self._flow_rate_acceleration = rate
-
-    @property
-    def pressure(self):
-        pressure = self._pressure
-
-        if self.pressure_units.lower() == 'mpa':
-            pressure = pressure/145.038
-        elif self.pressure_units == 'bar':
-            pressure = pressure/14.5038
-
-        return pressure
-
-    @pressure.setter
-    def pressure(self, input_pressure):
-        pass
 
     @property
     def max_pressure(self):
@@ -3190,7 +3174,7 @@ class PumpCommThread(threading.Thread):
             refill_rate = None
 
         try:
-            pressure = pump.pressure
+            pressure = pump.get_pressure()
         except Exception:
             pressure = None
 
