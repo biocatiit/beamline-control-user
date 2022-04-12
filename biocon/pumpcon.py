@@ -446,9 +446,8 @@ class M50Pump(Pump):
 
         self.comm_lock = comm_lock
 
-        self.comm_lock.acquire()
-        self.pump_comm = MForceSerialComm(device)
-        self.comm_lock.release()
+        with self.comm_lock:
+            self.pump_comm = MForceSerialComm(device)
 
 
         #Make sure parameters are set right
@@ -541,9 +540,8 @@ class M50Pump(Pump):
         """
         logger.debug("Sending pump %s cmd %r", self.name, cmd)
 
-        self.comm_lock.acquire()
-        ret = self.pump_comm.write(cmd, get_response)
-        self.comm_lock.release()
+        with self.comm_lock:
+            ret = self.pump_comm.write(cmd, get_response)
 
         if get_response:
             logger.debug("Pump %s returned %r", self.name, ret)
@@ -620,7 +618,8 @@ class M50Pump(Pump):
 
     def disconnect(self):
         logger.debug("Closing pump %s serial connection", self.name)
-        self.pump_comm.ser.close()
+        with self.comm_lock:
+            self.pump_comm.ser.close()
 
 class PHD4400Pump(Pump):
     """
@@ -649,10 +648,9 @@ class PHD4400Pump(Pump):
 
         self.comm_lock = comm_lock
 
-        self.comm_lock.acquire()
-        self.pump_comm = PHD4400SerialComm(device, stopbits=serial.STOPBITS_TWO,
-            baudrate=19200)
-        self.comm_lock.release()
+        with self.comm_lock:
+            self.pump_comm = PHD4400SerialComm(device, stopbits=serial.STOPBITS_TWO,
+                baudrate=19200)
 
         self._is_flowing = False
         self._is_dispensing = False
@@ -826,13 +824,12 @@ class PHD4400Pump(Pump):
 
         logger.debug("Sending pump %s cmd %r", self.name, cmd)
 
-        self.comm_lock.acquire()
+        with self.comm_lock:
 
-        ret = self.pump_comm.write("{}{}".format(self._pump_address, cmd),
-            self._pump_address, get_response=get_response, send_term_char='\r')
+            ret = self.pump_comm.write("{}{}".format(self._pump_address, cmd),
+                self._pump_address, get_response=get_response, send_term_char='\r')
 
-        time.sleep(0.01)
-        self.comm_lock.release()
+            time.sleep(0.01)
 
         logger.debug("Pump %s returned %r", self.name, ret)
 
@@ -1014,7 +1011,9 @@ class PHD4400Pump(Pump):
     def disconnect(self):
         """Close any communication connections"""
         logger.debug("Closing pump %s serial connection", self.name)
-        self.pump_comm.ser.close()
+
+        with self.comm_lock:
+            self.pump_comm.ser.close()
 
 
 class NE500Pump(Pump):
@@ -1044,9 +1043,8 @@ class NE500Pump(Pump):
 
         self.comm_lock = comm_lock
 
-        self.comm_lock.acquire()
-        self.pump_comm = SerialComm(device, baudrate=19200)
-        self.comm_lock.release()
+        with self.comm_lock:
+            self.pump_comm = SerialComm(device, baudrate=19200)
 
         self._is_flowing = False
         self._is_dispensing = False
@@ -1193,12 +1191,9 @@ class NE500Pump(Pump):
 
         logger.debug("Sending pump %s cmd %r", self.name, cmd)
 
-        self.comm_lock.acquire()
-
-        ret = self.pump_comm.write("{}{}".format(self._pump_address, cmd),
-            get_response=get_response, send_term_char='\r', term_char='\x03')
-
-        self.comm_lock.release()
+        with self.comm_lock:
+            ret = self.pump_comm.write("{}{}".format(self._pump_address, cmd),
+                get_response=get_response, send_term_char='\r', term_char='\x03')
 
         if get_response:
             ret = ret.lstrip('\x02').rstrip('\x03').lstrip(self._pump_address)
@@ -1402,7 +1397,8 @@ class NE500Pump(Pump):
     def disconnect(self):
         """Close any communication connections"""
         logger.debug("Closing pump %s serial connection", self.name)
-        self.pump_comm.ser.close()
+        with self.comm_lock:
+            self.pump_comm.ser.close()
 
 
 class SSINextGenPump(Pump):
@@ -1440,9 +1436,8 @@ class SSINextGenPump(Pump):
 
         self.comm_lock = comm_lock
 
-        self.comm_lock.acquire()
-        self.pump_comm = SerialComm(device)
-        self.comm_lock.release()
+        with self.comm_lock:
+            self.pump_comm = SerialComm(device)
 
         self.timeout=1 #Timeout to wait for response in s
 
@@ -1779,9 +1774,8 @@ class SSINextGenPump(Pump):
         """
         logger.debug("Sending pump %s cmd %r", self.name, cmd)
 
-        self.comm_lock.acquire()
-        ret = self.pump_comm.write(cmd, get_response, '\r', '/')
-        self.comm_lock.release()
+        with self.comm_lock:
+            ret = self.pump_comm.write(cmd, get_response, '\r', '/')
 
         if get_response:
             logger.debug("Pump %s returned %r", self.name, ret)
@@ -2114,7 +2108,8 @@ class SSINextGenPump(Pump):
         self._is_dispensing = False
         self._accel_stop.set()
 
-        self.pump_comm.ser.close()
+        with self.comm_lock:
+            self.pump_comm.ser.close()
 
 class SoftPump(Pump):
     """

@@ -2973,6 +2973,7 @@ class TRFlowPanel(wx.Panel):
                 self._set_pump_status(pump_name, status_dict)
 
     def _set_pump_status(self, pump_name, status_dict):
+        print(status_dict)
         self.set_pump_moving(pump_name, status_dict['is_moving'])
         self.set_pump_status_direction(pump_name, status_dict['is_dispensing'])
         self.set_pump_status_volume(pump_name, status_dict['volume'])
@@ -3880,12 +3881,12 @@ class TRPumpPanel(wx.Panel):
         self.dual_syringe = wx.Choice(parent, choices=['True', 'False'])
         self.dual_syringe.SetStringSelection(str(dual_syringe))
         self.dual_syringe_lbl = wx.StaticText(parent, label='Dual syringe:')
-        self.max_pressure_ctrl = wx.TextCtrl(parent, value=max_pressure, size=(60, -1),
+        self.max_pressure_ctrl = wx.TextCtrl(parent, value=str(max_pressure), size=(60, -1),
             validator=utils.CharValidator('float_te'), style=wx.TE_PROCESS_ENTER)
         self.max_pressure_lbl = wx.StaticText(parent, label='Max Pressure:')
         self.pressure_units_lbl = wx.StaticText(parent,
             label=self.tr_flow_panel.settings['pressure_units'])
-        self.flow_accel_ctrl = wx.TextCtrl(parent, value=flow_accel, size=(60, -1),
+        self.flow_accel_ctrl = wx.TextCtrl(parent, value=str(flow_accel), size=(60, -1),
             validator=utils.CharValidator('float_te'), style=wx.TE_PROCESS_ENTER)
         self.flow_accel_units_lbl = wx.StaticText(parent,
             label=self.tr_flow_panel.settings['flow_units']+'^2')
