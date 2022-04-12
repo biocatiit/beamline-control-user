@@ -2013,6 +2013,63 @@ class CoflowPlotFrame(wx.Frame):
 
     def updatePlot(self, redraw=False):
 
+        # oldx = self.subplot.get_xlim()
+        # oldy = self.subplot.get_ylim()
+
+        # self.subplot.set_autoscale_on(True)
+        # self.subplot.relim()
+        # self.subplot.autoscale_view()
+
+        # newx = self.subplot.get_xlim()
+        # newy = self.subplot.get_ylim()
+
+        # newx = [newx[0], newx[1]]
+        # newy = [newy[0], newy[1]]
+
+        # oldx = [oldx[0], oldx[1]]
+        # oldy = [oldy[0], oldy[1]]
+
+        # print('start')
+        # print(oldx)
+        # print(newx)
+
+        
+
+        # # if not x_sim:
+        #     # print('new x')
+
+        # if newx[0] < oldx[0] + self.t_axis_incrementer:
+        #     newx[0] = oldx[0]
+
+        # if newx[1] > oldx[1]:
+        #     newx[1] = newx[1] + self.t_axis_incrementer
+
+        # else:
+        #     newx[1] = oldx[1]
+
+        # print('final')
+        # print(oldx)
+        # print(newx)
+
+        # if newx[0] != oldx[0] or newx[1] != oldx[1]:
+        #     redraw = True
+        #     self.subplot.set_xlim(newx[0], newx[1])
+
+        # if newy[0] != oldy[0] or newy[1] != oldy[1]:
+        #     redraw = True
+
+        # if redraw:
+        #     self.canvas.draw()
+
+        # self.canvas.restore_region(self.background)
+
+        # if self.line1 is not None:
+        #     self.subplot.draw_artist(self.line1)
+        # if self.line2 is not None:
+        #     self.subplot.draw_artist(self.line2)
+
+        # self.canvas.blit(self.subplot.bbox)
+
         oldx = self.subplot.get_xlim()
         oldy = self.subplot.get_ylim()
 
@@ -2022,18 +2079,7 @@ class CoflowPlotFrame(wx.Frame):
         newx = self.subplot.get_xlim()
         newy = self.subplot.get_ylim()
 
-        if newy != oldy:
-            redraw = True
-
-        if newx != oldx:
-            if newx[0] > oldx[0] and newx[0] < oldx[0] + self.t_axis_incrementer:
-                new_x[0] = oldx[0]
-
-            if newx[1] > oldx[1]:
-                newx[1] = newx[1] + self.t_axis_incrementer
-
-        if newx != oldx:
-            self.subplot.set_xlim(newx[0], newx[1])
+        if newx != oldx or newy != oldy:
             redraw = True
 
         if redraw:

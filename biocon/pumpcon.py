@@ -847,12 +847,22 @@ class PHD4400Pump(Pump):
         """
         ret = self.send_cmd("")
 
-        if ret.endswith('>') or ret.endswith('<'):
+        if ret.endswith('>'):
             moving = True
+            self._is_dispensing = True
+        elif ret.endswith('<'):
+            moving = True
+            self._is_dispensing = False
         else:
             moving = False
 
         return moving
+
+    def is_dispensing(self, update=False):
+        if update:
+            self.is_moving()
+
+        return self._is_dispensing
 
     def get_delivered_volume(self):
         ret = self.send_cmd("DEL")
@@ -1212,12 +1222,24 @@ class NE500Pump(Pump):
         """
         ret, status = self.send_cmd("")
 
-        if status == 'I' or status == 'W' or status == 'X' or status == 'T':
+        if status == 'I':
+            moving = True
+            self._is_dispensing = True
+        elif status == 'W':
+            moving = True
+            self._is_dispensing = False
+        elif status == 'X' or status == 'T':
             moving = True
         else:
             moving = False
 
         return moving
+
+    def is_dispensing(self, update=False):
+        if update:
+            self.is_moving()
+
+        return self._is_dispensing
 
     def get_delivered_volume(self):
         ret, status = self.send_cmd("DIS")
@@ -2770,6 +2792,7 @@ class PumpCommThread(threading.Thread):
                         'get_status'    : self._get_status,
                         'get_status_multi': self._get_status_multiple,
                         'set_pump_dual_syringe': self._set_dual_syringe,
+                        'set_max_pressure'  : self._set_max_pressure,
                         }
 
         self._connected_pumps = OrderedDict()
@@ -3138,20 +3161,55 @@ class PumpCommThread(threading.Thread):
 
     def _get_status(self, name):
         logger.debug("Getting pump status")
-        pump = self._connected_pumps[name]
-        is_moving = pump.is_moving()
-        volume = pump.volume
-        self.return_queue.append((name, 'status', (is_moving, volume)))
+        pump_status = self._get_pump_status(name)
+        self.return_queue.append((name, 'status', pump_status))
 
     def _get_status_multiple(self, names):
         status = []
         for name in names:
-            pump = self._connected_pumps[name]
-            is_moving = pump.is_moving()
-            volume = pump.volume
-            status.append((is_moving, volume))
+            pump_status = self._get_pump_status(name)
+
+            status.append(pump_status)
 
         self.return_queue.append((names, 'multi_status', status))
+
+    def _get_pump_status(self, name):
+        pump = self._connected_pumps[name]
+        is_moving = pump.is_moving()
+
+        try:
+            volume = pump.volume
+        except Exception:
+            volume = None
+
+        flow_rate = pump.flow_rate
+
+        try:
+            refill_rate = pump.refill_rate
+        except Exception:
+            refill_rate = None
+
+        try:
+            pressure = pump.pressure
+        except Exception:
+            pressure = None
+
+        try:
+            is_dispensing = pump.is_dispensing()
+        except Exception:
+            is_dispensing = None
+
+        status = {'is_moving' : is_moving, 'volume' : volume,
+                'flow_rate' : flow_rate, 'refill_rate' : refill_rate,
+                'pressure' : pressure, 'is_dispensing' : is_dispensing}
+
+        return status
+
+    def _set_max_pressure(self, name, pressure):
+        logger.info("Setting pump %s max pressure", name)
+        pump = self._connected_pumps[name]
+        pump.max_pressure = pressure
+        logger.debug("Pump %s max pressure set", name)
 
     def _send_cmd(self, name, cmd, get_response=True):
         """
