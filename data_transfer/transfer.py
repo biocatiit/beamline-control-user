@@ -292,7 +292,7 @@ class TransferFrame(wx.Frame):
         self.abort_event.set()
 
     def _run_rsync(self):
-        rsync_proc = subprocess.Popen(['rsync', '-avz', self.source, self.dest])
+        rsync_proc = subprocess.Popen(['rsync', '-av', self.source, self.dest])
 
         while rsync_proc.poll() == None:
             if self.abort_event.is_set():
