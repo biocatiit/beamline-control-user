@@ -1954,6 +1954,10 @@ class TRFlowPanel(wx.Panel):
 
             init = self._send_pumpcmd(cmd, response=True)
 
+            self.pumps[name] = (name, ptype, com, address)
+
+            self.set_units(name, self.settings['flow_units'])
+
             if not init and not self.timeout_event.is_set():
                 logger.error('Failed to connect to the {}.'.format(name.replace('_', ' ')))
 
@@ -1965,12 +1969,10 @@ class TRFlowPanel(wx.Panel):
                 dialog.ShowModal()
                 dialog.Destroy()
 
-            self.pumps[name] = (name, ptype, com, address)
-
-            self.set_units(name, self.settings['flow_units'])
-
-            self.set_pump_status(name, 'Connected')
-            self.pump_panels[name].connected = True
+            elif init:
+                self.set_pump_status(name, 'Connected')
+                self.pump_panels[name].connected = True
+                self.pump_panels[name].set_max_pressure()
 
         self.pump_monitor_thread.start()
 
@@ -2109,6 +2111,7 @@ class TRFlowPanel(wx.Panel):
 
         self.max_flow_time = wx.StaticText(info_parent, size=(60, -1))
         # self.current_flow_time = wx.StaticText(info_parent, size=(60, -1))
+        self.outlet_flow = wx.StaticText(info_parent)
 
         info_sizer = wx.FlexGridSizer(cols=2, hgap=5, vgap=5)
         # info_sizer.Add(wx.StaticText(info_parent, label='Cur. flow time [s]:'),
@@ -2117,6 +2120,9 @@ class TRFlowPanel(wx.Panel):
         info_sizer.Add(wx.StaticText(info_parent, label='Max. flow time [s]:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
         info_sizer.Add(self.max_flow_time, flag=wx.ALIGN_CENTER_VERTICAL)
+        info_sizer.Add(wx.StaticText(info_parent, label='Outlet flow [{}]:'.format(self.settings['flow_units'])),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        info_sizer.Add(self.outlet_flow)
 
         info_box_sizer.Add(info_sizer)
         info_box_sizer.AddStretchSpacer(1)
@@ -2254,16 +2260,11 @@ class TRFlowPanel(wx.Panel):
         fm_box_sizer = wx.StaticBoxSizer(wx.VERTICAL, ctrl_parent, "Flow Meter")
         fm_parent = fm_box_sizer.GetStaticBox()
 
-        self.outlet_flow = wx.StaticText(fm_parent)
+
         self.outlet_density = wx.StaticText(fm_parent, size=(60, -1))
         self.outlet_T = wx.StaticText(fm_parent)
 
         fm_sizer = wx.FlexGridSizer(cols=3, vgap=2, hgap=2)
-        fm_sizer.Add(wx.StaticText(fm_parent, label='Flow rate:'),
-            flag=wx.ALIGN_CENTER_VERTICAL)
-        fm_sizer.Add(self.outlet_flow, flag=wx.ALIGN_CENTER_VERTICAL)
-        fm_sizer.Add(wx.StaticText(fm_parent, label=self.settings['flow_units']),
-            flag=wx.ALIGN_CENTER_VERTICAL)
         fm_sizer.Add(wx.StaticText(fm_parent, label='Density:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
         fm_sizer.Add(self.outlet_density, flag=wx.ALIGN_CENTER_VERTICAL)
@@ -2462,6 +2463,7 @@ class TRFlowPanel(wx.Panel):
         self.get_all_valve_positions()
         self.get_all_pump_status()
 
+        total_flow = 0
 
         for pump_panel in self.pump_panels.values():
             pump_status = pump_panel.moving
@@ -2490,6 +2492,25 @@ class TRFlowPanel(wx.Panel):
                 self.pause_valve_monitor.clear()
                 self.pause_pump_monitor.clear()
                 return False
+
+            flow_rate = pump_panel.get_flow_rate()
+
+            if pump_panel.get_dual_syringe():
+                flow_rate = flow_rate*2
+
+            total_flow += flow_rate
+
+        if total_flow <= 0 or total_flow > self.settings['max_flow']:
+            msg = ('Cannot start all pumps when total flow rate is {1} {0}. '
+                'Total flow rate must be between 0 and {2} {0}.'.format(
+                    self.settings['flow_units'], total_flow, self.settings['max_flow']))
+            wx.CallAfter(self.showMessageDialog, self, msg, 'Failed to start pumps',
+                    wx.OK|wx.ICON_ERROR)
+
+            self.pause_valve_monitor.clear()
+            self.pause_pump_monitor.clear()
+            return False
+
 
         if self.set_valve_position.IsChecked():
             valve_list = [
@@ -2973,7 +2994,6 @@ class TRFlowPanel(wx.Panel):
                 self._set_pump_status(pump_name, status_dict)
 
     def _set_pump_status(self, pump_name, status_dict):
-        print(status_dict)
         self.set_pump_moving(pump_name, status_dict['is_moving'])
         self.set_pump_status_direction(pump_name, status_dict['is_dispensing'])
         self.set_pump_status_volume(pump_name, status_dict['volume'])
@@ -3238,6 +3258,9 @@ class TRFlowPanel(wx.Panel):
             for pump_name, pump_panel in self.pump_panels.items():
                 flow_rate = float(pump_panel.get_flow_rate())
 
+                if pump_panel.get_dual_syringe():
+                    flow_rate = flow_rate*2
+
                 total_fr = total_fr + flow_rate
 
                 if pump_name == self.settings['sample_pump'][0]:
@@ -3248,10 +3271,23 @@ class TRFlowPanel(wx.Panel):
                     buffer2_fr = flow_rate
 
             metadata['Total flow rate [{}]:'.format(flow_units)] = total_fr
-            metadata['Dilution ratio:'] = 1./(sample_fr/total_fr)
+
+            if self.chaotic_mixer:
+                metadata['Dilution ratio:'] = 1./(sample_fr/total_fr)
+            else:
+                metadata['Sample/buffer ratio:'] = sample_fr/buffer1_fr
+                metadata['Sheath/buffer ratio:'] = buffer2_fr/buffer1_fr
+
             metadata['Sample flow rate [{}]:'.format(flow_units)] = sample_fr
-            metadata['Buffer 1 flow rate [{}]:'.format(flow_units)] = buffer1_fr
-            metadata['Buffer 2 flow rate [{}]:'.format(flow_units)] = buffer2_fr
+
+            if self.chaotic_mixer:
+                metadata['Buffer 1 flow rate [{}]:'.format(flow_units)] = buffer1_fr
+                metadata['Buffer 2 flow rate [{}]:'.format(flow_units)] = buffer2_fr
+
+            else:
+                metadata['Buffer flow rate [{}]:'.format(flow_units)] = buffer1_fr
+                metadata['Sheath flow rate [{}]:'.format(flow_units)] = buffer2_fr
+
             metadata['Exposure start setting:'] = start_condition
             if start_condition == 'Fixed delay':
                 metadata['Exposure start delay [s]:'] = float(start_delay)
@@ -4293,6 +4329,17 @@ class TRPumpPanel(wx.Panel):
             msg = "Volume must be a number."
             wx.MessageBox(msg, "Error setting volume")
 
+    def set_max_pressure(self):
+        cont = True
+
+        try:
+            max_pressure = float(self.max_pressure_ctrl.GetValue())
+        except Exception:
+            cont = False
+
+        if cont:
+            self._set_max_pressure()
+
     def _set_max_pressure(self):
         cont = True
 
@@ -4455,8 +4502,6 @@ class TRPumpPanel(wx.Panel):
         self.tr_flow_panel.set_pump_dual_syringe_type(self.name,
             self.dual_syringe.GetStringSelection()=='True')
 
-
-
     def set_pump_direction(self, dispense):
         if dispense:
             self.pump_direction = 'Dispense'
@@ -4601,11 +4646,14 @@ if __name__ == '__main__':
         #     ['20 mL, Medline P.C.', '3'], {}, {'flow_rate' : '10',
         #     'refill_rate' : '10', 'dual_syringe': False}),
         'sample_pump'           : ('Sample', 'SSI Next Gen', 'COM17',
-            [], {}, {'continuous_flow': True, 'flow_accel': 0.0},  True),
+            [], {}, {'continuous_flow': True, 'flow_accel': 0.0,
+            'max_pressure': 100},  True),
         'buffer1_pump'           : ('Buffer 1', 'SSI Next Gen', 'COM15',
-            [], {}, {'continuous_flow': True, 'flow_accel': 0.0}, True),
+            [], {}, {'continuous_flow': True, 'flow_accel': 0.0,
+            'max_pressure': 100}, True),
         'buffer2_pump'          : ('Buffer 2', 'SSI Next Gen', 'COM18',
-            [], {}, {'continuous_flow': True, 'flow_accel': 0.0}, True),
+            [], {}, {'continuous_flow': True, 'flow_accel': 0.0,
+            'max_pressure': 100}, True),
         'outlet_fm'             : ('BFS', 'COM5', [], {}),
         # 'injection_valve'       : [('Rheodyne', 'COM6', [], {'positions' : 2}, 'Injection'),], #Laminar flow
         # 'sample_valve'          : [('Rheodyne', 'COM9', [], {'positions' : 6}, 'Sample'),],
