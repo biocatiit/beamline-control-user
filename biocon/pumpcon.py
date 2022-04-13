@@ -1549,7 +1549,10 @@ class SSINextGenPump(Pump):
             logger.warning("Failed to change pump %s pressure units, units supplied were invalid: %s", self.name, units)
 
     @property
-    def flow_rate(self):
+    def flow_rate(self, update=True):
+        if update:
+            self.get_status()
+
         rate = self._flow_rate
 
         if self.units.split('/')[0] == 'uL':
@@ -2856,6 +2859,10 @@ class PumpCommThread(threading.Thread):
             for an :py:class:`M50Pump` you could pass ``flow_cal`` and ``backlash``.
         """
         logger.info("Connecting pump %s", name)
+        if device in self.comm_locks:
+            kwargs['comm_lock'] = self.comm_locks[device]
+        else:
+            logger.info('creating new comlock!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
         new_pump = self.known_pumps[pump_type](device, name, **kwargs)
         self._connected_pumps[name] = new_pump
         self.return_queue.append((name, 'connect', True))
@@ -4073,10 +4080,10 @@ class PumpPanel(wx.Panel):
         pump = self.type_ctrl.GetStringSelection().replace(' ', '_')
 
         if pump == 'VICI_M50':
-            kwargs = {'flow_cal': fc, 'backlash_cal': bc, 'comm_lock': self.comm_lock}
+            kwargs = {'flow_cal': fc, 'backlash_cal': bc}
         elif pump == 'PHD_4400' or pump == 'NE_500':
             kwargs = copy.deepcopy(self.known_syringes[self.syringe_type.GetStringSelection()])
-            kwargs['comm_lock'] = self.comm_lock
+
             kwargs['syringe_id'] = self.syringe_type.GetStringSelection()
             kwargs['pump_address'] = self.pump_address.GetValue()
             kwargs['dual_syringe'] = self.dual_syringe.GetStringSelection() == 'True'
@@ -4085,6 +4092,8 @@ class PumpPanel(wx.Panel):
             kwargs['syringe_id'] = self.syringe_type2.GetStringSelection()
         else:
             kwargs = {}
+
+        kwargs['comm_lock'] = self.comm_lock
 
         try:
             self.pump = self.known_pumps[pump](com, self.name, **kwargs)
@@ -4609,16 +4618,14 @@ class PumpFrame(wx.Frame):
     def _add_pump(self, pump):
         if pump[0] in self.comm_locks:
             comm_lock = self.comm_locks[pump[0]]
-            new_pump = PumpPanel(self.top_panel, wx.ID_ANY, pump[0], self.ports, self.pump_cmd_q,
-                self.pump_answer_q, self.pump_con.known_pumps, pump[0], pump[1],
-                pump[2], pump[3], pump[4], comm_lock, **pump[5])
         else:
             logger.info('creating new comlock!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
             comm_lock = threading.Lock()
             self.comm_locks[pump[0]] = comm_lock
-            new_pump = PumpPanel(self.top_panel, wx.ID_ANY, pump[0], self.ports, self.pump_cmd_q,
-                self.pump_answer_q, self.pump_con.known_pumps, pump[0], pump[1],
-                pump[2], pump[3], pump[4], comm_lock, **pump[5])
+
+        new_pump = PumpPanel(self.top_panel, wx.ID_ANY, pump[0], self.ports, self.pump_cmd_q,
+            self.pump_answer_q, self.pump_con.known_pumps, pump[0], pump[1],
+            pump[2], pump[3], pump[4], comm_lock, **pump[5])
 
         self.pump_sizer.Add(new_pump, border=5, flag=wx.LEFT|wx.RIGHT)
         self.pumps.append(new_pump)
