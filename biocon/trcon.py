@@ -207,6 +207,11 @@ class TRScanPanel(wx.Panel):
         self.pick_file = wx.Button(adv_win, label='Select steps')
         self.step_filename = wx.TextCtrl(adv_win)
 
+        self.pco_direction = wx.Choice(adv_win, choices=['x', 'y'])
+        self.encoder_resolution = wx.TextCtrl(adv_win, size=(60, -1),
+            validator=utils.CharValidator('float'))
+        self.encoder_precision = wx.TextCtrl(adv_win, size=(60, -1),
+            validator=utils.CharValidator('int'))
 
         self.return_speed.Bind(wx.EVT_TEXT, self._on_param_change)
         self.scan_acceleration.Bind(wx.EVT_TEXT, self._on_param_change)
@@ -219,6 +224,9 @@ class TRScanPanel(wx.Panel):
         self.step_speed.Bind(wx.EVT_TEXT, self._on_param_change)
         self.step_acceleration.Bind(wx.EVT_TEXT, self._on_param_change)
         self.gridpoints_from_file.Bind(wx.EVT_TEXT, self._on_param_change)
+        self.pco_direction.Bind(wx.EVT_CHOICE, self._on_param_change)
+        self.encoder_resolution.Bind(wx.EVT_TEXT, self._on_param_change)
+        self.encoder_precision.Bind(wx.EVT_TEXT, self._on_param_change)
 
         self.pick_file.Bind(wx.EVT_BUTTON, self._on_pick_file)
 
@@ -269,6 +277,20 @@ class TRScanPanel(wx.Panel):
         adv_settings_sizer.Add(self.step_filename, (11,0),
             flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
         adv_settings_sizer.Add(self.pick_file, (11,1), flag=wx.ALIGN_CENTER_VERTICAL)
+        adv_settings_sizer.Add(wx.StaticText(adv_win, label='PCO direction:'),
+            (12,0), flag=wx.ALIGN_CENTER_VERTICAL)
+        adv_settings_sizer.Add(self.pco_direction, (12,1),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        adv_settings_sizer.Add(wx.StaticText(adv_win,
+            label='Encoder resolution [{}]:'.format(
+            self.settings['position_units'])), (13,0),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        adv_settings_sizer.Add(self.encoder_resolution, (13,1),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        adv_settings_sizer.Add(wx.StaticText(adv_win, label='Encoder precision:'),
+            (14,0), flag=wx.ALIGN_CENTER_VERTICAL)
+        adv_settings_sizer.Add(self.encoder_precision, (14,1),
+            flag=wx.ALIGN_CENTER_VERTICAL)
 
         adv_sizer.Add(adv_settings_sizer)
 
@@ -340,6 +362,10 @@ class TRScanPanel(wx.Panel):
         self.step_acceleration.SetValue('1')
         self.scan_type.SetStringSelection('Vector')
         self.step_axis.SetStringSelection('None')
+
+        self.pco_direction.SetStringSelection(self.settings['pco_direction'])
+        self.encoder_resolution.SetValue(str(self.settings['encoder_resolution']))
+        self.encoder_precision.SetValue(str(self.settings['encoder_precision']))
 
         self.gridpoints = None
 
@@ -930,6 +956,9 @@ class TRScanPanel(wx.Panel):
                     return_acceleration = D(self.return_acceleration.GetValue())
                     scan_type = self.scan_type.GetStringSelection().lower()
                     step_axis = self.step_axis.GetStringSelection().lower()
+                    pco_direction = self.pco_direction.GetStringSelection()
+                    encoder_resolution = D(self.encoder_resolution.GetValue())
+                    encoder_precision = int(self.encoder_precision.GetValue())
 
                     (x_pco_step,
                         y_pco_step,
@@ -939,9 +968,10 @@ class TRScanPanel(wx.Panel):
                         vect_return_accel) = self._calc_pco_params(x_start,
                         x_end, y_start, y_end, scan_speed, return_speed,
                         scan_acceleration, return_acceleration, delta_t,
-                        scan_type, step_axis)
+                        scan_type, step_axis, encoder_resolution,
+                        encoder_precision)
 
-                    if self.settings['pco_direction'] == 'x':
+                    if pco_direction == 'x':
                         pco_step = x_pco_step
                         if x_start < x_end:
                             pco_start = x_start
@@ -960,15 +990,13 @@ class TRScanPanel(wx.Panel):
                             pco_end = y_end
                         pco_speed = vect_scan_speed[1]
 
-                    if pco_start % self.settings['encoder_resolution'] != 0:
-                        pco_start = self.round_to(pco_start,
-                            self.settings['encoder_precision'],
-                            self.settings['encoder_resolution'])
+                    if pco_start % encoder_resolution != 0:
+                        pco_start = self.round_to(pco_start, encoder_precision,
+                            encoder_resolution)
 
-                    if pco_end % self.settings['encoder_resolution'] != 0:
-                        pco_end = self.round_to(pco_end,
-                            self.settings['encoder_precision'],
-                            self.settings['encoder_resolution'])
+                    if pco_end % encoder_resolution != 0:
+                        pco_end = self.round_to(pco_end, encoder_precision,
+                            encoder_resolution)
 
                     if isinstance(pco_step, float):
                         num_images = int(round(float(abs(pco_end-pco_start))/pco_step))
@@ -982,7 +1010,7 @@ class TRScanPanel(wx.Panel):
                             self.settings['time_units'])))
 
                     if (float(self.settings['pco_encoder_settle_t'])/1e6 >
-                        float(self.settings['encoder_resolution'])/float(pco_speed)):
+                        float(encoder_resolution)/float(pco_speed)):
                         errors.append(('Encoder settling time must be less '
                             'than encoder resolution divded by axis speed'))
 
@@ -1126,7 +1154,9 @@ class TRScanPanel(wx.Panel):
         step_speed = self.step_speed.GetValue()
         step_acceleration = self.step_acceleration.GetValue()
         use_grid_from_file = self.gridpoints_from_file.GetValue()
-
+        pco_direction = self.pco_direction.GetStringSelection()
+        encoder_resolution = self.encoder_resolution.GetValue()
+        encoder_precision = self.encoder_precision.GetValue()
 
         errors = []
 
@@ -1191,6 +1221,16 @@ class TRScanPanel(wx.Panel):
                 self.settings['acceleration_lim'][1], accel_units))
 
         try:
+            encoder_resolution = float(encoder_resolution)
+        except Exception:
+            errors.append('Encoder resolution must be a number.')
+
+        try:
+            encoder_precision = int(encoder_precision)
+        except Exception:
+            errors.append('Encoder precision must be an integer.')
+
+        try:
             scan_start_offset_dist = float(scan_start_offset_dist)
         except Exception:
             errors.append('Start offset (greater than or equal to 0)')
@@ -1217,7 +1257,7 @@ class TRScanPanel(wx.Panel):
             if step_axis == 'none':
                 errors.append('For a grid scan you must specify the step axis (X or Y).')
             else:
-                if step_axis != self.settings['pco_direction'].lower():
+                if step_axis != pco_direction:
                     if not use_grid_from_file:
                         if step_axis == 'x':
                             try:
@@ -1558,7 +1598,7 @@ class TRScanPanel(wx.Panel):
                 scan_values['motor_group_name'] = self.settings['motor_group_name']
                 scan_values['motor_x_name'] = self.settings['motor_x_name']
                 scan_values['motor_y_name'] = self.settings['motor_y_name']
-                scan_values['pco_direction'] = self.settings['pco_direction']
+                scan_values['pco_direction'] = pco_direction
                 scan_values['pco_pulse_width'] = self.settings['pco_pulse_width']
                 scan_values['pco_encoder_settle_t'] =  self.settings['pco_encoder_settle_t']
 
@@ -1639,7 +1679,7 @@ class TRScanPanel(wx.Panel):
 
     def _calc_pco_params(self, x_start, x_end, y_start, y_end, scan_speed,
         return_speed, scan_acceleration, return_acceleration, delta_t,
-        scan_type, step_axis):
+        scan_type, step_axis, encoder_resolution, encoder_precision):
         """ For Newport XPS controller with encoded stages"""
 
         (vect_scan_speed, vect_scan_accel,
@@ -1650,15 +1690,15 @@ class TRScanPanel(wx.Panel):
         x_pco_step = delta_t*D(vect_scan_speed[0])
         y_pco_step = delta_t*D(vect_scan_speed[1])
 
-        if x_pco_step % self.settings['encoder_resolution'] != 0:
-            x_pco_step = x_pco_step + self.settings['encoder_resolution']/D('2') #Round up
-            x_pco_step = self.round_to(x_pco_step, self.settings['encoder_precision'],
-            self.settings['encoder_resolution'])
+        if x_pco_step % encoder_resolution != 0:
+            x_pco_step = x_pco_step + encoder_resolution/D('2') #Round up
+            x_pco_step = self.round_to(x_pco_step, encoder_precision,
+            encoder_resolution)
 
-        if y_pco_step % self.settings['encoder_resolution'] != 0:
-            y_pco_step = y_pco_step + self.settings['encoder_resolution']/D('2') #Round up
-            y_pco_step = self.round_to(x_pco_step, self.settings['encoder_precision'],
-            self.settings['encoder_resolution'])
+        if y_pco_step % encoder_resolution != 0:
+            y_pco_step = y_pco_step + encoder_resolution/D('2') #Round up
+            y_pco_step = self.round_to(x_pco_step, encoder_precision,
+            encoder_resolution)
 
         return x_pco_step, y_pco_step, vect_scan_speed, vect_scan_accel, vect_return_speed, vect_return_accel
 
@@ -2450,7 +2490,7 @@ class TRFlowPanel(wx.Panel):
     def _on_start_all(self, evt):
         wx.CallAfter(self.start_all)
 
-    def start_all(self):
+    def start_all(self, force=False):
         logger.info('Starting all pumps')
         self.pause_valve_monitor.set()
         self.pause_pump_monitor.set()
@@ -2473,7 +2513,7 @@ class TRFlowPanel(wx.Panel):
             else:
                 pump_volume = 1
 
-            if pump_status:
+            if pump_status and not force:
                 msg = ('Cannot start all pumps when one or more pumps '
                     'are already moving.')
                 wx.CallAfter(self.showMessageDialog, self, msg, 'Failed to start pumps',
@@ -2546,7 +2586,7 @@ class TRFlowPanel(wx.Panel):
         else:
             for pump_panel in self.pump_panels.values():
                 pump_panel.set_pump_direction(True)
-                success = pump_panel.run_pump()
+                success = pump_panel.start_pump()
 
         if not success:
             msg = ('Pumps failed to start correctly.')
@@ -3132,6 +3172,7 @@ class TRFlowPanel(wx.Panel):
         valid = True
 
         errors = []
+        warnings = []
 
         self.pause_valve_monitor.set()
         self.pause_pump_monitor.set()
@@ -3189,8 +3230,9 @@ class TRFlowPanel(wx.Panel):
                 pump_status = pump_panel.get_status()
 
                 if pump_status != 'Connected' and pump_status != 'Done':
-                    errors.append(('Pump {} is moving. All pumps must be '
-                        'stopped before starting exposure').format(pump_name))
+                    warnings.append(('Pump {} is moving. Usually pumps are '
+                        'stopped before starting exposure. Flow rates may '
+                        'not be the expected values.').format(pump_name))
 
             for pump_name, pump_panel in self.pump_panels.items():
                 pump_volume = float(pump_panel.get_status_volume())
@@ -3208,10 +3250,24 @@ class TRFlowPanel(wx.Panel):
                 if autoinject_scan < 1:
                     errors.append('Autoinject scan number must an integer >0')
 
+        if len(warnings) > 0:
+            valid = False
+
+            msg = 'The following warning(s) were found:'
+            for warn in warnings:
+                msg = msg + '\n- ' + warn
+            msg = msg + ('\n\nDo you want to continue?')
+
+            ret = wx.CallAfter(wx.MessageBox, msg, 'Warning in scan parameters',
+                style=wx.YES_NO|wx.ICON_QUESTION)
+
+            res = ret.GetResult()
+
+            if res == wx.ID_YES:
+                valid = True
 
         if len(errors) > 0:
             valid = False
-            flow_values = {}
 
             msg = 'The following field(s) have invalid values:'
             for err in errors:
@@ -3221,7 +3277,7 @@ class TRFlowPanel(wx.Panel):
             wx.CallAfter(wx.MessageBox, msg, 'Error in scan parameters',
                 style=wx.OK|wx.ICON_ERROR)
 
-        else:
+        if valid:
             flow_values = {
                 'start_condition'   : start_condition.lower().replace(' ', '_'),
                 'start_delay'       : start_delay,
@@ -3233,6 +3289,8 @@ class TRFlowPanel(wx.Panel):
                 'autoinject_event'  : self.autoinject_event,
                 'start_exp_event'   : self.start_exposure_event,
             }
+        else:
+            flow_values = {}
 
 
         self.pause_valve_monitor.clear()
@@ -4143,6 +4201,15 @@ class TRPumpPanel(wx.Panel):
             self.run_button.SetLabel('Start')
             self.fr_button.Hide()
             self.set_status('Done')
+
+    def start_pump(self):
+        # Just starts the pump
+        if self.run_button.GetLabel() != 'Start':
+            success = self.run_pump()
+        else:
+            success = True
+
+        return success
 
     def run_pump(self):
         """

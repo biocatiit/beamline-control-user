@@ -806,7 +806,7 @@ class ExpCommThread(threading.Thread):
                         motor.set_acceleration(vect_return_accel[0], y_motor, 1)
                     else:
                         motor.set_velocity(vect_return_speed[1], x_motor, 0)
-                        motor.set_acceleration(vect_return_speed[0], x_motor, 0)
+                        motor.set_acceleration(vect_return_accel[1], x_motor, 0)
 
 
         motor_cmd_q.append(('move_absolute', ('TR_motor', (next_x, next_y)), {}))
@@ -826,12 +826,19 @@ class ExpCommThread(threading.Thread):
             cur_fprefix, exp_period, dark_counts, log_vals,
             exp_settings['metadata'], extra_vals)
 
-        while det.get_status() !=0:
+        start = time.time()
+        timeout = False
+        while det.get_status() !=0 and not timeout:
             time.sleep(0.001)
             if self._abort_event.is_set():
                 self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6,
                     comp_settings, exp_time)
                 break
+
+            # Is this long enough? Should it be based off of the scan/return time?
+            if time.time() - start > 5:
+                timeout = True
+                logger.error('Timeout while waiting for detector to finish!')
 
         if self._abort_event.is_set():
             self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6,
