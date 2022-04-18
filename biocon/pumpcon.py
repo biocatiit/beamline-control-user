@@ -2067,6 +2067,13 @@ class SSINextGenPump(Pump):
 
         self.fault = self.motor_stall_fault or self.upl_fault or self.lpl_fault or self.leak_fault
 
+        faults = {'Fault' : self.fault, 'Motor stall': self.motor_stall_fault,
+            'Upper pressure limit' : self.upl_fault,
+            'Lower pressure limit' : self.lpl_fault, 'Leak': self.leak_fault,
+            }
+
+        return faults
+
     def get_pressure(self):
         ret = self.send_cmd('PR')
 
@@ -2775,6 +2782,7 @@ class PumpCommThread(threading.Thread):
                         'get_status_multi': self._get_status_multiple,
                         'set_pump_dual_syringe': self._set_dual_syringe,
                         'set_max_pressure'  : self._set_max_pressure,
+                        'get_faults'    : self._get_faults,
                         }
 
         self._connected_pumps = OrderedDict()
@@ -3150,6 +3158,12 @@ class PumpCommThread(threading.Thread):
         pump_status = self._get_pump_status(name)
         self.return_queue.append((name, 'status', pump_status))
 
+    def _get_faults(self, name):
+        logger.debug('Getting pump faults')
+        pump = self._connected_pumps[name]
+        faults = pump.get_faults()
+        self.return_queue.append((name, 'faults', faults))
+
     def _get_status_multiple(self, names):
         status = []
         for name in names:
@@ -3185,9 +3199,15 @@ class PumpCommThread(threading.Thread):
         except Exception:
             is_dispensing = None
 
+        try:
+            faults = pump.get_faults()
+        except Exception:
+            faults = {'Faults' : False}
+
         status = {'is_moving' : is_moving, 'volume' : volume,
                 'flow_rate' : flow_rate, 'refill_rate' : refill_rate,
-                'pressure' : pressure, 'is_dispensing' : is_dispensing}
+                'pressure' : pressure, 'is_dispensing' : is_dispensing,
+                'faults' : faults,}
 
         return status
 

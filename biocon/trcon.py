@@ -3040,6 +3040,7 @@ class TRFlowPanel(wx.Panel):
         self.set_pump_status_flow_rate(pump_name, status_dict['flow_rate'])
         self.set_pump_status_refill_rate(pump_name, status_dict['refill_rate'])
         self.set_pump_status_pressure(pump_name, status_dict['pressure'])
+        self.show_pump_faults(pump_name, status_dict['faults'])
 
     def set_pump_status(self, pump_name, status):
         if status != self.pump_panels[pump_name].get_status():
@@ -3072,6 +3073,17 @@ class TRFlowPanel(wx.Panel):
     def set_pump_moving(self, pump_name, moving):
         if moving != self.pump_panels[pump_name].moving:
             self.pump_panels[pump_name].set_moving(moving)
+
+    def show_pump_faults(self, pump_name, faults):
+        if faults['Faults']:
+            msg = ('The following faults were detected in the {}:'.format(
+                pump_name.replace('_', ' ')))
+
+            for key in faults:
+                if key != 'Faults' and faults[key]:
+                    msg += '\n- {}'.format(key)
+
+        self.pump_panels[pump_name].show_faults_dialog(msg)
 
     def _monitor_pump_status(self):
         logger.info('Starting continuous monitoring of pump status')
@@ -3862,6 +3874,7 @@ class TRPumpPanel(wx.Panel):
         self.syringe_volume_val = 0
         self.pump_direction = 'Dispense'
         self.continuous_flow = continuous_flow
+        self.faults_dialog = None
 
         self.known_syringes = {'30 mL, EXEL': {'diameter': 23.5, 'max_volume': 30,
             'max_rate': 70},
@@ -4578,7 +4591,10 @@ class TRPumpPanel(wx.Panel):
             ret = wx.CallAfter(self.direction_ctrl.SetStringSelection, 'Aspirate')
 
 
-
+    def show_faults_dialog(self, msg):
+        if self.faults_dialog is None:
+            self.faults_dialog = utils.WarningMessage(self, msg, 'Fault detected')
+            self.faults_dialog.Show()
 
 
 
