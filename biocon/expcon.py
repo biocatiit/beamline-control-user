@@ -1114,7 +1114,11 @@ class ExpCommThread(threading.Thread):
         det.set_exp_time(exp_time)
         det.set_exp_period(exp_period)
 
+
         if exp_type == 'muscle':
+            logger.debug('muscle setup')
+            logger.debug(struck_meas_time)
+            logger.debug(struck_num_meas)
             struck.set_measurement_time(struck_meas_time)   #Ignored for external LNE of Struck
             struck.set_num_measurements(struck_num_meas)
             struck.set_trigger_mode(0x2)    #Sets external mode, i.e. counting on first LNE
