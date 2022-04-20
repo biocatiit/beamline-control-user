@@ -3075,12 +3075,12 @@ class TRFlowPanel(wx.Panel):
             self.pump_panels[pump_name].set_moving(moving)
 
     def show_pump_faults(self, pump_name, faults):
-        if faults['Faults']:
+        if faults['Fault']:
             msg = ('The following faults were detected in the {}:'.format(
                 pump_name.replace('_', ' ')))
 
             for key in faults:
-                if key != 'Faults' and faults[key]:
+                if key != 'Fault' and faults[key]:
                     msg += '\n- {}'.format(key)
 
         self.pump_panels[pump_name].show_faults_dialog(msg)
