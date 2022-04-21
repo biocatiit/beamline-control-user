@@ -270,7 +270,7 @@ class Pump(object):
     documentation contains an example.
     """
 
-    def __init__(self, device, name):
+    def __init__(self, device, name, flow_rate_scale=1, flow_rate_offset=0):
         """
         :param device: The device comport as sent to pyserial
         :type device: str
@@ -281,6 +281,8 @@ class Pump(object):
 
         self.device = device
         self.name = name
+        self.flow_rate_scale = flow_rate_scale
+        self.flow_rate_offset = flow_rate_offset
 
     def __repr__(self):
         return '{}({}, {})'.format(self.__class__.__name__, self.name, self.device)
@@ -318,7 +320,7 @@ class Pump(object):
     @units.setter
     def units(self, units):
         old_units = self._units
-        flow_rate = self.flow_rate
+        flow_rate_offset = self.flow_rate_offset
 
         if units in ['nL/s', 'nL/min', 'uL/s', 'uL/min', 'mL/s', 'mL/min']:
             self._units = units
@@ -326,18 +328,20 @@ class Pump(object):
             new_vu, new_tu = self._units.split('/')[0]
             if old_vu != new_vu:
                 if (old_vu == 'nL' and new_vu == 'uL') or (old_vu == 'uL' and new_vu == 'mL'):
-                    flow_rate = flow_rate/1000.
+                    flow_rate_offset = flow_rate_offset/1000.
                 elif old_vu == 'nL' and new_vu == 'mL':
-                    flow_rate = flow_rate/1000000.
+                    flow_rate_offset = flow_rate_offset/1000000.
                 elif (old_vu == 'mL' and new_vu == 'uL') or (old_vu == 'uL' and new_vu == 'nL'):
-                    flow_rate = flow_rate*1000.
+                    flow_rate_offset = flow_rate_offset*1000.
                 elif old_vu == 'mL' and new_vu == 'nL':
-                    flow_rate = flow_rate*1000000.
+                    flow_rate_offset = flow_rate_offset*1000000.
             if old_tu != new_tu:
                 if old_tu == 'min':
-                    flow_rate = flow_rate/60
+                    flow_rate_offset = flow_rate_offset/60
                 else:
-                    flow_rate = flow_rate*60
+                    flow_rate_offset = flow_rate_offset*60
+
+            self.flow_rate_offset = flow_rate_offset
 
             logger.info("Changed pump %s units from %s to %s", self.name, old_units, units)
         else:
@@ -395,6 +399,12 @@ class Pump(object):
         :type units: str
         """
         pass #Should be implimented in each subclass
+
+    def set_flow_rate_scale(self, scale):
+        self.flow_rate_scale = scale
+
+    def set_flow_rate_offset(self, offset):
+        self.flow_rate_offset = offset
 
     def stop(self):
         """Stops all pump flow."""
@@ -1417,7 +1427,7 @@ class SSINextGenPump(Pump):
         >>> my_pump.stop_flow()
     """
 
-    def __init__(self, device, name, comm_lock=None):
+    def __init__(self, device, name, comm_lock=None, flow_rate_scale=1, flow_rate_offset=0):
         """
         This makes the initial serial connection, and then sets the MForce
         controller parameters to the correct values.
@@ -1428,7 +1438,7 @@ class SSINextGenPump(Pump):
         :param name: A unique identifier for the pump
         :type name: str
         """
-        Pump.__init__(self, device, name)
+        Pump.__init__(self, device, name, flow_rate_scale=1, flow_rate_offset=0)
 
         logstr = ("Initializing pump {} on serial port {}".format(self.name,
             self.device))
@@ -1682,8 +1692,6 @@ class SSINextGenPump(Pump):
             self._accel_change.set()
             while self._accel_change.is_set():
                 time.sleep(0.001)
-
-
 
         return rate
 
@@ -1964,6 +1972,8 @@ class SSINextGenPump(Pump):
         logger.debug('sending flow rate command')
         rate = round(rate, self._flow_rate_decimals)
         self._flow_rate = rate
+
+        rate = round(rate*self.flow_rate_scale+self.flow_rate_offset, self._flow_rate_decimals)
 
         if '.' in str(rate):
             rate_dec = '{:0<{fill}}'.format(str(rate).split('.')[-1], fill=self._flow_rate_decimals)
