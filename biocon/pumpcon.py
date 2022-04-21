@@ -1417,7 +1417,7 @@ class SSINextGenPump(Pump):
         >>> my_pump.stop_flow()
     """
 
-    def __init__(self, device, name, comm_lock=threading.Lock()):
+    def __init__(self, device, name, comm_lock=None):
         """
         This makes the initial serial connection, and then sets the MForce
         controller parameters to the correct values.
@@ -1434,6 +1434,10 @@ class SSINextGenPump(Pump):
             self.device))
         logger.info(logstr)
 
+        if comm_lock is None:
+            comm_lock = threading.Lock()
+            logger.info('Creating comm lock!!!!!!!!!!!!!!!!!!!!!!!!!!')
+
         self.comm_lock = comm_lock
 
         with self.comm_lock:
@@ -1441,7 +1445,7 @@ class SSINextGenPump(Pump):
 
         self.timeout=1 #Timeout to wait for response in s
 
-        self.keypad_enable(False)
+        # self.keypad_enable(False)
 
         # All internal variables are stored in mL/min and psi, regardless of user/pump units
         self._units = 'mL/min'
@@ -2038,7 +2042,7 @@ class SSINextGenPump(Pump):
         ret = self.send_cmd('RF')
 
         if ret.startswith('OK') and ret.endswith('/'):
-            vals = ret.split(',')
+            vals = ret.rstrip('/').split(',')
 
             if vals[1] == '0':
                 self.motor_stall_fault = False
@@ -3386,7 +3390,7 @@ class PumpPanel(wx.Panel):
             style=wx.ST_NO_AUTORESIZE)
         self.pressure_units = wx.StaticText(self, label='psi')
         self.flow_readback_label = wx.StaticText(self, label='Flow Rate:')
-        self.flow_readback = wx.StaticText(self, label='')
+        self.flow_readback = wx.StaticText(self, label='', size=(40, -1))
         self.flow_readback_units = wx.StaticText(self, label='mL/min')
 
         self.vol_gauge = wx.BoxSizer(wx.HORIZONTAL)
@@ -3406,25 +3410,27 @@ class PumpPanel(wx.Panel):
             flag=wx.ALIGN_CENTER_VERTICAL)
         status_grid.Add(self.status, (1,1), span=(1,2),
             flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
-        status_grid.Add(self.syringe_volume_label, (2,0),
+        status_grid.Add(self.flow_readback_label, (2, 0), flag=wx.ALIGN_CENTER_VERTICAL)
+        status_grid.Add(self.flow_readback, (2, 1), flag=wx.ALIGN_CENTER_VERTICAL)
+        status_grid.Add(self.flow_readback_units, (2, 2), flag=wx.ALIGN_CENTER_VERTICAL)
+        status_grid.Add(self.syringe_volume_label, (3,0),
             flag=wx.ALIGN_CENTER_VERTICAL)
-        status_grid.Add(self.syringe_volume, (2,1),
+        status_grid.Add(self.syringe_volume, (3,1),
             flag=wx.ALIGN_CENTER_VERTICAL)
-        status_grid.Add(self.syringe_volume_units, (2,2),
+        status_grid.Add(self.syringe_volume_units, (3,2),
             flag=wx.ALIGN_CENTER_VERTICAL)
-        status_grid.Add(self.vol_gauge, (3,1), span=(1,2),
+        status_grid.Add(self.vol_gauge, (4,1), span=(1,2),
             flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
-        status_grid.Add(self.set_syringe_volume, (4,1), span=(1,2),
+        status_grid.Add(self.set_syringe_volume, (5,1), span=(1,2),
             flag=wx.LEFT|wx.ALIGN_RIGHT|wx.ALIGN_CENTER_VERTICAL)
+
 
 
         self.ssi_status_sizer = wx.FlexGridSizer(cols=3, vgap=5, hgap=5)
         self.ssi_status_sizer.Add(self.pressure_label, flag=wx.ALIGN_CENTER_VERTICAL)
         self.ssi_status_sizer.Add(self.pressure, flag=wx.ALIGN_CENTER_VERTICAL)
         self.ssi_status_sizer.Add(self.pressure_units, flag=wx.ALIGN_CENTER_VERTICAL)
-        self.ssi_status_sizer.Add(self.flow_readback_label, flag=wx.ALIGN_CENTER_VERTICAL)
-        self.ssi_status_sizer.Add(self.flow_readback, flag=wx.ALIGN_CENTER_VERTICAL)
-        self.ssi_status_sizer.Add(self.flow_readback_units, flag=wx.ALIGN_CENTER_VERTICAL)
+
 
         self.status_sizer = wx.StaticBoxSizer(wx.StaticBox(self, label='Info'),
             wx.VERTICAL)
@@ -4161,30 +4167,32 @@ class PumpPanel(wx.Panel):
 
         fr = self.pump.flow_rate
 
-        if fr != self._current_flow_rate:
-            if self.type_ctrl.GetStringSelection() == 'SSI Next Gen':
-                wx.CallAfter(self.flow_readback.SetLabel, str(fr))
+        wx.CallAfter(self.flow_readback.SetLabel, str(fr))
 
-                if not self.pump.is_ramping() and self._current_move_status:
-                    wx.CallAfter(self.flow_rate_ctrl.SetValue, str(fr))
-                    self._current_flow_rate = fr
+        # if fr != self._current_flow_rate:
+        #     if self.type_ctrl.GetStringSelection() == 'SSI Next Gen':
+        #         wx.CallAfter(self.flow_readback.SetLabel, str(fr))
 
-            else:
-                wx.CallAfter(self.flow_rate_ctrl.SetValue, str(fr))
-                self._current_flow_rate = fr
+        #         if not self.pump.is_ramping() and self._current_move_status:
+        #             wx.CallAfter(self.flow_rate_ctrl.SetValue, str(fr))
+        #             self._current_flow_rate = fr
 
-        else:
-            if self.type_ctrl.GetStringSelection() == 'SSI Next Gen' and fr != float(self.flow_readback.GetLabel()):
-                wx.CallAfter(self.flow_readback.SetLabel, str(fr))
+        #     else:
+        #         wx.CallAfter(self.flow_rate_ctrl.SetValue, str(fr))
+        #         self._current_flow_rate = fr
 
-        try:
-            accel = self.pump.flow_rate_acceleration
-            if accel != self._current_flow_accel:
-                wx.CallAfter(self.flow_accel_ctrl.SetValue, str(accel))
-                self._current_flow_accel = accel
+        # else:
+        #     if self.type_ctrl.GetStringSelection() == 'SSI Next Gen' and fr != float(self.flow_readback.GetLabel()):
+        #         wx.CallAfter(self.flow_readback.SetLabel, str(fr))
 
-        except Exception:
-            pass
+        # try:
+        #     accel = self.pump.flow_rate_acceleration
+        #     if accel != self._current_flow_accel:
+        #         wx.CallAfter(self.flow_accel_ctrl.SetValue, str(accel))
+        #         self._current_flow_accel = accel
+
+        # except Exception:
+        #     pass
 
         try:
             rr = self.pump.refill_rate
@@ -4200,9 +4208,9 @@ class PumpPanel(wx.Panel):
         try:
             pressure = self.pump.get_pressure()
 
-            if pressure != self._current_pressure:
-                wx.CallAfter(self.pressure.SetLabel, str(pressure))
-                self._current_pressure = pressure
+            # if pressure != self._current_pressure:
+            wx.CallAfter(self.pressure.SetLabel, str(pressure))
+            self._current_pressure = pressure
 
         except Exception:
             pass

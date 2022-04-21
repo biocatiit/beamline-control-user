@@ -303,14 +303,14 @@ if __name__ == '__main__':
         #     {'flow_rate' : '10', 'refill_rate' : '10'}),
         # ('Buffer 2', 'PHD 4400', 'COM4', ['20 mL, Medline P.C.', '3'], {},
         #     {'flow_rate' : '10', 'refill_rate' : '10'}),
-        ('Sample', 'SSI Next Gen', 'COM17', [], {}, {}),
-        ('Buffer 1', 'SSI Next Gen', 'COM15', [], {}, {}),
+        ('Buffer 1', 'SSI Next Gen', 'COM17', [], {}, {}),
+        ('Sample', 'SSI Next Gen', 'COM15', [], {}, {}),
         ('Buffer 2', 'SSI Next Gen', 'COM18', [], {}, {}),
         ]
 
     pump_local_comm_locks = {
-        'Sample'    : pump_comm_locks[setup_pumps[0][2]],
-        'Buffer 1'    : pump_comm_locks[setup_pumps[1][2]],
+        'Buffer 1'    : pump_comm_locks[setup_pumps[0][2]],
+        'Sample'    : pump_comm_locks[setup_pumps[1][2]],
         'Buffer 2'    : pump_comm_locks[setup_pumps[2][2]]
         }
 
