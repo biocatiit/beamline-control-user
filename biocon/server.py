@@ -309,8 +309,8 @@ if __name__ == '__main__':
         ]
 
     pump_local_comm_locks = {
-        'Sample'    : pump_comm_locks[setup_pumps[0][2]],
-        'Buffer 1'    : pump_comm_locks[setup_pumps[1][2]],
+        'Buffer 1'    : pump_comm_locks[setup_pumps[0][2]],
+        'Sample'    : pump_comm_locks[setup_pumps[1][2]],
         'Buffer 2'    : pump_comm_locks[setup_pumps[2][2]]
         }
 
