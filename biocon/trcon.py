@@ -2013,6 +2013,7 @@ class TRFlowPanel(wx.Panel):
                 self.set_pump_status(name, 'Connected')
                 self.pump_panels[name].connected = True
                 self.pump_panels[name].set_max_pressure()
+                self.pump_panels[name].set_flow_accel()
 
         self.pump_monitor_thread.start()
 
@@ -2583,10 +2584,13 @@ class TRFlowPanel(wx.Panel):
             self.pause_valve_monitor.clear()
             self.pause_pump_monitor.clear()
             return False
+
         else:
             for pump_panel in self.pump_panels.values():
                 pump_panel.set_pump_direction(True)
-                success = pump_panel.start_pump()
+                start = pump_panel.start_pump()
+
+                success = success and start
 
         if not success:
             msg = ('Pumps failed to start correctly.')
@@ -3083,7 +3087,7 @@ class TRFlowPanel(wx.Panel):
                 if key != 'Fault' and faults[key]:
                     msg += '\n- {}'.format(key)
 
-        self.pump_panels[pump_name].show_faults_dialog(msg)
+            wx.CallAfter(self.pump_panels[pump_name].show_faults_dialog, msg)
 
     def _monitor_pump_status(self):
         logger.info('Starting continuous monitoring of pump status')
@@ -3249,7 +3253,7 @@ class TRFlowPanel(wx.Panel):
             for pump_name, pump_panel in self.pump_panels.items():
                 pump_volume = float(pump_panel.get_status_volume())
 
-                if pump_volume <= 0:
+                if pump_volume <= 0 and not pump_panel.continuous_flow:
                     errors.append(('Pump {} has loaded volume <= 0').format(pump_name))
 
         if autoinject == 'After scan':
@@ -3270,12 +3274,12 @@ class TRFlowPanel(wx.Panel):
                 msg = msg + '\n- ' + warn
             msg = msg + ('\n\nDo you want to continue?')
 
-            ret = wx.CallAfter(wx.MessageBox, msg, 'Warning in scan parameters',
-                style=wx.YES_NO|wx.ICON_QUESTION)
+            dlg = wx.MessageDialog(self, msg, "Warning in scan parameters",
+                style=wx.ICON_QUESTION|wx.YES_NO)
+            proceed = dlg.ShowModal()
+            dlg.Destroy()
 
-            res = ret.GetResult()
-
-            if res == wx.ID_YES:
+            if proceed == wx.ID_YES:
                 valid = True
 
         if len(errors) > 0:
@@ -3286,7 +3290,7 @@ class TRFlowPanel(wx.Panel):
                 msg = msg + '\n- ' + err
             msg = msg + ('\n\nPlease correct these errors, then start the scan.')
 
-            wx.CallAfter(wx.MessageBox, msg, 'Error in scan parameters',
+            wx.CallAfter(wx.MessageBox, msg, 'Error in flow parameters',
                 style=wx.OK|wx.ICON_ERROR)
 
         if valid:
@@ -3404,7 +3408,7 @@ class TRFlowPanel(wx.Panel):
                     break
 
             if success:
-                success = self.start_all()
+                success = self.start_all(True)
                 start_time = time.time()
 
                 if not success:
@@ -4217,7 +4221,7 @@ class TRPumpPanel(wx.Panel):
 
     def start_pump(self):
         # Just starts the pump
-        if self.run_button.GetLabel() != 'Start':
+        if self.run_button.GetLabel() == 'Start':
             success = self.run_pump()
         else:
             success = True
@@ -4439,6 +4443,16 @@ class TRPumpPanel(wx.Panel):
 
         return success
 
+    def set_flow_accel(self):
+        cont = True
+
+        try:
+            flow_accel = float(self.flow_accel_ctrl.GetValue())
+        except Exception:
+            cont = False
+
+        if cont:
+            self._set_flow_accel()
 
     def _set_flow_accel(self):
         cont = True
@@ -4728,15 +4742,15 @@ if __name__ == '__main__':
         # 'buffer2_pump'          : ('Buffer 2', 'PHD 4400', 'COM4',
         #     ['20 mL, Medline P.C.', '3'], {}, {'flow_rate' : '10',
         #     'refill_rate' : '10', 'dual_syringe': False}),
-        'sample_pump'           : ('Sample', 'SSI Next Gen', 'COM17',
+        'sample_pump'           : ('Sample', 'SSI Next Gen', 'COM15',
             [], {}, {'continuous_flow': True, 'flow_accel': 0.0,
-            'max_pressure': 100},  True),
-        'buffer1_pump'           : ('Buffer 1', 'SSI Next Gen', 'COM15',
+            'max_pressure': 1100},  True),
+        'buffer1_pump'           : ('Buffer 1', 'SSI Next Gen', 'COM17',
             [], {}, {'continuous_flow': True, 'flow_accel': 0.0,
-            'max_pressure': 100}, True),
+            'max_pressure': 1100}, True),
         'buffer2_pump'          : ('Buffer 2', 'SSI Next Gen', 'COM18',
             [], {}, {'continuous_flow': True, 'flow_accel': 0.0,
-            'max_pressure': 100}, True),
+            'max_pressure': 1100}, True),
         'outlet_fm'             : ('BFS', 'COM5', [], {}),
         # 'injection_valve'       : [('Rheodyne', 'COM6', [], {'positions' : 2}, 'Injection'),], #Laminar flow
         # 'sample_valve'          : [('Rheodyne', 'COM9', [], {'positions' : 6}, 'Sample'),],

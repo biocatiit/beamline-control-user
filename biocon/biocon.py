@@ -231,7 +231,7 @@ if __name__ == '__main__':
         'remote_dir_root'       : '/nas_data/Eiger2xe9M',
         'detector'              : '18ID:EIG2:_epics',
         'det_args'              :  {'use_tiff_writer': False, 'use_file_writer': True,
-                                    'photon_energy' : 12.0, 'images_per_file': 300},
+                                    'photon_energy' : 12.0, 'images_per_file': 1},
         'add_file_postfix'      : False,
 
         # 'shutter_speed_open'    : 0.004, #in s      NM vacuum shutter, broken
@@ -239,20 +239,20 @@ if __name__ == '__main__':
         # 'shutter_pad'           : 0.002, #padding for shutter related values
         # 'shutter_cycle'         : 0.02, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
 
-        'shutter_speed_open'    : 0.001, #in s    Fast shutters
-        'shutter_speed_close'   : 0.001, # in s
-        'shutter_pad'           : 0.00, #padding for shutter related values
-        'shutter_cycle'         : 0.002, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
+        # 'shutter_speed_open'    : 0.001, #in s    Fast shutters
+        # 'shutter_speed_close'   : 0.001, # in s
+        # 'shutter_pad'           : 0.00, #padding for shutter related values
+        # 'shutter_cycle'         : 0.002, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
 
         # 'shutter_speed_open'    : 0.075, #in s      Slow vacuum shutter
         # 'shutter_speed_close'   : 0.075, # in s
         # 'shutter_pad'           : 0.01, #padding for shutter related values
         # 'shutter_cycle'         : 0.2, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
 
-        # 'shutter_speed_open'    : 0.0045, #in s      Normal vacuum shutter
-        # 'shutter_speed_close'   : 0.004, # in s
-        # 'shutter_pad'           : 0.002, #padding for shutter related values
-        # 'shutter_cycle'         : 0.1, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
+        'shutter_speed_open'    : 0.0045, #in s      Normal vacuum shutter
+        'shutter_speed_close'   : 0.004, # in s
+        'shutter_pad'           : 0.002, #padding for shutter related values
+        'shutter_cycle'         : 0.1, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
 
         'struck_measurement_time' : '0.001', #in s
         'tr_muscle_exp'         : False,
@@ -275,8 +275,8 @@ if __name__ == '__main__':
             # scale, offset, use_dark_current, normalize_by_exp_time)
             {'mx_record': 'mcs3', 'channel': 2, 'name': 'I0',
             'scale': 1, 'offset': 0, 'dark': True, 'norm_time': False},
-            # {'mx_record': 'mcs4', 'channel': 3, 'name': 'I1', 'scale': 1,
-            # 'offset': 0, 'dark': True, 'norm_time': False},
+            {'mx_record': 'mcs4', 'channel': 3, 'name': 'I1', 'scale': 1,
+            'offset': 0, 'dark': True, 'norm_time': False},
             # {'mx_record': 'mcs5', 'channel': 4, 'name': 'I2', 'scale': 1,
             # 'offset': 0, 'dark': True, 'norm_time': False},
             # {'mx_record': 'mcs6', 'channel': 5, 'name': 'I3', 'scale': 1,
@@ -285,14 +285,14 @@ if __name__ == '__main__':
             'scale': 5000, 'offset': 0.5, 'dark': False, 'norm_time': True},
             # {'mx_record': 'mcs12', 'channel': 11, 'name': 'Flow_rate',
             # 'scale': 10e6, 'offset': 0, 'dark': True, 'norm_time': True},
-            {'mx_record': 'mcs7', 'channel': 6, 'name': 'Detector_Enable',
-            'scale': 1e5, 'offset': 0, 'dark': True, 'norm_time': True},
-            {'mx_record': 'mcs12', 'channel': 11, 'name': 'Length_Out',
-            'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
-            {'mx_record': 'mcs13', 'channel': 13, 'name': 'Length_In',
-            'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
-            {'mx_record': 'mcs13', 'channel': 12, 'name': 'Force',
-            'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
+            # {'mx_record': 'mcs7', 'channel': 6, 'name': 'Detector_Enable',
+            # 'scale': 1e5, 'offset': 0, 'dark': True, 'norm_time': True},
+            # {'mx_record': 'mcs12', 'channel': 11, 'name': 'Length_Out',
+            # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
+            # {'mx_record': 'mcs13', 'channel': 13, 'name': 'Length_In',
+            # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
+            # {'mx_record': 'mcs13', 'channel': 12, 'name': 'Force',
+            # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
             ],
         'joerger_log_vals'      : [{'mx_record': 'j3', 'name': 'I0',
             'scale': 1, 'offset': 0, 'norm_time': False}, #Format: (mx_record_name, struck_channel, header_name, scale, offset, use_dark_current, normalize_by_exp_time)
@@ -358,11 +358,11 @@ if __name__ == '__main__':
         'x_end'                 : 10,
         'y_start'               : 0,
         'y_end'                 : 0,
-        'scan_speed'            : 1,
+        'scan_speed'            : 2,
         'num_scans'             : 1,
-        'return_speed'          : 1,
-        'scan_acceleration'     : 1,
-        'return_acceleration'   : 1,
+        'return_speed'          : 20,
+        'scan_acceleration'     : 110,
+        'return_acceleration'   : 100,
         'constant_scan_speed'   : True,
         'scan_start_offset_dist': 0,
         'scan_end_offset_dist'  : 0,
@@ -391,10 +391,15 @@ if __name__ == '__main__':
         'remote_valve_ip'       : '164.54.204.8',
         'remote_valve_port'     : '5558',
         'device_communication'  : 'remote',
-        # 'injection_valve'       : [('Rheodyne', 'COM6', [], {'positions' : 2}, 'Injection'),], #Chaotic flow
+        # valve definition: ('Valve type', 'Port', [args], {kwargs}, 'Name')
+        'injection_valve'       : [('Rheodyne', 'COM6', [], {'positions' : 2}, 'Injection'),], #Chaotic flow
         # 'sample_valve'          : [('Rheodyne', 'COM9', [], {'positions' : 6}, 'Sample'),],
         # 'buffer1_valve'         : [('Rheodyne', 'COM8', [], {'positions' : 6}, 'Buffer 1'),],
         # 'buffer2_valve'         : [('Rheodyne', 'COM7', [], {'positions' : 6}, 'Buffer 2'),],
+        'sample_valve'          : [],
+        'buffer1_valve'         : [],
+        'buffer2_valve'         : [],
+        # pump definition: ('Name', 'Pump type', 'Port', [args], {kwargs}, {gui kwargs}, continuous_flow)
         # 'sample_pump'           : ('Sample', 'PHD 4400', 'COM4',
         #     ['10 mL, Medline P.C.', '1'], {}, {'flow_rate' : '5',
         #     'refill_rate' : '5', 'dual_syringe': False}),
@@ -404,29 +409,36 @@ if __name__ == '__main__':
         # 'buffer2_pump'          : ('Buffer 2', 'PHD 4400', 'COM4',
         #     ['20 mL, Medline P.C.', '3'], {}, {'flow_rate' : '10',
         #     'refill_rate' : '10', 'dual_syringe': False}),
-        # 'outlet_fm'             : ('BFS', 'COM5', [], {}),
-        'injection_valve'       : [('Rheodyne', 'COM6', [], {'positions' : 2}, 'Injection'),], #Laminar flow
-        'sample_valve'          : [('Rheodyne', 'COM7', [], {'positions' : 6}, 'Sample'),],
-        'buffer1_valve'         : [('Rheodyne', 'COM12', [], {'positions' : 6}, 'Buffer'),
-                                    ('Rheodyne', 'COM14', [], {'positions' : 6}, 'Buffer')],
-        'buffer2_valve'         : [('Rheodyne', 'COM9', [], {'positions' : 6}, 'Sheath'),
-                                    ('Rheodyne', 'COM8', [], {'positions' : 6}, 'Sheath')],
-        'buffer1_pump'           : ('Buffer', 'PHD 4400', 'COM4',
-            ['10 mL, Medline P.C.', '2'], {}, {'flow_rate' : '0.1',
-            'refill_rate' : '5', 'dual_syringe': True}),
-        'buffer2_pump'          : ('Sheath', 'NE 500', 'COM10',
-            ['3 mL, Medline P.C.', '01'], {}, {'flow_rate' : '0.1',
-            'refill_rate' : '1.5', 'dual_syringe': True}),
-        'sample_pump'           : ('Sample', 'PHD 4400', 'COM4',
-            ['3 mL, Medline P.C.', '3'], {}, {'flow_rate' : '0.1',
-            'refill_rate' : '1.5', 'dual_syringe': False}),
-        'outlet_fm'             : ('BFS', 'COM13', [], {}),
-        # 'device_communication'  : 'local',                                                    # Simulated
-        # 'injection_valve'       : [('Soft', '', [], {'positions' : 2}, 'Injection'),],
+        'sample_pump'           : ('Sample', 'SSI Next Gen', 'COM15',
+            [], {}, {'continuous_flow': True, 'flow_accel': 0.0,
+            'max_pressure': 1100},  True),
+        'buffer1_pump'           : ('Buffer 1', 'SSI Next Gen', 'COM17',
+            [], {}, {'continuous_flow': True, 'flow_accel': 0.0,
+            'max_pressure': 1100}, True),
+        'buffer2_pump'          : ('Buffer 2', 'SSI Next Gen', 'COM18',
+            [], {}, {'continuous_flow': True, 'flow_accel': 0.0,
+            'max_pressure': 1100}, True),
+        'outlet_fm'             : ('BFS', 'COM5', [], {}),
+        # 'injection_valve'       : [('Rheodyne', 'COM6', [], {'positions' : 2}, 'Injection'),], #Laminar flow
+        # 'sample_valve'          : [('Rheodyne', 'COM9', [], {'positions' : 6}, 'Sample'),],
+        # 'buffer1_valve'         : [('Rheodyne', 'COM8', [], {'positions' : 6}, 'Buffer'),],
+        # 'buffer2_valve'         : [('Rheodyne', 'COM7', [], {'positions' : 6}, 'Sheath'),],
+        # 'buffer1_pump'           : ('Buffer', 'NE 500', 'COM11',
+        #     ['20 mL, Medline P.C.', '00'], {}, {'flow_rate' : '10',
+        #     'refill_rate' : '10', 'dual_syringe': False}),
+        # 'buffer2_pump'          : ('Sheath', 'NE 500', 'COM10',
+        #     ['20 mL, Medline P.C.', '01'], {}, {'flow_rate' : '10',
+        #     'refill_rate' : '10', 'dual_syringe': False}),
+        # 'sample_pump'           : ('Sample', 'NE 500', 'COM3',
+        #     ['10 mL, Medline P.C.', '02'], {}, {'flow_rate' : '0.1',
+        #     'refill_rate' : '10', 'dual_syringe': False}),
+        # 'outlet_fm'             : ('BFS', 'COM13', [], {}),
+        # 'device_communication'  : 'local',                                                  # Simulated
+        # 'injection_valve'       : [('Soft', '', [], {'positions' : 2}, 'Injection'),],    # Simulated Chaotic w/syringe
         # 'sample_valve'          : [('Soft', '', [], {'positions' : 6}, 'Sample'),],
         # 'buffer1_valve'         : [('Soft', '', [], {'positions' : 6}, 'Buffer'),],
         # 'buffer2_valve'         : [('Soft', '', [], {'positions' : 6}, 'Sheath'),],
-        # 'sample_pump'           : ('Sample', 'Soft Syringe', '',   
+        # 'sample_pump'           : ('Sample', 'Soft Syringe', '',
         #     ['10 mL, Medline P.C.',], {}, {'flow_rate' : '5',
         #     'refill_rate' : '20', 'dual_syringe' : False}),
         # 'buffer1_pump'           : ('Buffer 1', 'Soft Syringe', '',
@@ -435,6 +447,21 @@ if __name__ == '__main__':
         # 'buffer2_pump'          : ('Buffer 2', 'Soft Syringe', '',
         #     ['20 mL, Medline P.C.',], {}, {'flow_rate' : '10',
         #     'refill_rate' : '40', 'dual_syringe' : False}),
+        # 'outlet_fm'             : ('Soft', '', [], {}),                                   # Simulated Chaotic w/continuous pump
+        # 'injection_valve'       : [('Soft', '', [], {'positions' : 2}, 'Injection'),],
+        # 'sample_valve'          : [],
+        # 'buffer1_valve'         : [],
+        # 'buffer2_valve'         : [],
+        # 'sample_pump'           : ('Sample', 'Soft Syringe', '',
+        #     ['10 mL, Medline P.C.',], {}, {'flow_rate' : '5',
+        #     'refill_rate' : '20', 'dual_syringe' : False}, True),
+        # 'buffer1_pump'           : ('Buffer 1', 'Soft Syringe', '',
+        #     ['20 mL, Medline P.C.',], {}, {'flow_rate' : '10',
+        #     'refill_rate' : '40', 'dual_syringe' : False}, True),
+        # 'buffer2_pump'          : ('Buffer 2', 'Soft Syringe', '',
+        #     ['20 mL, Medline P.C.',], {}, {'flow_rate' : '10',
+        #     'refill_rate' : '40', 'dual_syringe' : False}, True),
+        # 'outlet_fm'             : ('Soft', '', [], {}),
         # 'injection_valve'       : [('Soft', '', [], {'positions' : 2}, 'Injection'),],
         # 'sample_valve'          : [('Soft', '', [], {'positions' : 6}, 'Sample'),],
         # 'buffer1_valve'         : [('Soft', '', [], {'positions' : 6}, 'Buffer'),
@@ -452,24 +479,25 @@ if __name__ == '__main__':
         #     'refill_rate' : '40', 'dual_syringe' : True}),
         # 'outlet_fm'             : ('Soft', '', [], {}),
         'flow_units'            : 'mL/min',
-        'total_flow_rate'       : '1.5', # For laminar flow
-        # 'total_flow_rate'       : '6', # For chaotic flow
+        'pressure_units'        : 'psi',
+        # 'total_flow_rate'       : '1.5', # For laminar flow
+        'total_flow_rate'       : '6', # For chaotic flow
         'dilution_ratio'        : '10', # For chaotic flow
         'max_flow'              : 8, # For chaotic flow
         'max_dilution'          : 50, # For chaotic flow
         'auto_set_valves'       : True,
-        'valve_start_positions' : {'sample_valve' : 2, 'buffer1_valve': 2,
-            'buffer2_valve' : 2, 'injection_valve' : 1},
-        'valve_refill_positions': {'sample_valve' : 1, 'buffer1_valve': 1,
+        'valve_start_positions' : {'sample_valve' : 1, 'buffer1_valve': 1,
             'buffer2_valve' : 1, 'injection_valve' : 1},
+        'valve_refill_positions': {'sample_valve' : 2, 'buffer1_valve': 2,
+            'buffer2_valve' : 2, 'injection_valve' : 1},
         'autostart'             : 'At flow rate',
         'autostart_flow'        : '4.5',
-        'autostart_flow_ratio'  : 0.9,
+        'autostart_flow_ratio'  : 0.98,
         'autostart_delay'       : '0',
         'autoinject'            : 'After scan',
         'autoinject_scan'       : '5',
         'autoinject_valve_pos'  : 2,
-        'mixer_type'            : 'laminar', # laminar or chaotic
+        'mixer_type'            : 'chaotic', # laminar or chaotic
         'sample_ratio'          : '0.066', # For laminar flow
         'sheath_ratio'          : '0.032', # For laminar flow
         'simulated'             : False, # VERY IMPORTANT. MAKE SURE THIS IS FALSE FOR EXPERIMENTS
@@ -503,8 +531,8 @@ if __name__ == '__main__':
                                 'preparation'   : 'Intact',
                                 'notes'         : '',
                                 },
-        # 'metadata_type'     : 'auto',
-        'metadata_type'     : 'muscle',
+        'metadata_type'     : 'auto',
+        # 'metadata_type'     : 'muscle',
         }
 
     pipeline_settings = {
@@ -522,8 +550,8 @@ if __name__ == '__main__':
     components = OrderedDict([
         ('exposure', expcon.ExpPanel),
         # ('coflow', coflowcon.CoflowPanel),
-        # ('trsaxs_scan', trcon.TRScanPanel),
-        # ('trsaxs_flow', trcon.TRFlowPanel),
+        ('trsaxs_scan', trcon.TRScanPanel),
+        ('trsaxs_flow', trcon.TRFlowPanel),
         # ('scan',    scancon.ScanPanel),
         ('metadata', metadata.ParamPanel),
         # ('pipeline', pipeline_ctrl.PipelineControl)

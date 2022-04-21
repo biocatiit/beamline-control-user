@@ -1766,7 +1766,7 @@ class ScanPanel(wx.Panel):
 
             self.move_to.Set(['FWHM center', 'COM position'])
 
-        self._safe_draw()
+        self.safe_draw()
         self._ax_redraw()
 
     def _on_flipder(self, event):

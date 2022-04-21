@@ -723,7 +723,7 @@ class ExpCommThread(threading.Thread):
                 wait_for_motor = True
                 while wait_for_motor:
                     status, descrip = motor.get_group_status(tr_scan_settings['motor_group_name'])
-                    logger.info(status)
+                    logger.debug(status)
                     if status == 12:
                         wait_for_motor = False
 
@@ -733,7 +733,7 @@ class ExpCommThread(threading.Thread):
                 wait_for_motor = True
                 while wait_for_motor:
                     status, descrip = motor.get_group_status(tr_scan_settings['motor_group_name'])
-                    logger.info(status)
+                    logger.debug(status)
                     if status == 12:
                         wait_for_motor = False
 
@@ -826,6 +826,7 @@ class ExpCommThread(threading.Thread):
             cur_fprefix, exp_period, dark_counts, log_vals,
             exp_settings['metadata'], extra_vals)
 
+        logger.debug('Waiting for detector to finish')
         start = time.time()
         timeout = False
         while det.get_status() !=0 and not timeout:
@@ -2474,6 +2475,9 @@ class ExpPanel(wx.Panel):
                 elif md_exp_type == 'SEC-SAXS' or md_exp_type == 'SEC-MALS-SAXS':
                     exp_type = 'SEC'
 
+                elif md_exp_type == 'TR-SAXS':
+                    exp_type = 'TR'
+
                 else:
                     exp_type = 'Other'
 
@@ -2486,6 +2490,11 @@ class ExpPanel(wx.Panel):
 
                     fprefix = exp_values['fprefix']
                     num_frames = exp_values['num_frames']
+
+                    if exp_type == 'TR':
+                        logger.info(exp_values['metadata'])
+                        num_scans = exp_values['metadata']['Number of scans:']
+                        num_frames *= num_scans
 
                     if not os.path.exists(local_data_dir):
                         os.mkdir(local_data_dir)
