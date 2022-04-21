@@ -303,8 +303,8 @@ if __name__ == '__main__':
         #     {'flow_rate' : '10', 'refill_rate' : '10'}),
         # ('Buffer 2', 'PHD 4400', 'COM4', ['20 mL, Medline P.C.', '3'], {},
         #     {'flow_rate' : '10', 'refill_rate' : '10'}),
-        ('Sample', 'SSI Next Gen', 'COM17', [], {}, {}),
-        ('Buffer 1', 'SSI Next Gen', 'COM15', [], {}, {}),
+        ('Buffer 1', 'SSI Next Gen', 'COM17', [], {}, {}),
+        ('Sample', 'SSI Next Gen', 'COM15', [], {}, {}),
         ('Buffer 2', 'SSI Next Gen', 'COM18', [], {}, {}),
         ]
 
