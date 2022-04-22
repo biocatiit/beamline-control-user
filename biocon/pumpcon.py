@@ -1980,10 +1980,12 @@ class SSINextGenPump(Pump):
 
     def _send_flow_rate_cmd(self, rate):
         logger.debug('sending flow rate command')
-        self._flow_rate = rate
+        self._flow_rate = round(rate, self._flow_rate_decimals)
 
-        scaled_rate = round(rate*self.flow_rate_scale+self.flow_rate_offset,
-            self._flow_rate_decimals)
+        scaled_rate = rate*self.flow_rate_scale+self.flow_rate_offset
+
+        if scaled_rate < 0:
+            scaled_rate = rate
 
         if self.scale_type == 'up':
             if scaled_rate > rate:
@@ -1993,6 +1995,8 @@ class SSINextGenPump(Pump):
                 rate = scaled_rate
         else:
             rate = scaled_rate
+
+        rate = round(rate, self._flow_rate_decimals)
 
         if '.' in str(rate):
             rate_dec = '{:0<{fill}}'.format(str(rate).split('.')[-1], fill=self._flow_rate_decimals)
@@ -3394,6 +3398,11 @@ class PumpPanel(wx.Panel):
             'max_rate': 11},
             }
 
+        if flow_rate == '':
+            flow_rate = '0.1'
+        if refill_rate == '':
+            refill_rate = '0.1'
+
         self.top_sizer = self._create_layout(flow_rate, refill_rate)
 
         self.monitor_flow_evt = threading.Event()
@@ -4650,14 +4659,14 @@ class PumpFrame(wx.Frame):
 
             setup_pumps = [
                 ('Pump 4', 'SSI Next Gen', 'COM17', [],
-                    {'flow_rate_scale': 1.0076, 'flow_rate_offset': -4.24/1000,
-                    'scale_type': 'up'}, {}),
-                ('Pump 3', 'SSI Next Gen', 'COM15', [],
-                     {'flow_rate_scale': 1.0204, 'flow_rate_offset': 15.346/1000,
+                    {'flow_rate_scale': 1.0478, 'flow_rate_offset': -72.82/1000,
                      'scale_type': 'up'}, {}),
-                ('Pump 2', 'SSI Next Gen', 'COM18', [],
-                    {'flow_rate_scale': 1.0179, 'flow_rate_offset': -20.842/1000,
-                    'scale_type': 'up'}, {}),
+                # ('Pump 3', 'SSI Next Gen', 'COM15', [],
+                #      {'flow_rate_scale': 1.0204, 'flow_rate_offset': 15.346/1000,
+                #      'scale_type': 'up'}, {}),
+                # ('Pump 2', 'SSI Next Gen', 'COM18', [],
+                #     {'flow_rate_scale': 1.0179, 'flow_rate_offset': -20.842/1000,
+                #     'scale_type': 'up'}, {}),
                         ]
 
         elif len(setup_pumps) > 0:

@@ -303,9 +303,12 @@ if __name__ == '__main__':
         #     {'flow_rate' : '10', 'refill_rate' : '10'}),
         # ('Buffer 2', 'PHD 4400', 'COM4', ['20 mL, Medline P.C.', '3'], {},
         #     {'flow_rate' : '10', 'refill_rate' : '10'}),
-        ('Buffer 1', 'SSI Next Gen', 'COM17', [], {}, {}),
-        ('Sample', 'SSI Next Gen', 'COM15', [], {}, {}),
-        ('Buffer 2', 'SSI Next Gen', 'COM18', [], {}, {}),
+        ('Buffer 1', 'SSI Next Gen', 'COM17', [], {'flow_rate_scale': 1.0076,
+            'flow_rate_offset': -4.24/1000, 'scale_type': 'up'}, {}),
+        ('Sample', 'SSI Next Gen', 'COM15', [], {'flow_rate_scale': 1.0204,
+            'flow_rate_offset': 15.346/1000, 'scale_type': 'up'}, {}),
+        ('Buffer 2', 'SSI Next Gen', 'COM18', [], {'flow_rate_scale': 1.0179,
+            'flow_rate_offset': -20.842/1000, 'scale_type': 'up'}, {}),
         ]
 
     pump_local_comm_locks = {
