@@ -270,7 +270,8 @@ class Pump(object):
     documentation contains an example.
     """
 
-    def __init__(self, device, name, flow_rate_scale=1, flow_rate_offset=0):
+    def __init__(self, device, name, flow_rate_scale=1, flow_rate_offset=0,
+        scale_type='both'):
         """
         :param device: The device comport as sent to pyserial
         :type device: str
@@ -283,6 +284,12 @@ class Pump(object):
         self.name = name
         self.flow_rate_scale = flow_rate_scale
         self.flow_rate_offset = flow_rate_offset
+
+        self.scale_type = scale_type
+        #up, down, or both, indicating only scale up flowrate, only scale down
+        # flow rate, or do both (e.g. if both scale and offset are set, can get
+        # flow rates above or below set rate, but perhaps you only want to scale
+        # up, and otherwise use the set rate)
 
     def __repr__(self):
         return '{}({}, {})'.format(self.__class__.__name__, self.name, self.device)
@@ -325,7 +332,7 @@ class Pump(object):
         if units in ['nL/s', 'nL/min', 'uL/s', 'uL/min', 'mL/s', 'mL/min']:
             self._units = units
             old_vu, old_tu = old_units.split('/')
-            new_vu, new_tu = self._units.split('/')[0]
+            new_vu, new_tu = self._units.split('/')
             if old_vu != new_vu:
                 if (old_vu == 'nL' and new_vu == 'uL') or (old_vu == 'uL' and new_vu == 'mL'):
                     flow_rate_offset = flow_rate_offset/1000.
@@ -335,6 +342,7 @@ class Pump(object):
                     flow_rate_offset = flow_rate_offset*1000.
                 elif old_vu == 'mL' and new_vu == 'nL':
                     flow_rate_offset = flow_rate_offset*1000000.
+
             if old_tu != new_tu:
                 if old_tu == 'min':
                     flow_rate_offset = flow_rate_offset/60
@@ -1427,7 +1435,8 @@ class SSINextGenPump(Pump):
         >>> my_pump.stop_flow()
     """
 
-    def __init__(self, device, name, comm_lock=None, flow_rate_scale=1, flow_rate_offset=0):
+    def __init__(self, device, name, comm_lock=None, flow_rate_scale=1,
+        flow_rate_offset=0, scale_type='both'):
         """
         This makes the initial serial connection, and then sets the MForce
         controller parameters to the correct values.
@@ -1438,7 +1447,8 @@ class SSINextGenPump(Pump):
         :param name: A unique identifier for the pump
         :type name: str
         """
-        Pump.__init__(self, device, name, flow_rate_scale=1, flow_rate_offset=0)
+        Pump.__init__(self, device, name, flow_rate_scale=flow_rate_scale,
+            flow_rate_offset=flow_rate_offset, scale_type=scale_type)
 
         logstr = ("Initializing pump {} on serial port {}".format(self.name,
             self.device))
@@ -1970,10 +1980,19 @@ class SSINextGenPump(Pump):
 
     def _send_flow_rate_cmd(self, rate):
         logger.debug('sending flow rate command')
-        rate = round(rate, self._flow_rate_decimals)
         self._flow_rate = rate
 
-        rate = round(rate*self.flow_rate_scale+self.flow_rate_offset, self._flow_rate_decimals)
+        scaled_rate = round(rate*self.flow_rate_scale+self.flow_rate_offset,
+            self._flow_rate_decimals)
+
+        if self.scale_type == 'up':
+            if scaled_rate > rate:
+                rate = scaled_rate
+        elif self.scale_type == 'down':
+            if scaled_rate < rate:
+                rate = scaled_rate
+        else:
+            rate = scaled_rate
 
         if '.' in str(rate):
             rate_dec = '{:0<{fill}}'.format(str(rate).split('.')[-1], fill=self._flow_rate_decimals)
@@ -2026,7 +2045,21 @@ class SSINextGenPump(Pump):
 
         if ret.startswith('OK') and ret.endswith('/'):
             vals = ret.split(',')
-            self._flow_rate = float(vals[1])
+
+            rate = float(vals[1])
+            scaled_rate = round((rate-self.flow_rate_offset)/self.flow_rate_scale,
+                self._flow_rate_decimals)
+
+            if self.scale_type == 'up':
+                if scaled_rate < rate:
+                    rate = scaled_rate
+            elif self.scale_type == 'down':
+                if scaled_rate > rate:
+                    rate = scaled_rate
+            else:
+                rate = scaled_rate
+
+            self._flow_rate = rate
             self._max_pressure = float(vals[2])
 
             if self._pump_pressure_unit == 'mpa':
@@ -3757,11 +3790,11 @@ class PumpPanel(wx.Panel):
 
         if pump_type in my_pumps and comport in self.all_comports:
             logger.info('Initialized pump %s on startup', self.name)
-            self._connect()
+            self._connect(pump_kwargs)
 
         elif pump_type == 'Soft' or pump_type == 'Soft Syringe':
             logger.info('Initialized pump %s on startup', self.name)
-            self._connect()
+            self._connect(pump_kwargs)
 
     def _on_type(self, evt):
         """Called when the pump type is changed in the GUI."""
@@ -4098,7 +4131,7 @@ class PumpPanel(wx.Panel):
         self.syringe_vol_gauge_high.SetLabel(str(max_vol))
         self.syringe_vol_gauge.SetRange(int(round(float(max_vol)*1000)))
 
-    def _connect(self):
+    def _connect(self, pump_kwargs):
         """Initializes the pump in the PumpCommThread"""
         pump = self.type_ctrl.GetStringSelection().replace(' ', '_')
 
@@ -4130,6 +4163,15 @@ class PumpPanel(wx.Panel):
             kwargs = {}
 
         kwargs['comm_lock'] = self.comm_lock
+
+        if 'flow_rate_scale' in pump_kwargs:
+            kwargs['flow_rate_scale'] = pump_kwargs['flow_rate_scale']
+
+        if 'flow_rate_offset' in pump_kwargs:
+            kwargs['flow_rate_offset'] = pump_kwargs['flow_rate_offset']
+
+        if 'scale_type' in pump_kwargs:
+            kwargs['scale_type'] = pump_kwargs['scale_type']
 
         try:
             self.pump = self.known_pumps[pump](com, self.name, **kwargs)
@@ -4607,9 +4649,15 @@ class PumpFrame(wx.Frame):
                         # ]
 
             setup_pumps = [
-                ('Pump 4', 'SSI Next Gen', 'COM17', [], {}, {}),
-                ('Pump 3', 'SSI Next Gen', 'COM15', [], {}, {}),
-                ('Pump 2', 'SSI Next Gen', 'COM18', [], {}, {}),
+                ('Pump 4', 'SSI Next Gen', 'COM17', [],
+                    {'flow_rate_scale': 1.0076, 'flow_rate_offset': -4.24/1000,
+                    'scale_type': 'up'}, {}),
+                ('Pump 3', 'SSI Next Gen', 'COM15', [],
+                     {'flow_rate_scale': 1.0204, 'flow_rate_offset': 15.346/1000,
+                     'scale_type': 'up'}, {}),
+                ('Pump 2', 'SSI Next Gen', 'COM18', [],
+                    {'flow_rate_scale': 1.0179, 'flow_rate_offset': -20.842/1000,
+                    'scale_type': 'up'}, {}),
                         ]
 
         elif len(setup_pumps) > 0:
