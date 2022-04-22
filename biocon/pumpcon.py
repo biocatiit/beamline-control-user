@@ -1987,6 +1987,9 @@ class SSINextGenPump(Pump):
         if scaled_rate < 0:
             scaled_rate = rate
 
+        elif rate == 0:
+            scaled_rate = 0
+
         if self.scale_type == 'up':
             if scaled_rate > rate:
                 rate = scaled_rate
@@ -2062,6 +2065,9 @@ class SSINextGenPump(Pump):
                     rate = scaled_rate
             else:
                 rate = scaled_rate
+
+            if rate <= 0:
+                rate = 0
 
             self._flow_rate = rate
             self._max_pressure = float(vals[2])
@@ -4661,12 +4667,12 @@ class PumpFrame(wx.Frame):
                 ('Pump 4', 'SSI Next Gen', 'COM17', [],
                     {'flow_rate_scale': 1.0478, 'flow_rate_offset': -72.82/1000,
                      'scale_type': 'up'}, {}),
-                # ('Pump 3', 'SSI Next Gen', 'COM15', [],
-                #      {'flow_rate_scale': 1.0204, 'flow_rate_offset': 15.346/1000,
-                #      'scale_type': 'up'}, {}),
-                # ('Pump 2', 'SSI Next Gen', 'COM18', [],
-                #     {'flow_rate_scale': 1.0179, 'flow_rate_offset': -20.842/1000,
-                #     'scale_type': 'up'}, {}),
+                ('Pump 3', 'SSI Next Gen', 'COM15', [],
+                     {'flow_rate_scale': 1.0204, 'flow_rate_offset': 15.346/1000,
+                     'scale_type': 'up'}, {}),
+                ('Pump 2', 'SSI Next Gen', 'COM18', [],
+                    {'flow_rate_scale': 1.0179, 'flow_rate_offset': -20.842/1000,
+                    'scale_type': 'up'}, {}),
                         ]
 
         elif len(setup_pumps) > 0:
