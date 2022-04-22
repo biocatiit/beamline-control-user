@@ -414,7 +414,7 @@ if __name__ == '__main__':
                      'scale_type': 'up'}, {'continuous_flow': True, 'flow_accel': 0.0,
             'max_pressure': 1100},  True),
         'buffer1_pump'           : ('Buffer 1', 'SSI Next Gen', 'COM17',
-            [], {'flow_rate_scale': 1.0076, 'flow_rate_offset': -4.24/1000,
+            [], {'flow_rate_scale': 1.0478, 'flow_rate_offset': -72.82/1000,
                     'scale_type': 'up'}, {'continuous_flow': True, 'flow_accel': 0.0,
             'max_pressure': 1100}, True),
         'buffer2_pump'          : ('Buffer 2', 'SSI Next Gen', 'COM18',

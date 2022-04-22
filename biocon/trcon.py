@@ -1987,6 +1987,8 @@ class TRFlowPanel(wx.Panel):
             if dual_syringe is not None:
                 kwargs['dual_syringe'] = dual_syringe
 
+            kwargs.update(pump[1][4])
+
             if not self.local_devices:
                 cmd = ('connect_remote', args, kwargs)
             else:
