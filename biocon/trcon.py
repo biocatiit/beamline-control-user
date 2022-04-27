@@ -990,6 +990,9 @@ class TRScanPanel(wx.Panel):
                             pco_end = y_end
                         pco_speed = vect_scan_speed[1]
 
+                    if abs(pco_start-pco_end) % pco_step == 0:
+                        pco_end -= min(encoder_resolution, pco_step)
+
                     if pco_start % encoder_resolution != 0:
                         pco_start = self.round_to(pco_start, encoder_precision,
                             encoder_resolution)
@@ -1601,6 +1604,8 @@ class TRScanPanel(wx.Panel):
                 scan_values['pco_direction'] = pco_direction
                 scan_values['pco_pulse_width'] = self.settings['pco_pulse_width']
                 scan_values['pco_encoder_settle_t'] =  self.settings['pco_encoder_settle_t']
+
+            logger.info(scan_values)
 
         return scan_values, valid
 

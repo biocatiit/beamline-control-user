@@ -400,6 +400,31 @@ class ExpCommThread(threading.Thread):
 
         motor_cmd_q.append(('move_absolute', ('TR_motor', (x_start, y_start)), {}))
 
+        logger.debug('Waiting for detector to finish')
+        start = time.time()
+        timeout = False
+        while det.get_status() !=0 and not timeout:
+            time.sleep(0.001)
+            if self._abort_event.is_set():
+                self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6,
+                    comp_settings, exp_time)
+                break
+
+            # Is this long enough? Should it be based off of the scan/return time?
+            if time.time() - start > 5:
+                timeout = True
+                logger.error('Timeout while waiting for detector to finish!')
+
+                if det.get_status() !=0:
+                    try:
+                        det.abort()
+                    except (mp.Device_Action_Failed_Error, mp.Unparseable_String_Error):
+                        pass
+                    try:
+                        det.abort()
+                    except (mp.Device_Action_Failed_Error, mp.Unparseable_String_Error):
+                        pass
+
         # det_datadir.put(data_dir)
         # while det_datadir.get().rstrip('/') != data_dir.rstrip('/'):
         #     time.sleep(0.001)
@@ -409,11 +434,29 @@ class ExpCommThread(threading.Thread):
         # det_exp_time.put(exp_time)
         # det_exp_period.put(exp_period)
 
+        current_run = 1
+        exp_start_num = '000001'
+
+        if wait_for_trig:
+            cur_fprefix = '{}_{:04}'.format(fprefix, current_run)
+        else:
+            cur_fprefix = fprefix
+
+        if self._settings['add_file_postfix']:
+            new_fname = '{}_{}.tif'.format(cur_fprefix, exp_start_num)
+        else:
+            new_fname = cur_fprefix
+
+        det.set_filename(new_fname)
+
+        tot_frames = num_frames*num_runs
+        logger.info(tot_frames)
         det.set_data_dir(data_dir)
-        det.set_num_frames(num_frames)
+        det.set_num_frames(tot_frames)
         det.set_trigger_mode('ext_enable')
         det.set_exp_time(exp_time)
         det.set_exp_period(exp_period)
+        det.arm()
 
         # struck_mode_pv.caput(1, timeout=5)
         struck.set_measurement_time(exp_time)   #Ignored for external LNE of Struck
@@ -656,16 +699,6 @@ class ExpCommThread(threading.Thread):
         autoinject, autoinject_scan, start_autoinject_event, s_counters, log_vals,
         x_positions, y_positions, comp_settings, tr_scan_settings):
 
-        if det.get_status() !=0:
-            try:
-                det.abort()
-            except (mp.Device_Action_Failed_Error, mp.Unparseable_String_Error):
-                pass
-            try:
-                det.abort()
-            except (mp.Device_Action_Failed_Error, mp.Unparseable_String_Error):
-                pass
-
         struck.stop()
         ab_burst.stop()
 
@@ -684,14 +717,10 @@ class ExpCommThread(threading.Thread):
         else:
             new_fname = cur_fprefix
 
-        # det_filename.put(new_fname)
-        det.set_filename(new_fname)
-
         dio_out6.write(0) #Open the slow normally closed xia shutter
 
         struck.start()
         ab_burst.arm()
-        det.arm()
 
         #If the softglue is running, could replace this by a put to a variable that ors with the XPS enable signal?
         # if continuous_exp:
@@ -701,10 +730,16 @@ class ExpCommThread(threading.Thread):
 
         start = time.time()
         timeout = False
-        while not motor.is_moving() and not timeout:
-            time.sleep(0.001) #Waits for motion to start
-            if time.time()-start>0.1:
-                timeout = True
+        x, y = motor.position
+
+        logger.info(x)
+        logger.info(y)
+
+        if x != x_start and y != y_start: 
+            while not motor.is_moving() and not timeout:
+                time.sleep(0.001) #Waits for motion to start
+                if time.time()-start>0.1:
+                    timeout = True
 
         while motor.is_moving():
             if self._abort_event.is_set():
@@ -717,6 +752,35 @@ class ExpCommThread(threading.Thread):
             self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6,
                 comp_settings, exp_time)
             return
+
+        # logger.info('Waiting for detector to finish')
+        # start = time.time()
+        # timeout = False
+        # while det.get_status() !=0 and not timeout:
+        #     time.sleep(0.001)
+        #     if self._abort_event.is_set():
+        #         self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6,
+        #             comp_settings, exp_time)
+        #         break
+
+        #     # Is this long enough? Should it be based off of the scan/return time?
+        #     if time.time() - start > 5:
+        #         timeout = True
+        #         logger.error('Timeout while waiting for detector to finish!')
+
+        #         if det.get_status() !=0:
+        #             try:
+        #                 det.abort()
+        #             except (mp.Device_Action_Failed_Error, mp.Unparseable_String_Error):
+        #                 pass
+        #             try:
+        #                 det.abort()
+        #             except (mp.Device_Action_Failed_Error, mp.Unparseable_String_Error):
+        #                 pass
+
+        # det_filename.put(new_fname)
+        det.set_filename(new_fname)
+        # det.arm()
 
         if motor_type == 'Newport_XPS':
             if pco_direction == 'x':
@@ -825,21 +889,6 @@ class ExpCommThread(threading.Thread):
         self.write_counters_struck(measurement, num_frames, data_dir,
             cur_fprefix, exp_period, dark_counts, log_vals,
             exp_settings['metadata'], extra_vals)
-
-        logger.debug('Waiting for detector to finish')
-        start = time.time()
-        timeout = False
-        while det.get_status() !=0 and not timeout:
-            time.sleep(0.001)
-            if self._abort_event.is_set():
-                self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6,
-                    comp_settings, exp_time)
-                break
-
-            # Is this long enough? Should it be based off of the scan/return time?
-            if time.time() - start > 5:
-                timeout = True
-                logger.error('Timeout while waiting for detector to finish!')
 
         if self._abort_event.is_set():
             self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6,
