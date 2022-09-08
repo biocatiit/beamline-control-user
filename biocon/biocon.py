@@ -231,7 +231,7 @@ if __name__ == '__main__':
         'remote_dir_root'       : '/nas_data/Eiger2xe9M',
         'detector'              : '18ID:EIG2:_epics',
         'det_args'              :  {'use_tiff_writer': False, 'use_file_writer': True,
-                                    'photon_energy' : 12.0, 'images_per_file': 1},
+                                    'photon_energy' : 12.0, 'images_per_file': 100},
         'add_file_postfix'      : False,
 
         # 'shutter_speed_open'    : 0.004, #in s      NM vacuum shutter, broken
@@ -309,8 +309,8 @@ if __name__ == '__main__':
             'thresh': 0.04}, 'guard_vac' : {'check': True, 'thresh': 0.04},
             'sample_vac': {'check': False, 'thresh': 0.04}, 'sc_vac':
             {'check': False, 'thresh':0.04}},
-        # 'base_data_dir'         : '/nas_data/Pilatus1M/2021_Run3', #CHANGE ME
-        'base_data_dir'         : '/nas_data/Eiger2xe9M/2022_Run1', #CHANGE ME and pipeline local_basedir
+        # 'base_data_dir'         : '/nas_data/Pilatus1M/2022_Run2', #CHANGE ME
+        'base_data_dir'         : '/nas_data/Eiger2xe9M/2022_Run2', #CHANGE ME and pipeline local_basedir
         }
 
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']
@@ -555,8 +555,8 @@ if __name__ == '__main__':
         # ('coflow', coflowcon.CoflowPanel),
         # ('trsaxs_scan', trcon.TRScanPanel),
         # ('trsaxs_flow', trcon.TRFlowPanel),
-        # ('scan',    scancon.ScanPanel),
-        ('metadata', metadata.ParamPanel),
+        ('scan',    scancon.ScanPanel),
+        # ('metadata', metadata.ParamPanel),
         # ('pipeline', pipeline_ctrl.PipelineControl)
         ])
 
@@ -589,7 +589,7 @@ if __name__ == '__main__':
 
     h2 = handlers.RotatingFileHandler(os.path.join(info_dir, 'biocon.log'), maxBytes=10e6, backupCount=5, delay=True)
     h2.setLevel(logging.INFO)
-    # h2.setLevel(logging.DEBUG)
+    h2.setLevel(logging.DEBUG)
     formatter2 = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
     h2.setFormatter(formatter2)
 

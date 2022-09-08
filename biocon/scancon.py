@@ -27,6 +27,12 @@ from io import open
 import logging
 import sys
 from collections import OrderedDict
+import copy
+import threading
+import time
+
+if __name__ != '__main__':
+    logger = logging.getLogger(__name__)
 
 import wx
 import numpy as np
@@ -65,6 +71,8 @@ class ScanPanel(wx.Panel):
 
     def _init_values(self):
         self.scan_motor_panels = OrderedDict()
+        self._abort_event = threading.Event()
+        self.test_scan_running = False
 
     def _create_layout(self):
 
@@ -88,9 +96,9 @@ class ScanPanel(wx.Panel):
         num_sizer.Add(self.num_scans, flag=wx.ALIGN_CENTER_VERTICAL)
 
         if 'exposure' in self.settings['components']:
-            test_scan_button = wx.Button(self.ctrl_parent, label='Run test')
-            test_scan_button.Bind(wx.EVT_BUTTON, self._on_test_scan)
-            button_sizer.Add(test_scan_button, flag=wx.LEFT, border=5)
+            self.test_scan_button = wx.Button(self.ctrl_parent, label='Run test')
+            self.test_scan_button.Bind(wx.EVT_BUTTON, self._on_test_scan)
+            button_sizer.Add(self.test_scan_button, flag=wx.LEFT, border=5)
 
         self.motor_sizer = wx.GridBagSizer(vgap=5, hgap=5)
 
@@ -121,15 +129,113 @@ class ScanPanel(wx.Panel):
         self.Fit()
         self.GetParent().Layout()
         self.GetParent().Fit()
+        wx.FindWindowByName('biocon').Layout()
+        wx.FindWindowByName('biocon').Fit()
 
-    def _on_test_scan(self):
-        pass
+    def _on_test_scan(self, evt):
+        if not self.test_scan_running:
+            scan_settings, valid = self.get_scan_values()
+
+            if valid:
+                self._abort_event.clear()
+                cmd = ['start_test_scan', [scan_settings, self._abort_event, 
+                    self.on_scan_end], {}]
+                wx.FindWindowByName('exposure').exp_cmd_q.append(cmd)
+                self.test_scan_running = True
+                self.set_test_scan_button_name()
+
+        else:
+            self._abort_event.set()
+
+    def on_scan_end(self):
+        self.test_scan_running = False
+        wx.CallAfter(self.set_test_scan_button_name)
+
+    def set_test_scan_button_name(self):
+        if not self.test_scan_running:
+            self.test_scan_button.SetLabel('Run test')
+        else:
+            self.test_scan_button.SetLabel('Abort test')
+
+    def _run_test_scan(self, scan_settings):
+        num_scans = scan_settings['num_scans']
+        
+        for current_run in range(1,num_scans+1):
+            scan_motors = copy.deepcopy(scan_settings['motors'])
+
+            self._inner_scan_test(scan_settings,
+                scan_motors, OrderedDict(), current_run)
+
+    def _inner_scan_test(self, scan_settings, scan_motors,
+        motor_positions, current_run):
+        motor_num, motor_params = scan_motors.popitem(False)
+
+        motor_name = motor_params['motor']
+        start = motor_params['start']
+        stop = motor_params['stop']
+        step_size = motor_params['step']
+        motor_type = motor_params['type']
+
+        if motor_type == 'Newport':
+            motor_get_params = copy.deepcopy(motor_params)
+            motor_get_params['motor_ip'] = scan_settings['motor_ip']
+            motor_get_params['motor_port'] = scan_settings['motor_port']
+
+        motor = wx.FindWindowByName('exposure').exp_con.get_motor(motor_name, motor_type, motor_params)
+
+        initial_motor_position = float(motor.get_position())
+
+        if start < stop:
+            mtr_positions = np.arange(start, stop+step_size, step_size)
+
+            if mtr_positions[-1] > stop:
+                mtr_positions = mtr_positions[:-1]
+        else:
+            mtr_positions = np.arange(stop, start+step_size, step_size)
+
+            if mtr_positions[-1] > start:
+                mtr_positions = mtr_positions[:-1]
+
+            mtr_positions = mtr_positions[::-1]
+
+        for position in mtr_positions:
+            logger.debug('Position: {}'.format(position))
+            if self._abort_event.is_set():
+                break
+
+            motor.move_absolute(position)
+
+            while motor.is_busy():
+                time.sleep(0.01)
+                if self._abort_event.is_set():
+                    motor.stop()
+                    motor.move_absolute(initial_motor_position)
+                    break
+
+            if self._abort_event.is_set():
+                break
+
+            motor_positions['m{}'.format(motor_num)] = position
+
+            if len(scan_motors) > 0: # Recursive case
+                my_scan_motors = copy.deepcopy(scan_motors)
+
+                self._inner_scan_test(exp_settings, scan_settings, my_scan_motors,
+                    motor_positions, current_run)
+
+            else:   # Base case for recursion:
+
+                time.sleep(0.1)
+
+        self.test_scan_running = False
+        wx.CallAfter(self.set_test_scan_button_name)
 
     def get_scan_values(self):
         motor_params = OrderedDict()
         for num, motor_panel in self.scan_motor_panels.items():
             params = motor_panel.get_motor_params()
-            motor_params[num] = params
+            if params['use']:
+                motor_params[num] = params
 
         scan_values = {'motors' : motor_params,
             'num_scans' : self.num_scans.GetValue()}
@@ -375,8 +481,15 @@ class MotorPanel(wx.Panel):
             if step:
                 if start < stop:
                     mtr_positions = np.arange(start, stop+step_size, step_size)
+
+                    if mtr_positions[-1] > stop:
+                        mtr_positions = mtr_positions[:-1]
                 else:
                     mtr_positions = np.arange(stop, start+step_size, step_size)
+
+                    if mtr_positions[-1] > start:
+                        mtr_positions = mtr_positions[:-1]
+
                     mtr_positions = mtr_positions[::-1]
 
                 num_steps = mtr_positions.size
