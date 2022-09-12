@@ -923,6 +923,7 @@ class ExpCommThread(threading.Thread):
         stop = motor_params['stop']
         step_size = motor_params['step']
         motor_type = motor_params['type']
+        scan_type = motor_params['scan_type']
 
         if motor_type == 'Newport':
             motor_get_params = copy.deepcopy(motor_params)
@@ -946,6 +947,8 @@ class ExpCommThread(threading.Thread):
 
             mtr_positions = mtr_positions[::-1]
 
+        if 'relative' == scan_type.lower():
+            mtr_positions += initial_motor_position
 
         if len(scan_motors) == 0: # Recursive base case
             det = self._mx_data['det']          #Detector
@@ -1097,6 +1100,13 @@ class ExpCommThread(threading.Thread):
                 if not finished:
                     #Abort happened in the inner function
                     break
+
+        motor.move_absolute(initial_motor_position)
+
+        while motor.is_busy():
+            time.sleep(0.01)
+            if self._abort_event.is_set():
+                motor.stop()
 
     def fast_exposure(self, data_dir, fprefix, num_frames, exp_time, exp_period,
         exp_type='standard', **kwargs):

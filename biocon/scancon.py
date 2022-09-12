@@ -157,79 +157,6 @@ class ScanPanel(wx.Panel):
         else:
             self.test_scan_button.SetLabel('Abort test')
 
-    def _run_test_scan(self, scan_settings):
-        num_scans = scan_settings['num_scans']
-        
-        for current_run in range(1,num_scans+1):
-            scan_motors = copy.deepcopy(scan_settings['motors'])
-
-            self._inner_scan_test(scan_settings,
-                scan_motors, OrderedDict(), current_run)
-
-    def _inner_scan_test(self, scan_settings, scan_motors,
-        motor_positions, current_run):
-        motor_num, motor_params = scan_motors.popitem(False)
-
-        motor_name = motor_params['motor']
-        start = motor_params['start']
-        stop = motor_params['stop']
-        step_size = motor_params['step']
-        motor_type = motor_params['type']
-
-        if motor_type == 'Newport':
-            motor_get_params = copy.deepcopy(motor_params)
-            motor_get_params['motor_ip'] = scan_settings['motor_ip']
-            motor_get_params['motor_port'] = scan_settings['motor_port']
-
-        motor = wx.FindWindowByName('exposure').exp_con.get_motor(motor_name, motor_type, motor_params)
-
-        initial_motor_position = float(motor.get_position())
-
-        if start < stop:
-            mtr_positions = np.arange(start, stop+step_size, step_size)
-
-            if mtr_positions[-1] > stop:
-                mtr_positions = mtr_positions[:-1]
-        else:
-            mtr_positions = np.arange(stop, start+step_size, step_size)
-
-            if mtr_positions[-1] > start:
-                mtr_positions = mtr_positions[:-1]
-
-            mtr_positions = mtr_positions[::-1]
-
-        for position in mtr_positions:
-            logger.debug('Position: {}'.format(position))
-            if self._abort_event.is_set():
-                break
-
-            motor.move_absolute(position)
-
-            while motor.is_busy():
-                time.sleep(0.01)
-                if self._abort_event.is_set():
-                    motor.stop()
-                    motor.move_absolute(initial_motor_position)
-                    break
-
-            if self._abort_event.is_set():
-                break
-
-            motor_positions['m{}'.format(motor_num)] = position
-
-            if len(scan_motors) > 0: # Recursive case
-                my_scan_motors = copy.deepcopy(scan_motors)
-
-                self._inner_scan_test(exp_settings, scan_settings, my_scan_motors,
-                    motor_positions, current_run)
-
-            else:   # Base case for recursion:
-
-                time.sleep(0.1)
-
-        self.test_scan_running = False
-        wx.CallAfter(self.set_test_scan_button_name)
-
     def get_scan_values(self):
         motor_params = OrderedDict()
         for num, motor_panel in self.scan_motor_panels.items():
@@ -370,6 +297,15 @@ class MotorPanel(wx.Panel):
         self.use_in_scan = wx.CheckBox(ctrl_parent, label='Use in scan')
         self.use_in_scan.SetValue(True)
 
+        self.scan_type = wx.Choice(ctrl_parent, choices=['Absolute', 'Relative'])
+        self.scan_type.SetSelection(0)
+
+        scan_type_sizer = wx.FlexGridSizer(cols=2, vgap=5, hgap=5)
+        scan_type_sizer.Add(wx.StaticText(ctrl_parent, label='Scan type:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        scan_type_sizer.Add(self.scan_type, flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT,
+            border=5)
+
         motor_sizer = wx.FlexGridSizer(cols=2, vgap=5, hgap=5)
         motor_sizer.Add(wx.StaticText(ctrl_parent, label='Motor:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
@@ -437,6 +373,7 @@ class MotorPanel(wx.Panel):
         self.top_sizer.Add(scan_sizer, flag=wx.LEFT|wx.RIGHT|wx.TOP|wx.EXPAND, border=5)
         self.top_sizer.Add(num_sizer, flag=wx.LEFT|wx.RIGHT|wx.TOP|wx.EXPAND, border=5)
         self.top_sizer.Add(self.use_in_scan, flag=wx.LEFT|wx.RIGHT|wx.TOP|wx.EXPAND, border=5)
+        self.top_sizer.Add(scan_type_sizer, flag=wx.LEFT|wx.RIGHT|wx.TOP|wx.EXPAND, border=5)
         self.top_sizer.Add(self.advanced_options, flag=wx.ALL|wx.EXPAND, border=5)
 
         self.top_sizer.Show(self.advanced_options,
@@ -513,6 +450,7 @@ class MotorPanel(wx.Panel):
         num_steps = self.num_steps.GetValue()
         use_in_scan = self.use_in_scan.GetValue()
         motor_type = self.motor_type.GetStringSelection()
+        scan_type = self.scan_type.GetStringSelection()
         np_group = self.newport_group.GetValue()
         np_index = self.newport_index.GetValue()
         np_axes = self.newport_axes.GetValue()
@@ -524,6 +462,7 @@ class MotorPanel(wx.Panel):
             'num_steps' : num_steps,
             'use'       : use_in_scan,
             'type'      : motor_type,
+            'scan_type' : scan_type,
             'np_group'  : np_group,
             'np_index'  : np_index,
             'np_axes'   : np_axes,
