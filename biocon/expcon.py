@@ -2868,6 +2868,13 @@ class ExpPanel(wx.Panel):
         self.advanced_options.Add(trig_sizer, border=5, flag=wx.ALL|wx.EXPAND)
         self.advanced_options.Add(self.muscle_sizer, border=5, flag=wx.ALL|wx.EXPAND)
 
+        self.start_scan_btn = wx.Button(self, label='Start Scan')
+        self.start_scan_btn.Bind(wx.EVT_BUTTON, self._on_start_exp)
+        self.start_scan_btn.Hide()
+
+        if ('scan' in self.settings['components'] 
+            or 'trsaxs_scan' in self.settings['components']):
+            self.start_scan_btn.Show()
 
         self.start_exp_btn = wx.Button(self, label='Start Exposure')
         self.start_exp_btn.Bind(wx.EVT_BUTTON, self._on_start_exp)
@@ -2878,6 +2885,8 @@ class ExpPanel(wx.Panel):
 
         self.exp_btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
         self.exp_btn_sizer.AddStretchSpacer(1)
+        self.exp_btn_sizer.Add(self.start_scan_btn, border=5,
+            flag=wx.ALIGN_CENTER_VERTICAL|wx.ALIGN_RIGHT|wx.RIGHT)
         self.exp_btn_sizer.Add(self.start_exp_btn, border=5,
             flag=wx.ALIGN_CENTER_VERTICAL|wx.ALIGN_RIGHT|wx.RIGHT)
         self.exp_btn_sizer.Add(self.stop_exp_btn, border=5,
@@ -3008,12 +3017,17 @@ class ExpPanel(wx.Panel):
             trsaxs_panel.update_params()
 
     def _on_start_exp(self, evt):
-        self.start_exp()
+        if evt.GetEventObject() == self.start_exp_btn:
+            exp_only = True
+        else:
+            exp_only = False
+
+        self.start_exp(exp_only)
 
     def _on_stop_exp(self, evt):
         self.stop_exp()
 
-    def start_exp(self):
+    def start_exp(self, exp_only):
         self.abort_event.clear()
         self.exp_event.clear()
         self.timeout_event.clear()
@@ -3028,7 +3042,7 @@ class ExpPanel(wx.Panel):
         if not exp_valid:
             return
 
-        comp_valid, comp_settings = self._check_components()
+        comp_valid, comp_settings = self._check_components(exp_only)
 
         if not comp_valid:
             return
@@ -3089,6 +3103,21 @@ class ExpPanel(wx.Panel):
         if not overwrite_valid:
             return
 
+        cont = True
+
+        if (('trsaxs_scan' in self.settings['components'] and exp_only) or 
+            ('scan' in self.settings['components'] and exp_only)):
+            msg = ("Only exposures will be taken, no scan will be done. Are you sure you want to continue?")
+            dlg = wx.MessageDialog(None, msg, "Shutter Closed", wx.YES_NO|wx.ICON_EXCLAMATION|wx.NO_DEFAULT)
+            result = dlg.ShowModal()
+            dlg.Destroy()
+
+            if result == wx.ID_NO:
+                cont = False
+
+        if not cont:
+            return
+
         if self.pipeline_ctrl is not None and exp_type is not None:
 
             # Note, in the future this should get parameters for batch
@@ -3101,6 +3130,7 @@ class ExpPanel(wx.Panel):
                 fprefix, num_frames)
 
 
+
         self.set_status('Preparing exposure')
         self.start_exp_btn.Disable()
         self.stop_exp_btn.Enable()
@@ -3111,11 +3141,11 @@ class ExpPanel(wx.Panel):
         else:
             exp_values['exp_type'] = 'standard'
 
-        if 'trsaxs_scan' in self.settings['components']:
+        if 'trsaxs_scan' in self.settings['components'] and not exp_only:
             self.total_time = comp_settings['trsaxs_scan']['total_time']+1*comp_settings['trsaxs_scan']['num_scans']
             self.exp_cmd_q.append(('start_tr_exp', (exp_values, comp_settings), {}))
 
-        elif 'scan' in self.settings['components']:
+        elif 'scan' in self.settings['components'] and not exp_only:
             self.total_time = self.total_time*comp_settings['scan']['total_steps'] + 4*comp_settings['scan']['total_outer_loop_steps']
             self.exp_cmd_q.append(('start_scan_exp', (exp_values, comp_settings), {}))
 
@@ -3128,14 +3158,14 @@ class ExpPanel(wx.Panel):
 
         self.set_time_remaining(self.total_time)
 
-        if ('trsaxs_scan' in self.settings['components'] or exp_values['wait_for_trig']
-            or 'scan' in self.settings['components']):
+        if (('trsaxs_scan' in self.settings['components'] and not exp_only) or exp_values['wait_for_trig']
+            or ('scan' in self.settings['components'] and not exp_only)):
             self.exp_status_sizer.Show(self.scan_num_sizer, recursive=True)
             self.scan_number.SetLabel('1')
         else:
             self.exp_status_sizer.Hide(self.scan_num_sizer, recursive=True)
 
-        if 'trsaxs_flow' in self.settings['components']:
+        if 'trsaxs_flow' in self.settings['components'] and not exp_only:
             trsaxs_flow_panel = wx.FindWindowByName('trsaxs_flow')
             trsaxs_flow_panel.prepare_for_exposure(comp_settings['trsaxs_flow'])
 
@@ -3532,7 +3562,7 @@ class ExpPanel(wx.Panel):
 
         return exp_values, valid
 
-    def _check_components(self):
+    def _check_components(self, exp_only):
         comp_settings = {}
         errors = []
 
@@ -3542,21 +3572,21 @@ class ExpPanel(wx.Panel):
         else:
             coflow_started = True
 
-        if 'trsaxs_scan' in self.settings['components']:
+        if 'trsaxs_scan' in self.settings['components'] and not exp_only:
             trsaxs_panel = wx.FindWindowByName('trsaxs_scan')
             trsaxs_values, trsaxs_scan_valid = trsaxs_panel.get_scan_values()
             comp_settings['trsaxs_scan'] = trsaxs_values
         else:
             trsaxs_scan_valid = True
 
-        if 'trsaxs_flow' in self.settings['components']:
+        if 'trsaxs_flow' in self.settings['components'] and not exp_only:
             trsaxs_panel = wx.FindWindowByName('trsaxs_flow')
             trsaxs_values, trsaxs_flow_valid = trsaxs_panel.get_flow_values()
             comp_settings['trsaxs_flow'] = trsaxs_values
         else:
             trsaxs_flow_valid = True
 
-        if 'scan' in self.settings['components']:
+        if 'scan' in self.settings['components'] and not exp_only:
             scan_panel = wx.FindWindowByName('scan')
             scan_values, scan_valid = scan_panel.get_scan_values()
             comp_settings['scan'] = scan_values

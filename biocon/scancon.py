@@ -166,10 +166,16 @@ class ScanPanel(wx.Panel):
             params = motor_panel.get_motor_params()
             if params['use']:
                 motor_params[num] = params
-                tot_steps *= int(params['num_steps'])
+                try:
+                    tot_steps *= int(params['num_steps'])
+                except ValueError:
+                    pass
 
                 if int(num) < len(self.scan_motor_panels.items()):
-                    tot_outer_loop *= int(params['num_steps'])
+                    try:
+                        tot_outer_loop *= int(params['num_steps'])
+                    except ValueError:
+                        pass
 
         scan_values = {'motors' : motor_params,
             'num_scans' : self.num_scans.GetValue(),
