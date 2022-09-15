@@ -158,14 +158,30 @@ class ScanPanel(wx.Panel):
             self.test_scan_button.SetLabel('Abort test')
 
     def get_scan_values(self):
+        tot_steps = 1
+        tot_outer_loop = 1
+
         motor_params = OrderedDict()
         for num, motor_panel in self.scan_motor_panels.items():
             params = motor_panel.get_motor_params()
             if params['use']:
                 motor_params[num] = params
+                try:
+                    tot_steps *= int(params['num_steps'])
+                except ValueError:
+                    pass
+
+                if int(num) < len(self.scan_motor_panels.items()):
+                    try:
+                        tot_outer_loop *= int(params['num_steps'])
+                    except ValueError:
+                        pass
 
         scan_values = {'motors' : motor_params,
-            'num_scans' : self.num_scans.GetValue()}
+            'num_scans' : self.num_scans.GetValue(),
+            'total_steps' : tot_steps,
+            'total_outer_loop_steps'    : tot_outer_loop,
+            }
 
         valid = self.validate_scan_values(scan_values)
 
@@ -250,7 +266,12 @@ class ScanPanel(wx.Panel):
                     metadata['Motor {} start:'.format(num)] = params['start']
                     metadata['Motor {} stop:'.format(num)] = params['stop']
                     metadata['Motor {} step:'.format(num)] = params['step']
-                    metadata['Motor {} # steps:'.format(num)] = params['motor']
+                    metadata['Motor {} # steps:'.format(num)] = params['num_steps']
+                    metadata['Motor {} scan type:'.format(num)] = params['scan_type']
+
+                    if params['scan_type'].lower() == 'relative':
+                        metadata['Motor {} absolute start:'.format(num)] = params['start']
+                        metadata['Motor {} absolute stop:'.format(num)] = params['stop']
         except:
             pass
 
