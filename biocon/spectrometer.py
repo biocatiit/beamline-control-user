@@ -40,7 +40,144 @@ if __name__ != '__main__':
 import numpy as np
 
 # Uses stellarnet python driver, available from the manufacturer
+sys.path.append('/Users/jessehopkins/Desktop/projects/spectrometer/MAC_64b_python3')#add the path of the stellarnet_demo.py
 import stellarnet_driver3 as sn
+
+import utils
+
+
+class SpectraData(object):
+    """
+    Data class for spectra
+    """
+
+    def __init__(self, spectrum, timestamp, spec_type='raw',
+        absorbance_window=1, absorbance_wavelengths={}):
+        logger.debug('Creating SpectraData with %s spectrum', spec_type)
+
+        self.timestamp = timestamp
+        self.wavelength = spectrum[:,0]
+
+        self.spectrum = None
+        self.trans_spectrum = None
+        self.abs_spectrum = None
+
+        self._absorbance_wavelengths = absorbance_wavelengths
+        self._absorbance_window = absorbance_window
+        self.absorbance_values = {}
+
+        if spec_type == 'raw':
+            self.spectrum = spectrum[:,1]
+        elif spec_type == 'trans':
+            self.trans_spectrum = spectrum[:,1]
+        elif spec_type == 'abs':
+            self.abs_spectrum = spectrum[:,1]
+
+            self._calculate_absorbances()
+
+    def get_timestamp(self):
+        logger.debug('SpectraData: Getting timestamp')
+        return self.timestamp
+
+    def get_wavelength(self):
+        logger.debug('SpectraData: Getting wavelength')
+        return self.wavelength
+
+    def get_spectrum(self, spec_type='raw'):
+        logger.debug('SpectraData: Getting %s spectrum', spec_type)
+
+        if spec_type == 'raw':
+            spec = self.spectrum
+        elif spec_type == 'trans':
+            spec = self.trans_spectrum
+        elif spec_type == 'abs':
+            spec = self.abs_spectrum
+
+        spectrum = np.column_stack((self.wavelength, spec))
+
+        return spectrum
+
+    def set_spectrum(self, spectrum, spec_type='raw'):
+        logger.debug('SpectraData: Setting %s spectrum', spec_type)
+
+        if spec_type == 'raw':
+            self.spectrum = spectrum[:,1]
+
+        elif spec_type == 'trans':
+            self.trans_spectrum = spectrum[:,1]
+            self.calc_abs()
+
+        elif spec_type == 'abs':
+            self.abs_spectrum = spectrum[:,1]
+            self._calculate_all_abs_single_wavelength()
+
+    def dark_correct(self, dark_spectrum):
+        logger.debug('SpectraData: Dark correcting spectrum')
+        bkg = dark_spectrum.get_spectrum()
+
+        self.spectrum = self.spectrum - bkg[:,1]
+
+    def transmission_from_ref(self, ref_spectrum):
+        logger.debug('SpectraData: Calculating transmission and absorbance')
+
+        bkg = ref_spectrum.get_spectrum()
+
+        self.trans_spectrum = self.spectrum/bkg[:,1]
+
+        self.calc_abs()
+
+    def calc_abs(self):
+        logger.debug('SpectraData: Calculating absorbance')
+
+        self.abs_spectrum = -np.log10(self.trans_spectrum)
+
+        self._calculate_all_abs_single_wavelength()
+
+    def _calculate_all_abs_single_wavelength(self):
+        for wvl in self._absorbance_wavelengths:
+            self._calculate_abs_single_wavelength(wvl)
+
+    def _calculate_abs_single_wavelength(self, wavelength):
+        start = self._absorbance_wavelengths[wavelength]['start']
+        end = self._absorbance_wavelengths[wavelength]['end']
+
+        abs_val = np.mean(self.abs_spectrum[start:end+1])
+
+        self.absorbance_values[wavelength] = abs_val
+
+    def get_all_absorbances(self):
+        return self.absorbance_values
+
+    def get_absorbance(self, wavelength):
+        if wavelength < self.wavelength[0] or wavelength > self.wavelength[-1]:
+            raise RuntimeError('Wavelength is outside of measured range.')
+
+        if wavelength not in self.absorbance_values:
+            self._calculate_absorbance_range(wavelength)
+            self._calculate_abs_single_wavelength(wavelength)
+
+        abs_val = self.absorbance_values[wavelength]
+
+        return abs_val
+
+    def _calculate_absorbance_range(self, wvl):
+        wvl_start = wvl - self._absorbance_window/2
+        wvl_end = wvl + self._absorbance_window/2
+
+        _, start_idx = utils.find_closest(wvl_start, self.wavelength)
+        _, end_idx = utils.find_closest(wvl_end, self.wavelength)
+
+        self._absorbance_wavelengths[wvl] = {'start': start_idx, 'end': end_idx}
+
+    def get_absorbance_window(self):
+        return self._absorbance_window
+
+    def set_absorbance_window(self, window):
+        self._absorbance_window = window
+        for wavelength in self.absorbance_values:
+            self._calculate_absorbance_range(wavelength)
+
+        self._calculate_all_abs_single_wavelength()
 
 class Spectrometer(object):
 
@@ -56,6 +193,7 @@ class Spectrometer(object):
         history_time: float, optional
             The length of time to retain spectrum in the local history
         """
+        logger.info('Creating spectrometer %s', name)
         self.name = name
 
         self._history_length = history_time
@@ -75,6 +213,11 @@ class Spectrometer(object):
         self._scan_avg = 1
         self._smoothing = 0
 
+        self._absorbance_window = 1 #window of lambdas to average for absorbance at particular wavelengths
+        self._absorbance_wavelengths = {}
+
+        self.wavelength = None #Wavelength array as returned by spectrometer
+
 
     def __repr__(self):
         return '{}({})'.format(self.__class__.__name__, self.name)
@@ -83,25 +226,29 @@ class Spectrometer(object):
         return '{} {}'.format(self.__class__.__name__, self.name)
 
     def connect(self):
-        pass
+        logger.info('Spectrometer %s: Connecting', self.name)
 
     def disconnect(self):
-        pass
+        logger.info('Spectrometer %s: Disconnecting', self.name)
 
     def set_integration_time(self, int_time, update_dark=True):
-        pass
+        logger.info('Spectrometer %s: Setting integration time to %s s',
+            self.name, int_time)
 
     def set_scan_avg(self, num_avgs, update_dark=True):
-        pass
+        logger.info('Spectrometer %s: Setting number of scans to average for '
+            'each collected spectra to %s', self.name, num_avgs)
 
     def set_smoothing(self, smooth, update_dark=True):
-        pass
+        logger.info('Spectrometer %s: Setting smoothing to %s', self.name,
+            smooth)
 
     def lightsource_shutter(self, open):
-        pass
+        logger.debug('Spectrometer %s: Opening light source shutter: %s',
+            self.name, open)
 
     def _collect_spectrum(self, int_trigger):
-        pass
+        logger.debug('Spectrometer %s: Collecting spectrum', self.name)
 
     def _check_dark_conditions(self, set_dark_conditions=True):
         """
@@ -117,30 +264,46 @@ class Spectrometer(object):
         is_dark: bool
             Whether spectrometer is currently in a dark condition
         """
-        pass
+        logger.debug('Spectrometer %s: Checking dark conditions', self.name)
 
     def is_busy(self):
-        return self._taking_data or self._taking_series
+        busy =self._taking_data or self._taking_series
+        logger.debug('Spectrometer %s: Busy: %s', self.name, busy)
+
+        return
 
     def get_integration_time(self):
+        logger.debug('Spectrometer %s: Integration time: %s s', self.name,
+            self._integration_time)
+
         return self._integration_time
 
     def get_scan_avg(self):
+        logger.debug('Spectrometer %s: Scans to average: %s', self.name,
+            self._scan_avg)
+
         return self._scan_avg
 
     def get_smoothing(self):
+        logger.debug('Spectrometer %s: Smoothing: %s', self.name, self._smoothing)
+
         return self._smoothing
 
-    def set_dark(self, spectrum, timestamp):
-        self._dark_spectrum = [timestamp, spectrum]
+    def set_dark(self, spectrum):
+        logger.debug('Spectrometer %s: Setting dark spectrum', self.name)
+
+        self._dark_spectrum = spectrum
 
     def get_dark(self):
+        logger.debug('Spectrometer %s: Getting dark spectrum', self.name)
+
         if self._dark_spectrum is None:
             raise RuntimeError('No dark spectrum')
 
         return self._dark_spectrum
 
     def collect_dark(self, averages=1, set_dark_conditions=True):
+        logger.info('Spectrometer %s: Collecting dark spectrum', self.name)
         if not self.is_busy():
             is_dark = self._check_dark_conditions(
                 set_dark_conditions=set_dark_conditions)
@@ -164,7 +327,11 @@ class Spectrometer(object):
                     avg_timestamp = initial_timestamp
                     avg_spectrum = all_spectra[0]
 
-                self.set_dark(avg_spectrum, avg_timestamp)
+                avg_spec = SpectraData(avg_spectrum, avg_timestamp,
+                    absorbance_window=self._absorbance_window,
+                    absorbance_wavelengths=self._absorbance_wavelengths)
+
+                self.set_dark(avg_spec)
             else:
                 raise RuntimeError('Spectrometer is not in dark conditions, so '
                     'a dark reference spectrum could not be collected.')
@@ -173,35 +340,68 @@ class Spectrometer(object):
             raise RuntimeError('A spectrum or series of spectrum is already being '
                 'collected, cannot collect a new spectrum.')
 
-    def set_reference_spectrum(self, spectrum, timestamp):
-        self._reference_spectrum = [timestamp, spectrum]
+    def set_reference_spectrum(self, spectrum):
+        logger.debug('Spectrometer %s: Setting reference spectrum', self.name)
+
+        self._reference_spectrum = spectrum
 
     def get_reference_spectrum(self):
+        logger.debug('Spectrometer %s: Getting reference spectrum', self.name)
+
         if self._reference_spectrum is None:
             raise RuntimeError('No reference spectrum')
 
         return self._reference_spectrum
 
-    def collect_reference_spectrum(self, averages=1, dark_correct=True, int_trigger=True):
+    def collect_reference_spectrum(self, averages=1, dark_correct=True,
+        int_trigger=True, auto_dark=True, dark_time=60*60):
+        if not self.is_busy():
+            if auto_dark:
+                self._auto_dark(dark_time)
+
+            self._collect_reference_spectrum_inner(averages, dark_correct, int_trigger)
+
+        else:
+            raise RuntimeError('A spectrum or series of spectrum is already being '
+                'collected, cannot collect a new spectrum.')
+
+
+
+    def _collect_reference_spectrum_inner(self, averages=1, dark_correct=True,
+        int_trigger=True):
+        logger.info('Spectrometer %s: Collecting reference spectrum', self.name)
+
         all_spectra = []
 
         for i in range(averages):
-            timestamp, spectrum = self.get_spectrum(False, dark_correct, int_trigger)
-            all_spectra.append(spectrum)
+            spectrum = self._get_spectrum_inner(dark_correct, int_trigger)
+            all_spectra.append(spectrum.get_spectrum())
 
             if i == 0:
-                initial_timestamp = timestamp
+                initial_timestamp = spectrum.get_timestamp()
 
         if averages > 1:
-            avg_timestamp = initial_timestamp + (timestamp-initial_timestamp)/2
+            avg_timestamp = initial_timestamp + (spectrum.get_timestamp()-initial_timestamp)/2
             avg_spectrum = np.mean(all_spectra, axis=0)
         else:
             avg_timestamp = initial_timestamp
             avg_spectrum = all_spectra[0]
 
-        self.set_reference_spectrum(avg_spectrum, avg_timestamp)
+        avg_spec = SpectraData(avg_spectrum, avg_timestamp,
+            absorbance_window=self._absorbance_window,
+            absorbance_wavelengths=self._absorbance_wavelengths)
 
-    def get_spectrum(self, spec_type='abs', dark_correct=True, int_trigger=True):
+        self.set_reference_spectrum(avg_spec)
+
+    def _auto_dark(self, dark_time):
+        dark_spec = self.get_dark()
+
+        if (datetime.datetime.now() - dark_spec.get_timestamp()
+            > datetime.timedelta(seconds=dark_time)):
+            self.collect_dark()
+
+    def get_spectrum(self, spec_type='abs', dark_correct=True, int_trigger=True,
+        auto_dark=True, dark_time=60*60):
         """
         Parameters
         ----------
@@ -211,74 +411,89 @@ class Spectrometer(object):
         """
 
         if not self.is_busy():
+            if auto_dark:
+                self._auto_dark(dark_time)
+
+            logger.info('Spectrometer %s: Collecting spectrum', self.name)
+
             if spec_type == 'abs':
-                spectrum, timestamp = self._get_absorbance_spectrum_inner(dark_correct,
+                spectrum = self._get_absorbance_spectrum_inner(dark_correct,
                     int_trigger)
 
             elif spec_type == 'trans':
-                spectrum, timestamp = self._get_transmission_spectrum_inner(dark_correct,
+                spectrum = self._get_transmission_spectrum_inner(dark_correct,
                     int_trigger)
             else:
-                spectrum, timestamp = self._get_spectrum_inner(dark_correct, int_trigger)
+                spectrum = self._get_spectrum_inner(dark_correct, int_trigger)
 
         else:
             raise RuntimeError('A spectrum or series of spectrum is already being '
                 'collected, cannot collect a new spectrum.')
 
-        return timestamp, spectrum
+        return spectrum
 
     def _get_spectrum_inner(self, dark_correct, int_trigger):
+        logger.debug('Spectrometer %s: Getting raw spectrum', self.name)
         spectrum = self._collect_spectrum(int_trigger)
         timestamp = datetime.datetime.now()
 
-        self._add_spectrum_to_history(spectrum, timestamp)
+        spectrum = SpectraData(spectrum, timestamp,
+            absorbance_window=self._absorbance_window,
+            absorbance_wavelengths=self._absorbance_wavelengths)
 
         if dark_correct:
-            dark_spectrum = self.get_dark()[1]
+            dark_spectrum = self.get_dark()
 
-            spectrum = self.subtract_spectra(spectrum, dark_spectrum)
+            spectrum.dark_correct(dark_spectrum)
 
-        return spectrum, timestamp
+        self._add_spectrum_to_history(spectrum)
+
+        return spectrum
 
     def _get_transmission_spectrum_inner(self, dark_correct, int_trigger):
-        spectrum, timestamp = self._get_spectrum_inner(dark_correct, int_trigger)
+        logger.debug('Spectrometer %s: Getting transmission spectrum', self.name)
+        spectrum = self._get_spectrum_inner(dark_correct, int_trigger)
 
-        ref_spectrum = self.get_reference_spectrum()[1]
+        ref_spectrum = self.get_reference_spectrum()
 
-        spectrum = self.divide_spectra(spectrum, ref_spectrum)
+        spectrum.transmission_from_ref(ref_spectrum)
 
-        self._add_spectrum_to_history(spectrum, timestamp, spec_type='trans')
+        self._add_spectrum_to_history(spectrum, spec_type='trans')
 
-        return spectrum, timestamp
+        return spectrum
 
     def _get_absorbance_spectrum_inner(self, dark_correct, int_trigger):
-        spectrum, timestamp = self._get_transmission_spectrum_inner(dark_correct,
+        logger.debug('Spectrometer %s: Getting absorbance spectrum', self.name)
+        spectrum = self._get_transmission_spectrum_inner(dark_correct,
             int_trigger)
 
-        spectrum[:,1] = -np.log10(spectrum[:,1])
+        self._add_spectrum_to_history(spectrum, spec_type='abs')
 
-        self._add_spectrum_to_history(spectrum, timestamp, spec_type='abs')
-
-        return spectrum, timestamp
+        return spectrum
 
     def get_spectra_series(self, num_spectra, spec_type='abs', return_q=None,
-        delta_t_min=0, dark_correct=True, int_trigger=True):
+        delta_t_min=0, dark_correct=True, int_trigger=True, auto_dark=True,
+        dark_time=60*60, take_ref=True, ref_avgs=1):
         if self.is_busy():
             raise RuntimeError('A spectrum or series of spectrum is already being '
                 'collected, cannot collect a new spectrum.')
 
         else:
-            logger.info('Collecting a series of {} spectra'.format(num_spectra))
+            logger.info('Spectrometer %s: Collecting a series of %s spectra',
+                self.name, num_spectra)
             self._series_thread = threading.Thread(target=self._collect_spectra_series,
                 args=(num_spectra,), kwargs={'return_q': return_q,
                 'spec_type': spec_type, 'delta_t_min' : delta_t_min,
-                'dark_correct' : dark_correct, 'int_trigger' : int_trigger})
+                'dark_correct' : dark_correct, 'int_trigger' : int_trigger,
+                'auto_dark' : auto_dark, 'dark_time' : dark_time,
+                'take_ref' : take_ref, 'ref_avgs' : ref_avgs,})
 
             self._series_thread.daemon = True
             self._series_thread.start()
 
     def _collect_spectra_series(self, num_spectra, return_q=None, spec_type='abs',
-        delta_t_min=0, dark_correct=True, int_trigger=True):
+        delta_t_min=0, dark_correct=True, int_trigger=True, auto_dark=True,
+        dark_time=60*60, take_ref=True, ref_avgs=1):
         if self.is_busy():
             raise RuntimeError('A spectrum or series of spectrum is already being '
                 'collected, cannot collect a new spectrum.')
@@ -294,34 +509,42 @@ class Spectrometer(object):
             if self._series_abort_event.is_set():
                 return
 
+            if auto_dark:
+                self._auto_dark(dark_time)
+
+            if take_ref:
+                self._collect_reference_spectrum_inner(ref_avgs)
+
             while tot_spectrum < num_spectra:
                 if self._series_abort_event.is_set():
                     break
 
-                logger.debug('Collecting series spectra {}'.format(tot_spectrum+1))
+                logger.debug('Spectrometer %s: Collecting series spectra %s',
+                    self.name, tot_spectrum+1)
 
                 if spec_type == 'abs':
-                    spectrum, timestamp = self._get_absorbance_spectrum_inner(dark_correct,
+                    spectrum = self._get_absorbance_spectrum_inner(dark_correct,
                         int_trigger)
 
                 elif spec_type == 'trans':
-                    spectrum, timestamp = self._get_transmission_spectrum_inner(dark_correct,
+                    spectrum = self._get_transmission_spectrum_inner(dark_correct,
                         int_trigger)
                 else:
-                    spectrum, timestamp = self._get_spectrum_inner(dark_correct,
+                    spectrum = self._get_spectrum_inner(dark_correct,
                         int_trigger)
 
                 if return_q is not None:
-                    logger.debug('Returning series spectra {}'.format(tot_spectrum+1))
+                    logger.debug('Spectrometer %s: Returning series spectra %s',
+                        self.name, tot_spectrum+1)
 
                     try:
-                        return_q.put_nowait([timestamp, spectrum])
+                        return_q.put_nowait(spectrum)
                     except:
-                        return_q.append([timestamp, spectrum])
+                        return_q.append(spectrum)
 
                 tot_spectrum += 1
 
-                while datetime.datetime.now() - timestamp < dt_delta_t:
+                while datetime.datetime.now() - spectrum.get_timestamp() < dt_delta_t:
                     if self._series_abort_event.is_set():
                         break
 
@@ -329,11 +552,19 @@ class Spectrometer(object):
 
             self._taking_series = False
 
-    def subtract_spectra(self, spectrum1, spectrum2):
+            logger.info('Spectrometer %s: Finished Collecting a series of '
+                '%s spectra', self.name, num_spectra)
+
+    def subtract_spectra(self, spectrum1, spectrum2, spec_type='raw'):
         """Return spectrum1 - spectrum2"""
-        if np.all(spectrum1[:,0] == spectrum2[:,0]):
-            sub_spectrum = np.column_stack((spectrum1[:,0],
-                spectrum1[:,1] - spectrum2[:,1]))
+        logger.debug('Spectrometer %s: Subtracting spectra')
+
+        spec1 = spectrum1.get_spectrum(spec_type)
+        spec2 = spectrum2.get_spectrum(spec_type)
+
+        if np.all(spec1[:,0] == spec2[:,0]):
+            sub_spectrum = np.column_stack((spec1[:,0],
+                spec1[:,1] - spec2[:,1]))
 
         else:
             raise ValueError('spectrum do not have the same wavelength, and so '
@@ -343,9 +574,14 @@ class Spectrometer(object):
 
     def divide_spectra(self, spectrum1, spectrum2):
         """Return spectrum1/spectrum2"""
-        if np.all(spectrum1[:,0] == spectrum2[:,0]):
-            ratio_spectrum = np.column_stack((spectrum1[:,0],
-                spectrum1[:,1]/spectrum2[:,1]))
+        logger.debug('Spectrometer %s: Dividing spectra')
+
+        spec1 = spectrum1.get_spectrum(spec_type)
+        spec2 = spectrum2.get_spectrum(spec_type)
+
+        if np.all(spec1[:,0] == spec2[:,0]):
+            ratio_spectrum = np.column_stack((spec1[:,0],
+                spec1[:,1]/spec2[:,1]))
 
         else:
             raise ValueError('spectrum do not have the same wavelength, and so '
@@ -353,7 +589,10 @@ class Spectrometer(object):
 
         return ratio_spectrum
 
-    def _add_spectrum_to_history(self, spectrum, timestamp, spec_type='raw'):
+    def _add_spectrum_to_history(self, spectrum, spec_type='raw'):
+        logger.debug('Spectrometer %s: Adding %s spectrum to history',
+            self.name, spec_type)
+
         if spec_type == 'abs':
             history = self._absorbance_history
         elif spec_type == 'trans':
@@ -361,8 +600,8 @@ class Spectrometer(object):
         else:
             history = self._history
 
-        history['spectra'].append([timestamp, spectrum])
-        history['timestamps'].append(timestamp.timestamp())
+        history['spectra'].append(spectrum)
+        history['timestamps'].append(spectrum.get_timestamp().timestamp())
 
         history = self._prune_history(history)
 
@@ -374,6 +613,8 @@ class Spectrometer(object):
             self._history = history
 
     def _prune_history(self, history):
+        logger.debug('Spectrometer %s: Pruning history', self.name)
+
         if len(history['timestamps']) > 0:
             now = datetime.datetime.now().timestamp()
 
@@ -401,6 +642,9 @@ class Spectrometer(object):
         return history
 
     def get_last_n_spectra(self, n, spec_type='abs'):
+        logger.debug('Spectrometer %s: Getting last %s %s spectra', self.name,
+            n, spec_type)
+
         if spec_type == 'abs':
             history = self._absorbance_history
         elif spec_type == 'trans':
@@ -418,6 +662,9 @@ class Spectrometer(object):
         t: float
             Time in seconds
         """
+        logger.debug('Spectrometer %s: Getting last %s s of %s spectra',
+            self.name, t, spec_type)
+
         if spec_type == 'abs':
             history = self._absorbance_history
         elif spec_type == 'trans':
@@ -450,6 +697,9 @@ class Spectrometer(object):
         return ret_spectra
 
     def get_full_history(self, spec_type='abs'):
+        logger.debug('Spectrometer %s: Getting full history of %s spectra',
+            self.name, spec_type)
+
         if spec_type == 'abs':
             history = self._absorbance_history
         elif spec_type == 'trans':
@@ -460,13 +710,46 @@ class Spectrometer(object):
         return history['spectra']
 
     def set_history_time(self, t):
+        logger.debug('Spectrometer %s: Setting history time to %s', self.name, t)
+
         self._history_length = t
 
         self._prune_history(self._absorbance_history)
         self._prune_history(self._transmission_history)
         self._prune_history(self._history)
 
+    def add_absorbance_wavelength(self, wavelength):
+        if wavelength < self.wavelength[0] or wavelength > self.wavelength[-1]:
+            raise RuntimeError('Wavelength is outside of measured range.')
+
+        self._calculate_absorbance_range(wavelength)
+
+    def _calculate_absorbance_range(self, wvl):
+        wvl_start = wvl - self._absorbance_window/2
+        wvl_end = wvl + self._absorbance_window/2
+
+        _, start_idx = utils.find_closest(wvl_start, self.wavelength)
+        _, end_idx = utils.find_closest(wvl_end, self.wavelength)
+
+        self._absorbance_wavelengths[wvl] = {'start': start_idx, 'end': end_idx}
+
+    def get_absorbance_wavelengths(self):
+        return list(self._absorbance_wavelengths.keys())
+
+    def remove_absorbance_wavelength(self, wavelength):
+        self._absorbance_wavelengths.pop(wavelength, None)
+
+    def set_absorbance_window(self, window_size):
+        self._absorbance_window = window_size
+
+        for wavelength in self._absorbance_wavelengths:
+            self._calculate_absorbance_range(wavelength)
+
+    def get_absorbance_window(self):
+        return self._absorbance_window
+
     def abort_collection(self):
+        logger.info('Spectrometer %s: Aborting collection', self.name)
         self._series_abort_event.set()
 
 class StellarnetUVVis(Spectrometer):
@@ -491,17 +774,26 @@ class StellarnetUVVis(Spectrometer):
         self._get_config()
 
     def connect(self):
+        logger.info('Spectrometer %s: Connecting', self.name)
+
         spec, wav = sn.array_get_spec(0)
 
         self.spectrometer = spec
-        self.wavelength = wav
+        self.wav = wav
+
+        self.wavelength = self.wav.reshape(self.wav.shape[0])
 
     def disconnect(self):
+        logger.info('Spectrometer %s: Disconnecting', self.name)
+
         if self.is_busy():
             self.abort_collection()
         self.spectrometer['device'].__del__()
 
     def set_integration_time(self, int_time, update_dark=True):
+        logger.info('Spectrometer %s: Setting integration time to %s s',
+            self.name, int_time)
+
         if int_time != self._integration_time:
             self._set_config(int_time, self._scan_avg, self._smoothing,
                 self._x_timing)
@@ -509,13 +801,19 @@ class StellarnetUVVis(Spectrometer):
             self.collect_dark()
 
     def set_scan_avg(self, num_avgs, update_dark=True):
+        logger.info('Spectrometer %s: Setting number of scans to average for '
+            'each collected spectra to %s', self.name, num_avgs)
+
         if num_avgs != self._scan_avg:
-            self._set_config(self._integration_time, num_avgs, self._smoothing,
-                self._x_timing)
+            self._set_config(self._integration_time/1000, num_avgs,
+                self._smoothing, self._x_timing)
 
             self.collect_dark()
 
     def set_smoothing(self, smooth, update_dark=True):
+        logger.info('Spectrometer %s: Setting smoothing to %s', self.name,
+            smooth)
+
         if smooth != self._smoothing:
             self._set_config(self._integration_time, self._scan_avg, smooth,
                 self._x_timing)
@@ -523,16 +821,26 @@ class StellarnetUVVis(Spectrometer):
             self.collect_dark()
 
     def set_xtiming(self, x_timing, update_dark=True):
+        logger.info('Spectrometer %s: Setting x timing to %s', self.name,
+            x_timing)
+
         if x_timing != self._x_timing:
             self._set_config(self._integration_time, self._scan_avg,
                 self._smoothing, x_timing)
 
             self.collect_dark()
 
+    def get_xtiming(self):
+        logger.info('Spectrometer %s: X timing: %s', self.name, self._x_timing)
+
+        return self._x_timing
+
     def lightsource_shutter(self, open):
-        pass
+        logger.debug('Spectrometer %s: Opening light source shutter: %s',
+            self.name, open)
 
     def _collect_spectrum(self, int_trigger):
+        logger.debug('Spectrometer %s: Collecting spectrum', self.name)
         self._taking_data = True
 
         if self._external_trigger and int_trigger:
@@ -542,7 +850,7 @@ class StellarnetUVVis(Spectrometer):
         else:
             trigger_ext = False
 
-        spectrum = sn.array_spectrum(self.spectrometer, self.wavelength)
+        spectrum = sn.array_spectrum(self.spectrometer, self.wav)
 
         if trigger_ext:
             self.set_external_trigger(True)
@@ -565,11 +873,13 @@ class StellarnetUVVis(Spectrometer):
         is_dark: bool
             Whether spectrometer is currently in a dark condition
         """
+        logger.debug('Spectrometer %s: Checking dark conditions', self.name)
         return True
 
     # function defination to set parameter
     def _set_config(self, int_time, num_avgs, smooth, xtiming):
-        self._integration_time = int_time
+        int_time = round(int_time*1000)
+        self._integration_time = int_time/1000
         self._scan_avg = num_avgs
         self._smoothing = smooth
         self._x_timing = xtiming
@@ -582,7 +892,7 @@ class StellarnetUVVis(Spectrometer):
     def _get_config(self):
         params = self.spectrometer['device'].get_config()
 
-        self._integration_time = params['int_time']
+        self._integration_time = params['int_time']/1000
         self._scan_avg = params['scans_to_avg']
         self._smoothing = params['x_smooth']
         self._x_timing = params['x_timing']
@@ -592,7 +902,7 @@ class StellarnetUVVis(Spectrometer):
         self._model = params['model']
         self._device_id = params['device_id']
 
-    def set_external_trigger(trigger):
+    def set_external_trigger(self, trigger):
         self.ext_trig = trigger
         sn.ext_trig(self.spectrometer, trigger)
 
@@ -603,7 +913,7 @@ if __name__ == '__main__':
     logger.setLevel(logging.DEBUG)
     h1 = logging.StreamHandler(sys.stdout)
     h1.setLevel(logging.DEBUG)
-    # h1.setLevel(logging.INFO)
+    h1.setLevel(logging.INFO)
     # h1.setLevel(logging.WARNING)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
     h1.setFormatter(formatter)
@@ -613,3 +923,11 @@ if __name__ == '__main__':
     spec.collect_dark()
     spec.collect_reference_spectrum()
     # spec.disconnect()
+
+    """
+    To do:
+    Figure out how we'll be controling the shutter on the light source
+    Make communication object that multicasts results, accepts commands from local
+        and remote sources
+    Make simple GUI
+    """

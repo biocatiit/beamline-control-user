@@ -36,6 +36,7 @@ import wx
 from wx.lib.wordwrap import wordwrap
 from wx.lib.stattext import GenStaticText as StaticText
 from matplotlib.backends.backend_wxagg import NavigationToolbar2WxAgg
+import numpy as np
 
 class CharValidator(wx.Validator):
     ''' Validates data as it is entered into the text controls. '''
@@ -463,3 +464,8 @@ class WarningMessage(wx.Frame):
         parent.warning_dialog = None
 
         self.Destroy()
+
+def find_closest(val, array):
+    argmin = np.argmin(np.absolute(array-val))
+
+    return array[argmin], argmin
