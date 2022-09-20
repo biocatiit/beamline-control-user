@@ -29,6 +29,9 @@ import sys
 import six
 from six.moves import StringIO as bytesio
 import platform
+import threading
+from collections import deque
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -469,3 +472,208 @@ def find_closest(val, array):
     argmin = np.argmin(np.absolute(array-val))
 
     return array[argmin], argmin
+
+
+class CommManager(threading.Thread):
+    def __init__(self, name=None):
+        """
+        Initializes the custom thread.
+
+        :param collections.deque command_queue: The queue used to pass commands
+            to the thread.
+
+        :param collections.deque return_queue: The queue used to return data
+            from the thread.
+
+        :param threading.Event abort_event: An event that is set when the thread
+            needs to abort, and otherwise is not set.
+        """
+        threading.Thread.__init__(self, name=name)
+        self.daemon = True
+
+        logger.info("Starting communication thread: %s", self.name)
+
+        self._command_queues = {}
+        self._return_queues = {}
+        self._status_queues = {}
+        self._abort_event = threading.Event()
+        self._stop_event = threading.Event()
+        self._queue_lock = threading.Lock()
+
+        self._status_cmds = {}
+
+        self._commands = {'example_command' : self._example_command} # overwrite
+
+        # Need to make run and abort work for multiple queues
+        # Need to add a way to set status commands and intervals
+        # Need to add a way to add on stop commands?
+
+    def run(self):
+        """
+        Custom run method for the thread.
+        """
+        while True:
+            cmds_run = False
+            with self._queue_lock:
+                for comm_name, cmd_q in self._command_queues.items():
+                    if len(cmd_q) > 0:
+                        logger.debug("Getting new command")
+                        command, args, kwargs = cmd_q.popleft()
+                    else:
+                        command = None
+
+                    if self._abort_event.is_set():
+                        break
+
+                    if self._stop_event.is_set():
+                        break
+
+                    if command is not None:
+                        kwargs['comm_name'] = comm_name
+                        self._run_command(command, args, kwargs)
+
+                        cmds_run = True
+
+            if self._abort_event.is_set():
+                logger.debug("Abort event detected")
+                self._abort()
+
+            if self._stop_event.is_set():
+                logger.debug("Stop event detected")
+                self._abort()
+                break
+
+            with self._queue_lock:
+                for status_cmd in self._status_cmds:
+                    temp = self._status_cmds[status_cmd]
+                    cmd, args, kwargs = temp['cmd']
+                    period = temp['period']
+                    last_t = temp['last_run']
+
+                    if self._abort_event.is_set():
+                        break
+
+                    if self._stop_event.is_set():
+                        break
+
+                    if time.time() - last_t > period:
+                        kwargs['comm_name'] = 'status'
+                        self._run_command(cmd, args, kwargs)
+                        self._status_cmds[status_cmd]['last_run'] = time.time()
+
+                        cmds_run = True
+
+            if self._abort_event.is_set():
+                logger.debug("Abort event detected")
+                self._abort()
+
+            if self._stop_event.is_set():
+                logger.debug("Stop event detected")
+                self._abort()
+                break
+
+            if not cmds_run:
+                time.sleep(0.01)
+
+        if self._stop_event.is_set():
+            self._stop_event.clear()
+        else:
+            self._abort()
+
+        logger.info("Quitting communication thread: %s", self.name)
+
+    def _run_command(self, command, args, kwargs):
+        logger.debug(("Processing cmd '%s' with args: %s and "
+            "kwargs: %s "), command, ', '.join(['{}'.format(a) for a in args]),
+            ', '.join(['{}:{}'.format(kw, item) for kw, item in kwargs.items()]))
+
+        try:
+            self._commands[command](*args, **kwargs)
+        except Exception:
+            msg = ("Communication thread %s failed to run command '%s' "
+                "with args: %s and kwargs: %s " %(self.name, command,
+                ', '.join(['{}'.format(a) for a in args]),
+                ', '.join(['{}:{}'.format(kw, item) for kw, item in kwargs.items()])))
+            logger.exception(msg)
+
+            if command == 'connect' or command == 'disconnect':
+                self._return_value((command, False), kwargs['comm_name'])
+
+    def add_new_communication(self, name, command_queue, return_queue, status_queue):
+        logger.info('Adding new communication device to thread: %s', name)
+        with self._queue_lock:
+            self._command_queues[name] = command_queue
+            self._return_queues[name] = return_queue
+            self._status_queues[name] = status_queue
+
+        logger.debug('Added new communication device to thread')
+
+    def remove_communication(self, name):
+        logger.info('Removing communication device from thread: %s', name)
+        with self._queue_lock:
+            self._command_queues.pop(name, None)
+            self._return_queues.pop(name, None)
+            self._status_queues.pop(name, None)
+
+        logger.info('Removed communication device from thread')
+
+    def add_status_cmd(self, cmd, period):
+        logger.debug('Adding status command: %s', cmd)
+        with self._queue_lock:
+            self._status_cmds[cmd[0]] = {'cmd' : cmd, 'period' : period, 'last_run': 0}
+
+        logger.debug('Added status command')
+
+    def remove_status_cmd(self, cmd):
+        logger.debug('Removing status command: %s', cmd)
+
+        with self._queue_lock:
+            self._status_cmds.pop(cmd, None)
+
+        logger.debug('Removed status command')
+
+    def _example_command(self, comm_name=None):
+        """
+        Commands need to take in 0 or more arguments, 0 or more key word agruments,
+        and additionally must always take in the comm_name keyword argument, which
+        is used to make sure the right return queue is used.
+        """
+        if comm_name == 'status':
+            return_queue_list = self._status_queues.values()
+        else:
+            return_queue_list = [self._return_queues[comm_name]]
+
+    def _return_value(self, val, comm_name):
+        if comm_name == 'status':
+            return_queue_list = self._status_queues.values()
+        else:
+            return_queue_list = [self._return_queues[comm_name]]
+
+        for ret_q in return_queue_list:
+            ret_q.append(val)
+
+    def abort(self):
+        self._abort_event.set()
+
+    def _abort(self):
+        """
+        Clears the ``command_queue`` and the ``return_queue``.
+        """
+        logger.info("Aborting communication thread %s current and future commands", self.name)
+        with self._queue_lock:
+            for comm_name, cmd_q in self._command_queues.items():
+                cmd_q.clear()
+
+            for comm_name, ret_q in self._return_queues.items():
+                ret_q.clear()
+
+            for comm_name, status_q in self._status_queues.items():
+                status_q.clear()
+
+        self._abort_event.clear()
+        logger.debug("Communication thread %s aborted", self.name)
+
+    def stop(self):
+        """Stops the thread cleanly."""
+        logger.info("Starting to clean up and shut down communication thread: %s", self.name)
+        self._stop_event.set()

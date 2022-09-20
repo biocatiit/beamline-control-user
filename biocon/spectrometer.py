@@ -33,6 +33,7 @@ import sys
 import copy
 import platform
 import datetime
+import os
 
 if __name__ != '__main__':
     logger = logging.getLogger(__name__)
@@ -146,9 +147,11 @@ class SpectraData(object):
         self.absorbance_values[wavelength] = abs_val
 
     def get_all_absorbances(self):
+        logger.debug('SpectraData: Getting all absorbance values')
         return self.absorbance_values
 
     def get_absorbance(self, wavelength):
+        logger.debug('SpectraData: Getting absorbance at %s', wavelength)
         if wavelength < self.wavelength[0] or wavelength > self.wavelength[-1]:
             raise RuntimeError('Wavelength is outside of measured range.')
 
@@ -170,14 +173,33 @@ class SpectraData(object):
         self._absorbance_wavelengths[wvl] = {'start': start_idx, 'end': end_idx}
 
     def get_absorbance_window(self):
+        logger.debug('SpectraData: Getting absorbance window')
         return self._absorbance_window
 
     def set_absorbance_window(self, window):
+        logger.debug('SpectraData: Setting absorbance window')
         self._absorbance_window = window
         for wavelength in self.absorbance_values:
             self._calculate_absorbance_range(wavelength)
 
         self._calculate_all_abs_single_wavelength()
+
+    def save_spectrum(self, name, save_dir, spec_type='abs'):
+
+        fname = os.path.join(save_dir, name)
+        logger.debug('SpectraData: Saving to %s', fname)
+
+        h_start = '{}\nWavelength_(nm),'.format(self.timestamp.isoformat())
+
+        if spec_type == 'raw':
+            header = h_start + 'Spectrum'
+        elif spec_type == 'trans':
+            header = h_start + 'Transmission'
+        elif spec_type == 'abs':
+            header = h_start + 'Absorbance_(Au)'
+
+        np.savetxt(fname, self.get_spectrum(spec_type), delimiter=',',
+            header=header)
 
 class Spectrometer(object):
 
@@ -217,6 +239,13 @@ class Spectrometer(object):
         self._absorbance_wavelengths = {}
 
         self.wavelength = None #Wavelength array as returned by spectrometer
+
+        self._autosave_dir = None
+        self._autosave_prefix = None
+        self._autosave_raw = False
+        self._autosave_trans = False
+        self._autosave_abs = True
+        self._autosave_on = False
 
 
     def __repr__(self):
@@ -374,7 +403,7 @@ class Spectrometer(object):
         all_spectra = []
 
         for i in range(averages):
-            spectrum = self._get_spectrum_inner(dark_correct, int_trigger)
+            spectrum = self._collect_spectrum_inner(dark_correct, int_trigger)
             all_spectra.append(spectrum.get_spectrum())
 
             if i == 0:
@@ -394,13 +423,16 @@ class Spectrometer(object):
         self.set_reference_spectrum(avg_spec)
 
     def _auto_dark(self, dark_time):
-        dark_spec = self.get_dark()
 
-        if (datetime.datetime.now() - dark_spec.get_timestamp()
-            > datetime.timedelta(seconds=dark_time)):
+        if self._dark_spectrum is not None:
+            dark_spec = self.get_dark()
+
+        if (self._dark_spectrum is None or
+            (datetime.datetime.now() - dark_spec.get_timestamp()
+            > datetime.timedelta(seconds=dark_time))):
             self.collect_dark()
 
-    def get_spectrum(self, spec_type='abs', dark_correct=True, int_trigger=True,
+    def collect_spectrum(self, spec_type='abs', dark_correct=True, int_trigger=True,
         auto_dark=True, dark_time=60*60):
         """
         Parameters
@@ -417,14 +449,14 @@ class Spectrometer(object):
             logger.info('Spectrometer %s: Collecting spectrum', self.name)
 
             if spec_type == 'abs':
-                spectrum = self._get_absorbance_spectrum_inner(dark_correct,
+                spectrum = self._collect_absorbance_spectrum_inner(dark_correct,
                     int_trigger)
 
             elif spec_type == 'trans':
-                spectrum = self._get_transmission_spectrum_inner(dark_correct,
+                spectrum = self._collect_transmission_spectrum_inner(dark_correct,
                     int_trigger)
             else:
-                spectrum = self._get_spectrum_inner(dark_correct, int_trigger)
+                spectrum = self._collect_spectrum_inner(dark_correct, int_trigger)
 
         else:
             raise RuntimeError('A spectrum or series of spectrum is already being '
@@ -432,7 +464,7 @@ class Spectrometer(object):
 
         return spectrum
 
-    def _get_spectrum_inner(self, dark_correct, int_trigger):
+    def _collect_spectrum_inner(self, dark_correct, int_trigger):
         logger.debug('Spectrometer %s: Getting raw spectrum', self.name)
         spectrum = self._collect_spectrum(int_trigger)
         timestamp = datetime.datetime.now()
@@ -450,9 +482,9 @@ class Spectrometer(object):
 
         return spectrum
 
-    def _get_transmission_spectrum_inner(self, dark_correct, int_trigger):
+    def _collect_transmission_spectrum_inner(self, dark_correct, int_trigger):
         logger.debug('Spectrometer %s: Getting transmission spectrum', self.name)
-        spectrum = self._get_spectrum_inner(dark_correct, int_trigger)
+        spectrum = self._collect_spectrum_inner(dark_correct, int_trigger)
 
         ref_spectrum = self.get_reference_spectrum()
 
@@ -462,16 +494,16 @@ class Spectrometer(object):
 
         return spectrum
 
-    def _get_absorbance_spectrum_inner(self, dark_correct, int_trigger):
+    def _collect_absorbance_spectrum_inner(self, dark_correct, int_trigger):
         logger.debug('Spectrometer %s: Getting absorbance spectrum', self.name)
-        spectrum = self._get_transmission_spectrum_inner(dark_correct,
+        spectrum = self._collect_transmission_spectrum_inner(dark_correct,
             int_trigger)
 
         self._add_spectrum_to_history(spectrum, spec_type='abs')
 
         return spectrum
 
-    def get_spectra_series(self, num_spectra, spec_type='abs', return_q=None,
+    def collect_spectra_series(self, num_spectra, spec_type='abs', return_q=None,
         delta_t_min=0, dark_correct=True, int_trigger=True, auto_dark=True,
         dark_time=60*60, take_ref=True, ref_avgs=1):
         if self.is_busy():
@@ -523,15 +555,34 @@ class Spectrometer(object):
                     self.name, tot_spectrum+1)
 
                 if spec_type == 'abs':
-                    spectrum = self._get_absorbance_spectrum_inner(dark_correct,
+                    spectrum = self._collect_absorbance_spectrum_inner(dark_correct,
                         int_trigger)
 
                 elif spec_type == 'trans':
-                    spectrum = self._get_transmission_spectrum_inner(dark_correct,
+                    spectrum = self._collect_transmission_spectrum_inner(dark_correct,
                         int_trigger)
                 else:
-                    spectrum = self._get_spectrum_inner(dark_correct,
+                    spectrum = self._collect_spectrum_inner(dark_correct,
                         int_trigger)
+
+                if self._autosave_on:
+                    s_base = '{}_{:06}'.format(self._autosave_prefix , tot_spectrum+1)
+
+                    if self._autosave_raw:
+                        logger.debug('Autosaving raw spectra')
+                        s_name = s_base + '_raw.csv'
+                        spectrum.save_spectrum(s_name, self._autosave_dir, 'raw')
+
+                    if (self._autosave_trans and
+                        (spec_type == 'trans' or spec_type == 'abs')):
+                        logger.debug('Autosaving trans spectra')
+                        s_name = s_base + '_trans.csv'
+                        spectrum.save_spectrum(s_name, self._autosave_dir, 'trans')
+
+                    if self._autosave_abs and spec_type == 'abs':
+                        logger.debug('Autosaving abs spectra')
+                        s_name = s_base + '.csv'
+                        spectrum.save_spectrum(s_name, self._autosave_dir, 'abs')
 
                 if return_q is not None:
                     logger.debug('Spectrometer %s: Returning series spectra %s',
@@ -718,7 +769,13 @@ class Spectrometer(object):
         self._prune_history(self._transmission_history)
         self._prune_history(self._history)
 
+    def get_history_time(self):
+        logger.debug('Spectrometer %s: Getting history length', self.name)
+        return self._history_length
+
     def add_absorbance_wavelength(self, wavelength):
+        logger.info('Spectrometer %s: Adding absorbance at %s nm', self.name,
+            wavelength)
         if wavelength < self.wavelength[0] or wavelength > self.wavelength[-1]:
             raise RuntimeError('Wavelength is outside of measured range.')
 
@@ -734,19 +791,52 @@ class Spectrometer(object):
         self._absorbance_wavelengths[wvl] = {'start': start_idx, 'end': end_idx}
 
     def get_absorbance_wavelengths(self):
+        logger.debug('Spectrometer %s: Getting absorbance wavelengths', self.name)
         return list(self._absorbance_wavelengths.keys())
 
     def remove_absorbance_wavelength(self, wavelength):
+        logger.info('Spectrometer %s: Removing absorbance at %s nm', self.name,
+            wavelength)
         self._absorbance_wavelengths.pop(wavelength, None)
 
     def set_absorbance_window(self, window_size):
+        logger.info('Spectrometer %s: Setting absorbance window to %s nm',
+            self.name, window_size)
         self._absorbance_window = window_size
 
         for wavelength in self._absorbance_wavelengths:
             self._calculate_absorbance_range(wavelength)
 
     def get_absorbance_window(self):
+        logger.debug('Spectrometer %s: Getting absorbance window', self.name)
         return self._absorbance_window
+
+    def set_autosave_parameters(self, data_dir, prefix, save_raw=False,
+        save_trans=False, save_abs=True):
+        logger.debug('Spectrometer %s: Setting series autosave parameters: '
+            'savedir: %s, prefix: %s, save_raw: %s, save_trans: %s, '
+            'save_abs: %s', self.name, data_dir, prefix, save_raw, save_trans,
+            save_abs)
+        self._autosave_dir = data_dir
+        self._autosave_prefix = prefix
+        self._autosave_raw = save_raw
+        self._autosave_trans = save_trans
+        self._autosave_abs = save_abs
+
+    def set_autosave(self, on):
+        logger.info('Spectrometer %s: Setting series autosave to %s', self.name,
+            on)
+        self._autosave_on = on
+
+    def get_autosave(self):
+        logger.debug('Spectrometer %s: Getting series autosave', self.name)
+        return self._autosave_on
+
+    def get_autosave_parameters(self):
+        logger.debug('Spectrometer %s: Getting series autosave parameters',
+            self.name)
+        return (self._autosave_dir, self._autosave_prefix, self._autosave_raw,
+            self._autosave_trans, self._autosave_abs)
 
     def abort_collection(self):
         logger.info('Spectrometer %s: Aborting collection', self.name)
@@ -907,27 +997,718 @@ class StellarnetUVVis(Spectrometer):
         sn.ext_trig(self.spectrometer, trigger)
 
 
+class UVCommThread(utils.CommManager):
+
+    def __init__(self, name):
+        utils.CommManager.__init__(self, name)
+
+        self._commands = {
+            'connect'           : self._connect_device,
+            'disconnect'        : self._disconnect_device,
+            'set_int_time'      : self._set_int_time,
+            'set_scan_avg'      : self._set_scan_avg,
+            'set_smoothing'     : self._set_smoothing,
+            'set_xtiming'       : self._set_xtiming,
+            'get_int_time'      : self._get_int_time,
+            'get_scan_avg'      : self._get_scan_avg,
+            'get_smoothing'     : self._get_smoothing,
+            'get_xtiming'       : self._get_xtiming,
+            'set_dark'          : self._set_dark,
+            'get_dark'          : self._get_dark,
+            'collect_dark'      : self._collect_dark,
+            'set_ref'           : self._set_ref,
+            'get_ref'           : self._get_ref,
+            'collect_ref'       : self._collect_ref,
+            'collect_spec'      : self._collect_spec,
+            'collect_series'    : self._collect_series,
+            'get_last_n'        : self._get_last_n_spectra,
+            'get_last_t'        : self._get_spectra_in_last_t,
+            'get_full_hist'     : self._get_full_history,
+            'set_hist_time'     : self._set_history_time,
+            'get_hist_time'     : self._get_history_time,
+            'add_abs_wav'       : self._add_absorbance_wavelength,
+            'get_abs_wav'       : self._get_absorbance_wavelengths,
+            'remove_abs_wav'    : self._remove_absorbance_wavelength,
+            'set_abs_window'    : self._set_absorbance_window,
+            'get_abs_window'    : self._get_absorbance_window,
+            'set_autosave_on'   : self._set_autosave_on,
+            'get_autosave_on'   : self._get_autosave_on,
+            'set_autosave_param': self._set_autosave_params,
+            'get_autosave_param': self._get_autosave_params,
+        }
+
+        self._connected_devices = OrderedDict()
+
+        self.known_devices = {
+            'StellarNet' : StellarnetUVVis,
+            }
+
+    def _connect_device(self, name, device_type, **kwargs):
+        logger.info("Connecting device %s", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+
+        new_device = self.known_devices[device_type](name, **kwargs)
+        new_device.connect()
+        self._connected_devices[name] = new_device
+
+        self._return_value((name, 'connected', True), comm_name)
+
+        logger.debug("Device %s connected", name)
+
+    def _disconnect_device(self, name, **kwargs):
+        logger.info("Disconnecting device %s", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+
+        device = self._connected_devices.pop(name, None)
+        if device is not None:
+            device.disconnect()
+
+        self._return_value((name, 'disconnected', True), comm_name)
+
+        logger.debug("Device %s disconnected", name)
+
+    def _disconnect_device(self, name, **kwargs):
+        logger.info("Disconnecting device %s", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+
+        device = self._connected_devices[name]
+        device.disconnect(**kwargs)
+
+        self._return_value((name, 'disconnected', True), comm_name)
+
+        logger.debug("Device %s disconnected", name)
+
+    def _set_int_time(self, name, val, **kwargs):
+        logger.debug("Setting device %s integration time to %s s", name, val)
+
+        comm_name = kwargs.pop('comm_name', None)
+
+        device = self._connected_devices[name]
+        device.set_integration_time(val, **kwargs)
+
+        self._return_value((name, 'set_int_time', True), comm_name)
+
+        logger.debug("Device %s integraiton time set", name)
+
+    def _set_scan_avg(self, name, val, **kwargs):
+        logger.debug("Setting device %s scan averages to %s", name, val)
+
+        comm_name = kwargs.pop('comm_name', None)
+
+        device = self._connected_devices[name]
+        device.set_scan_avg(val, **kwargs)
+
+        self._return_value((name, 'set_scan_avg', True), comm_name)
+
+        logger.debug("Device %s scan averages set", name)
+
+    def _set_smoothing(self, name, val, **kwargs):
+        logger.debug("Setting device %s smoothing to %s", name, val)
+
+        comm_name = kwargs.pop('comm_name', None)
+
+        device = self._connected_devices[name]
+        device.set_smoothing(val, **kwargs)
+
+        self._return_value((name, 'set_smoothing', True), comm_name)
+
+        logger.debug("Device %s smoothing set", name)
+
+    def _set_xtiming(self, name, val, **kwargs):
+        logger.debug("Setting device %s xtiming to %s", name, val)
+
+        comm_name = kwargs.pop('comm_name', None)
+
+        device = self._connected_devices[name]
+        device.set_xtiming(val, **kwargs)
+
+        self._return_value((name, 'set_xtiming', True), comm_name)
+
+        logger.debug("Device %s xtiming set", name)
+
+    def _get_int_time(self, name, **kwargs):
+        logger.debug("Getting device %s integration time", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+
+        device = self._connected_devices[name]
+        val = device.get_integration_time(**kwargs)
+
+        self._return_value((name, 'int_time', val), comm_name)
+
+        logger.debug("Device %s integration time is %s s", name, val)
+
+    def _get_scan_avg(self, name, **kwargs):
+        logger.debug("Getting device %s scan averages", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+
+        device = self._connected_devices[name]
+        val = device.get_scan_avg(**kwargs)
+
+        self._return_value((name, 'scan_avg', val), comm_name)
+
+        logger.debug("Device %s scan averages: %s", name, val)
+
+    def _get_smoothing(self, name, **kwargs):
+        logger.debug("Getting device %s smoothing", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+
+        device = self._connected_devices[name]
+        val = device.get_smoothing(**kwargs)
+
+        self._return_value((name, 'smoothing', val), comm_name)
+
+        logger.debug("Device %s smoothing: %s", name, val)
+
+    def _get_xtiming(self, name, **kwargs):
+        logger.debug("Getting device %s xtiming", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+
+        device = self._connected_devices[name]
+        val = device.get_xtiming(**kwargs)
+
+        self._return_value((name, 'xtiming', val), comm_name)
+
+        logger.debug("Device %s xtiming: %s", name, val)
+
+    def _set_dark(self, name, val, **kwargs):
+        logger.debug("Setting device %s dark to %s", name, val)
+
+        comm_name = kwargs.pop('comm_name', None)
+
+        device = self._connected_devices[name]
+        device.set_dark(val, **kwargs)
+
+        self._return_value((name, 'set_dark', True), comm_name)
+
+        logger.debug("Device %s dark set", name)
+
+    def _get_dark(self, name, **kwargs):
+        logger.debug("Getting device %s dark", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+
+        device = self._connected_devices[name]
+        val = device.get_dark(**kwargs)
+
+        self._return_value((name, 'dark', val), comm_name)
+
+        logger.debug("Device %s dark: %s", name, val)
+
+    def _collect_dark(self, name, **kwargs):
+        logger.debug("Collecting device %s dark", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+
+        device = self._connected_devices[name]
+        val = device.collect_dark(**kwargs)
+
+        self._return_value((name, 'collect_dark', val), comm_name)
+
+        logger.debug("Device %s dark: %s", name, val)
+
+    def _set_ref(self, name, val, **kwargs):
+        logger.debug("Setting device %s ref to %s", name, val)
+
+        comm_name = kwargs.pop('comm_name', None)
+
+        device = self._connected_devices[name]
+        device.set_reference_spectrum(val, **kwargs)
+
+        self._return_value((name, 'set_ref', True), comm_name)
+
+        logger.debug("Device %s ref set", name)
+
+    def _get_ref(self, name, **kwargs):
+        logger.debug("Getting device %s ref", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+
+        device = self._connected_devices[name]
+        val = device.get_reference_spectrum(**kwargs)
+
+        self._return_value((name, 'ref', val), comm_name)
+
+        logger.debug("Device %s ref: %s", name, val)
+
+    def _collect_ref(self, name, **kwargs):
+        logger.debug("Collecting device %s ref", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+
+        device = self._connected_devices[name]
+        val = device.collect_reference_spectrum(**kwargs)
+
+        self._return_value((name, 'collect_ref', val), comm_name)
+
+        logger.debug("Device %s ref: %s", name, val)
+
+    def _collect_spec(self, name, **kwargs):
+        logger.debug("Collecting device %s spectrum", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+
+        device = self._connected_devices[name]
+        val = device.collect_spectrum(**kwargs)
+
+        self._return_value((name, 'collect_spec', val), comm_name)
+
+        logger.debug("Device %s spectrum: %s", name, val)
+
+    def _collect_series(self, name, val, **kwargs):
+        logger.debug("Collecting device %s spectra series of %s spectra", name, val)
+
+        comm_name = kwargs.pop('comm_name', None)
+
+        device = self._connected_devices[name]
+        device.collect_spectra_series(val, **kwargs)
+
+        self._return_value((name, 'collect_series', True), comm_name)
+
+        logger.debug("Device %s series started", name)
+
+    def _get_last_n_spectra(self, name, val, **kwargs):
+        logger.debug("Getting device %s %s most recent spectra", name, val)
+
+        comm_name = kwargs.pop('comm_name', None)
+
+        device = self._connected_devices[name]
+        hist = device.get_last_n_spectra(val, **kwargs)
+
+        self._return_value((name, 'get_history', hist), comm_name)
+
+        logger.debug("Device %s history returned", name)
+
+    def _get_spectra_in_last_t(self, name, val, **kwargs):
+        logger.debug("Getting device %s spectra in the last %s s", name, val)
+
+        comm_name = kwargs.pop('comm_name', None)
+
+        device = self._connected_devices[name]
+        hist = device.get_spectra_in_last_t(val, **kwargs)
+
+        self._return_value((name, 'get_history', hist), comm_name)
+
+        logger.debug("Device %s history returned", name)
+
+    def _get_full_history(self, name, **kwargs):
+        logger.debug("Getting device %s full spectra history", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+
+        device = self._connected_devices[name]
+        val = device.get_full_history(**kwargs)
+
+        self._return_value((name, 'get_history', val), comm_name)
+
+        logger.debug("Device %s history returned", name)
+
+    def _set_history_time(self, name, val, **kwargs):
+        logger.debug("Setting device %s history length to %s s", name, val)
+
+        comm_name = kwargs.pop('comm_name', None)
+
+        device = self._connected_devices[name]
+        device.set_history_time(val, **kwargs)
+
+        self._return_value((name, 'set_history_time', True), comm_name)
+
+        logger.debug("Device %s history length set", name)
+
+    def _get_history_time(self, name, **kwargs):
+        logger.debug("Getting device %s history length", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+
+        device = self._connected_devices[name]
+        val = device.get_history_time(**kwargs)
+
+        self._return_value((name, 'get_history_time', val), comm_name)
+
+        logger.debug("Device %s history time: %s s", name, val)
+
+    def _add_absorbance_wavelength(self, name, val, **kwargs):
+        logger.debug("Device %s adding absorbance wavelenght %s nm", name, val)
+
+        comm_name = kwargs.pop('comm_name', None)
+
+        device = self._connected_devices[name]
+        device.add_absorbance_wavelength(val, **kwargs)
+
+        self._return_value((name, 'add_abs_wav', True), comm_name)
+
+        logger.debug("Device %s absorbance wavelenght added", name)
+
+    def _get_absorbance_wavelengths(self, name, **kwargs):
+        logger.debug("Getting device %s absorbance wavelengths", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+
+        device = self._connected_devices[name]
+        val = device.get_absorbance_wavelengths(**kwargs)
+
+        self._return_value((name, 'get_abs_wav', val), comm_name)
+
+        logger.debug("Device %s absorbance wavelengths: %s", name, val)
+
+    def _remove_absorbance_wavelength(self, name, val, **kwargs):
+        logger.debug("Device %s removing absorbance wavelenght %s nm", name, val)
+
+        comm_name = kwargs.pop('comm_name', None)
+
+        device = self._connected_devices[name]
+        device.remove_absorbance_wavelength(val, **kwargs)
+
+        self._return_value((name, 'remove_abs_wav', True), comm_name)
+
+        logger.debug("Device %s absorbance wavelength removed", name)
+
+    def _set_absorbance_window(self, name, val, **kwargs):
+        logger.debug("Device %s setting absorbance window %s nm", name, val)
+
+        comm_name = kwargs.pop('comm_name', None)
+
+        device = self._connected_devices[name]
+        device.set_absorbance_window(val, **kwargs)
+
+        self._return_value((name, 'set_abs_window', True), comm_name)
+
+        logger.debug("Device %s absorbance window added", name)
+
+    def _get_absorbance_window(self, name, **kwargs):
+        logger.debug("Getting device %s absorbance window", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+
+        device = self._connected_devices[name]
+        val = device.get_absorbance_window(**kwargs)
+
+        self._return_value((name, 'get_abs_wav', val), comm_name)
+
+        logger.debug("Device %s absorbance window: %s nm", name, val)
+
+    def _set_autosave_on(self, name, val, **kwargs):
+        logger.debug("Device %s setting series autosave to %s", name, val)
+
+        comm_name = kwargs.pop('comm_name', None)
+
+        device = self._connected_devices[name]
+        device.set_autosave(val, **kwargs)
+
+        self._return_value((name, 'set_autosave_on', True), comm_name)
+
+        logger.debug("Device %s autosave on set", name)
+
+    def _get_autosave_on(self, name, **kwargs):
+        logger.debug("Getting device %s autosave on", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+
+        device = self._connected_devices[name]
+        val = device.get_autosave(**kwargs)
+
+        self._return_value((name, 'get_autosave_on', val), comm_name)
+
+        logger.debug("Device %s autosave on: %s", name, val)
+
+    def _set_autosave_params(self, name, data_dir, prefix, **kwargs):
+        logger.debug("Device %s setting series autosave parameters to %s",
+            name, val)
+
+        comm_name = kwargs.pop('comm_name', None)
+
+        device = self._connected_devices[name]
+        device.set_autosave_parameters(data_dir, prefix, **kwargs)
+
+        self._return_value((name, 'set_autosave_params', True), comm_name)
+
+        logger.debug("Device %s autosave parameters set", name)
+
+    def _get_autosave_params(self, name, **kwargs):
+        logger.debug("Getting device %s autosave parameters", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+
+        device = self._connected_devices[name]
+        val = device.get_autosave_parameters(**kwargs)
+
+        self._return_value((name, 'get_autosave_params', val), comm_name)
+
+        logger.debug("Device %s autosave parameters: %s", name, val)
 
 if __name__ == '__main__':
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
     h1 = logging.StreamHandler(sys.stdout)
     h1.setLevel(logging.DEBUG)
-    h1.setLevel(logging.INFO)
+    # h1.setLevel(logging.INFO)
     # h1.setLevel(logging.WARNING)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
     h1.setFormatter(formatter)
     logger.addHandler(h1)
 
-    spec = StellarnetUVVis('Test')
-    spec.collect_dark()
-    spec.collect_reference_spectrum()
+    # spec = StellarnetUVVis('Test')
+    # spec.collect_dark()
+    # spec.collect_reference_spectrum()
     # spec.disconnect()
+
+    comm_thread = UVCommThread('Test')
+    comm_thread.start()
+
+    # cmd_q = deque()
+    # ret_q = deque()
+    # status_q = deque()
+
+    # comm_thread.add_new_communication('test_com', cmd_q, ret_q, status_q)
+
+    # connect_cmd = ['connect', ['Test2', 'StellarNet'], {}]
+    # cmd_q.append(connect_cmd)
+
+    # disconnect_cmd = ['disconnect', ['Test2'], {}]
+    # cmd_q.append(disconnect_cmd)
+
+    # set_int_time_cmd = ['set_int_time', ['Test2', 0.01], {}]
+    # cmd_q.append(set_int_time_cmd)
+
+    # set_scan_avg_cmd = ['set_scan_avg', ['Test2', 1], {}]
+    # cmd_q.append(set_scan_avg_cmd)
+
+    # set_smoothing_cmd = ['set_smoothing', ['Test2', 0], {}]
+    # cmd_q.append(set_smoothing_cmd)
+
+    # set_xtiming_cmd = ['set_xtiming', ['Test2', 3], {}]
+    # cmd_q.append(set_xtiming_cmd)
+
+    # get_int_time_cmd = ['get_int_time', ['Test2'], {}]
+    # cmd_q.append(get_int_time_cmd)
+
+    # get_scan_avg_cmd = ['get_scan_avg', ['Test2'], {}]
+    # cmd_q.append(get_scan_avg_cmd)
+
+    # get_smoothing_cmd = ['get_smoothing', ['Test2'], {}]
+    # cmd_q.append(get_smoothing_cmd)
+
+    # get_xtiming_cmd = ['get_xtiming', ['Test2'], {}]
+    # cmd_q.append(get_xtiming_cmd)
+
+
+    # collect_dark_cmd = ['collect_dark', ['Test2'], {}]
+    # cmd_q.append(collect_dark_cmd)
+
+    # time.sleep(0.5)
+
+    # start_count = len(ret_q)
+
+    # get_dark_cmd = ['get_dark', ['Test2'], {}]
+    # cmd_q.append(get_dark_cmd)
+
+    # while len(ret_q) == start_count:
+    #     time.sleep(0.1)
+
+    # dark = ret_q.pop()[2]
+
+    # set_dark_cmd = ['set_dark', ['Test2', dark], {}]
+    # cmd_q.append(set_dark_cmd)
+
+
+
+    # collect_ref_cmd = ['collect_ref', ['Test2'], {}]
+    # cmd_q.append(collect_ref_cmd)
+
+    # time.sleep(0.5)
+
+    # start_count = len(ret_q)
+
+    # get_ref_cmd = ['get_ref', ['Test2'], {}]
+    # cmd_q.append(get_ref_cmd)
+
+    # while len(ret_q) == start_count:
+    #     time.sleep(0.1)
+
+    # ref = ret_q.pop()[2]
+
+    # set_ref_cmd = ['set_ref', ['Test2', ref], {}]
+    # cmd_q.append(set_ref_cmd)
+
+
+    # start_count = len(ret_q)
+
+    # collect_spec_cmd = ['collect_spec', ['Test2'], {}]
+    # cmd_q.append(collect_spec_cmd)
+
+    # while len(ret_q) == start_count:
+    #     time.sleep(0.1)
+
+    # s1 = ret_q.pop()[2]
+
+    # start_count = len(ret_q)
+
+    # collect_spec_cmd = ['collect_spec', ['Test2'], {'spec_type':'raw'}]
+    # cmd_q.append(collect_spec_cmd)
+
+    # while len(ret_q) == start_count:
+    #     time.sleep(0.1)
+
+    # s1 = ret_q.pop()[2]
+
+
+    # start_count = len(ret_q)
+
+    # collect_series_cmd = ['collect_series', ['Test2', 5], {}]
+    # cmd_q.append(collect_series_cmd)
+
+    # while len(ret_q) == start_count:
+    #     time.sleep(0.1)
+
+    # s1 = ret_q.pop()[2]
+
+    # start_count = len(ret_q)
+
+    # collect_series_cmd = ['collect_series', ['Test2', 5], {'spec_type':'raw'}]
+    # cmd_q.append(collect_series_cmd)
+
+    # while len(ret_q) == start_count:
+    #     time.sleep(0.1)
+
+    # s1 = ret_q.pop()[2]
+
+
+    # start_count = len(ret_q)
+
+    # get_last_n_cmd = ['get_last_n', ['Test2',5], {}]
+    # cmd_q.append(get_last_n_cmd)
+
+    # while len(ret_q) == start_count:
+    #     time.sleep(0.1)
+
+    # history = ret_q.pop()[2]
+
+    # start_count = len(ret_q)
+
+    # get_last_t_cmd = ['get_last_t', ['Test2',300], {}]
+    # cmd_q.append(get_last_t_cmd)
+
+    # while len(ret_q) == start_count:
+    #     time.sleep(0.1)
+
+    # history = ret_q.pop()[2]
+
+    # start_count = len(ret_q)
+
+    # get_full_history_cmd = ['get_full_hist', ['Test2'], {}]
+    # cmd_q.append(get_full_history_cmd)
+
+    # while len(ret_q) == start_count:
+    #     time.sleep(0.1)
+
+    # history = ret_q.pop()[2]
+
+    # start_count = len(ret_q)
+
+    # get_hist_time_cmd = ['get_hist_time', ['Test2'], {}]
+    # cmd_q.append(get_hist_time_cmd)
+
+    # while len(ret_q) == start_count:
+    #     time.sleep(0.1)
+
+    # history_length = ret_q.pop()[2]
+
+    # set_hist_time_cmd = ['set_hist_time', ['Test2', 60*60], {}]
+    # cmd_q.append(set_hist_time_cmd)
+
+
+    # add_abs_wav_cmd = ['add_abs_wav', ['Test2', 280], {}]
+    # cmd_q.append(add_abs_wav_cmd)
+
+    # time.sleep(0.5)
+
+    # start_count = len(ret_q)
+
+    # get_abs_wav_cmd = ['get_abs_wav', ['Test2'], {}]
+    # cmd_q.append(get_abs_wav_cmd)
+
+    # time.sleep(0.5)
+
+    # while len(ret_q) == start_count:
+    #     time.sleep(0.1)
+
+    # val = ret_q.pop()[2]
+
+    # remove_abs_wav_cmd = ['remove_abs_wav', ['Test2', 280], {}]
+    # cmd_q.append(remove_abs_wav_cmd)
+
+    # set_abs_window_cmd = ['set_abs_window', ['Test2', 1], {}]
+    # cmd_q.append(set_abs_window_cmd)
+
+    # time.sleep(0.5)
+
+    # start_count = len(ret_q)
+
+    # get_abs_window_cmd = ['get_abs_window', ['Test2'], {}]
+    # cmd_q.append(get_abs_window_cmd)
+
+    # while len(ret_q) == start_count:
+    #     time.sleep(0.1)
+
+    # val = ret_q.pop()[2]
+
+
+    # set_autosave_on_cmd = ['set_autosave_on', ['Test2', True], {}]
+    # cmd_q.append(set_autosave_on_cmd)
+
+    # time.sleep(0.5)
+
+    # start_count = len(ret_q)
+
+    # get_autosave_on_cmd = ['get_autosave_on', ['Test2'], {}]
+    # cmd_q.append(get_autosave_on_cmd)
+
+    # while len(ret_q) == start_count:
+    #     time.sleep(0.1)
+
+    # val = ret_q.pop()[2]
+
+    # save_dir = '/Users/jessehopkins/Desktop/projects/spectrometer/test_save'
+
+    # set_autosave_param_cmd = ['set_autosave_param', ['Test2', save_dir, 'test_thread'], {}]
+    # cmd_q.append(set_autosave_param_cmd)
+
+    # time.sleep(0.5)
+
+    # start_count = len(ret_q)
+
+    # get_autosave_param_cmd = ['get_autosave_param', ['Test2'], {}]
+    # cmd_q.append(get_autosave_param_cmd)
+
+    # while len(ret_q) == start_count:
+    #     time.sleep(0.1)
+
+    # val = ret_q.pop()[2]
+
+
+    # cmd_q2 = deque()
+    # ret_q2 = deque()
+    # status_q2 = deque()
+
+    # comm_thread.add_new_communication('test_com2', cmd_q2, ret_q2, status_q2)
+
+    # get_int_time_cmd = ['get_int_time', ['Test2'], {}]
+    # cmd_q.append(get_int_time_cmd)
+
+    # get_scan_avg_cmd = ['get_scan_avg', ['Test2', 1], {}]
+    # cmd_q2.append(get_scan_avg_cmd)
+
+    # get_int_status_cmd = ['get_int_time', ['Test2',], {}]
+    # comm_thread.add_status_cmd(get_int_status_cmd, 10)
 
     """
     To do:
     Figure out how we'll be controling the shutter on the light source
-    Make communication object that multicasts results, accepts commands from local
-        and remote sources
     Make simple GUI
     """
