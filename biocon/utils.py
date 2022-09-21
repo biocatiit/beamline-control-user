@@ -468,6 +468,41 @@ class WarningMessage(wx.Frame):
 
         self.Destroy()
 
+class ValueEntry(wx.TextCtrl):
+    def __init__(self, enter_callback, *args, **kwargs):
+        wx.TextCtrl.__init__(self, *args, style=wx.TE_PROCESS_ENTER, **kwargs)
+
+        self._enter_callback = enter_callback
+
+        self.Bind(wx.EVT_TEXT, self.OnText)
+
+        self.Bind(wx.EVT_TEXT_ENTER, self.OnEnter)
+
+    def OnText(self, event):
+        """
+        Called when text is changed in the box. Changes the background
+        color of the text box to indicate there are unset changes.
+        """
+        self.SetBackgroundColour("yellow")
+        self.SetModified(True)
+
+    def OnEnter(self, event):
+        """
+        When enter is pressed in the box, it sets the value in EPICS.
+        """
+        value = self.GetValue().strip()
+        self._enter_callback(self, value)
+        self.SetBackgroundColour(wx.NullColour)
+        self.SetModified(False)
+
+    def SafeSetValue(self, val):
+        if not self.IsModified():
+            self.SetValue(val)
+
+    def SafeChangeValue(self, val):
+        if not self.IsModified():
+            self.ChangeValue(val)
+
 def find_closest(val, array):
     argmin = np.argmin(np.absolute(array-val))
 
@@ -580,6 +615,8 @@ class CommManager(threading.Thread):
         else:
             self._abort()
 
+        self._cleanup_devices()
+
         logger.info("Quitting communication thread: %s", self.name)
 
     def _run_command(self, command, args, kwargs):
@@ -677,3 +714,316 @@ class CommManager(threading.Thread):
         """Stops the thread cleanly."""
         logger.info("Starting to clean up and shut down communication thread: %s", self.name)
         self._stop_event.set()
+
+    def _cleanup_devices(self):
+        pass #Set for each device type
+
+class DevicePanel(wx.Panel):
+    """
+    This device panel supports standard settings, including connection settings,
+    for a device. It is meant to be embedded in a larger application and can
+    be instanced several times, once for each device. It communciates
+    with the devices using the :py:class:`CommManager`.
+    """
+    def __init__(self, parent, panel_id, com_thread, known_devices,
+        device_data, *args, **kwargs):
+        """
+        :param wx.Window parent: Parent class for the panel.
+
+        :param int panel_id: wx ID for the panel.
+
+        :param str panel_name: Name for the panel
+
+        :param com_thread: The communication thread for the device.
+
+        :param dict device_data" A dictionary containing at least the keys
+        name, args, kwargs for the device.
+
+        """
+        self.name = device_data['name']
+        self.parent = parent
+
+        wx.Panel.__init__(self, parent, panel_id, *args, name=self.name,
+            **kwargs)
+
+        logger.debug('Initializing UVPanel for device %s', self.name)
+
+        self.known_devices = known_devices
+        self.connected = False
+
+        self.cmd_q = deque()
+        self.return_q = deque()
+        self.status_q = deque()
+
+        self.com_thread = com_thread
+        self.com_thread.add_new_communication(self.name, self.cmd_q, self.return_q,
+            self.status_q)
+
+        self._clear_return = threading.Lock()
+        self._stop_status = threading.Event()
+
+        self._create_layout()
+        self._init_device(device_data)
+
+        # Dictionary of status settings that should be defined. If a status
+        # response is returned, the command name is used as a key and the
+        # function returned is run on the return value
+        self._status_settings = {}
+        self._status_thread = threading.Thread(target=self._get_status)
+        self._status_thread.daemon = True
+        self._status_thread.start()
+
+    def _FromDIP(self, size):
+        # This is a hack to provide easy back compatibility with wxpython < 4.1
+        try:
+            return self.FromDIP(size)
+        except Exception:
+            return size
+
+    def _create_layout(self):
+        """Creates the layout for the panel."""
+
+        top_sizer = wx.BoxSizer(wx.VERTICAL)
+
+        self.SetSizer(self.top_sizer)
+
+    def _init_device(self, device_data):
+        """
+        Initializes the device parameters if any were provided. If enough are
+        provided the device is automatically connected.
+        """
+        pass
+
+    def _send_cmd(self, cmd, wait_for_response=False):
+        """
+        Sends commands to the pump using the ``cmd_q`` that was given
+        to :py:class:`UVCommThread`.
+
+        :param str cmd: The command to send, matching the command in the
+            :py:class:`UVCommThread` ``_commands`` dictionary.
+        """
+        logger.debug('Sending device %s command %s', self.name, cmd)
+
+        if wait_for_response:
+            with self._clear_return:
+                self.cmd_q.append(cmd)
+                result = self._wait_for_response()
+
+                if result[0] == cmd[1][0] and result[1] == cmd[0]:
+                    ret_val = result[2]
+                else:
+                    ret_val = None
+
+        else:
+            self.cmd_q.append(cmd)
+            ret_val = None
+
+        return ret_val
+
+    def _wait_for_response(self):
+        start_count = len(self.return_q)
+        while len(self.return_q) == start_count:
+            time.sleep(0.01)
+
+        answer = self.return_q.pop()
+        return answer
+
+    def _get_status(self):
+        while not self._stop_status.is_set():
+            if len(self.status_q) > 0:
+                new_status = self.status_q.popleft()
+
+            else:
+                new_status = None
+
+            if new_status is not None:
+                device, cmd, val = new_status
+
+                if device == self.name:
+                    wx.CallAfter(self._set_status, cmd, val)
+
+            else:
+                time.sleep(0.01)
+
+            with self._clear_return:
+                while len(self.return_q) > 0:
+                    self.return_q.pop()
+
+    def _set_status(self, cmd, val):
+        pass # Overwrite this
+
+    def close(self):
+        self._on_close()
+        self.com_thread.remove_communication(self.name)
+        self._stop_status.set()
+
+    def _on_close(self):
+        """Device specific stuff goes here"""
+        pass
+
+
+
+class DeviceFrame(wx.Frame):
+    """
+    A lightweight frame allowing one to work with arbitrary number of devices.
+    Only meant to be used when the device module is run directly,
+    rather than when it is imported into another program.
+    """
+    def __init__(self, name, comm_thread, device_panel, *args, **kwargs):
+        """
+        Initializes the device frame. Takes frame name, utils.CommManager thread
+        (or subclass), the device_panel class, and args and kwargs for the wx.Frame class.
+        """
+        super(DeviceFrame, self).__init__(*args, **kwargs)
+
+        self.name = name
+        self.device_panel = device_panel
+
+        logger.debug('Setting up the DeviceFrame %s', self.name)
+        self.cmd_q = deque()
+        self.return_q = deque()
+        self.status_q = deque()
+
+        self.com_thread = comm_thread
+        self.com_thread.add_new_communication(self.name, self.cmd_q, self.return_q,
+            self.status_q)
+
+        self.Bind(wx.EVT_CLOSE, self._on_exit)
+
+        self.devices =[]
+
+        top_sizer = self._create_layout()
+
+        self.SetSizer(top_sizer)
+
+        self.Fit()
+        self.Raise()
+
+        # Enable these to init devices on startup
+        # self.setup_devices = []
+        # self._init_devices()
+
+    def _FromDIP(self, size):
+        # This is a hack to provide easy back compatibility with wxpython < 4.1
+        try:
+            return self.FromDIP(size)
+        except Exception:
+            return size
+
+
+    def _create_layout(self):
+        """Creates the layout"""
+
+        #Overwrite this
+        new_device_panel = self.device_panel(self, wx.ID_ANY, self.cmd_q,
+            self.return_q, self.status_q, self.com_thread.known_devices, device)
+
+        self.sizer = wx.BoxSizer(wx.HORIZONTAL)
+        self.sizer.Add(panel, flag=wx.RESERVE_SPACE_EVEN_IF_HIDDEN)
+
+        self.sizer.Hide(panel, recursive=True)
+
+        button_panel = wx.Panel(self)
+
+        add_device = wx.Button(button_panel, label='Add device')
+        add_device.Bind(wx.EVT_BUTTON, self._on_add_device)
+
+        button_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        button_sizer.Add(add_device)
+
+        button_panel_sizer = wx.BoxSizer(wx.VERTICAL)
+        button_panel_sizer.Add(wx.StaticLine(button_panel), flag=wx.EXPAND|wx.TOP|wx.BOTTOM, border=2)
+        button_panel_sizer.Add(button_sizer, flag=wx.ALIGN_RIGHT|wx.BOTTOM|wx.RIGHT, border=2)
+
+        button_panel.SetSizer(button_panel_sizer)
+
+        top_sizer = wx.BoxSizer(wx.VERTICAL)
+        top_sizer.Add(self.sizer, flag=wx.EXPAND)
+        top_sizer.Add(button_panel, flag=wx.EXPAND)
+
+        return top_sizer
+
+    def _init_devices(self):
+        """
+        This is a convenience function for initalizing devices on startup, if you
+        already know what devices you want to add. You can add/comment it out in
+        the ``__init__`` if you want to not load any devices on startup.
+
+        If you want to add devices here, add them to the ``setup_devices`` list.
+        Each entry should be an iterable with the following parameters: name,
+        device type, comport, arg list, and kwarg dict in that order. How the
+        arg list and kwarg dict are handled are defined in the
+        DevicePanel._init_devices function, and depends on the device type.
+
+        Add this to the _init__ and add a self.setup_devices list to the init
+        """
+        if not self.devices:
+            try:
+                self.sizer.Remove(0)
+            except Exception:
+                pass
+
+        logger.info('Initializing %s devices on startup', str(len(self.setup_devices)))
+
+        for device in self.setup_devices:
+            new_device = self.device_panel(self, wx.ID_ANY, self.com_thread,
+                self.com_thread.known_devices, device)
+
+            self.sizer.Add(new_device, 1, flag=wx.EXPAND)
+            self.devices.append(new_device)
+
+        self.Layout()
+        self.Fit()
+
+    def _on_add_device(self, evt):
+        """
+        Called when the Add Devices button is used. Adds a new device
+        to the control panel.
+
+        .. note:: device names must be distinct.
+        """
+        if not self.devices:
+            self.sizer.Remove(0)
+
+        dlg = wx.TextEntryDialog(self, "Enter device name:", "Create new device")
+        if dlg.ShowModal() == wx.ID_OK:
+            name = dlg.GetValue()
+            for device in self.devices:
+                if name == device.name:
+                    msg = "device names must be distinct. Please choose a different name."
+                    wx.MessageBox(msg, "Failed to add device")
+                    logger.debug('Attempted to add a device with the same name (%s) as another pump.', name)
+                    return
+
+            new_device = self.device_panel(self, wx.ID_ANY, name, self.ports, self.cmd_q,
+                self.return_q, self.com_thread.known_devices, name)
+            logger.info('Added new device %s to the device control panel.', name)
+            self.sizer.Add(new_device)
+            self.devices.append(new_device)
+
+            self.Layout()
+            self.Fit()
+
+        return
+
+    def _get_ports(self):
+        """
+        Gets a list of active comports.
+
+        .. note:: This doesn't update after the program is opened.
+        """
+        port_info = list_ports.comports()
+        self.ports = [port.device for port in port_info]
+
+        logger.debug('Found the following comports for the DeviceFrame: %s', ' '.join(self.ports))
+
+    def _on_exit(self, evt):
+        """
+        Removes communication to the device. You still need to close the device
+        elsewhere in the program.
+        """
+        logger.debug('Closing the DeviceFrame')
+        for device in self.devices:
+            device.close()
+
+        self.Destroy()
