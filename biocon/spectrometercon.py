@@ -40,6 +40,7 @@ if __name__ != '__main__':
 
 import numpy as np
 import wx
+import epics
 
 # Uses stellarnet python driver, available from the manufacturer
 sys.path.append('/Users/jessehopkins/Desktop/projects/spectrometer/MAC_64b_python3')#add the path of the stellarnet_demo.py
@@ -273,9 +274,13 @@ class Spectrometer(object):
         logger.info('Spectrometer %s: Setting smoothing to %s', self.name,
             smooth)
 
-    def lightsource_shutter(self, open):
+    def set_lightsource_shutter(self, set_open):
         logger.debug('Spectrometer %s: Opening light source shutter: %s',
-            self.name, open)
+            self.name, set_open)
+
+    def get_lightsource_shutter(self):
+        logger.debug('Spectrometer %s: Shutter open: %s',
+            self.name, status)
 
     def _collect_spectrum(self, int_trigger):
         logger.debug('Spectrometer %s: Collecting spectrum', self.name)
@@ -296,11 +301,32 @@ class Spectrometer(object):
         """
         logger.debug('Spectrometer %s: Checking dark conditions', self.name)
 
+    def _check_light_conditions(self, set_light_conditions=True):
+        """
+        Checks whether the spectrometer is light
+
+        Parameters
+        ----------
+        set_light_conditions: bool, optional
+            If True (default) will attempt to set light conditions properly
+
+        Returns
+        -------
+        is_light: bool
+            Whether spectrometer is currently in a light condition
+        """
+        logger.debug('Spectrometer %s: Checking light conditions', self.name)
+
     def is_busy(self):
         busy =self._taking_data or self._taking_series
         logger.debug('Spectrometer %s: Busy: %s', self.name, busy)
 
         return busy
+
+    def taking_series(self):
+        logger.debug('Spectrometer %s: Taking series: %s', self.name,
+            self._taking_series)
+        return self._taking_series
 
     def get_integration_time(self):
         logger.debug('Spectrometer %s: Integration time: %s s', self.name,
@@ -370,6 +396,8 @@ class Spectrometer(object):
             raise RuntimeError('A spectrum or series of spectrum is already being '
                 'collected, cannot collect a new spectrum.')
 
+        return self.get_dark()
+
     def set_reference_spectrum(self, spectrum):
         logger.debug('Spectrometer %s: Setting reference spectrum', self.name)
 
@@ -389,13 +417,15 @@ class Spectrometer(object):
             if auto_dark:
                 self._auto_dark(dark_time)
 
+            self._check_light_conditions()
+
             self._collect_reference_spectrum_inner(averages, dark_correct, int_trigger)
 
         else:
             raise RuntimeError('A spectrum or series of spectrum is already being '
                 'collected, cannot collect a new spectrum.')
 
-
+        return self.get_reference_spectrum()
 
     def _collect_reference_spectrum_inner(self, averages=1, dark_correct=True,
         int_trigger=True):
@@ -446,6 +476,8 @@ class Spectrometer(object):
         if not self.is_busy():
             if auto_dark:
                 self._auto_dark(dark_time)
+
+            self._check_light_conditions()
 
             logger.info('Spectrometer %s: Collecting spectrum', self.name)
 
@@ -544,6 +576,8 @@ class Spectrometer(object):
 
             if auto_dark:
                 self._auto_dark(dark_time)
+
+            self._check_light_conditions()
 
             if take_ref:
                 self._collect_reference_spectrum_inner(ref_avgs)
@@ -761,6 +795,19 @@ class Spectrometer(object):
 
         return history['spectra']
 
+    def get_full_history_ts(self, spec_type='abs'):
+        logger.debug('Spectrometer %s: Getting full history of %s spectra',
+            self.name, spec_type)
+
+        if spec_type == 'abs':
+            history = self._absorbance_history
+        elif spec_type == 'trans':
+            history = self._transmission_history
+        else:
+            history = self._history
+
+        return history
+
     def set_history_time(self, t):
         logger.debug('Spectrometer %s: Setting history time to %s', self.name, t)
 
@@ -848,7 +895,8 @@ class StellarnetUVVis(Spectrometer):
     Stellarnet black comet UV-Vis spectrometer
     """
 
-    def __init__(self, name):
+    def __init__(self, name, shutter_pv_name='18ID:LJT4:3:DI11',
+        trigger_pv_name='18ID:LJT4:3:DI12'):
 
         Spectrometer.__init__(self, name)
 
@@ -860,6 +908,12 @@ class StellarnetUVVis(Spectrometer):
         self._device_id = None
 
         self._external_trigger = False
+
+        self.shutter_pv = epics.PV(shutter_pv_name)
+        self.trigger_pv = epics.PV(trigger_pv_name)
+
+        self.shutter_pv.get()
+        self.trigger_pv.get()
 
         self.connect()
         self._get_config()
@@ -922,13 +976,35 @@ class StellarnetUVVis(Spectrometer):
             self.collect_dark()
 
     def get_xtiming(self):
-        logger.info('Spectrometer %s: X timing: %s', self.name, self._x_timing)
+        logger.debug('Spectrometer %s: X timing: %s', self.name, self._x_timing)
 
         return self._x_timing
 
-    def lightsource_shutter(self, open):
+    def set_lightsource_shutter(self, set_open):
         logger.debug('Spectrometer %s: Opening light source shutter: %s',
-            self.name, open)
+            self.name, set_open)
+
+        if set_open:
+            self.shutter_pv.put(1, wait=True)
+        else:
+            self.shutter_pv.put(0, wait=True)
+
+    def get_lightsource_shutter(self):
+        status = self.shutter_pv.get()
+
+        logger.debug('Spectrometer %s: Shutter open: %s',
+            self.name, status)
+
+        return status
+
+    def set_int_trigger(self, trigger):
+        if trigger:
+            self.trigger_pv.put(1, wait=True)
+        else:
+            self.trigger_pv.put(0, wait=True)
+
+    def get_int_trigger(self):
+        return  self.trigger_pv.get()
 
     def _collect_spectrum(self, int_trigger):
         logger.debug('Spectrometer %s: Collecting spectrum', self.name)
@@ -937,11 +1013,18 @@ class StellarnetUVVis(Spectrometer):
         if self._external_trigger and int_trigger:
             trigger_ext = True
             self.set_external_trigger(False)
-
         else:
             trigger_ext = False
 
+        if int_trigger:
+            trigger_status = self.get_int_trigger()
+            if not trigger_status:
+                self.set_int_trigger(True)
+
         spectrum = sn.array_spectrum(self.spectrometer, self.wav)
+
+        if int_trigger and not trigger_status:
+                self.set_int_trigger(False)
 
         if trigger_ext:
             self.set_external_trigger(True)
@@ -965,7 +1048,38 @@ class StellarnetUVVis(Spectrometer):
             Whether spectrometer is currently in a dark condition
         """
         logger.debug('Spectrometer %s: Checking dark conditions', self.name)
-        return True
+        dark = not self.get_lightsource_shutter()
+
+        if not dark and set_dark_conditions:
+            self.set_lightsource_shutter(False)
+
+            dark = True
+
+        return dark
+
+    def _check_light_conditions(self, set_light_conditions=True):
+        """
+        Checks whether the spectrometer is light
+
+        Parameters
+        ----------
+        set_light_conditions: bool, optional
+            If True (default) will attempt to set light conditions properly
+
+        Returns
+        -------
+        is_light: bool
+            Whether spectrometer is currently in a light condition
+        """
+        logger.debug('Spectrometer %s: Checking light conditions', self.name)
+        light = self.get_lightsource_shutter()
+
+        if not light and set_light_conditions:
+            self.set_lightsource_shutter(True)
+
+            light = True
+
+        return light
 
     # function defination to set parameter
     def _set_config(self, int_time, num_avgs, smooth, xtiming):
@@ -1028,6 +1142,7 @@ class UVCommThread(utils.CommManager):
             'get_last_n'        : self._get_last_n_spectra,
             'get_last_t'        : self._get_spectra_in_last_t,
             'get_full_hist'     : self._get_full_history,
+            'get_full_hist_ts'  : self._get_full_history_ts,
             'set_hist_time'     : self._set_history_time,
             'get_hist_time'     : self._get_history_time,
             'add_abs_wav'       : self._add_absorbance_wavelength,
@@ -1052,14 +1167,24 @@ class UVCommThread(utils.CommManager):
             'StellarNet' : StellarnetUVVis,
             }
 
+        self._series_q = {}
+
+        self._monitor_threads = {}
+
+    def _additional_new_comm(self, name):
+        pass
+
     def _connect_device(self, name, device_type, **kwargs):
         logger.info("Connecting device %s", name)
 
         comm_name = kwargs.pop('comm_name', None)
 
-        new_device = self.known_devices[device_type](name, **kwargs)
-        new_device.connect()
-        self._connected_devices[name] = new_device
+        if name not in self._connected_devices:
+            new_device = self.known_devices[device_type](name, **kwargs)
+            new_device.connect()
+            self._connected_devices[name] = new_device
+
+            self._series_q[name] = deque()
 
         self._return_value((name, 'connected', True), comm_name)
 
@@ -1204,7 +1329,10 @@ class UVCommThread(utils.CommManager):
         comm_name = kwargs.pop('comm_name', None)
 
         device = self._connected_devices[name]
-        val = device.get_dark(**kwargs)
+        try:
+            val = device.get_dark(**kwargs)
+        except RuntimeError:
+            val = None
 
         self._return_value((name, 'dark', val), comm_name)
 
@@ -1213,7 +1341,7 @@ class UVCommThread(utils.CommManager):
     def _collect_dark(self, name, **kwargs):
         logger.debug("Collecting device %s dark", name)
 
-        # comm_name = kwargs.pop('comm_name', None)
+        comm_name = kwargs.pop('comm_name', None)
         comm_name = 'status'
 
         device = self._connected_devices[name]
@@ -1241,7 +1369,10 @@ class UVCommThread(utils.CommManager):
         comm_name = kwargs.pop('comm_name', None)
 
         device = self._connected_devices[name]
-        val = device.get_reference_spectrum(**kwargs)
+        try:
+            val = device.get_reference_spectrum(**kwargs)
+        except RuntimeError:
+            val = None
 
         self._return_value((name, 'ref', val), comm_name)
 
@@ -1250,7 +1381,7 @@ class UVCommThread(utils.CommManager):
     def _collect_ref(self, name, **kwargs):
         logger.debug("Collecting device %s ref", name)
 
-        # comm_name = kwargs.pop('comm_name', None)
+        comm_name = kwargs.pop('comm_name', None)
         comm_name = 'status'
 
         device = self._connected_devices[name]
@@ -1264,6 +1395,7 @@ class UVCommThread(utils.CommManager):
         logger.debug("Collecting device %s spectrum", name)
 
         comm_name = kwargs.pop('comm_name', None)
+        comm_name = 'status'
 
         device = self._connected_devices[name]
         val = device.collect_spectrum(**kwargs)
@@ -1277,8 +1409,20 @@ class UVCommThread(utils.CommManager):
 
         comm_name = kwargs.pop('comm_name', None)
 
+        self._return_value((name, 'collect_series_start', val), 'status')
+
         device = self._connected_devices[name]
+        series_q = self._series_q[name]
+        series_q.clear()
+        kwargs['return_q'] = series_q
+
         device.collect_spectra_series(val, **kwargs)
+
+        monitor_thread = threading.Thread(target=self._monitor_series, args=(name,))
+        monitor_thread.daemon = True
+        monitor_thread.start()
+
+        self._monitor_threads[name] = monitor_thread
 
         self._return_value((name, 'collect_series', True), comm_name)
 
@@ -1315,6 +1459,18 @@ class UVCommThread(utils.CommManager):
 
         device = self._connected_devices[name]
         val = device.get_full_history(**kwargs)
+
+        self._return_value((name, 'get_history', val), comm_name)
+
+        logger.debug("Device %s history returned", name)
+
+    def _get_full_history_ts(self, name, **kwargs):
+        logger.debug("Getting device %s full history", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+
+        device = self._connected_devices[name]
+        val = device.get_full_history_ts(**kwargs)
 
         self._return_value((name, 'get_history', val), comm_name)
 
@@ -1512,8 +1668,17 @@ class UVCommThread(utils.CommManager):
         scan_avg = device.get_scan_avg()
         smooth = device.get_smoothing()
         xtiming = device.get_xtiming()
-        dark = device.get_dark()
-        ref = device.get_reference_spectrum()
+
+        try:
+            dark = device.get_dark()
+        except RuntimeError:
+            dark = None
+
+        try:
+            ref = device.get_reference_spectrum()
+        except RuntimeError:
+            ref = None
+
         abs_wavs = device.get_absorbance_wavelengths()
         abs_win = device.get_absorbance_window()
         hist_t = device.get_history_time(**kwargs)
@@ -1534,6 +1699,28 @@ class UVCommThread(utils.CommManager):
 
         logger.debug('Got device %s settings: %s', name, ret_vals)
 
+    def _monitor_series(self, name):
+        device = self._connected_devices[name]
+
+        with self._queue_lock:
+            series_q = self._series_q[name]
+
+        while device.taking_series():
+            if self._abort_event.is_set():
+                break
+
+            if len(series_q) > 0:
+                spectrum = series_q.popleft()
+                self._return_value((name, 'collect_series', spectrum), 'status')
+
+            else:
+                time.sleep(0.01)
+
+        self._return_value((name, 'collect_series_end', True), 'status')
+
+    def _additional_abort(self):
+        for mon_thread in self._monitor_threads.values():
+            mon_thread.join()
 
     def _cleanup_devices(self):
         for device in self._connected_devices.values():
@@ -1548,14 +1735,39 @@ class UVPanel(utils.DevicePanel):
             known_devices, device_data, *args, **kwargs)
 
         self._dark_spectrum = None
-        self._ref_spectrum = None
+        self._reference_spectrum = None
 
         self._all_abs_spectra = []
         self._all_trans_spectra = []
         self._all_raw_spectra = []
 
+        self._history_length = 60*60*24
+
+        self._history = {'spectra' : [], 'timestamps' : []}
+        self._transmission_history = {'spectra' : [], 'timestamps' : []}
+        self._absorbance_history = {'spectra' : [], 'timestamps' : []}
+
+        self._series_running = False
+        self._series_count = 0
+        self._series_total = 0
+
     def _create_layout(self):
         """Creates the layout for the panel."""
+
+        status_parent = wx.StaticBox(self, label='Status:')
+        self.status = wx.StaticText(status_parent, size=(150, -1),
+            style=wx.ST_NO_AUTORESIZE)
+        self.status.SetForegroundColour(wx.RED)
+        fsize = self.GetFont().GetPointSize()
+        font = wx.Font(fsize, wx.DEFAULT, wx.NORMAL, wx.BOLD)
+        self.status.SetFont(font)
+
+        status_sizer = wx.StaticBoxSizer(status_parent, wx.HORIZONTAL)
+        status_sizer.Add(wx.StaticText(status_parent, label='Status:'),
+            flag=wx.ALL, border=self._FromDIP(5))
+        status_sizer.Add(self.status, flag=wx.TOP|wx.BOTTOM|wx.LEFT,
+            border=self._FromDIP(5))
+        status_sizer.AddStretchSpacer(1)
 
         settings_parent = wx.StaticBox(self, label='Settings')
 
@@ -1676,6 +1888,7 @@ class UVPanel(utils.DevicePanel):
             size=(file_open.GetWidth()+15, -1))
         self.collect_series_btn = wx.Button(series_parent,
             label='Collect Spectral Series')
+        self.abort_series_btn = wx.Button(series_parent, label='Stop Series')
 
         self.series_num.SetValue('2')
         self.series_period.SetValue('0')
@@ -1686,8 +1899,12 @@ class UVPanel(utils.DevicePanel):
         self.autosave_prefix.SetValue('series')
         self.change_dir_btn.Bind(wx.EVT_BUTTON, self._on_change_dir)
         self.collect_series_btn.Bind(wx.EVT_BUTTON, self._on_collect_series)
+        self.abort_series_btn.Bind(wx.EVT_BUTTON, self._on_abort_series)
 
-
+        start_stop_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        start_stop_sizer.Add(self.collect_series_btn, flag=wx.RIGHT,
+            border=self._FromDIP(5))
+        start_stop_sizer.Add(self.abort_series_btn)
 
         series_sizer = wx.GridBagSizer(vgap=self._FromDIP(5),
             hgap=self._FromDIP(5))
@@ -1707,7 +1924,7 @@ class UVPanel(utils.DevicePanel):
             (6,0))
         series_sizer.Add(self.autosave_dir, (6,1), flag=wx.EXPAND)
         series_sizer.Add(self.change_dir_btn, (6,2), flag=wx.EXPAND)
-        series_sizer.Add(self.collect_series_btn, (7,0), span=(1,3),
+        series_sizer.Add(start_stop_sizer, (7,0), span=(1,3),
             flag=wx.ALIGN_CENTER_HORIZONTAL)
 
         series_box_sizer = wx.StaticBoxSizer(series_parent,
@@ -1716,6 +1933,8 @@ class UVPanel(utils.DevicePanel):
             border=self._FromDIP(5))
 
         top_sizer = wx.BoxSizer(wx.VERTICAL)
+        top_sizer.Add(status_sizer, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
+            border=self._FromDIP(5))
         top_sizer.Add(settings_box_sizer, flag=wx.EXPAND|wx.ALL,
             border=self._FromDIP(5))
         top_sizer.Add(single_spectrum_box_sizer,
@@ -1740,8 +1959,12 @@ class UVPanel(utils.DevicePanel):
         self._send_cmd(connect_cmd, True)
 
         # Need some kind of delay or I get a USB error message from the stellarnet driver
-        wx.CallLater(500, self._collect_spectrum,'dark')
-        wx.CallLater(500, self._collect_spectrum, 'ref')
+        is_busy = self._get_busy()
+
+        wx.CallLater(500, self._get_full_history)
+
+        if not is_busy:
+            wx.CallLater(510, self._init_dark_and_ref)
 
         wx.CallLater(600, self._set_status_commands)
 
@@ -1750,6 +1973,26 @@ class UVPanel(utils.DevicePanel):
             self.setitngs_sizer.Hide(self.xtiming)
             self.parent.Layout()
             self.parent.Refresh()
+
+    def _init_dark_and_ref(self):
+        dark_cmd = ['get_dark', [self.name,], {}]
+
+        dark = self._send_cmd(dark_cmd, True)
+
+        if dark is None:
+            self._collect_spectrum('dark')
+
+        else:
+            self._dark_spectrum = dark
+
+        ref_cmd = ['get_ref', [self.name,], {}]
+
+        ref = self._send_cmd(ref_cmd, True)
+
+        if ref is None:
+            self._collect_spectrum('ref')
+        else:
+            self._reference_spectrum = ref
 
     def _on_settings_change(self, obj, val):
         if obj == self.int_time:
@@ -1784,8 +2027,7 @@ class UVPanel(utils.DevicePanel):
             self._collect_spectrum()
 
     def _collect_spectrum(self, stype='normal'):
-        busy_cmd = ['get_busy', [self.name,], {}]
-        is_busy = self._send_cmd(busy_cmd, True)
+        is_busy = self._get_busy()
 
         if not is_busy:
             dark_correct = self.dark_correct.GetValue()
@@ -1841,8 +2083,7 @@ class UVPanel(utils.DevicePanel):
         self._collect_series()
 
     def _collect_series(self):
-        busy_cmd = ['get_busy', [self.name,], {}]
-        is_busy = self._send_cmd(busy_cmd, True)
+        is_busy = self._get_busy()
 
         if not is_busy:
             self._set_autosave_parameters()
@@ -1882,6 +2123,19 @@ class UVPanel(utils.DevicePanel):
 
         else:
             wx.CallAfter(self._show_busy_msg)
+
+    def _on_abort_series(self, evt):
+        self._abort_series()
+
+    def _abort_series(self):
+        cmd = ['abort_collection', [self.name,], {}]
+        self._send_cmd(cmd)
+
+    def _get_busy(self):
+        busy_cmd = ['get_busy', [self.name,], {}]
+        is_busy = self._send_cmd(busy_cmd, True)
+
+        return is_busy
 
     def _set_autosave_parameters(self):
         autosave_on = self.autosave_series.GetValue()
@@ -1970,6 +2224,7 @@ class UVPanel(utils.DevicePanel):
 
         elif cmd == 'get_hist_time':
             self.history_time.SafeChangeValue(str(val))
+            self._history_length = val
 
         elif cmd == 'get_spec_settings':
             int_time = val['int_time']
@@ -1988,25 +2243,128 @@ class UVPanel(utils.DevicePanel):
             self.xtiming.SafeChangeValue(str(xtiming))
             self.history_time.SafeChangeValue(str(hist_t))
 
+            self._history_length = hist_t
+
             self._dark_spectrum = dark
-            self._ref_spectrum = ref
-
-        elif cmd == 'collect_spec':
-            pass
-
-        elif cmd == 'collect_ref':
             self._reference_spectrum = ref
 
+        elif cmd == 'collect_spec':
+            self._add_new_spectrum(val)
+
+        elif cmd == 'collect_ref':
+            self._reference_spectrum = val
+            self._add_new_spectrum(val)
+
         elif cmd == 'collect_dark':
-            self._dark_spectrum = ref
+            self._dark_spectrum = val
 
         elif cmd == 'collect_series':
-            pass
+            self._add_new_spectrum(val)
+            self._series_count += 1
+
+            logger.debug('Got series spectrum %s of %s', self._series_count,
+                self._series_total)
+
+        elif cmd == 'get_busy':
+            if val:
+                if self._series_running:
+                    msg = ('Collecting {} of {}'.format(self._series_count,
+                        self._series_total))
+                else:
+                    msg = 'Collecting'
+                self.status.SetLabel(msg)
+            else:
+                self.status.SetLabel('Ready')
+
+        elif cmd == 'collect_series_start':
+            self._series_running = True
+            self._series_count = 0
+            self._series_total = val
+
+        elif cmd == 'collect_series_end':
+            self._series_running = True
+            self._series_count = 0
+
+    def _add_new_spectrum(self, val):
+        if val.spectrum is not None:
+            self._add_spectrum_to_history(val)
+
+        if val.trans_spectrum is not None:
+            self._add_spectrum_to_history(val, 'trans')
+
+        if val.abs_spectrum is not None:
+            self._add_spectrum_to_history(val, 'abs')
 
     def _set_status_commands(self):
         settings_cmd = ['get_spec_settings', [self.name], {}]
 
         self.com_thread.add_status_cmd(settings_cmd, 60)
+
+        busy_cmd = ['get_busy', [self.name,], {}]
+
+        self.com_thread.add_status_cmd(busy_cmd, 1)
+
+    def _add_spectrum_to_history(self, spectrum, spec_type='raw'):
+        logger.debug('Adding %s spectrum to history',
+            self.name, spec_type)
+
+        if spec_type == 'abs':
+            history = self._absorbance_history
+        elif spec_type == 'trans':
+            history = self._transmission_history
+        else:
+            history = self._history
+
+        if history is not None:
+            history['spectra'].append(spectrum)
+            history['timestamps'].append(spectrum.get_timestamp().timestamp())
+
+            history = self._prune_history(history)
+
+            if spec_type == 'abs':
+                self._absorbance_history = history
+            elif spec_type == 'trans':
+                self._transmission_history = history
+            else:
+                self._history = history
+
+    def _prune_history(self, history):
+        logger.debug('Pruning history', self.name)
+
+        if len(history['timestamps']) > 0:
+            now = datetime.datetime.now().timestamp()
+
+            if len(history['timestamps']) == 1:
+                if now - history['timestamps'][0] > self._history_length:
+                    index = 1
+                else:
+                    index = 0
+
+            else:
+                index = 0
+
+                while (index < len(history['timestamps'])-1
+                    and now - history['timestamps'][index] > self._history_length):
+                    index += 1
+
+            if index == len(history['timestamps']):
+                history['spectra'] = []
+                history['timestamps'] = []
+
+            elif index != 0:
+                history['spectra'] = history['spectra'][index:]
+                history['timestamps'] = history['timestamps'][index:]
+
+        return history
+
+    def _get_full_history(self):
+        abs_cmd = ['get_full_hist_ts', [self.name,], {}]
+        trans_cmd = ['get_full_hist_ts', [self.name,], {'spec_type': 'trans'}]
+        raw_cmd = ['get_full_hist_ts', [self.name,], {'spec_type': 'raw'}]
+
+        self._absorbance_history = self._send_cmd(abs_cmd, True)
+        self._transmission_history = self._send_cmd(trans_cmd, True)
+        self._history = self._send_cmd(raw_cmd, True)
 
     def _on_close(self):
         """Device specific stuff goes here"""
@@ -2043,7 +2401,7 @@ if __name__ == '__main__':
     logger.setLevel(logging.DEBUG)
     h1 = logging.StreamHandler(sys.stdout)
     h1.setLevel(logging.DEBUG)
-    # h1.setLevel(logging.INFO)
+    h1.setLevel(logging.INFO)
     # h1.setLevel(logging.WARNING)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
     h1.setFormatter(formatter)
@@ -2314,13 +2672,8 @@ if __name__ == '__main__':
 
     """
     To do:
-    Figure out how we'll be controling the shutter on the light source
-    Make simple GUI
-    Set spectra to return as status in all cases, so everyting gets them
-    Deal with reading out series spectra
-    Figure out what the initialization should do: get dark and ref? or no
-    Make shutter open/close when taking images and darks
+    Test shutter open/close when taking images and darks
     Integrate into biocon main window, coflow server
     Set absorbance wavelengths/window in GUI
-    Spectra history and storage in GUI, how best to do that so it can be plotted at some point
+    Add plotting to GUI
     """

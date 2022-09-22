@@ -643,7 +643,12 @@ class CommManager(threading.Thread):
             self._return_queues[name] = return_queue
             self._status_queues[name] = status_queue
 
+            self._additional_new_comm(name)
+
         logger.debug('Added new communication device to thread')
+
+    def _additional_new_comm(self, name):
+        pass #Add device specific stuff here
 
     def remove_communication(self, name):
         logger.info('Removing communication device from thread: %s', name)
@@ -707,8 +712,13 @@ class CommManager(threading.Thread):
             for comm_name, status_q in self._status_queues.items():
                 status_q.clear()
 
+            self._additional_abort()
+
         self._abort_event.clear()
         logger.debug("Communication thread %s aborted", self.name)
+
+    def _additional_abort(self):
+        pass #Device specific stuff here
 
     def stop(self):
         """Stops the thread cleanly."""
