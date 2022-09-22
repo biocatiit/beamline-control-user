@@ -276,60 +276,60 @@ if __name__ == '__main__':
 
     # Coflow
 
-    # ip = '164.54.204.53'
+    ip = '164.54.204.53'
 
-    # setup_pumps = [('sheath', 'VICI M50', 'COM3', ['629.48', '13.442'], {}, {}),
-    #     ('outlet', 'VICI M50', 'COM4', ['625.28', '7.905'], {}, {})
-    #     ]
-
-    # pump_local_comm_locks = {'sheath'    : pump_comm_locks[setup_pumps[0][2]],
-    #     'outlet'    : pump_comm_locks[setup_pumps[1][2]]
-    #     }
-
-    # setup_valves = [('Coflow Sheath', 'Cheminert', 'COM7', [], {'positions' : 10}),
-    #     ]
-
-
-    # TR SAXS
-
-    ip = '164.54.204.8'
-
-    # Chaotic flow
-
-    setup_pumps = [
-        # ('Sample', 'PHD 4400', 'COM4', ['10 mL, Medline P.C.', '1'], {},
-        #     {'flow_rate' : '10', 'refill_rate' : '10'}),
-        # ('Buffer 1', 'PHD 4400', 'COM4', ['20 mL, Medline P.C.', '2'], {},
-        #     {'flow_rate' : '10', 'refill_rate' : '10'}),
-        # ('Buffer 2', 'PHD 4400', 'COM4', ['20 mL, Medline P.C.', '3'], {},
-        #     {'flow_rate' : '10', 'refill_rate' : '10'}),
-        ('Buffer 1', 'SSI Next Gen', 'COM17', [], {'flow_rate_scale': 1.0478,
-            'flow_rate_offset': -72.82/1000,'scale_type': 'up'}, {}),
-        ('Sample', 'SSI Next Gen', 'COM15', [], {'flow_rate_scale': 1.0204,
-            'flow_rate_offset': 15.346/1000, 'scale_type': 'up'}, {}),
-        ('Buffer 2', 'SSI Next Gen', 'COM18', [], {'flow_rate_scale': 1.0179,
-            'flow_rate_offset': -20.842/1000, 'scale_type': 'up'}, {}),
+    setup_pumps = [('sheath', 'VICI M50', 'COM3', ['629.48', '13.442'], {}, {}),
+        ('outlet', 'VICI M50', 'COM4', ['625.28', '7.905'], {}, {})
         ]
 
-    pump_local_comm_locks = {
-        'Buffer 1'    : pump_comm_locks[setup_pumps[0][2]],
-        'Sample'    : pump_comm_locks[setup_pumps[1][2]],
-        'Buffer 2'    : pump_comm_locks[setup_pumps[2][2]]
+    pump_local_comm_locks = {'sheath'    : pump_comm_locks[setup_pumps[0][2]],
+        'outlet'    : pump_comm_locks[setup_pumps[1][2]]
         }
 
-    setup_valves = [
-        ('Injection', 'Rheodyne', 'COM6', [], {'positions' : 2}),
-        # ('Sample', 'Rheodyne', 'COM9', [], {'positions' : 6}),
-        # ('Buffer 1', 'Rheodyne', 'COM8', [], {'positions' : 6}),
-        # ('Buffer 2', 'Rheodyne', 'COM7', [], {'positions' : 6}),
+    setup_valves = [('Coflow Sheath', 'Cheminert', 'COM7', [], {'positions' : 10}),
         ]
 
-    valve_local_comm_locks = {
-        'Injection'    : valve_comm_locks[setup_valves[0][2]],
-        # 'Sample'    : valve_comm_locks[setup_valves[1][2]],
-        # 'Buffer 1'    : valve_comm_locks[setup_valves[2][2]],
-        # 'Buffer 2'    : valve_comm_locks[setup_valves[3][2]],
-       }
+
+    # # TR SAXS
+
+    # ip = '164.54.204.8'
+
+    # # Chaotic flow
+
+    # setup_pumps = [
+    #     # ('Sample', 'PHD 4400', 'COM4', ['10 mL, Medline P.C.', '1'], {},
+    #     #     {'flow_rate' : '10', 'refill_rate' : '10'}),
+    #     # ('Buffer 1', 'PHD 4400', 'COM4', ['20 mL, Medline P.C.', '2'], {},
+    #     #     {'flow_rate' : '10', 'refill_rate' : '10'}),
+    #     # ('Buffer 2', 'PHD 4400', 'COM4', ['20 mL, Medline P.C.', '3'], {},
+    #     #     {'flow_rate' : '10', 'refill_rate' : '10'}),
+    #     ('Buffer 1', 'SSI Next Gen', 'COM17', [], {'flow_rate_scale': 1.0478,
+    #         'flow_rate_offset': -72.82/1000,'scale_type': 'up'}, {}),
+    #     ('Sample', 'SSI Next Gen', 'COM15', [], {'flow_rate_scale': 1.0204,
+    #         'flow_rate_offset': 15.346/1000, 'scale_type': 'up'}, {}),
+    #     ('Buffer 2', 'SSI Next Gen', 'COM18', [], {'flow_rate_scale': 1.0179,
+    #         'flow_rate_offset': -20.842/1000, 'scale_type': 'up'}, {}),
+    #     ]
+
+    # pump_local_comm_locks = {
+    #     'Buffer 1'    : pump_comm_locks[setup_pumps[0][2]],
+    #     'Sample'    : pump_comm_locks[setup_pumps[1][2]],
+    #     'Buffer 2'    : pump_comm_locks[setup_pumps[2][2]]
+    #     }
+
+    # setup_valves = [
+    #     ('Injection', 'Rheodyne', 'COM6', [], {'positions' : 2}),
+    #     # ('Sample', 'Rheodyne', 'COM9', [], {'positions' : 6}),
+    #     # ('Buffer 1', 'Rheodyne', 'COM8', [], {'positions' : 6}),
+    #     # ('Buffer 2', 'Rheodyne', 'COM7', [], {'positions' : 6}),
+    #     ]
+
+    # valve_local_comm_locks = {
+    #     'Injection'    : valve_comm_locks[setup_valves[0][2]],
+    #     # 'Sample'    : valve_comm_locks[setup_valves[1][2]],
+    #     # 'Buffer 1'    : valve_comm_locks[setup_valves[2][2]],
+    #     # 'Buffer 2'    : valve_comm_locks[setup_valves[3][2]],
+    #    }
 
     # # Laminar flow
     # setup_pumps = [

@@ -4663,17 +4663,17 @@ class PumpFrame(wx.Frame):
             #     'refill_rate' : '10'}),
                         # ]
 
-            setup_pumps = [
-                ('Pump 4', 'SSI Next Gen', 'COM17', [],
-                    {'flow_rate_scale': 1.0478, 'flow_rate_offset': -72.82/1000,
-                     'scale_type': 'up'}, {}),
-                ('Pump 3', 'SSI Next Gen', 'COM15', [],
-                     {'flow_rate_scale': 1.0204, 'flow_rate_offset': 15.346/1000,
-                     'scale_type': 'up'}, {}),
-                ('Pump 2', 'SSI Next Gen', 'COM18', [],
-                    {'flow_rate_scale': 1.0179, 'flow_rate_offset': -20.842/1000,
-                    'scale_type': 'up'}, {}),
-                        ]
+            # setup_pumps = [
+            #     ('Pump 4', 'SSI Next Gen', 'COM17', [],
+            #         {'flow_rate_scale': 1.0478, 'flow_rate_offset': -72.82/1000,
+            #          'scale_type': 'up'}, {}),
+            #     ('Pump 3', 'SSI Next Gen', 'COM15', [],
+            #          {'flow_rate_scale': 1.0204, 'flow_rate_offset': 15.346/1000,
+            #          'scale_type': 'up'}, {}),
+            #     ('Pump 2', 'SSI Next Gen', 'COM18', [],
+            #         {'flow_rate_scale': 1.0179, 'flow_rate_offset': -20.842/1000,
+            #         'scale_type': 'up'}, {}),
+            #             ]
 
         elif len(setup_pumps) > 0:
             if not self.pumps:
