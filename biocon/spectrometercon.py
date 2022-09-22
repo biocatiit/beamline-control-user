@@ -46,6 +46,7 @@ import epics
 sys.path.append('/Users/jessehopkins/Desktop/projects/spectrometer/MAC_64b_python3')#add the path of the stellarnet_demo.py
 import stellarnet_driver3 as sn
 
+import client
 import utils
 
 
@@ -1729,17 +1730,13 @@ class UVCommThread(utils.CommManager):
 
 class UVPanel(utils.DevicePanel):
 
-    def __init__(self, parent, panel_id, com_thread, known_devices,
-        device_data, *args, **kwargs):
+    def __init__(self, parent, panel_id, com_thread, device_data, *args,
+        **kwargs):
         super(UVPanel, self).__init__(parent, panel_id, com_thread,
-            known_devices, device_data, *args, **kwargs)
+            device_data, *args, **kwargs)
 
         self._dark_spectrum = None
         self._reference_spectrum = None
-
-        self._all_abs_spectra = []
-        self._all_trans_spectra = []
-        self._all_raw_spectra = []
 
         self._history_length = 60*60*24
 
@@ -2008,7 +2005,7 @@ class UVPanel(utils.DevicePanel):
             cmd = ['set_xtiming', [self.name, int(val)], {}]
 
         elif obj == self.history_time:
-            cmd = ['set_hist_time', [self.name, float(val), {}]]
+            cmd = ['set_hist_time', [self.name, float(val)], {}]
 
         else:
             cmd = None
@@ -2369,6 +2366,550 @@ class UVPanel(utils.DevicePanel):
         """Device specific stuff goes here"""
         pass
 
+
+class InlineUVPanel(utils.DevicePanel):
+
+    def __init__(self, settings, parent, *args,
+        **kwargs):
+        super(InlineUVPanel, self).__init__(parent, wx.ID_ANY, None,
+            settings, *args, **kwargs)
+
+        # Pass in settings where the parent expects device data
+        self.settings = settings
+
+        self._dark_spectrum = None
+        self._reference_spectrum = None
+
+        self._history_length = 60*60*24
+
+        self._history = {'spectra' : [], 'timestamps' : []}
+        self._transmission_history = {'spectra' : [], 'timestamps' : []}
+        self._absorbance_history = {'spectra' : [], 'timestamps' : []}
+
+        self._series_running = False
+        self._series_count = 0
+        self._series_total = 0
+
+        self._init_controls()
+        wx.CallLater(500, self._init_device_part2)
+
+    def _create_layout(self):
+        """Creates the layout for the panel."""
+
+        status_parent = wx.StaticBox(self, label='Status:')
+        self.status = wx.StaticText(status_parent, size=(150, -1),
+            style=wx.ST_NO_AUTORESIZE)
+        self.status.SetForegroundColour(wx.RED)
+        fsize = self.GetFont().GetPointSize()
+        font = wx.Font(fsize, wx.DEFAULT, wx.NORMAL, wx.BOLD)
+        self.status.SetFont(font)
+
+        status_sizer = wx.StaticBoxSizer(status_parent, wx.HORIZONTAL)
+        status_sizer.Add(wx.StaticText(status_parent, label='Status:'),
+            flag=wx.ALL, border=self._FromDIP(5))
+        status_sizer.Add(self.status, flag=wx.TOP|wx.BOTTOM|wx.LEFT,
+            border=self._FromDIP(5))
+        status_sizer.AddStretchSpacer(1)
+
+        settings_parent = wx.StaticBox(self, label='Settings')
+
+        self.int_time =wx.TextCtrl(settings_parent,
+            validator=utils.CharValidator('float_te'))
+
+        self.settings_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(5),
+            hgap=self._FromDIP(5))
+        self.settings_sizer.AddGrowableCol(1)
+
+        self.settings_sizer.Add(wx.StaticText(settings_parent,
+            label='Max int. time (s):'), flag=wx.ALIGN_CENTER_VERTICAL)
+        self.settings_sizer.Add(self.int_time,
+            flag=wx.EXPAND|wx.ALIGN_CENTER_VERTICAL)
+
+        settings_box_sizer = wx.StaticBoxSizer(settings_parent, wx.VERTICAL)
+        settings_box_sizer.Add(self.settings_sizer, flag=wx.EXPAND|wx.ALL,
+            border=self._FromDIP(5))
+
+
+        adv_pane = wx.CollapsiblePane(self, label="Advanced",
+            style=wx.CP_NO_TLW_RESIZE)
+        adv_pane.Bind(wx.EVT_COLLAPSIBLEPANE_CHANGED, self.on_collapse)
+        adv_win = adv_pane.GetPane()
+
+
+        adv_settings_parent = wx.StaticBox(adv_win, label='Settings')
+
+        self.auto_dark = wx.CheckBox(adv_settings_parent, label='Auto update dark')
+        self.auto_dark_period = wx.TextCtrl(adv_settings_parent,
+            validator=utils.CharValidator('float'))
+        self.dark_avgs = wx.TextCtrl(adv_settings_parent,
+            validator=utils.CharValidator('int'))
+        self.ref_avgs = wx.TextCtrl(adv_settings_parent,
+            validator=utils.CharValidator('int'))
+        self.history_time = utils.ValueEntry(self._on_settings_change,
+            adv_settings_parent, validator=utils.CharValidator('float_te'))
+
+        adv_settings_sizer = wx.GridBagSizer(vgap=self._FromDIP(5),
+            hgap=self._FromDIP(5))
+
+        adv_settings_sizer.Add(self.auto_dark, (0,0), span=(1,2),
+            flag=wx.EXPAND|wx.ALIGN_CENTER_VERTICAL)
+        adv_settings_sizer.Add(wx.StaticText(adv_settings_parent,
+            label='Dark period (s):'), (1,0), flag=wx.ALIGN_CENTER_VERTICAL)
+        adv_settings_sizer.Add(self.auto_dark_period, (1,1),
+            flag=wx.EXPAND|wx.ALIGN_CENTER_VERTICAL)
+        adv_settings_sizer.Add(wx.StaticText(adv_settings_parent,
+            label='Dark averages:'), (2,0), flag=wx.ALIGN_CENTER_VERTICAL)
+        adv_settings_sizer.Add(self.dark_avgs, (2,1),
+            flag=wx.EXPAND|wx.ALIGN_CENTER_VERTICAL)
+        adv_settings_sizer.Add(wx.StaticText(adv_settings_parent,
+            label='Ref. averages:'), (3,0), flag=wx.ALIGN_CENTER_VERTICAL)
+        adv_settings_sizer.Add(self.ref_avgs, (3,1),
+            flag=wx.EXPAND|wx.ALIGN_CENTER_VERTICAL)
+        adv_settings_sizer.Add(wx.StaticText(adv_settings_parent,
+            label='History (s):'), (4,0), flag=wx.ALIGN_CENTER_VERTICAL)
+        adv_settings_sizer.Add(self.history_time, (4,1),
+            flag=wx.EXPAND|wx.ALIGN_CENTER_VERTICAL)
+
+        adv_settings_sizer.AddGrowableCol(1)
+
+        adv_settings_box_sizer = wx.StaticBoxSizer(adv_settings_parent,
+            wx.VERTICAL)
+        adv_settings_box_sizer.Add(adv_settings_sizer, flag=wx.EXPAND|wx.ALL,
+            border=self._FromDIP(5))
+
+
+        single_spectrum_parent = wx.StaticBox(adv_win,
+            label='Collect Single Spectrum')
+
+        self.collect_dark_btn = wx.Button(single_spectrum_parent,
+            label='Collect Dark')
+        self.collect_ref_btn = wx.Button(single_spectrum_parent,
+            label='Collect Reference')
+
+        self.collect_dark_btn.Bind(wx.EVT_BUTTON, self._on_collect_single)
+        self.collect_ref_btn.Bind(wx.EVT_BUTTON, self._on_collect_single)
+
+        single_spectrum_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(5),
+            hgap=self._FromDIP(5))
+        single_spectrum_sizer.Add(self.collect_dark_btn,
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        single_spectrum_sizer.Add(self.collect_ref_btn,
+            flag=wx.ALIGN_CENTER_VERTICAL)
+
+        single_spectrum_box_sizer = wx.StaticBoxSizer(single_spectrum_parent,
+            wx.VERTICAL)
+        single_spectrum_box_sizer.Add(single_spectrum_sizer, flag=wx.EXPAND|wx.ALL,
+            border=self._FromDIP(5))
+
+        adv_sizer = wx.BoxSizer(wx.VERTICAL)
+        adv_sizer.Add(adv_settings_box_sizer, 1, flag=wx.EXPAND|wx.ALL,
+            border=self._FromDIP(5))
+        adv_sizer.Add(single_spectrum_box_sizer, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM,
+            border=self._FromDIP(5))
+
+        adv_win.SetSizer(adv_sizer)
+
+
+
+        top_sizer = wx.BoxSizer(wx.VERTICAL)
+        top_sizer.Add(status_sizer, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
+            border=self._FromDIP(5))
+        top_sizer.Add(settings_box_sizer, flag=wx.EXPAND|wx.ALL,
+            border=self._FromDIP(5))
+        top_sizer.Add(adv_pane, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM,
+            border=self._FromDIP(5))
+
+        self.SetSizer(top_sizer)
+
+    def on_collapse(self, event):
+        self.Layout()
+        self.Fit()
+
+        self.parent.Layout()
+        self.parent.Fit()
+
+        try:
+            wx.FindWindowByName('biocon').Layout()
+            wx.FindWindowByName('biocon').Fit()
+        except Exception:
+            pass
+
+    def _send_cmd(self, cmd, wait_for_response=False, is_status=False,
+        status_period=1, add_status=True):
+        """
+        Sends commands to the pump using the ``cmd_q`` that was given
+        to :py:class:`UVCommThread`.
+
+        :param str cmd: The command to send, matching the command in the
+            :py:class:`UVCommThread` ``_commands`` dictionary.
+        """
+        logger.debug('Sending device %s command %s', self.name, cmd)
+
+        if is_status:
+            device = 'uv_status'
+            cmd = [cmd, status_period, add_status]
+        else:
+            device = 'uv'
+
+        zmq_cmd = {'device': device, 'command': cmd, 'response': wait_for_response}
+
+        if wait_for_response:
+            with self._clear_return:
+                self.cmd_q.append(zmq_cmd)
+                result = self._wait_for_response()
+
+                if result is not None:
+                    logger.debug(result)
+                    if result[0] == cmd[1][0] and result[1] == cmd[0]:
+                        ret_val = result[2]
+                    else:
+                        ret_val = None
+                else:
+                    ret_val = None
+
+        else:
+            self.cmd_q.append(zmq_cmd)
+            ret_val = None
+
+        return ret_val
+
+    def _wait_for_response(self):
+        start_count = len(self.return_q)
+        while len(self.return_q) == start_count:
+            time.sleep(0.01)
+            if self.timeout_event.is_set():
+                break
+
+        if not self.timeout_event.is_set():
+            answer = self.return_q.pop()
+        else:
+            answer = None
+
+        return answer
+
+    def _init_connections(self, settings):
+        self.abort_event = threading.Event()
+        self.event = threading.Event()
+        self.timeout_event = threading.Event()
+
+        ip = settings['remote_ip']
+        port = settings['remote_port']
+
+        self.uv_com_thread = client.ControlClient(ip, port, self.cmd_q,
+            self.return_q, self.abort_event, self.timeout_event,
+            name='UVControlClient', status_queue=self.status_q)
+
+        self.uv_com_thread.start()
+
+    def _init_device(self, settings):
+        """
+        Initializes the device parameters if any were provided. If enough are
+        provided the device is automatically connected.
+        """
+
+        self._init_connections(settings)
+
+        device_data = settings['device_init']
+
+        args = device_data['args']
+        kwargs = device_data['kwargs']
+
+        args.insert(0, self.name)
+
+        connect_cmd = ['connect', args, kwargs]
+
+        self._send_cmd(connect_cmd, True)
+
+
+    def _init_dark_and_ref(self):
+        dark_cmd = ['get_dark', [self.name,], {}]
+
+        dark = self._send_cmd(dark_cmd, True)
+
+        if dark is None:
+            self._collect_spectrum('dark')
+
+        else:
+            self._dark_spectrum = dark
+
+        ref_cmd = ['get_ref', [self.name,], {}]
+
+        ref = self._send_cmd(ref_cmd, True)
+
+        if ref is None:
+            self._collect_spectrum('ref')
+        else:
+            self._reference_spectrum = ref
+
+    def _init_controls(self):
+        self.auto_dark.SetValue(self.settings['auto_dark'])
+        self.auto_dark_period.SetValue('{}'.format(self.settings['auto_dark_t']))
+        self.dark_avgs.SetValue('{}'.format(self.settings['dark_avgs']))
+        self.ref_avgs.SetValue('{}'.format(self.settings['dark_avgs']))
+
+        self._history_length = self.settings['history_t']
+        self.history_time.SafeChangeValue('{}'.format(self.settings['history_t']))
+
+
+
+    def _init_device_part2(self):
+        # Need some kind of delay or I get a USB error message from the stellarnet driver
+        cmd = ['set_hist_time', [self.name, float(self._history_length)], {}]
+        self._send_cmd(cmd)
+
+        is_busy = self._get_busy()
+
+        self._get_full_history()
+
+        if not is_busy:
+            self._init_dark_and_ref()
+
+        self._set_status_commands()
+
+
+    def _on_settings_change(self, obj, val):
+        if obj == self.int_time:
+            cmd = ['set_int_time', [self.name, float(val)], {}]
+
+        elif obj == self.history_time:
+            cmd = ['set_hist_time', [self.name, float(val)], {}]
+
+        else:
+            cmd = None
+
+        if cmd is not None:
+            self._send_cmd(cmd)
+
+    def _on_collect_single(self, evt):
+        obj = evt.GetEventObject()
+
+        if obj == self.collect_dark_btn:
+            self._collect_spectrum('dark')
+        elif obj == self.collect_ref_btn:
+            self._collect_spectrum('ref')
+
+    def _collect_spectrum(self, stype='normal'):
+        is_busy = self._get_busy()
+
+        if not is_busy:
+            dark_correct = self.settings['dark_correct']
+            auto_dark = self.auto_dark.GetValue()
+            dark_time = float(self.auto_dark_period.GetValue())
+
+            if stype == 'normal':
+                spec_type = self.spectrum_type.GetStringSelection()
+
+                if spec_type == 'Absorbance':
+                    spec_type = 'abs'
+                elif spec_type == 'Transmission':
+                    spec_type == 'trans'
+                else:
+                    spec_type = 'raw'
+
+                kwargs = {
+                    'spec_type'     : spec_type,
+                    'dark_correct'  : dark_correct,
+                    'auto_dark'     : auto_dark,
+                    'dark_time'     : dark_time,
+                }
+
+                cmd = ['collect_spec', [self.name,], kwargs]
+
+            elif stype == 'ref':
+                avgs = int(self.ref_avgs.GetValue())
+
+                kwargs = {
+                    'averages'      : avgs,
+                    'dark_correct'  : dark_correct,
+                    'auto_dark'     : auto_dark,
+                    'dark_time'     : dark_time,
+                }
+
+                cmd = ['collect_ref', [self.name], kwargs]
+
+            elif stype == 'dark':
+                avgs = int(self.dark_avgs.GetValue())
+
+                cmd = ['collect_dark', [self.name,], {'averages': avgs}]
+
+            else:
+                cmd = None
+
+            if cmd is not None:
+                self._send_cmd(cmd)
+
+        else:
+            wx.CallAfter(self._show_busy_msg)
+
+    def _get_busy(self):
+        busy_cmd = ['get_busy', [self.name,], {}]
+        is_busy = self._send_cmd(busy_cmd, True)
+
+        return is_busy
+
+    def _show_busy_msg(self):
+        wx.MessageBox('Cannot collect spectrum because device is busy.',
+            'Device is busy')
+
+    def _set_status(self, cmd, val):
+        logger.debug('Setting status %s %s', cmd, val)
+        if cmd == 'set_int_time':
+            self.int_time.ChangeValue(str(val))
+
+        elif cmd == 'get_hist_time':
+            self.history_time.SafeChangeValue(str(val))
+            self._history_length = val
+
+        elif cmd == 'get_spec_settings':
+            int_time = val['int_time']
+            scan_avg = val['scan_avg']
+            smooth = val['smooth']
+            xtiming = val['xtiming']
+            dark = val['dark']
+            ref = val['ref']
+            abs_wavs = val['abs_wavs']
+            abs_win = val['abs_win']
+            hist_t = val['hist_t']
+
+            self.int_time.ChangeValue(str(int_time))
+            self.history_time.SafeChangeValue(str(hist_t))
+
+            self._history_length = hist_t
+
+            self._dark_spectrum = dark
+            self._reference_spectrum = ref
+
+        elif cmd == 'collect_spec':
+            self._add_new_spectrum(val)
+
+        elif cmd == 'collect_ref':
+            self._reference_spectrum = val
+            self._add_new_spectrum(val)
+
+        elif cmd == 'collect_dark':
+            self._dark_spectrum = val
+
+        elif cmd == 'collect_series':
+            self._add_new_spectrum(val)
+            self._series_count += 1
+
+            logger.debug('Got series spectrum %s of %s', self._series_count,
+                self._series_total)
+
+        elif cmd == 'get_busy':
+            if val:
+                if self._series_running:
+                    msg = ('Collecting {} of {}'.format(self._series_count,
+                        self._series_total))
+                else:
+                    msg = 'Collecting'
+                self.status.SetLabel(msg)
+            else:
+                self.status.SetLabel('Ready')
+
+        elif cmd == 'collect_series_start':
+            self._series_running = True
+            self._series_count = 0
+            self._series_total = val
+
+        elif cmd == 'collect_series_end':
+            self._series_running = True
+            self._series_count = 0
+
+    def _add_new_spectrum(self, val):
+        if val.spectrum is not None:
+            self._add_spectrum_to_history(val)
+
+        if val.trans_spectrum is not None:
+            self._add_spectrum_to_history(val, 'trans')
+
+        if val.abs_spectrum is not None:
+            self._add_spectrum_to_history(val, 'abs')
+
+    def _set_status_commands(self):
+        settings_cmd = ['get_spec_settings', [self.name], {}]
+
+        self._send_cmd(settings_cmd, is_status=True,
+            status_period=60, add_status=True)
+
+        busy_cmd = ['get_busy', [self.name,], {}]
+
+        self._send_cmd(busy_cmd, is_status=True,
+            status_period=1, add_status=True)
+
+    def _add_spectrum_to_history(self, spectrum, spec_type='raw'):
+        logger.debug('Adding %s spectrum to history', spec_type)
+
+        if spec_type == 'abs':
+            history = self._absorbance_history
+        elif spec_type == 'trans':
+            history = self._transmission_history
+        else:
+            history = self._history
+
+        if history is not None:
+            history['spectra'].append(spectrum)
+            history['timestamps'].append(spectrum.get_timestamp().timestamp())
+
+            history = self._prune_history(history)
+
+            if spec_type == 'abs':
+                self._absorbance_history = history
+            elif spec_type == 'trans':
+                self._transmission_history = history
+            else:
+                self._history = history
+
+    def _prune_history(self, history):
+        logger.debug('Pruning history')
+
+        if len(history['timestamps']) > 0:
+            now = datetime.datetime.now().timestamp()
+
+            if len(history['timestamps']) == 1:
+                if now - history['timestamps'][0] > self._history_length:
+                    index = 1
+                else:
+                    index = 0
+
+            else:
+                index = 0
+
+                while (index < len(history['timestamps'])-1
+                    and now - history['timestamps'][index] > self._history_length):
+                    index += 1
+
+            if index == len(history['timestamps']):
+                history['spectra'] = []
+                history['timestamps'] = []
+
+            elif index != 0:
+                history['spectra'] = history['spectra'][index:]
+                history['timestamps'] = history['timestamps'][index:]
+
+        return history
+
+    def _get_full_history(self):
+        abs_cmd = ['get_full_hist_ts', [self.name,], {}]
+        trans_cmd = ['get_full_hist_ts', [self.name,], {'spec_type': 'trans'}]
+        raw_cmd = ['get_full_hist_ts', [self.name,], {'spec_type': 'raw'}]
+
+        self._absorbance_history = self._send_cmd(abs_cmd, True)
+        self._transmission_history = self._send_cmd(trans_cmd, True)
+        self._history = self._send_cmd(raw_cmd, True)
+
+    def _on_close(self):
+        """Device specific stuff goes here"""
+        pass
+
+    def on_exit(self):
+        self.uv_com_thread.stop()
+
+        if not self.timeout_event.is_set():
+            self.uv_com_thread.join(5)
+
+        self.close()
+
 class UVFrame(utils.DeviceFrame):
 
     def __init__(self, name, setup_devices, com_thread, *args, **kwargs):
@@ -2394,12 +2935,29 @@ class UVFrame(utils.DeviceFrame):
 
         return top_sizer
 
+class InlineUVFrame(wx.Frame):
+
+    def __init__(self, settings, *args, **kwargs):
+
+        super(InlineUVFrame, self).__init__(*args, **kwargs)
+
+        uv_panel = InlineUVPanel(settings, self)
+
+        sizer = wx.BoxSizer(wx.HORIZONTAL)
+        sizer.Add(uv_panel, 1, flag=wx.EXPAND)
+
+        self.SetSizer(sizer)
+
+        self.Fit()
+        self.Raise()
+
+
 if __name__ == '__main__':
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
     h1 = logging.StreamHandler(sys.stdout)
     h1.setLevel(logging.DEBUG)
-    h1.setLevel(logging.INFO)
+    # h1.setLevel(logging.INFO)
     # h1.setLevel(logging.WARNING)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
     h1.setFormatter(formatter)
@@ -2659,13 +3217,39 @@ if __name__ == '__main__':
     # get_int_status_cmd = ['get_int_time', ['Test2',], {}]
     # com_thread.add_status_cmd(get_int_status_cmd, 10)
 
+
+    spectrometer_settings = {
+        'name'          :  'CoflowUV',
+        'device_init'   : {'name': 'CoflowUV', 'args': ['StellarNet'],
+            'kwargs': {}},
+        'max_int_t'     : 0.1, # in s
+        'scan_avg'      : 1,
+        'smoothing'     : 0,
+        'xtiming'       : 3,
+        'spectrum_type' : 'abs', #abs, trans, raw
+        'dark_correct'  : True,
+        'auto_dark'     : True,
+        'auto_dark_t'   : 60*60, #in s
+        'dark_avgs'     : 1,
+        'ref_avgs'      : 1,
+        'history_t'     : 60*60*24, #in s
+        'save_subdir'   : 'UV',
+        'save_type'     : 'Absorbance',
+        'remote_ip'     : '164.54.204.53',
+        'remote_port'   : '5559',
+    }
+
+
+
     setup_devices = [
         {'name': 'StellarNet', 'args': ['StellarNet'], 'kwargs': {}},
         ]
 
     app = wx.App()
     logger.debug('Setting up wx app')
-    frame = UVFrame('UVFrame', setup_devices, com_thread, parent=None,
+    # frame = UVFrame('UVFrame', setup_devices, com_thread, parent=None,
+    #     title='UV Spectrometer Control')
+    frame = InlineUVFrame(spectrometer_settings, parent=None, name='UVFrame',
         title='UV Spectrometer Control')
     frame.Show()
     app.MainLoop()

@@ -189,15 +189,19 @@ class ControlServer(threading.Thread):
                 if command is not None:
                     cmds_run = True
 
+                    logger.debug(command)
                     device = command['device']
                     device_cmd = command['command']
                     get_response = command['response']
-                    logger.debug("For device %s, processing cmd '%s' with args: %s and kwargs: %s ",
-                        device, device_cmd[0], ', '.join(['{}'.format(a) for a in device_cmd[1]]),
-                        ', '.join(['{}:{}'.format(kw, item) for kw, item in device_cmd[2].items()]))
+                    logger.debug(device_cmd)
+
 
                     try:
                         if device == 'server':
+                            logger.debug("For device %s, processing cmd '%s' with args: %s and kwargs: %s ",
+                                device, device_cmd[0], ', '.join(['{}'.format(a) for a in device_cmd[1]]),
+                                ', '.join(['{}:{}'.format(kw, item) for kw, item in device_cmd[2].items()]))
+
                             if device_cmd[0] == 'ping':
                                 answer = 'ping received'
                             else:
@@ -205,9 +209,9 @@ class ControlServer(threading.Thread):
 
                         elif device.endswith('status'):
                             cmd_device = device.rstrip('_status')
-                            status_cmd = cmd[0]
-                            status_period = cmd[1]
-                            add = cmd[2]
+                            status_cmd = device_cmd[0]
+                            status_period = device_cmd[1]
+                            add = device_cmd[2]
 
                             thread = self._device_control[cmd_device]['thread']
 
@@ -217,6 +221,10 @@ class ControlServer(threading.Thread):
                                 thread.remove_status_cmd(status_cmd)
 
                         else:
+                            logger.debug("For device %s, processing cmd '%s' with args: %s and kwargs: %s ",
+                                device, device_cmd[0], ', '.join(['{}'.format(a) for a in device_cmd[1]]),
+                                ', '.join(['{}:{}'.format(kw, item) for kw, item in device_cmd[2].items()]))
+
                             device_q = self._device_control[device]['queue']
                             device_q.append(device_cmd)
 
@@ -238,7 +246,8 @@ class ControlServer(threading.Thread):
                             logger.exception('No response received from device')
                         else:
                             logger.debug('Sending command response: %s', answer)
-                            self.socket.send_json(answer)
+                            answer = ['response', answer]
+                            self.socket.send_pyobj(answer)
 
                     except Exception:
                         device = command['device']
@@ -250,7 +259,7 @@ class ControlServer(threading.Thread):
                         logger.exception(msg)
                         logger.exception(traceback.print_exc())
 
-                for device, device_ctrl in self._device_control:
+                for device, device_ctrl in self._device_control.items():
                     if 'status_q' in device_ctrl:
                         status_q = device_ctrl['status_q']
 
@@ -259,8 +268,10 @@ class ControlServer(threading.Thread):
 
                             status = status_q.popleft()
 
+                            status = ['status', status]
+
                             logger.debug('Sending command response: %s', status)
-                            self.socket.send_json(status)
+                            self.socket.send_pyobj(status)
 
 
                 if not cmds_run:
@@ -304,8 +315,8 @@ if __name__ == '__main__':
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
     h1 = logging.StreamHandler(sys.stdout)
-    # h1.setLevel(logging.DEBUG)
-    h1.setLevel(logging.INFO)
+    h1.setLevel(logging.DEBUG)
+    # h1.setLevel(logging.INFO)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
     h1.setFormatter(formatter)
     logger.addHandler(h1)
@@ -356,8 +367,8 @@ if __name__ == '__main__':
     if exp_type == 'coflow':
         # Coflow
 
-        # ip = '164.54.204.53'
-        ip = '164.54.204.24'
+        ip = '164.54.204.53'
+        # ip = '164.54.204.24'
 
         setup_pumps = [('sheath', 'VICI M50', 'COM3', ['629.48', '13.442'], {}, {}),
             ('outlet', 'VICI M50', 'COM4', ['625.28', '7.905'], {}, {})
@@ -371,7 +382,7 @@ if __name__ == '__main__':
             ]
 
         setup_uv = [
-            {'name': 'StellarNet', 'args': ['StellarNet'], 'kwargs': {}},
+            {'name': 'CoflowUV', 'args': ['StellarNet'], 'kwargs': {}},
             ]
 
     elif exp_type.startswith('trsaxs'):

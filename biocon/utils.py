@@ -735,8 +735,7 @@ class DevicePanel(wx.Panel):
     be instanced several times, once for each device. It communciates
     with the devices using the :py:class:`CommManager`.
     """
-    def __init__(self, parent, panel_id, com_thread, known_devices,
-        device_data, *args, **kwargs):
+    def __init__(self, parent, panel_id, com_thread, device_data, *args, **kwargs):
         """
         :param wx.Window parent: Parent class for the panel.
 
@@ -758,7 +757,6 @@ class DevicePanel(wx.Panel):
 
         logger.debug('Initializing UVPanel for device %s', self.name)
 
-        self.known_devices = known_devices
         self.connected = False
 
         self.cmd_q = deque()
@@ -766,8 +764,10 @@ class DevicePanel(wx.Panel):
         self.status_q = deque()
 
         self.com_thread = com_thread
-        self.com_thread.add_new_communication(self.name, self.cmd_q, self.return_q,
-            self.status_q)
+
+        if self.com_thread is not None:
+            self.com_thread.add_new_communication(self.name, self.cmd_q, self.return_q,
+                self.status_q)
 
         self._clear_return = threading.Lock()
         self._stop_status = threading.Event()
@@ -864,7 +864,8 @@ class DevicePanel(wx.Panel):
 
     def close(self):
         self._on_close()
-        self.com_thread.remove_communication(self.name)
+        if self.com_thread is not None:
+            self.com_thread.remove_communication(self.name)
         self._stop_status.set()
 
     def _on_close(self):
@@ -890,13 +891,8 @@ class DeviceFrame(wx.Frame):
         self.device_panel = device_panel
 
         logger.debug('Setting up the DeviceFrame %s', self.name)
-        self.cmd_q = deque()
-        self.return_q = deque()
-        self.status_q = deque()
 
         self.com_thread = comm_thread
-        self.com_thread.add_new_communication(self.name, self.cmd_q, self.return_q,
-            self.status_q)
 
         self.Bind(wx.EVT_CLOSE, self._on_exit)
 
@@ -926,7 +922,7 @@ class DeviceFrame(wx.Frame):
 
         #Overwrite this
         new_device_panel = self.device_panel(self, wx.ID_ANY, self.cmd_q,
-            self.return_q, self.status_q, self.com_thread.known_devices, device)
+            self.return_q, self.status_q, device)
 
         self.sizer = wx.BoxSizer(wx.HORIZONTAL)
         self.sizer.Add(panel, flag=wx.RESERVE_SPACE_EVEN_IF_HIDDEN)
@@ -977,7 +973,7 @@ class DeviceFrame(wx.Frame):
 
         for device in self.setup_devices:
             new_device = self.device_panel(self, wx.ID_ANY, self.com_thread,
-                self.com_thread.known_devices, device)
+                device)
 
             self.sizer.Add(new_device, 1, flag=wx.EXPAND)
             self.devices.append(new_device)
@@ -1006,7 +1002,7 @@ class DeviceFrame(wx.Frame):
                     return
 
             new_device = self.device_panel(self, wx.ID_ANY, name, self.ports, self.cmd_q,
-                self.return_q, self.com_thread.known_devices, name)
+                self.return_q, name)
             logger.info('Added new device %s to the device control panel.', name)
             self.sizer.Add(new_device)
             self.devices.append(new_device)

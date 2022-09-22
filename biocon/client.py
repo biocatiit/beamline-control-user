@@ -41,7 +41,7 @@ class ControlClient(threading.Thread):
     """
 
     def __init__(self, ip, port, command_queue, answer_queue, abort_event,
-        timeout_event, name='ControlClient'):
+        timeout_event, name='ControlClient', status_queue=None):
         """
         Initializes the custom thread. Important parameters here are the
         list of known commands ``_commands`` and known pumps ``known_pumps``.
@@ -61,6 +61,7 @@ class ControlClient(threading.Thread):
         self.port = port
         self.command_queue = command_queue
         self.answer_queue = answer_queue
+        self.status_queue = status_queue
         self._abort_event = abort_event
         self._stop_event = threading.Event()
         self.timeout_event = timeout_event
@@ -85,6 +86,8 @@ class ControlClient(threading.Thread):
         self.socket.connect("tcp://{}:{}".format(self.ip, self.port))
 
         while True:
+            action_taken = False
+
             try:
                 if not self.socket.closed:
                     if time.time() - self.last_ping > self.heartbeat:
@@ -110,13 +113,22 @@ class ControlClient(threading.Thread):
                     break
 
                 if command is not None:
+                    action_taken = True
+
                     if not self.socket.closed:
                         self._send_cmd(command)
 
                     elif self.resend_missed_commands_on_reconnect:
                         self.missed_cmds.append(command)
 
+                if not self.socket.closed:
+                    got_status = self._get_status()
                 else:
+                    got_status = False
+
+                action_taken = action_taken or got_status
+
+                if not action_taken:
                     time.sleep(0.01)
 
             except Exception:
@@ -137,6 +149,7 @@ class ControlClient(threading.Thread):
 
 
     def _send_cmd(self, command):
+        logger.debug('Sending command %s', command)
         device = command['device']
         device_cmd = command['command']
         get_response = command['response']
@@ -144,14 +157,7 @@ class ControlClient(threading.Thread):
         try:
             self.socket.send_json(command)
 
-            start_time = time.time()
-            while self.socket.poll(10) == 0 and time.time()-start_time < 5:
-                pass
-
-            if self.socket.poll(10) > 0:
-                answer = self.socket.recv_json()
-            else:
-                answer = ''
+            answer = self._wait_for_response(5)
 
             if answer == '':
                 raise zmq.ZMQError(msg="Could not get a response from the server")
@@ -197,6 +203,46 @@ class ControlClient(threading.Thread):
             logger.error("Connection timed out")
             self.timeout_event.set()
 
+    def _wait_for_response(self, timeout):
+        start_time = time.time()
+        answer = ''
+
+        while time.time()-start_time < timeout:
+            if self.socket.poll(10) > 0:
+                res_type, response = self.socket.recv_pyobj()
+
+                if res_type == 'status':
+                    logger.debug('Recevied status %s', response)
+                    if self.status_queue is not None:
+                        self.status_queue.append(response)
+
+                elif res_type == 'response':
+                    answer = response
+                    logger.debug('Recevied status %s', answer)
+                    break
+
+        return answer
+
+    def _get_status(self):
+        got_response = False
+
+        while True:
+            if self.socket.poll(10) > 0:
+                res_type, response = self.socket.recv_pyobj()
+
+                if res_type == 'status':
+                    logger.debug('Recevied status %s', response)
+                    if self.status_queue is not None:
+                        self.status_queue.append(response)
+
+                got_response = True
+
+            else:
+                break
+
+
+        return got_response
+
     def _ping(self):
         # logger.debug("Checking if server is active")
         cmd = {'device': 'server', 'command': ('ping', (), {}), 'response': False}
@@ -207,14 +253,7 @@ class ControlClient(threading.Thread):
             while connect_tries < 5:
                 self.socket.send_json(cmd)
 
-                start_time = time.time()
-                while self.socket.poll(10) == 0 and time.time()-start_time < 1:
-                    pass
-
-                if self.socket.poll(10) > 0:
-                    answer = self.socket.recv_json()
-                else:
-                    answer = ''
+                answer = self._wait_for_response(1)
 
                 if answer == 'ping received':
                     logger.debug("Connection to server verified")
@@ -238,14 +277,7 @@ class ControlClient(threading.Thread):
             while connect_tries < 5:
                 self.socket.send_json(cmd)
 
-                start_time = time.time()
-                while self.socket.poll(10) == 0 and time.time()-start_time < 0.1:
-                    pass
-
-                if self.socket.poll(10) > 0:
-                    answer = self.socket.recv_json()
-                else:
-                    answer = ''
+                answer = self._wait_for_response(0.1)
 
                 if answer == 'ping received':
                     logger.debug("Connection to server verified")

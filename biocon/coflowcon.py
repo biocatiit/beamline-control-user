@@ -1058,8 +1058,12 @@ class CoflowPanel(wx.Panel):
         self.Layout()
         self.Refresh()
         self.SendSizeEvent()
-        wx.FindWindowByName('biocon').Layout()
-        wx.FindWindowByName('biocon').Fit()
+
+        try:
+            wx.FindWindowByName('biocon').Layout()
+            wx.FindWindowByName('biocon').Fit()
+        except Exception:
+            pass
 
     def showMessageDialog(self, parent, msg, title, style):
         dialog = wx.MessageDialog(parent, msg, title, style=style)
