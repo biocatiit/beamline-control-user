@@ -2305,8 +2305,7 @@ class UVPanel(utils.DevicePanel):
         self.com_thread.add_status_cmd(busy_cmd, 1)
 
     def _add_spectrum_to_history(self, spectrum, spec_type='raw'):
-        logger.debug('Adding %s spectrum to history',
-            self.name, spec_type)
+        logger.debug('Adding %s spectrum to history', spec_type)
 
         if spec_type == 'abs':
             history = self._absorbance_history
@@ -2329,7 +2328,7 @@ class UVPanel(utils.DevicePanel):
                 self._history = history
 
     def _prune_history(self, history):
-        logger.debug('Pruning history', self.name)
+        logger.debug('Pruning history')
 
         if len(history['timestamps']) > 0:
             now = datetime.datetime.now().timestamp()
@@ -2372,17 +2371,16 @@ class UVPanel(utils.DevicePanel):
 
 class UVFrame(utils.DeviceFrame):
 
-    def __init__(self, name, com_thread, *args, **kwargs):
+    def __init__(self, name, setup_devices, com_thread, *args, **kwargs):
         """
         Initializes the device frame. Takes frame name, utils.CommManager thread
         (or subclass), the device_panel class, and args and kwargs for the wx.Frame class.
         """
-        super(UVFrame, self).__init__(name, com_thread, *args, **kwargs)
+        super(UVFrame, self).__init__(name, com_thread, UVPanel, *args, **kwargs)
 
         # Enable these to init devices on startup
-        self.setup_devices = [
-            {'name': 'StellarNet', 'args': ['StellarNet'], 'kwargs': {}},
-            ]
+        self.setup_devices = setup_devices
+
         self._init_devices()
 
     def _create_layout(self):
@@ -2661,9 +2659,14 @@ if __name__ == '__main__':
     # get_int_status_cmd = ['get_int_time', ['Test2',], {}]
     # com_thread.add_status_cmd(get_int_status_cmd, 10)
 
+    setup_devices = [
+        {'name': 'StellarNet', 'args': ['StellarNet'], 'kwargs': {}},
+        ]
+
     app = wx.App()
     logger.debug('Setting up wx app')
-    frame = UVFrame('UVFrame', com_thread, UVPanel, None, title='UV Spectrometer Control')
+    frame = UVFrame('UVFrame', setup_devices, com_thread, parent=None,
+        title='UV Spectrometer Control')
     frame.Show()
     app.MainLoop()
 

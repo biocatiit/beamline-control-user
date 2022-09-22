@@ -92,7 +92,7 @@ class ControlServer(threading.Thread):
         self.socket.bind("tcp://{}:{}".format(self.ip, self.port))
 
 
-        if start_pump:
+        if self._start_pump:
             pump_cmd_q = deque()
             pump_return_q = deque()
             pump_abort_event = threading.Event()
@@ -111,7 +111,7 @@ class ControlServer(threading.Thread):
             self._device_control['pump'] = pump_ctrl
 
 
-        if start_fm:
+        if self._start_fm:
             fm_cmd_q = deque()
             fm_return_q = deque()
             fm_abort_event = threading.Event()
@@ -127,7 +127,7 @@ class ControlServer(threading.Thread):
             self._device_control['fm'] = fm_ctrl
 
 
-        if start_valve:
+        if self._start_valve:
             valve_cmd_q = deque()
             valve_return_q = deque()
             valve_abort_event = threading.Event()
@@ -145,11 +145,11 @@ class ControlServer(threading.Thread):
 
             self._device_control['valve'] = valve_ctrl
 
-        if start_uv:
+        if self._start_uv:
             uv_cmd_q = deque()
             uv_return_q = deque()
             uv_status_q = deque()
-            uv_con = uvcon.UVCommThread('UVCon')
+            uv_con = spectrometercon.UVCommThread('UVCon')
             uv_con.start()
 
             uv_con.add_new_communication('zmq_server', uv_cmd_q, uv_return_q,
@@ -281,6 +281,19 @@ class ControlServer(threading.Thread):
 
         logger.info("Quitting control thread: %s", self.name)
 
+    def add_comm_to_thread(self, device, name, cmd_q, return_q, status_q):
+        thread = self._device_control[device]['thread']
+
+        thread.add_new_communication(name, cmd_q, return_q, status_q)
+
+    def remove_comm_from_thread(self, device, name):
+        thread = self._device_control[device]['thread']
+
+        thread.remove_communication(name)
+
+    def get_comm_thread(self, device):
+        return self._device_control[device]['thread']
+
     def stop(self):
         """Stops the thread cleanly."""
         # logger.info("Starting to clean up and shut down pump control thread: %s", self.name)
@@ -314,7 +327,7 @@ if __name__ == '__main__':
     port1 = '5556'
     port2 = '5557'
     port3 = '5558'
-    port3 = '5559'
+    port4 = '5559'
 
     # Both
 
@@ -337,90 +350,101 @@ if __name__ == '__main__':
         'COM14' : threading.Lock(),
         }
 
+    exp_type = 'coflow' #coflow or trsaxs_laminar or trsaxs_chaotic
 
-    # Coflow
 
-    ip = '164.54.204.53'
+    if exp_type == 'coflow':
+        # Coflow
 
-    setup_pumps = [('sheath', 'VICI M50', 'COM3', ['629.48', '13.442'], {}, {}),
-        ('outlet', 'VICI M50', 'COM4', ['625.28', '7.905'], {}, {})
-        ]
+        # ip = '164.54.204.53'
+        ip = '164.54.204.24'
 
-    pump_local_comm_locks = {'sheath'    : pump_comm_locks[setup_pumps[0][2]],
-        'outlet'    : pump_comm_locks[setup_pumps[1][2]]
-        }
+        setup_pumps = [('sheath', 'VICI M50', 'COM3', ['629.48', '13.442'], {}, {}),
+            ('outlet', 'VICI M50', 'COM4', ['625.28', '7.905'], {}, {})
+            ]
 
-    setup_valves = [('Coflow Sheath', 'Cheminert', 'COM7', [], {'positions' : 10}),
-        ]
+        pump_local_comm_locks = {'sheath'    : pump_comm_locks[setup_pumps[0][2]],
+            'outlet'    : pump_comm_locks[setup_pumps[1][2]]
+            }
 
-    # # TR SAXS
+        setup_valves = [('Coflow Sheath', 'Cheminert', 'COM7', [], {'positions' : 10}),
+            ]
 
-    # ip = '164.54.204.8'
+        setup_uv = [
+            {'name': 'StellarNet', 'args': ['StellarNet'], 'kwargs': {}},
+            ]
 
-    # # Chaotic flow
+    elif exp_type.startswith('trsaxs'):
+        # TR SAXS
 
-    # setup_pumps = [
-    #     # ('Sample', 'PHD 4400', 'COM4', ['10 mL, Medline P.C.', '1'], {},
-    #     #     {'flow_rate' : '10', 'refill_rate' : '10'}),
-    #     # ('Buffer 1', 'PHD 4400', 'COM4', ['20 mL, Medline P.C.', '2'], {},
-    #     #     {'flow_rate' : '10', 'refill_rate' : '10'}),
-    #     # ('Buffer 2', 'PHD 4400', 'COM4', ['20 mL, Medline P.C.', '3'], {},
-    #     #     {'flow_rate' : '10', 'refill_rate' : '10'}),
-    #     ('Buffer 1', 'SSI Next Gen', 'COM17', [], {'flow_rate_scale': 1.0478,
-    #         'flow_rate_offset': -72.82/1000,'scale_type': 'up'}, {}),
-    #     ('Sample', 'SSI Next Gen', 'COM15', [], {'flow_rate_scale': 1.0204,
-    #         'flow_rate_offset': 15.346/1000, 'scale_type': 'up'}, {}),
-    #     ('Buffer 2', 'SSI Next Gen', 'COM18', [], {'flow_rate_scale': 1.0179,
-    #         'flow_rate_offset': -20.842/1000, 'scale_type': 'up'}, {}),
-    #     ]
+        ip = '164.54.204.8'
 
-    # pump_local_comm_locks = {
-    #     'Buffer 1'    : pump_comm_locks[setup_pumps[0][2]],
-    #     'Sample'    : pump_comm_locks[setup_pumps[1][2]],
-    #     'Buffer 2'    : pump_comm_locks[setup_pumps[2][2]]
-    #     }
+        if exp_type == 'trsaxs_chaotic':
+            # Chaotic flow
 
-    # setup_valves = [
-    #     ('Injection', 'Rheodyne', 'COM6', [], {'positions' : 2}),
-    #     # ('Sample', 'Rheodyne', 'COM9', [], {'positions' : 6}),
-    #     # ('Buffer 1', 'Rheodyne', 'COM8', [], {'positions' : 6}),
-    #     # ('Buffer 2', 'Rheodyne', 'COM7', [], {'positions' : 6}),
-    #     ]
+            setup_pumps = [
+                # ('Sample', 'PHD 4400', 'COM4', ['10 mL, Medline P.C.', '1'], {},
+                #     {'flow_rate' : '10', 'refill_rate' : '10'}),
+                # ('Buffer 1', 'PHD 4400', 'COM4', ['20 mL, Medline P.C.', '2'], {},
+                #     {'flow_rate' : '10', 'refill_rate' : '10'}),
+                # ('Buffer 2', 'PHD 4400', 'COM4', ['20 mL, Medline P.C.', '3'], {},
+                #     {'flow_rate' : '10', 'refill_rate' : '10'}),
+                ('Buffer 1', 'SSI Next Gen', 'COM17', [], {'flow_rate_scale': 1.0478,
+                    'flow_rate_offset': -72.82/1000,'scale_type': 'up'}, {}),
+                ('Sample', 'SSI Next Gen', 'COM15', [], {'flow_rate_scale': 1.0204,
+                    'flow_rate_offset': 15.346/1000, 'scale_type': 'up'}, {}),
+                ('Buffer 2', 'SSI Next Gen', 'COM18', [], {'flow_rate_scale': 1.0179,
+                    'flow_rate_offset': -20.842/1000, 'scale_type': 'up'}, {}),
+                ]
 
-    # valve_local_comm_locks = {
-    #     'Injection'    : valve_comm_locks[setup_valves[0][2]],
-    #     # 'Sample'    : valve_comm_locks[setup_valves[1][2]],
-    #     # 'Buffer 1'    : valve_comm_locks[setup_valves[2][2]],
-    #     # 'Buffer 2'    : valve_comm_locks[setup_valves[3][2]],
-    #    }
+            pump_local_comm_locks = {
+                'Buffer 1'    : pump_comm_locks[setup_pumps[0][2]],
+                'Sample'    : pump_comm_locks[setup_pumps[1][2]],
+                'Buffer 2'    : pump_comm_locks[setup_pumps[2][2]]
+                }
 
-    # # # Laminar flow
-    # # setup_pumps = [
-    # #     ('Buffer 1', 'PHD 4400', 'COM4', ['10 mL, Medline P.C.', '1'], {},
-    # #         {'flow_rate' : '0.068', 'refill_rate' : '5'}),
-    # #     ('Buffer 2', 'PHD 4400', 'COM4', ['10 mL, Medline P.C.', '2'], {},
-    # #         {'flow_rate' : '0.068', 'refill_rate' : '5'}),
-    # #     ('Sheath', 'NE 500', 'COM10', ['3 mL, Medline P.C.', '01'],
-    # #         {'dual_syringe': 'False'}, {'flow_rate' : '0.002', 'refill_rate' : '1.5'}),
-    # #     ('Sample', 'PHD 4400', 'COM4', ['3 mL, Medline P.C.', '3'], {},
-    # #         {'flow_rate' : '0.009', 'refill_rate' : '1.5'}),
-    # #     ]
+            setup_valves = [
+                ('Injection', 'Rheodyne', 'COM6', [], {'positions' : 2}),
+                # ('Sample', 'Rheodyne', 'COM9', [], {'positions' : 6}),
+                # ('Buffer 1', 'Rheodyne', 'COM8', [], {'positions' : 6}),
+                # ('Buffer 2', 'Rheodyne', 'COM7', [], {'positions' : 6}),
+                ]
 
-    # # pump_local_comm_locks = {
-    # #     'Buffer 1'    : pump_comm_locks[setup_pumps[0][2]],
-    # #     'Buffer 2'    : pump_comm_locks[setup_pumps[1][2]],
-    # #     'Sheath'    : pump_comm_locks[setup_pumps[2][2]],
-    # #     'Sample'    : pump_comm_locks[setup_pumps[3][2]]
-    # #     }
+            valve_local_comm_locks = {
+                'Injection'    : valve_comm_locks[setup_valves[0][2]],
+                # 'Sample'    : valve_comm_locks[setup_valves[1][2]],
+                # 'Buffer 1'    : valve_comm_locks[setup_valves[2][2]],
+                # 'Buffer 2'    : valve_comm_locks[setup_valves[3][2]],
+               }
 
-    # # setup_valves = [
-    # #     ('Injection', 'Rheodyne', 'COM6', [], {'positions' : 2}),
-    # #     ('Buffer 1', 'Rheodyne', 'COM12', [], {'positions' : 6}),
-    # #     ('Buffer 2', 'Rheodyne', 'COM14', [], {'positions' : 6}),
-    # #     ('Sheath 1', 'Rheodyne', 'COM9', [], {'positions' : 6}),
-    # #     ('Sheath 2', 'Rheodyne', 'COM8', [], {'positions' : 6}),
-    # #     ('Sample', 'Rheodyne', 'COM7', [], {'positions' : 6}),
-    # #     ]
+        elif exp_type == 'trsaxs_laminar':
+            # Laminar flow
+            setup_pumps = [
+                ('Buffer 1', 'PHD 4400', 'COM4', ['10 mL, Medline P.C.', '1'], {},
+                    {'flow_rate' : '0.068', 'refill_rate' : '5'}),
+                ('Buffer 2', 'PHD 4400', 'COM4', ['10 mL, Medline P.C.', '2'], {},
+                    {'flow_rate' : '0.068', 'refill_rate' : '5'}),
+                ('Sheath', 'NE 500', 'COM10', ['3 mL, Medline P.C.', '01'],
+                    {'dual_syringe': 'False'}, {'flow_rate' : '0.002', 'refill_rate' : '1.5'}),
+                ('Sample', 'PHD 4400', 'COM4', ['3 mL, Medline P.C.', '3'], {},
+                    {'flow_rate' : '0.009', 'refill_rate' : '1.5'}),
+                ]
+
+            pump_local_comm_locks = {
+                'Buffer 1'    : pump_comm_locks[setup_pumps[0][2]],
+                'Buffer 2'    : pump_comm_locks[setup_pumps[1][2]],
+                'Sheath'    : pump_comm_locks[setup_pumps[2][2]],
+                'Sample'    : pump_comm_locks[setup_pumps[3][2]]
+                }
+
+            setup_valves = [
+                ('Injection', 'Rheodyne', 'COM6', [], {'positions' : 2}),
+                ('Buffer 1', 'Rheodyne', 'COM12', [], {'positions' : 6}),
+                ('Buffer 2', 'Rheodyne', 'COM14', [], {'positions' : 6}),
+                ('Sheath 1', 'Rheodyne', 'COM9', [], {'positions' : 6}),
+                ('Sheath 2', 'Rheodyne', 'COM8', [], {'positions' : 6}),
+                ('Sample', 'Rheodyne', 'COM7', [], {'positions' : 6}),
+                ]
 
 
 
@@ -435,22 +459,31 @@ if __name__ == '__main__':
         None, title='Valve Control')
     valve_frame.Show()
 
-    control_server1 = ControlServer(ip, port1, name='PumpControlServer',
+    control_server_pump = ControlServer(ip, port1, name='PumpControlServer',
         pump_comm_locks = pump_comm_locks, start_pump=True)
-    control_server1.start()
+    control_server_pump.start()
 
-    control_server2 = ControlServer(ip, port2, name='FMControlServer',
+    control_server_fm = ControlServer(ip, port2, name='FMControlServer',
         start_fm=True)
-    control_server2.start()
+    control_server_fm.start()
 
-    control_server3 = ControlServer(ip, port3, name='ValveControlServer',
+    control_server_valve = ControlServer(ip, port3, name='ValveControlServer',
         valve_comm_locks = valve_comm_locks, start_valve=True)
-    control_server3.start()
+    control_server_valve.start()
 
-    control_server4 = ControlServer(ip, port4, name='UVControlServer',
-        start_uv=True)
-    control_server4.start()
 
+    if exp_type == 'coflow':
+        # Coflow only
+        control_server_uv = ControlServer(ip, port4, name='UVControlServer',
+            start_uv=True)
+        control_server_uv.start()
+
+        time.sleep(1)
+        uv_comm_thread = control_server_uv.get_comm_thread('uv')
+
+        uv_frame = spectrometercon.UVFrame('UVFrame', setup_uv, uv_comm_thread,
+            parent=None, title='UV Spectrometer Control')
+        uv_frame.Show()
 
     app.MainLoop()
 
@@ -458,17 +491,17 @@ if __name__ == '__main__':
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        control_server1.stop()
-        control_server1.join()
+        control_server_pump.stop()
+        control_server_pump.join()
 
-        control_server2.stop()
-        control_server2.join()
+        control_server_fm.stop()
+        control_server_fm.join()
 
-        # TR SAXS
-        control_server3.stop()
-        control_server3.join()
+        control_server_valve.stop()
+        control_server_valve.join()
 
-        control_server4.stop()
-        control_server4.join()
+        if exp_type == 'coflow':
+            control_server_uv.stop()
+            control_server_uv.join()
 
     logger.info("Quitting server")
