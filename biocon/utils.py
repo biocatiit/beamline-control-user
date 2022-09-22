@@ -670,7 +670,7 @@ class CommManager(threading.Thread):
         logger.debug('Removing status command: %s', cmd)
 
         with self._queue_lock:
-            self._status_cmds.pop(cmd, None)
+            self._status_cmds.pop(cmd[0], None)
 
         logger.debug('Removed status command')
 
