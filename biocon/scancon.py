@@ -27,6 +27,12 @@ from io import open
 import logging
 import sys
 from collections import OrderedDict
+import copy
+import threading
+import time
+
+if __name__ != '__main__':
+    logger = logging.getLogger(__name__)
 
 import wx
 import numpy as np
@@ -65,6 +71,8 @@ class ScanPanel(wx.Panel):
 
     def _init_values(self):
         self.scan_motor_panels = OrderedDict()
+        self._abort_event = threading.Event()
+        self.test_scan_running = False
 
     def _create_layout(self):
 
@@ -88,9 +96,9 @@ class ScanPanel(wx.Panel):
         num_sizer.Add(self.num_scans, flag=wx.ALIGN_CENTER_VERTICAL)
 
         if 'exposure' in self.settings['components']:
-            test_scan_button = wx.Button(self.ctrl_parent, label='Run test')
-            test_scan_button.Bind(wx.EVT_BUTTON, self._on_test_scan)
-            button_sizer.Add(test_scan_button, flag=wx.LEFT, border=5)
+            self.test_scan_button = wx.Button(self.ctrl_parent, label='Run test')
+            self.test_scan_button.Bind(wx.EVT_BUTTON, self._on_test_scan)
+            button_sizer.Add(self.test_scan_button, flag=wx.LEFT, border=5)
 
         self.motor_sizer = wx.GridBagSizer(vgap=5, hgap=5)
 
@@ -121,18 +129,59 @@ class ScanPanel(wx.Panel):
         self.Fit()
         self.GetParent().Layout()
         self.GetParent().Fit()
+        wx.FindWindowByName('biocon').Layout()
+        wx.FindWindowByName('biocon').Fit()
 
-    def _on_test_scan(self):
-        pass
+    def _on_test_scan(self, evt):
+        if not self.test_scan_running:
+            scan_settings, valid = self.get_scan_values()
+
+            if valid:
+                self._abort_event.clear()
+                cmd = ['start_test_scan', [scan_settings, self._abort_event, 
+                    self.on_scan_end], {}]
+                wx.FindWindowByName('exposure').exp_cmd_q.append(cmd)
+                self.test_scan_running = True
+                self.set_test_scan_button_name()
+
+        else:
+            self._abort_event.set()
+
+    def on_scan_end(self):
+        self.test_scan_running = False
+        wx.CallAfter(self.set_test_scan_button_name)
+
+    def set_test_scan_button_name(self):
+        if not self.test_scan_running:
+            self.test_scan_button.SetLabel('Run test')
+        else:
+            self.test_scan_button.SetLabel('Abort test')
 
     def get_scan_values(self):
+        tot_steps = 1
+        tot_outer_loop = 1
+
         motor_params = OrderedDict()
         for num, motor_panel in self.scan_motor_panels.items():
             params = motor_panel.get_motor_params()
-            motor_params[num] = params
+            if params['use']:
+                motor_params[num] = params
+                try:
+                    tot_steps *= int(params['num_steps'])
+                except ValueError:
+                    pass
+
+                if int(num) < len(self.scan_motor_panels.items()):
+                    try:
+                        tot_outer_loop *= int(params['num_steps'])
+                    except ValueError:
+                        pass
 
         scan_values = {'motors' : motor_params,
-            'num_scans' : self.num_scans.GetValue()}
+            'num_scans' : self.num_scans.GetValue(),
+            'total_steps' : tot_steps,
+            'total_outer_loop_steps'    : tot_outer_loop,
+            }
 
         valid = self.validate_scan_values(scan_values)
 
@@ -217,7 +266,12 @@ class ScanPanel(wx.Panel):
                     metadata['Motor {} start:'.format(num)] = params['start']
                     metadata['Motor {} stop:'.format(num)] = params['stop']
                     metadata['Motor {} step:'.format(num)] = params['step']
-                    metadata['Motor {} # steps:'.format(num)] = params['motor']
+                    metadata['Motor {} # steps:'.format(num)] = params['num_steps']
+                    metadata['Motor {} scan type:'.format(num)] = params['scan_type']
+
+                    if params['scan_type'].lower() == 'relative':
+                        metadata['Motor {} absolute start:'.format(num)] = params['start']
+                        metadata['Motor {} absolute stop:'.format(num)] = params['stop']
         except:
             pass
 
@@ -263,6 +317,15 @@ class MotorPanel(wx.Panel):
 
         self.use_in_scan = wx.CheckBox(ctrl_parent, label='Use in scan')
         self.use_in_scan.SetValue(True)
+
+        self.scan_type = wx.Choice(ctrl_parent, choices=['Absolute', 'Relative'])
+        self.scan_type.SetSelection(0)
+
+        scan_type_sizer = wx.FlexGridSizer(cols=2, vgap=5, hgap=5)
+        scan_type_sizer.Add(wx.StaticText(ctrl_parent, label='Scan type:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        scan_type_sizer.Add(self.scan_type, flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT,
+            border=5)
 
         motor_sizer = wx.FlexGridSizer(cols=2, vgap=5, hgap=5)
         motor_sizer.Add(wx.StaticText(ctrl_parent, label='Motor:'),
@@ -331,6 +394,7 @@ class MotorPanel(wx.Panel):
         self.top_sizer.Add(scan_sizer, flag=wx.LEFT|wx.RIGHT|wx.TOP|wx.EXPAND, border=5)
         self.top_sizer.Add(num_sizer, flag=wx.LEFT|wx.RIGHT|wx.TOP|wx.EXPAND, border=5)
         self.top_sizer.Add(self.use_in_scan, flag=wx.LEFT|wx.RIGHT|wx.TOP|wx.EXPAND, border=5)
+        self.top_sizer.Add(scan_type_sizer, flag=wx.LEFT|wx.RIGHT|wx.TOP|wx.EXPAND, border=5)
         self.top_sizer.Add(self.advanced_options, flag=wx.ALL|wx.EXPAND, border=5)
 
         self.top_sizer.Show(self.advanced_options,
@@ -375,8 +439,15 @@ class MotorPanel(wx.Panel):
             if step:
                 if start < stop:
                     mtr_positions = np.arange(start, stop+step_size, step_size)
+
+                    if mtr_positions[-1] > stop:
+                        mtr_positions = mtr_positions[:-1]
                 else:
                     mtr_positions = np.arange(stop, start+step_size, step_size)
+
+                    if mtr_positions[-1] > start:
+                        mtr_positions = mtr_positions[:-1]
+
                     mtr_positions = mtr_positions[::-1]
 
                 num_steps = mtr_positions.size
@@ -400,6 +471,7 @@ class MotorPanel(wx.Panel):
         num_steps = self.num_steps.GetValue()
         use_in_scan = self.use_in_scan.GetValue()
         motor_type = self.motor_type.GetStringSelection()
+        scan_type = self.scan_type.GetStringSelection()
         np_group = self.newport_group.GetValue()
         np_index = self.newport_index.GetValue()
         np_axes = self.newport_axes.GetValue()
@@ -411,6 +483,7 @@ class MotorPanel(wx.Panel):
             'num_steps' : num_steps,
             'use'       : use_in_scan,
             'type'      : motor_type,
+            'scan_type' : scan_type,
             'np_group'  : np_group,
             'np_index'  : np_index,
             'np_axes'   : np_axes,

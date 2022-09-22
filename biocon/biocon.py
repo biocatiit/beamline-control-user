@@ -231,7 +231,7 @@ if __name__ == '__main__':
         'remote_dir_root'       : '/nas_data/Eiger2xe9M',
         'detector'              : '18ID:EIG2:_epics',
         'det_args'              :  {'use_tiff_writer': False, 'use_file_writer': True,
-                                    'photon_energy' : 12.0, 'images_per_file': 1},
+                                    'photon_energy' : 12.0, 'images_per_file': 100},
         'add_file_postfix'      : False,
 
         # 'shutter_speed_open'    : 0.004, #in s      NM vacuum shutter, broken
@@ -258,9 +258,9 @@ if __name__ == '__main__':
         'tr_muscle_exp'         : False,
         'slow_mode_thres'       : 0.1,
         'fast_mode_max_exp_time': 2000,
-        'wait_for_trig'         : True,
+        'wait_for_trig'         : False,
         'num_trig'              : '1',
-        'show_advanced_options' : True,
+        'show_advanced_options' : False,
         'fe_shutter_pv'         : 'FE:18:ID:FEshutter',
         'd_shutter_pv'          : 'PA:18ID:STA_D_SDS_OPEN_PL.VAL',
         'col_vac_pv'            : '18ID:VAC:D:Cols',
@@ -309,8 +309,8 @@ if __name__ == '__main__':
             'thresh': 0.04}, 'guard_vac' : {'check': True, 'thresh': 0.04},
             'sample_vac': {'check': False, 'thresh': 0.04}, 'sc_vac':
             {'check': False, 'thresh':0.04}},
-        # 'base_data_dir'         : '/nas_data/Pilatus1M/2021_Run3', #CHANGE ME
-        'base_data_dir'         : '/nas_data/Eiger2xe9M/2022_Run1', #CHANGE ME and pipeline local_basedir
+        # 'base_data_dir'         : '/nas_data/Pilatus1M/2022_Run2', #CHANGE ME
+        'base_data_dir'         : '/nas_data/Eiger2xe9M/2022_Run2', #CHANGE ME and pipeline local_basedir
         }
 
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']
@@ -534,8 +534,8 @@ if __name__ == '__main__':
                                 'preparation'   : 'Intact',
                                 'notes'         : '',
                                 },
-        'metadata_type'     : 'auto',
-        # 'metadata_type'     : 'muscle',
+        # 'metadata_type'     : 'auto',
+        'metadata_type'     : 'muscle',
         }
 
     pipeline_settings = {
@@ -555,7 +555,7 @@ if __name__ == '__main__':
         # ('coflow', coflowcon.CoflowPanel),
         # ('trsaxs_scan', trcon.TRScanPanel),
         # ('trsaxs_flow', trcon.TRFlowPanel),
-        # ('scan',    scancon.ScanPanel),
+        ('scan',    scancon.ScanPanel),
         ('metadata', metadata.ParamPanel),
         # ('pipeline', pipeline_ctrl.PipelineControl)
         ])
@@ -589,7 +589,7 @@ if __name__ == '__main__':
 
     h2 = handlers.RotatingFileHandler(os.path.join(info_dir, 'biocon.log'), maxBytes=10e6, backupCount=5, delay=True)
     h2.setLevel(logging.INFO)
-    # h2.setLevel(logging.DEBUG)
+    h2.setLevel(logging.DEBUG)
     formatter2 = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
     h2.setFormatter(formatter2)
 

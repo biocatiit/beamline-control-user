@@ -80,9 +80,10 @@ class ExpCommThread(threading.Thread):
         self.xps = None
 
         self._commands = {
-            'start_exp'     : self._start_exp,
-            'start_tr_exp'  : self._start_tr_exp,
-            'start_scan_exp': self._start_scan_exp,
+            'start_exp'         : self._start_exp,
+            'start_tr_exp'      : self._start_tr_exp,
+            'start_scan_exp'    : self._start_scan_exp,
+            'start_test_scan'   : self.run_test_scan,
             }
 
     def run(self):
@@ -90,6 +91,7 @@ class ExpCommThread(threading.Thread):
         Custom run method for the thread.
         """
 
+        logger.debug('Setting up mx environment and database')
         #MX stuff
         try:
             # First try to get the name from an environment variable.
@@ -148,12 +150,12 @@ class ExpCommThread(threading.Thread):
         ab_burst = mx_database.get_record('ab_burst')
         ab_burst_server_record_name = ab_burst.get_field('server_record')
         ab_burst_server_record = mx_database.get_record(ab_burst_server_record_name)
-        dg645_trigger_source = mp.Net(ab_burst_server_record, 'dg645.trigger_source')
+        # dg645_trigger_source = mp.Net(ab_burst_server_record, 'dg645.trigger_source')
 
         ab_burst_2 = mx_database.get_record('ab_burst_2')
         ab_burst_server_record_name2 = ab_burst_2.get_field('server_record')
         ab_burst_server_record2 = mx_database.get_record(ab_burst_server_record_name2)
-        dg645_trigger_source2 = mp.Net(ab_burst_server_record2, 'dg645.trigger_source')
+        # dg645_trigger_source2 = mp.Net(ab_burst_server_record2, 'dg645.trigger_source')
 
         logger.debug("Got dg645 records")
 
@@ -180,12 +182,12 @@ class ExpCommThread(threading.Thread):
             'cd_burst': mx_database.get_record('cd_burst'),
             'ef_burst': mx_database.get_record('ef_burst'),
             'gh_burst': mx_database.get_record('gh_burst'),
-            'dg645_trigger_source': dg645_trigger_source,
+            # 'dg645_trigger_source': dg645_trigger_source,
             'ab_burst_2': mx_database.get_record('ab_burst_2'),
             'cd_burst_2': mx_database.get_record('cd_burst_2'),
             'ef_burst_2': mx_database.get_record('ef_burst_2'),
             'gh_burst_2': mx_database.get_record('gh_burst_2'),
-            'dg645_trigger_source2': dg645_trigger_source2,
+            # 'dg645_trigger_source2': dg645_trigger_source2,
             'ab': mx_database.get_record('ab'),
             'dio': [mx_database.get_record('do_{}'.format(i)) for i in range(16)],
             'joerger': mx_database.get_record('joerger_timer'),
@@ -291,7 +293,7 @@ class ExpCommThread(threading.Thread):
         cd_burst = self._mx_data['cd_burst']   #Struck LNE/channel advance signal
         ef_burst = self._mx_data['ef_burst']   #Pilatus trigger signal
         gh_burst = self._mx_data['gh_burst']
-        dg645_trigger_source = self._mx_data['dg645_trigger_source']
+        # dg645_trigger_source = self._mx_data['dg645_trigger_source']
 
         dio_out6 = self._mx_data['dio'][6]      #Xia/wharberton shutter N.C.
         dio_out9 = self._mx_data['dio'][9]      #Shutter control signal (alt.)
@@ -463,7 +465,7 @@ class ExpCommThread(threading.Thread):
         struck.set_num_measurements(num_frames)
         struck.set_trigger_mode(0x8|0x2)    #Sets 'autotrigger' mode, i.e. counting as soon as armed
 
-        dg645_trigger_source.put(1) #Change this to 2 for external falling edges
+        # dg645_trigger_source.put(1) #Change this to 2 for external falling edges
 
         #Need to clear srs possibly?
         ab_burst.setup(0.000001, 0.000000, 1, 0, 1, -1)
@@ -900,18 +902,7 @@ class ExpCommThread(threading.Thread):
         scan_settings = comp_settings['scan']
 
         num_scans = scan_settings['num_scans']
-        scan_motors = copy.deepcopy(scan_settings['motors'])
 
-        for current_run in range(1,num_scans+1):
-            self.return_queue.append(['scan', current_run])
-
-            self._inner_scan_exp(exp_settings, scan_settings,
-                scan_motors, OrderedDict(), current_run)
-
-        self._exp_event.clear()
-
-    def _inner_scan_exp(self, exp_settings, scan_settings, scan_motors,
-        motor_positions, current_run):
         det = self._mx_data['det']          #Detector
 
         struck = self._mx_data['struck']    #Struck SIS3820
@@ -921,18 +912,13 @@ class ExpCommThread(threading.Thread):
         cd_burst = self._mx_data['cd_burst']   #Struck LNE/channel advance signal
         ef_burst = self._mx_data['ef_burst']   #Pilatus trigger signal
         gh_burst = self._mx_data['gh_burst']
-        dg645_trigger_source = self._mx_data['dg645_trigger_source']
+        # dg645_trigger_source = self._mx_data['dg645_trigger_source']
 
         ab_burst_2 = None
 
         dio_out6 = self._mx_data['dio'][6]      #Xia/wharberton shutter N.C.
         dio_out9 = self._mx_data['dio'][9]      #Shutter control signal (alt.)
         dio_out10 = self._mx_data['dio'][10]    #SRS DG645 trigger
-
-        # det_datadir = self._mx_data['det_datadir']
-        # det_filename = self._mx_data['det_filename']
-        # det_exp_time = self._mx_data['det_exp_time']
-        # det_exp_period = self._mx_data['det_exp_period']
 
         exp_period = exp_settings['exp_period']
         exp_time = exp_settings['exp_time']
@@ -944,15 +930,6 @@ class ExpCommThread(threading.Thread):
         shutter_speed_close = exp_settings['shutter_speed_close']
         shutter_pad = exp_settings['shutter_pad']
         shutter_cycle = exp_settings['shutter_cycle']
-
-        #Values for the _inner_fast_exp that aren't used in this function
-        wait_for_trig = False
-        exp_type = 'scan'
-        cur_trig = 0
-        struck_num_meas = 0
-        struck_meas_time = 0
-        kwargs = {}
-
 
         total_shutter_speed = shutter_speed_open+shutter_speed_close+shutter_pad
         s_open_time = shutter_speed_open + shutter_pad
@@ -973,59 +950,7 @@ class ExpCommThread(threading.Thread):
             else:
                 dark_counts.append(0)
 
-        motor_num, motor_params = scan_motors.popitem(False)
-        my_scan_motors = copy.deepcopy(scan_motors)
-
-        motor_name = motor_params['motor']
-        start = motor_params['start']
-        stop = motor_params['stop']
-        step_size = motor_params['step']
-        motor_type = motor_params['type']
-
-        if motor_type == 'MX':
-            logger.debug('Motor: {}'.format(motor_name))
-            if motor_name in self._mx_data['motors']:
-                motor = self._mx_data['motors'][motor_name]
-            else:
-                motor = self._mx_data['mx_db'].get_record(motor_name)
-                self._mx_data['motors'][motor_name] = motor
-
-        elif motor_type == 'Newport':
-            if self.xps is None:
-                np_group = motor_params['np_group']
-                np_index = motor_params['np_index']
-                np_axes = motor_params['np_axes']
-                self.xps = xps_drivers.XPS()
-                motor = motorcon.NewportXPSSingleAxis('Scan', self.xps,
-                    scan_settings['motor_ip'], int(scan_settings['motor_port']),
-                    20, np_group, np_axes, motor_name, np_index)
-
-
-        initial_motor_position = float(motor.get_position())
-
-        if start < stop:
-            mtr_positions = np.arange(start, stop+step_size, step_size)
-        else:
-            mtr_positions = np.arange(stop, start+step_size, step_size)
-            mtr_positions = mtr_positions[::-1]
-
-        # det.set_duration_mode(num_frames)
-        # det.set_trigger_mode(2)
-        # det_exp_time.put(exp_time)
-        # det_exp_period.put(exp_period)
-
-        det.set_num_frames(num_frames)
-        det.set_trigger_mode('ext_enable')
-        det.set_exp_time(exp_time)
-        det.set_exp_period(exp_period)
-
-        # struck_mode_pv.caput(1, timeout=5)
-        struck.set_measurement_time(exp_time)   #Ignored for external LNE of Struck
-        struck.set_num_measurements(num_frames)
-        struck.set_trigger_mode(0x8|0x2)    #Sets 'autotrigger' mode, i.e. counting as soon as armed
-        # struck_mode_pv.caput(1, timeout=5)
-
-        dg645_trigger_source.put(1)
+        # dg645_trigger_source.put(1)
 
         if not continuous_exp:
             #Shutter opens and closes, Takes 4 ms for open and close
@@ -1040,6 +965,398 @@ class ExpCommThread(threading.Thread):
             ef_burst.setup(exp_period, exp_time, num_frames, 0, 1, -1)
             gh_burst.setup(exp_period, exp_time, num_frames, 0, 1, -1)
             continuous_exp = True
+
+        # if det.get_status() !=0:
+        #     try:
+        #         det.abort()
+        #     except (mp.Device_Action_Failed_Error, mp.Unparseable_String_Error):
+        #         pass
+        #     try:
+        #         det.abort()
+        #     except (mp.Device_Action_Failed_Error, mp.Unparseable_String_Error):
+        #         pass
+
+        # aborted = False
+
+        # struck.stop()
+        # ab_burst.stop()
+
+        # if exp_type == 'muscle':
+        #     ab_burst_2.stop()
+
+        # dio_out9.write(0) # Make sure the NM shutter is closed
+        # dio_out10.write(0) # Make sure the trigger is off
+
+        # tot_num_frames = num_frames*len(mtr_positions)
+
+        # det.set_num_frames(tot_num_frames)
+        det.set_trigger_mode('ext_enable')
+        det.set_exp_time(exp_time)
+        det.set_exp_period(exp_period)
+        det.set_data_dir(data_dir)
+
+        struck.set_measurement_time(exp_time)   #Ignored for external LNE of Struck
+        # struck.set_num_measurements(tot_num_frames)
+        struck.set_trigger_mode(0x8|0x2)    #Sets 'autotrigger' mode, i.e. counting as soon as armed
+        
+        for current_run in range(1,num_scans+1):
+            scan_motors = copy.deepcopy(scan_settings['motors'])
+
+            self.return_queue.append(['scan', current_run])
+
+            self._inner_scan_exp2(exp_settings, scan_settings,
+                scan_motors, OrderedDict(), current_run, dark_counts)
+
+        self._exp_event.clear()
+
+    # def _inner_scan_exp(self, exp_settings, scan_settings, scan_motors,
+    #     motor_positions, current_run):
+        
+    #     motor_num, motor_params = scan_motors.popitem(False)
+
+    #     motor_name = motor_params['motor']
+    #     start = motor_params['start']
+    #     stop = motor_params['stop']
+    #     step_size = motor_params['step']
+    #     motor_type = motor_params['type']
+    #     scan_type = motor_params['scan_type']
+
+    #     if motor_type == 'Newport':
+    #         motor_get_params = copy.deepcopy(motor_params)
+    #         motor_get_params['motor_ip'] = scan_settings['motor_ip']
+    #         motor_get_params['motor_port'] = scan_settings['motor_port']
+
+    #     motor = self.get_motor(motor_name, motor_type, motor_params)
+
+    #     initial_motor_position = float(motor.get_position())
+
+    #     if start < stop:
+    #         mtr_positions = np.arange(start, stop+step_size, step_size)
+
+    #         if mtr_positions[-1] > stop:
+    #             mtr_positions = mtr_positions[:-1]
+    #     else:
+    #         mtr_positions = np.arange(stop, start+step_size, step_size)
+
+    #         if mtr_positions[-1] > start:
+    #             mtr_positions = mtr_positions[:-1]
+
+    #         mtr_positions = mtr_positions[::-1]
+
+    #     if 'relative' == scan_type.lower():
+    #         mtr_positions += initial_motor_position
+
+    #     if len(scan_motors) == 0: # Recursive base case
+    #         det = self._mx_data['det']          #Detector
+
+    #         struck = self._mx_data['struck']    #Struck SIS3820
+    #         s_counters = self._mx_data['struck_ctrs']
+
+    #         ab_burst = self._mx_data['ab_burst']   #Shutter control signal
+
+    #         dio_out6 = self._mx_data['dio'][6]      #Xia/wharberton shutter N.C.
+    #         dio_out9 = self._mx_data['dio'][9]      #Shutter control signal (alt.)
+    #         dio_out10 = self._mx_data['dio'][10]    #SRS DG645 trigger
+
+    #         data_dir = exp_settings['data_dir']
+    #         fprefix = exp_settings['fprefix']
+
+    #         exp_period = exp_settings['exp_period']
+    #         exp_time = exp_settings['exp_time']
+    #         data_dir = exp_settings['data_dir']
+    #         fprefix = exp_settings['fprefix']
+    #         num_frames = exp_settings['num_frames']
+
+    #         shutter_speed_open = exp_settings['shutter_speed_open']
+    #         shutter_speed_close = exp_settings['shutter_speed_close']
+    #         shutter_pad = exp_settings['shutter_pad']
+    #         shutter_cycle = exp_settings['shutter_cycle']
+
+    #         #Values for the _inner_fast_exp that aren't used in this function
+    #         wait_for_trig = False
+    #         exp_type = 'scan'
+    #         cur_trig = 0
+    #         struck_num_meas = 0
+    #         struck_meas_time = 0
+    #         kwargs = exp_settings
+
+    #         total_shutter_speed = shutter_speed_open+shutter_speed_close+shutter_pad
+    #         s_open_time = shutter_speed_open + shutter_pad
+
+    #         if exp_period > exp_time+total_shutter_speed and exp_period >= shutter_cycle:
+    #             logger.info('Shuttered mode')
+    #             continuous_exp = False
+    #         else:
+    #             logger.info('Continuous mode')
+    #             continuous_exp = True
+
+    #         log_vals = exp_settings['struck_log_vals']
+
+    #         dark_counts = []
+    #         for i in range(len(s_counters)):
+    #             if log_vals[i]['dark']:
+    #                 dark_counts.append(s_counters[i].get_dark_current())
+    #             else:
+    #                 dark_counts.append(0)
+        
+
+    #     for position in mtr_positions:
+    #         logger.debug('Position: {}'.format(position))
+    #         if self._abort_event.is_set():
+    #             break
+
+    #         motor.move_absolute(position)
+
+    #         while motor.is_busy():
+    #             time.sleep(0.01)
+    #             if self._abort_event.is_set():
+    #                 motor.stop()
+    #                 motor.move_absolute(initial_motor_position)
+    #                 break
+
+    #         if self._abort_event.is_set():
+    #             break
+
+    #         motor_positions['m{}'.format(motor_num)] = position
+
+    #         if len(scan_motors) > 0: # Recursive case
+    #             my_scan_motors = copy.deepcopy(scan_motors)
+
+    #             self._inner_scan_exp(exp_settings, scan_settings, my_scan_motors,
+    #                 motor_positions, current_run)
+
+    #         else:   # Base case for recursion:
+
+    #             cur_fprefix = '{}_{:04}'.format(fprefix, current_run)
+
+    #             # new_fname = '{}_{:04}'.format(cur_fprefix)
+    #             logger.debug(motor_positions)
+    #             for mprefix, pos in motor_positions.items():
+    #                 cur_fprefix = cur_fprefix + '_{}_{}'.format(mprefix, pos)
+
+    #             exp_start_num = '000001'
+
+    #             if self._settings['add_file_postfix']:
+    #                 new_fname = '{}_{}.tif'.format(cur_fprefix, exp_start_num)
+    #             else:
+    #                 new_fname = cur_fprefix
+
+    #             extra_vals = []
+    #             for mprefix, pos in motor_positions.items():
+    #                 extra_vals.append([mprefix, np.ones(num_frames)*float(pos)])
+
+
+    #             finished = self._inner_fast_exp(det,
+    #             struck, ab_burst, ab_burst_2, dio_out6, dio_out9, dio_out10,
+    #             continuous_exp, wait_for_trig, exp_type, data_dir, new_fname,
+    #             cur_fprefix, log_vals, extra_vals, dark_counts, cur_trig, exp_time,
+    #             exp_period, num_frames, struck_num_meas, struck_meas_time, kwargs)
+
+    #             if not finished:
+    #                 #Abort happened in the inner function
+    #                 break
+
+    #     motor.move_absolute(initial_motor_position)
+
+    #     while motor.is_busy():
+    #         time.sleep(0.01)
+    #         if self._abort_event.is_set():
+    #             motor.stop()
+
+    def _inner_scan_exp2(self, exp_settings, scan_settings, scan_motors,
+        motor_positions, current_run, dark_counts):
+        motor_num, motor_params = scan_motors.popitem(False)
+
+        motor_name = motor_params['motor']
+        start = motor_params['start']
+        stop = motor_params['stop']
+        step_size = motor_params['step']
+        motor_type = motor_params['type']
+        scan_type = motor_params['scan_type']
+
+        if motor_type == 'Newport':
+            motor_get_params = copy.deepcopy(motor_params)
+            motor_get_params['motor_ip'] = scan_settings['motor_ip']
+            motor_get_params['motor_port'] = scan_settings['motor_port']
+
+        motor = self.get_motor(motor_name, motor_type, motor_params)
+
+        initial_motor_position = float(motor.get_position())
+
+        if start < stop:
+            mtr_positions = np.arange(start, stop+step_size, step_size)
+
+            if mtr_positions[-1] > stop:
+                mtr_positions = mtr_positions[:-1]
+        else:
+            mtr_positions = np.arange(stop, start+step_size, step_size)
+
+            if mtr_positions[-1] > start:
+                mtr_positions = mtr_positions[:-1]
+
+            mtr_positions = mtr_positions[::-1]
+
+        if 'relative' == scan_type.lower():
+            mtr_positions += initial_motor_position
+
+            exp_settings['metadata']['Motor {} absolute start:'.format(motor_num)] = mtr_positions[0]
+            exp_settings['metadata']['Motor {} absolute stop:'.format(motor_num)] = mtr_positions[-1]
+
+        if len(scan_motors) == 0: # Recursive base case
+            det = self._mx_data['det']          #Detector
+
+            struck = self._mx_data['struck']    #Struck SIS3820
+            s_counters = self._mx_data['struck_ctrs']
+
+            ab_burst = self._mx_data['ab_burst']   #Shutter control signal
+            cd_burst = self._mx_data['cd_burst']   #Struck LNE/channel advance signal
+            ef_burst = self._mx_data['ef_burst']   #Pilatus trigger signal
+            gh_burst = self._mx_data['gh_burst']
+            # dg645_trigger_source = self._mx_data['dg645_trigger_source']
+
+            ab_burst_2 = None
+
+            dio_out6 = self._mx_data['dio'][6]      #Xia/wharberton shutter N.C.
+            dio_out9 = self._mx_data['dio'][9]      #Shutter control signal (alt.)
+            dio_out10 = self._mx_data['dio'][10]    #SRS DG645 trigger
+
+            exp_period = exp_settings['exp_period']
+            exp_time = exp_settings['exp_time']
+            data_dir = exp_settings['data_dir']
+            fprefix = exp_settings['fprefix']
+            num_frames = exp_settings['num_frames']
+
+            shutter_speed_open = exp_settings['shutter_speed_open']
+            shutter_speed_close = exp_settings['shutter_speed_close']
+            shutter_pad = exp_settings['shutter_pad']
+            shutter_cycle = exp_settings['shutter_cycle']
+
+            #Values for the _inner_fast_exp that aren't used in this function
+            wait_for_trig = False
+            exp_type = 'scan'
+            cur_trig = 0
+            struck_num_meas = 0
+            struck_meas_time = 0
+            kwargs = exp_settings
+
+
+            total_shutter_speed = shutter_speed_open+shutter_speed_close+shutter_pad
+            s_open_time = shutter_speed_open + shutter_pad
+
+            if exp_period > exp_time+total_shutter_speed and exp_period >= shutter_cycle:
+                logger.info('Shuttered mode')
+                continuous_exp = False
+            else:
+                logger.info('Continuous mode')
+                continuous_exp = True
+
+            log_vals = exp_settings['struck_log_vals']
+
+            # dark_counts = []
+            # for i in range(len(s_counters)):
+            #     if log_vals[i]['dark']:
+            #         dark_counts.append(s_counters[i].get_dark_current())
+            #     else:
+            #         dark_counts.append(0)
+
+            # dg645_trigger_source.put(1)
+
+            # if not continuous_exp:
+            #     #Shutter opens and closes, Takes 4 ms for open and close
+            #     ab_burst.setup(exp_period, exp_time+s_open_time, num_frames, 0, 1, -1)
+            #     cd_burst.setup(exp_period, 0.0001, num_frames, exp_time+s_open_time, 1, -1)
+            #     ef_burst.setup(exp_period, exp_time, num_frames, s_open_time, 1, -1)
+            #     gh_burst.setup(exp_period, exp_time, num_frames, 0, 1, -1)
+            # else:
+            #     #Shutter will be open continuously, via dio_out9
+            #     ab_burst.setup(exp_period, exp_time, num_frames, 0, 1, -1) #Irrelevant
+            #     cd_burst.setup(exp_period, 0.0001, num_frames, exp_time+0.00015, 1, -1)
+            #     ef_burst.setup(exp_period, exp_time, num_frames, 0, 1, -1)
+            #     gh_burst.setup(exp_period, exp_time, num_frames, 0, 1, -1)
+            #     continuous_exp = True
+
+            if det.get_status() !=0:
+                try:
+                    det.abort()
+                except (mp.Device_Action_Failed_Error, mp.Unparseable_String_Error):
+                    pass
+                try:
+                    det.abort()
+                except (mp.Device_Action_Failed_Error, mp.Unparseable_String_Error):
+                    pass
+
+            aborted = False
+
+            struck.stop()
+            ab_burst.stop()
+
+            if exp_type == 'muscle':
+                ab_burst_2.stop()
+
+            dio_out9.write(0) # Make sure the NM shutter is closed
+            dio_out10.write(0) # Make sure the trigger is off
+
+            tot_num_frames = num_frames*len(mtr_positions)
+
+            det.set_num_frames(tot_num_frames)
+            # det.set_trigger_mode('ext_enable')
+            # det.set_exp_time(exp_time)
+            # det.set_exp_period(exp_period)
+
+            # struck.set_measurement_time(exp_time)   #Ignored for external LNE of Struck
+            struck.set_num_measurements(tot_num_frames)
+            # struck.set_trigger_mode(0x8|0x2)    #Sets 'autotrigger' mode, i.e. counting as soon as armed
+
+            cur_fprefix = '{}_{:04}'.format(fprefix, current_run)
+
+
+            logger.debug(motor_positions)
+            for mprefix, pos in motor_positions.items():
+                cur_fprefix = cur_fprefix + '_{}_{}'.format(mprefix, pos)
+
+            exp_start_num = '000001'
+
+            if self._settings['add_file_postfix']:
+                new_fname = '{}_{}.tif'.format(cur_fprefix, exp_start_num)
+            else:
+                new_fname = cur_fprefix
+
+            # det.set_data_dir(data_dir)
+            det.set_filename(new_fname)
+
+            extra_vals = [['real_start_time', []],]
+            for mprefix, pos in motor_positions.items():
+                extra_vals.append([mprefix, np.ones(tot_num_frames)*float(pos)])
+
+            log_positions = []
+
+            for pos in mtr_positions:
+                log_positions.extend([pos]*num_frames)
+
+            extra_vals.append(['m{}'.format(motor_num), np.array(log_positions)])
+
+            dio_out6.write(0) #Open the slow normally closed xia shutter
+
+            ab_burst.get_status() #Maybe need to clear this status?
+
+            motor.move_absolute(mtr_positions[0])
+
+            det.arm()
+            struck.start()
+
+            if continuous_exp:
+                if not exp_type == 'muscle' and not wait_for_trig:
+                    dio_out9.write(1)
+
+            if exp_type != 'muscle':
+                self.write_log_header(data_dir, cur_fprefix, log_vals,
+                    kwargs['metadata'], extra_vals)
+
+            last_meas = 0
+
+            timeouts = 0
+
+            exp_start_times = []
 
         for position in mtr_positions:
             logger.debug('Position: {}'.format(position))
@@ -1058,37 +1375,150 @@ class ExpCommThread(threading.Thread):
             if self._abort_event.is_set():
                 break
 
-            motor_positions['m{}'.format(motor_num)] = position
+            if len(scan_motors) > 0: # Recursive case
+                motor_positions['m{}'.format(motor_num)] = position
 
-            if len(my_scan_motors) > 0: # Recursive case
-                    self._inner_scan_exp(exp_settings, scan_motors, motor_positions)
+                my_scan_motors = copy.deepcopy(scan_motors)
+
+                self._inner_scan_exp2(exp_settings, scan_settings, my_scan_motors,
+                    motor_positions, current_run, dark_counts)
 
             else:   # Base case for recursion:
-                cur_fprefix = '{}_{:04}'.format(fprefix, current_run)
+                ab_burst.arm()
 
-                # new_fname = '{}_{:04}'.format(cur_fprefix)
-                logger.debug(motor_positions)
-                for mprefix, pos in motor_positions.items():
-                    cur_fprefix = cur_fprefix + '_{}_{}'.format(mprefix, pos)
+                if exp_type == 'muscle':
+                    ab_burst_2.arm()
 
-                exp_start_num = '000001'
+                self.wait_for_trigger(wait_for_trig, cur_trig, exp_time, ab_burst,
+                    ab_burst_2, det, struck, dio_out6, dio_out9, dio_out10)
 
-                if self._settings['add_file_postfix']:
-                    new_fname = '{}_{}.tif'.format(cur_fprefix, exp_start_num)
+                start_time = time.time()
+
+                if position == mtr_positions[0]:
+                    initial_start_time = start_time
+                    exp_start_time = 0
+
                 else:
-                    new_fname = cur_fprefix
+                    exp_start_time = start_time - initial_start_time
 
-                extra_vals = []
-                for mprefix, pos in motor_positions.items():
-                    extra_vals.append([mprefix, np.ones(num_frames)*float(pos)])
+                new_exp_start_times = np.cumsum(np.array([exp_period]*num_frames))-exp_period+exp_start_time
+                exp_start_times.extend(new_exp_start_times)
+                extra_vals[0] = ['real_start_time', exp_start_times]
+
+                if self._abort_event.is_set():
+                    self.fast_mode_abort_cleanup(det, struck, ab_burst, ab_burst_2,
+                        dio_out9, dio_out6, exp_time)
+                    aborted = True
+                    return False
+
+                logger.debug('Exposures started')
+                self._exp_event.set()
+
+                while True:
+                    #Struck is_busy doesn't work in thread! So have to go elsewhere
+
+                    exp_done, timeouts = self.get_experiment_status(ab_burst,
+                        ab_burst_2, det, timeouts)
+
+                    if exp_done:
+                        break
+
+                    if self._abort_event.is_set() or timeouts >= 5:
+                        if timeouts >= 5:
+                            logger.error(("Exposure aborted because current exposure "
+                                "status could not be verified"))
+                        self.fast_mode_abort_cleanup(det, struck, ab_burst, ab_burst_2,
+                            dio_out9, dio_out6, exp_time)
+                        aborted = True
+                        break
+
+                    if exp_type != 'muscle':
+                        current_meas = struck.get_last_measurement_number()
+
+                        if current_meas != last_meas and current_meas != -1:
+                            cvals = struck.read_all()
+
+                            if last_meas == 0:
+                                prev_meas = -1
+                            else:
+                                prev_meas = last_meas
+
+                            self.append_log_counters(cvals, prev_meas, current_meas,
+                                data_dir, cur_fprefix, exp_period, num_frames,
+                                dark_counts, log_vals, extra_vals)
+
+                            last_meas = current_meas
+
+                    time.sleep(0.01)
 
 
-                self._inner_fast_exp(self, det, struck,
-                    ab_burst, ab_burst_2, dio_out6, dio_out9, dio_out10,
-                    continuous_exp, wait_for_trig, exp_type, data_dir, new_fname,
-                    cur_fprefix, log_vals, extra_vals, dark_counts, cur_trig,
-                    exp_time, exp_period, num_frames, struck_num_meas,
-                    struck_meas_time, kwargs)
+                if continuous_exp:
+                    dio_out9.write(0)
+
+                if aborted:
+                    break
+
+                while time.time() - start_time < num_frames*exp_period:
+                    if self._abort_event.is_set() and not aborted:
+                        self.fast_mode_abort_cleanup(det, struck, ab_burst, ab_burst_2,
+                            dio_out9, dio_out6, exp_time)
+                        aborted = True
+                        break
+
+                if aborted:
+                    break
+
+        if len(scan_motors) == 0: # Base case
+            dio_out6.write(1) #Close the slow normally closed xia shutter
+
+            if exp_type != 'muscle':
+                current_meas = struck.get_last_measurement_number()
+                if current_meas != last_meas or (current_meas == last_meas and current_meas == 0):
+                    cvals = struck.read_all()
+
+                    if last_meas == 0:
+                        prev_meas = -1
+                    else:
+                        prev_meas = last_meas
+
+                    self.append_log_counters(cvals, prev_meas, current_meas,
+                        data_dir, cur_fprefix, exp_period, num_frames, dark_counts,
+                        log_vals, extra_vals)
+
+            else:
+                struck.stop()
+                measurement = struck.read_all()
+
+                logger.info('Writing counters')
+                self.write_counters_muscle(measurement, struck_num_meas, data_dir,
+                    cur_fprefix, struck_meas_time, dark_counts, log_vals,
+                    kwargs['metadata'])
+
+            ab_burst.get_status() #Maybe need to clear this status?
+
+            while det.get_status() !=0:
+                time.sleep(0.001)
+                if self._abort_event.is_set() and not aborted:
+                    self.fast_mode_abort_cleanup(det, struck, ab_burst, ab_burst_2,
+                        dio_out9, dio_out6, exp_time)
+                    aborted = True
+                    break
+
+            logger.info('Exposures done')
+
+            if self._abort_event.is_set():
+                if not aborted:
+                    self.fast_mode_abort_cleanup(det, struck, ab_burst, ab_burst_2,
+                        dio_out9, dio_out6, exp_time)
+                    aborted = True
+                return False
+
+        motor.move_absolute(initial_motor_position)
+
+        while motor.is_busy():
+            time.sleep(0.01)
+            if self._abort_event.is_set():
+                motor.stop()
 
     def fast_exposure(self, data_dir, fprefix, num_frames, exp_time, exp_period,
         exp_type='standard', **kwargs):
@@ -1109,14 +1539,14 @@ class ExpCommThread(threading.Thread):
         cd_burst = self._mx_data['cd_burst']   #Struck LNE/channel advance signal
         ef_burst = self._mx_data['ef_burst']   #Pilatus trigger signal
         gh_burst = self._mx_data['gh_burst']   #Continuous exposure shutter for waiting for trigger
-        dg645_trigger_source = self._mx_data['dg645_trigger_source']
+        # dg645_trigger_source = self._mx_data['dg645_trigger_source']
 
         if exp_type == 'muscle':
             ab_burst_2 = self._mx_data['ab_burst_2'] 
             cd_burst_2 = self._mx_data['cd_burst_2'] #Struck channel advance
             ef_burst_2 = self._mx_data['ef_burst_2']
             gh_burst_2 = self._mx_data['gh_burst_2']
-            dg645_trigger_source2 = self._mx_data['dg645_trigger_source2']
+            # dg645_trigger_source2 = self._mx_data['dg645_trigger_source2']
         else:
             ab_burst_2 = None
 
@@ -1184,10 +1614,12 @@ class ExpCommThread(threading.Thread):
             struck.set_num_measurements(num_frames)
             struck.set_trigger_mode(0x8|0x2)    #Sets 'autotrigger' mode, i.e. counting as soon as armed
 
-        dg645_trigger_source.put(1) #Change this to 2 for external falling edges
+        # logger.info('setting dg645 trigger soruce')
+        # dg645_trigger_source.put(1) #Change this to 2 for external falling edges
+        # # Should be 1 for external rising edge, 2 for external falling
 
-        if exp_type == 'muscle':
-            dg645_trigger_source2.put(1)
+        # if exp_type == 'muscle':
+        #     dg645_trigger_source2.put(1)
 
         #Need to clear srs possibly?
         ab_burst.setup(0.000001, 0.000000, 1, 0, 1, -1)
@@ -1381,7 +1813,7 @@ class ExpCommThread(threading.Thread):
 
         if exp_type != 'muscle':
             self.write_log_header(data_dir, cur_fprefix, log_vals,
-                kwargs['metadata'])
+                kwargs['metadata'], extra_vals)
 
         time.sleep(1)
 
@@ -1988,6 +2420,110 @@ class ExpCommThread(threading.Thread):
 
         return metadata
 
+    def get_motor(self, motor_name, motor_type, motor_params=None):
+        if motor_type == 'MX':
+            logger.debug('Motor: {}'.format(motor_name))
+            if motor_name in self._mx_data['motors']:
+                motor = self._mx_data['motors'][motor_name]
+            else:
+                motor = self._mx_data['mx_db'].get_record(motor_name)
+                self._mx_data['motors'][motor_name] = motor
+
+        elif motor_type == 'Newport':
+            if self.xps is None:
+                np_group = motor_params['np_group']
+                np_index = motor_params['np_index']
+                np_axes = motor_params['np_axes']
+                motor_ip = motor_params['motor_ip']
+                motor_port = int(motor_params['motor_port'])
+                self.xps = xps_drivers.XPS()
+                motor = motorcon.NewportXPSSingleAxis('Scan', self.xps,
+                    motor_ip, motor_port, 20, np_group, np_axes, 
+                    motor_name, np_index)
+
+        return motor
+
+    def run_test_scan(self, scan_settings, abort_event, end_callback):
+        num_scans = scan_settings['num_scans']
+        
+        for current_run in range(1,num_scans+1):
+            scan_motors = copy.deepcopy(scan_settings['motors'])
+
+            self._inner_scan_test(scan_settings,
+                scan_motors, OrderedDict(), current_run, abort_event)
+
+        end_callback()
+
+    def _inner_scan_test(self, scan_settings, scan_motors,
+        motor_positions, current_run, abort_event):
+        motor_num, motor_params = scan_motors.popitem(False)
+
+        motor_name = motor_params['motor']
+        start = motor_params['start']
+        stop = motor_params['stop']
+        step_size = motor_params['step']
+        motor_type = motor_params['type']
+        scan_type = motor_params['scan_type']
+
+        if motor_type == 'Newport':
+            motor_get_params = copy.deepcopy(motor_params)
+            motor_get_params['motor_ip'] = scan_settings['motor_ip']
+            motor_get_params['motor_port'] = scan_settings['motor_port']
+
+        motor = self.get_motor(motor_name, motor_type, motor_params)
+
+        initial_motor_position = float(motor.get_position())
+
+        if start < stop:
+            mtr_positions = np.arange(start, stop+step_size, step_size)
+
+            if mtr_positions[-1] > stop:
+                mtr_positions = mtr_positions[:-1]
+        else:
+            mtr_positions = np.arange(stop, start+step_size, step_size)
+
+            if mtr_positions[-1] > start:
+                mtr_positions = mtr_positions[:-1]
+
+            mtr_positions = mtr_positions[::-1]
+
+        if 'relative' == scan_type.lower():
+            mtr_positions += initial_motor_position
+
+        for position in mtr_positions:
+            logger.debug('Position: {}'.format(position))
+            if abort_event.is_set():
+                break
+
+            motor.move_absolute(position)
+
+            while motor.is_busy():
+                time.sleep(0.01)
+                if abort_event.is_set():
+                    motor.stop()
+                    motor.move_absolute(initial_motor_position)
+                    break
+
+            if abort_event.is_set():
+                break
+
+            motor_positions['m{}'.format(motor_num)] = position
+
+            if len(scan_motors) > 0: # Recursive case
+                my_scan_motors = copy.deepcopy(scan_motors)
+
+                self._inner_scan_test(scan_settings, my_scan_motors,
+                    motor_positions, current_run, abort_event)
+
+            else:   # Base case for recursion:
+
+                time.sleep(0.1)
+
+        motor.move_absolute(initial_motor_position)
+
+        self.test_scan_running = False
+        
+
     def fast_mode_abort_cleanup(self, det, struck, ab_burst, ab_burst_2, dio_out9,
         dio_out6, exp_time):
         logger.info("Aborting fast exposure")
@@ -2332,6 +2868,13 @@ class ExpPanel(wx.Panel):
         self.advanced_options.Add(trig_sizer, border=5, flag=wx.ALL|wx.EXPAND)
         self.advanced_options.Add(self.muscle_sizer, border=5, flag=wx.ALL|wx.EXPAND)
 
+        self.start_scan_btn = wx.Button(self, label='Start Scan')
+        self.start_scan_btn.Bind(wx.EVT_BUTTON, self._on_start_exp)
+        self.start_scan_btn.Hide()
+
+        if ('scan' in self.settings['components'] 
+            or 'trsaxs_scan' in self.settings['components']):
+            self.start_scan_btn.Show()
 
         self.start_exp_btn = wx.Button(self, label='Start Exposure')
         self.start_exp_btn.Bind(wx.EVT_BUTTON, self._on_start_exp)
@@ -2342,6 +2885,8 @@ class ExpPanel(wx.Panel):
 
         self.exp_btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
         self.exp_btn_sizer.AddStretchSpacer(1)
+        self.exp_btn_sizer.Add(self.start_scan_btn, border=5,
+            flag=wx.ALIGN_CENTER_VERTICAL|wx.ALIGN_RIGHT|wx.RIGHT)
         self.exp_btn_sizer.Add(self.start_exp_btn, border=5,
             flag=wx.ALIGN_CENTER_VERTICAL|wx.ALIGN_RIGHT|wx.RIGHT)
         self.exp_btn_sizer.Add(self.stop_exp_btn, border=5,
@@ -2472,12 +3017,17 @@ class ExpPanel(wx.Panel):
             trsaxs_panel.update_params()
 
     def _on_start_exp(self, evt):
-        self.start_exp()
+        if evt.GetEventObject() == self.start_exp_btn:
+            exp_only = True
+        else:
+            exp_only = False
+
+        self.start_exp(exp_only)
 
     def _on_stop_exp(self, evt):
         self.stop_exp()
 
-    def start_exp(self):
+    def start_exp(self, exp_only):
         self.abort_event.clear()
         self.exp_event.clear()
         self.timeout_event.clear()
@@ -2492,7 +3042,7 @@ class ExpPanel(wx.Panel):
         if not exp_valid:
             return
 
-        comp_valid, comp_settings = self._check_components()
+        comp_valid, comp_settings = self._check_components(exp_only)
 
         if not comp_valid:
             return
@@ -2553,6 +3103,21 @@ class ExpPanel(wx.Panel):
         if not overwrite_valid:
             return
 
+        cont = True
+
+        if (('trsaxs_scan' in self.settings['components'] and exp_only) or 
+            ('scan' in self.settings['components'] and exp_only)):
+            msg = ("Only exposures will be taken, no scan will be done. Are you sure you want to continue?")
+            dlg = wx.MessageDialog(None, msg, "Shutter Closed", wx.YES_NO|wx.ICON_EXCLAMATION|wx.NO_DEFAULT)
+            result = dlg.ShowModal()
+            dlg.Destroy()
+
+            if result == wx.ID_NO:
+                cont = False
+
+        if not cont:
+            return
+
         if self.pipeline_ctrl is not None and exp_type is not None:
 
             # Note, in the future this should get parameters for batch
@@ -2565,6 +3130,7 @@ class ExpPanel(wx.Panel):
                 fprefix, num_frames)
 
 
+
         self.set_status('Preparing exposure')
         self.start_exp_btn.Disable()
         self.stop_exp_btn.Enable()
@@ -2575,11 +3141,14 @@ class ExpPanel(wx.Panel):
         else:
             exp_values['exp_type'] = 'standard'
 
-        if 'trsaxs_scan' in self.settings['components']:
+        if 'trsaxs_scan' in self.settings['components'] and not exp_only:
             self.total_time = comp_settings['trsaxs_scan']['total_time']+1*comp_settings['trsaxs_scan']['num_scans']
             self.exp_cmd_q.append(('start_tr_exp', (exp_values, comp_settings), {}))
-        elif 'scan' in self.settings['components']:
+
+        elif 'scan' in self.settings['components'] and not exp_only:
+            self.total_time = self.total_time*comp_settings['scan']['total_steps'] + 4*comp_settings['scan']['total_outer_loop_steps']
             self.exp_cmd_q.append(('start_scan_exp', (exp_values, comp_settings), {}))
+
         else:
             #Exposure time fudge factors for the overhead and readout
             if exp_values['exp_period'] < exp_values['exp_time'] + self.settings['slow_mode_thres']:
@@ -2589,14 +3158,14 @@ class ExpPanel(wx.Panel):
 
         self.set_time_remaining(self.total_time)
 
-        if ('trsaxs_scan' in self.settings['components'] or exp_values['wait_for_trig']
-            or 'scan' in self.settings['components']):
+        if (('trsaxs_scan' in self.settings['components'] and not exp_only) or exp_values['wait_for_trig']
+            or ('scan' in self.settings['components'] and not exp_only)):
             self.exp_status_sizer.Show(self.scan_num_sizer, recursive=True)
             self.scan_number.SetLabel('1')
         else:
             self.exp_status_sizer.Hide(self.scan_num_sizer, recursive=True)
 
-        if 'trsaxs_flow' in self.settings['components']:
+        if 'trsaxs_flow' in self.settings['components'] and not exp_only:
             trsaxs_flow_panel = wx.FindWindowByName('trsaxs_flow')
             trsaxs_flow_panel.prepare_for_exposure(comp_settings['trsaxs_flow'])
 
@@ -2993,7 +3562,7 @@ class ExpPanel(wx.Panel):
 
         return exp_values, valid
 
-    def _check_components(self):
+    def _check_components(self, exp_only):
         comp_settings = {}
         errors = []
 
@@ -3003,21 +3572,21 @@ class ExpPanel(wx.Panel):
         else:
             coflow_started = True
 
-        if 'trsaxs_scan' in self.settings['components']:
+        if 'trsaxs_scan' in self.settings['components'] and not exp_only:
             trsaxs_panel = wx.FindWindowByName('trsaxs_scan')
             trsaxs_values, trsaxs_scan_valid = trsaxs_panel.get_scan_values()
             comp_settings['trsaxs_scan'] = trsaxs_values
         else:
             trsaxs_scan_valid = True
 
-        if 'trsaxs_flow' in self.settings['components']:
+        if 'trsaxs_flow' in self.settings['components'] and not exp_only:
             trsaxs_panel = wx.FindWindowByName('trsaxs_flow')
             trsaxs_values, trsaxs_flow_valid = trsaxs_panel.get_flow_values()
             comp_settings['trsaxs_flow'] = trsaxs_values
         else:
             trsaxs_flow_valid = True
 
-        if 'scan' in self.settings['components']:
+        if 'scan' in self.settings['components'] and not exp_only:
             scan_panel = wx.FindWindowByName('scan')
             scan_values, scan_valid = scan_panel.get_scan_values()
             comp_settings['scan'] = scan_values
