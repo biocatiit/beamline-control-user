@@ -198,7 +198,7 @@ class ControlClient(threading.Thread):
 
         if self.connect_error > 5:
             msg = ('5 consecutive failures to run a command on device'
-                '%s.'.format(device))
+                '{}.'.format(device))
             logger.error(msg)
             logger.error("Connection timed out")
             self.timeout_event.set()

@@ -40,6 +40,7 @@ from wx.lib.wordwrap import wordwrap
 from wx.lib.stattext import GenStaticText as StaticText
 from matplotlib.backends.backend_wxagg import NavigationToolbar2WxAgg
 import numpy as np
+import serial.tools.list_ports as list_ports
 
 class CharValidator(wx.Validator):
     ''' Validates data as it is entered into the text controls. '''
@@ -244,11 +245,11 @@ if six.PY3:
 
 class FloatSpinEvent(wx.PyCommandEvent):
 
-    def __init__(self, evtType, id, object):
+    def __init__(self, evtType, id, obj):
 
         wx.PyCommandEvent.__init__(self, evtType, id)
         self.value = 0
-        self.object = object
+        self.obj = obj
 
     def GetValue(self):
         return self.value
@@ -257,7 +258,7 @@ class FloatSpinEvent(wx.PyCommandEvent):
         self.value = value
 
     def GetEventObject(self):
-        return self.object
+        return self.obj
 
 myEVT_MY_SPIN = wx.NewEventType()
 EVT_MY_SPIN = wx.PyEventBinder(myEVT_MY_SPIN, 1)
@@ -795,7 +796,7 @@ class DevicePanel(wx.Panel):
 
         top_sizer = wx.BoxSizer(wx.VERTICAL)
 
-        self.SetSizer(self.top_sizer)
+        self.SetSizer(top_sizer)
 
     def _init_device(self, device_data):
         """

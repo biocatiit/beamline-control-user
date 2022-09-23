@@ -2154,9 +2154,6 @@ class SSINextGenPump(Pump):
 
         return pressure
 
-    def is_ramping(self):
-        return self._ramping_flow
-
     def clear_faults(self):
         self.send_cmd('#', False)
         self.send_cmd('CF')
