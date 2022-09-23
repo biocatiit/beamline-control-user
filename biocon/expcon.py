@@ -3593,6 +3593,12 @@ class ExpPanel(wx.Panel):
         else:
             scan_valid = True
 
+        if 'uv' in self.settings['components']:
+            uv_panel = wx.FindWindowByName('uv')
+            uv_values, uv_valid = uv_panel.on_exposure_start()
+            if uv_values is not None:
+                comp_settings['uv'] = uv_values
+
         if not coflow_started:
             msg = ('Coflow failed to start, so exposure has been canceled. '
                 'Please correct the errors then start the exposure again.')
@@ -3610,6 +3616,9 @@ class ExpPanel(wx.Panel):
                 errors.append(('Autoinjection scan must be less than the total '
                     'number of scans.'))
 
+        if not uv_valid:
+            errors.append(['UV collection failed to start'])
+
         if len(errors) > 0:
             msg = 'The following field(s) have invalid values:'
             for err in errors:
@@ -3622,7 +3631,8 @@ class ExpPanel(wx.Panel):
             comp_settings = {}
             valid = False
         else:
-            valid = coflow_started and trsaxs_scan_valid and trsaxs_flow_valid and scan_valid
+            valid = (coflow_started and trsaxs_scan_valid and trsaxs_flow_valid
+                and scan_valid and uv_valid)
 
         return valid, comp_settings
 
@@ -3714,6 +3724,13 @@ class ExpPanel(wx.Panel):
 
                 if key == 'Column:':
                     column = value
+
+        if 'uv' in self.settings['uv']:
+            uv_panel = wx.FindWindowByName('uv')
+            uv_metadata = uv_panel.metadata()
+
+            for key, value in uv_metadata.items():
+                metadata[key] = value
 
         if ('coflow' in self.settings['components']
             and 'metadata' in self.settings['components']):

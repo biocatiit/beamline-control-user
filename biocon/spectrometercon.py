@@ -2392,6 +2392,17 @@ class InlineUVPanel(utils.DevicePanel):
         self._series_count = 0
         self._series_total = 0
 
+        self._history_length = None
+        self._current_int_time = None
+        self._current_scan_avg = None
+        self._current_smooth = None
+        self._current_xtiming = None
+        self._current_abs_wav = None
+        self._current_abs_win = None
+
+        self._series_exp_time = None
+        self._series_scan_avg = None
+
         self._init_controls()
         wx.CallLater(500, self._init_device_part2)
 
@@ -2743,11 +2754,163 @@ class InlineUVPanel(utils.DevicePanel):
         else:
             wx.CallAfter(self._show_busy_msg)
 
+    def _collect_series(self, num_spectra, exp_time, scan_avgs):
+        is_busy = self._get_busy()
+
+        if not is_busy:
+            self._set_exposure_settings(exp_time, scan_avgs)
+            self._set_abs_params()
+
+            dark_correct = self.dark_correct.GetValue()
+            auto_dark = self.auto_dark.GetValue()
+            dark_time = float(self.auto_dark_period.GetValue())
+
+            spec_type = self.settings['spectrum_type']
+
+            if spec_type == 'Absorbance':
+                spec_type = 'abs'
+            elif spec_type == 'Transmission':
+                spec_type == 'trans'
+            else:
+                spec_type = 'raw'
+
+            take_ref = self.settings['series_ref_at_start']
+            ref_avgs = int(self.ref_avgs.GetValue())
+
+            kwargs = {
+                'spec_type'     : spec_type,
+                'delta_t_min'   : 0,
+                'dark_correct'  : dark_correct,
+                'int_trigger'   : False,
+                'auto_dark'     : auto_dark,
+                'dark_time'     : dark_time,
+                'take_ref'      : take_ref,
+                'ref_avgs'      : ref_avgs,
+            }
+
+            cmd = ['collect_series', [self.name, num_spectra], kwargs]
+
+            self._send_cmd(cmd)
+
+        else:
+            wx.CallAfter(self._show_busy_msg)
+
+        return not is_busy
+
+    def _set_exposure_settings(self, exp_time, scan_avgs):
+        update_dark = False
+
+        self._series_exp_time = exp_time
+        self._series_scan_avg = scan_avgs
+
+        if exp_time != self._current_int_time:
+            int_t_cmd = ['set_int_time', [self.name, exp_time],
+                {'update_dark': False}]
+            self._send_cmd(int_t_cmd)
+
+            update_dark = True
+
+        if scan_avgs != self._current_scan_avg:
+            scan_avg_cmd = ['set_scan_avg', [self.name, scan_avgs],
+                {'update_dark': False}]
+            self._send_cmd(scan_avg_cmd)
+
+            update_dark = True
+
+        if self._current_smooth != self.settings['smoothing']:
+            smoothing_cmd = ['set_smoothing', [self.name,
+                self.settings['smoothing']], {'update_dark': False}]
+            self._send_cmd(smoothing_cmd)
+
+            update_dark = True
+
+        if self._current_xtiming != self.settings['xtiming']:
+            xtiming_cmd = ['set_xtiming', [self.name,
+                self.settings['xtiming']], {'update_dark': False}]
+            self._send_cmd(smoothing_cmd)
+
+            update_dark = True
+
+        if update_dark:
+            self._collect_spectrum('dark')
+
+    def _set_abs_params(self):
+
+        for wav in self.settings['abs_wav']:
+            if wav not in self._current_abs_wav:
+                cmd = ['set_abs_wav', [self.name, wav], {}]
+                self._send_cmd(cmd)
+
+        for wav in self._current_abs_wav:
+            if wav not in self.settings['abs_wav']:
+                cmd = ['remove_abs_wav', [self.name, wav], {}]
+                self._send_cmd(cmd)
+
+        if self._current_abs_win != self.settings['abs_win']:
+            cmd = ['set_abs_window', [self.name, self.settings['abs_win']], {}]
+            self._send_cmd(cmd)
+
     def _get_busy(self):
         busy_cmd = ['get_busy', [self.name,], {}]
         is_busy = self._send_cmd(busy_cmd, True)
 
         return is_busy
+
+    def _set_autosave_parameters(self, prefix, data_dir):
+
+        cmd = ['set_autosave_on', [self.name, True], {}]
+
+        self._send_cmd(cmd)
+
+        autosave_choice = self.settings['save_type']
+
+        if autosave_choice == 'Absorbance':
+            save_raw = False
+            save_trans = False
+            save_abs = True
+
+        elif autosave_choice == 'Transmission':
+            save_raw = False
+            save_trans = True
+            save_abs = False
+
+        elif autosave_choice == 'Raw':
+            save_raw = True
+            save_trans = False
+            save_abs = False
+
+        elif autosave_choice == 'A & T':
+            save_raw = False
+            save_trans = True
+            save_abs = True
+
+        elif autosave_choice == 'A & T & R':
+            save_raw = True
+            save_trans = True
+            save_abs = True
+
+        elif autosave_choice == 'A & R':
+            save_raw = True
+            save_trans = False
+            save_abs = True
+
+        elif autosave_choice == 'R & T':
+            save_raw = True
+            save_trans = True
+            save_abs = False
+
+        data_dir = os.path.abspath(os.path.expanduser(data_dir))
+        data_dir = os.path.join(data_dir, self.settings['save_subdir'])
+
+        kwargs = {
+            'save_raw'      : save_raw,
+            'save_trans'    : save_trans,
+            'save_abs'      : save_abs,
+        }
+
+        cmd = ['set_autosave_param', [self.name, data_dir, prefix], kwargs]
+
+        self._send_cmd(cmd)
 
     def _show_busy_msg(self):
         wx.MessageBox('Cannot collect spectrum because device is busy.',
@@ -2773,10 +2936,15 @@ class InlineUVPanel(utils.DevicePanel):
             abs_win = val['abs_win']
             hist_t = val['hist_t']
 
-            self.int_time.ChangeValue(str(int_time))
             self.history_time.SafeChangeValue(str(hist_t))
 
             self._history_length = hist_t
+            self._current_int_time = int_time
+            self._current_scan_avg = scan_avg
+            self._current_smooth = smooth
+            self._current_xtiming = xtiming
+            self._current_abs_wav = abs_wav
+            self._current_abs_win = abs_win
 
             self._dark_spectrum = dark
             self._reference_spectrum = ref
@@ -2899,6 +3067,50 @@ class InlineUVPanel(utils.DevicePanel):
         self._absorbance_history = self._send_cmd(abs_cmd, True)
         self._transmission_history = self._send_cmd(trans_cmd, True)
         self._history = self._send_cmd(raw_cmd, True)
+
+    def on_exposure_start(self):
+        uv_values = None
+        uv_valid = True
+
+        exp_panel = wx.FindWindowByName('exp')
+        exp_metadata = exp_panel.metadata()
+
+        prefix = exp_metadata['File prefix:']
+        data_dir =  exp_metadata['Save directory:']
+        exp_time = exp_metadata['Exposure time/frame [s]:']
+        exp_period = exp_metadata['Exposure period/frame [s]:']
+        num_frames = exp_metadata['Number of frames:']
+
+        if exp_time < 0.05:
+            uv_valid = False
+
+        else:
+            max_int_t = float(self.int_time.GetValue())
+
+            int_time = min(exp_time/2, max_int_t)
+
+            spec_t = max(int_t*2, 0.05)
+
+            scan_avgs = exp_time // spec_t
+
+            ext_trig_cmd = ['set_external_trigger', [self.name, True], {}]
+            self._send_cmd(ext_trig_cmd)
+
+            self._set_autosave_parameters(prefix, data_dir)
+            valid = self._collect_series(num_frames, int_time, scan_avgs)
+
+            if valid:
+                while not self._is_busy():
+                    time.sleep(0.01)
+
+        return uv_values, uv_valid
+
+    def metadata(self):
+        metadata = OrderedDict()
+        metadata['UV integration time:'] = self._series_exp_time
+        metadata['UV scans averaged per spectrum:'] = self._series_scan_avg
+
+        return metadata
 
     def _on_close(self):
         """Device specific stuff goes here"""
@@ -3221,24 +3433,27 @@ if __name__ == '__main__':
 
 
     spectrometer_settings = {
-        'name'          :  'CoflowUV',
-        'device_init'   : {'name': 'CoflowUV', 'args': ['StellarNet'],
+        'name'                  :  'CoflowUV',
+        'device_init'           : {'name': 'CoflowUV', 'args': ['StellarNet'],
             'kwargs': {}},
-        'max_int_t'     : 0.1, # in s
-        'scan_avg'      : 1,
-        'smoothing'     : 0,
-        'xtiming'       : 3,
-        'spectrum_type' : 'abs', #abs, trans, raw
-        'dark_correct'  : True,
-        'auto_dark'     : True,
-        'auto_dark_t'   : 60*60, #in s
-        'dark_avgs'     : 1,
-        'ref_avgs'      : 1,
-        'history_t'     : 60*60*24, #in s
-        'save_subdir'   : 'UV',
-        'save_type'     : 'Absorbance',
-        'remote_ip'     : '164.54.204.53',
-        'remote_port'   : '5559',
+        'max_int_t'             : 0.1, # in s
+        'scan_avg'              : 1,
+        'smoothing'             : 0,
+        'xtiming'               : 3,
+        'spectrum_type'         : 'Absorbance', #Absorbance, Transmission, Raw
+        'dark_correct'          : True,
+        'auto_dark'             : True,
+        'auto_dark_t'           : 60*60, #in s
+        'dark_avgs'             : 1,
+        'ref_avgs'              : 1,
+        'history_t'             : 60*60*24, #in s
+        'save_subdir'           : 'UV',
+        'save_type'             : 'Absorbance',
+        'series_ref_at_start'   : True,
+        'abs_wav'               : [280, 260],
+        'abs_window'            : 1,
+        'remote_ip'             : '164.54.204.53',
+        'remote_port'           : '5559',
     }
 
 
@@ -3262,7 +3477,8 @@ if __name__ == '__main__':
     """
     To do:
     Test shutter open/close when taking images and darks
-    Integrate into biocon main window, coflow server
     Set absorbance wavelengths/window in GUI
     Add plotting to GUI
+    Need to be able to get metadata
+    Open and close lightsource shutter in GUI
     """
