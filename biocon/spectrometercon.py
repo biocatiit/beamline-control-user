@@ -43,7 +43,7 @@ import wx
 import epics
 
 # Uses stellarnet python driver, available from the manufacturer
-sys.path.append('/Users/jessehopkins/Desktop/projects/spectrometer/MAC_64b_python3')#add the path of the stellarnet_demo.py
+sys.path.append('C:\\Users\\biocat\\Stellarnet\\stellarnet_driverLibs')#add the path of the stellarnet_demo.py
 import stellarnet_driver3 as sn
 
 import client
@@ -320,13 +320,13 @@ class Spectrometer(object):
 
     def is_busy(self):
         busy =self._taking_data or self._taking_series
-        logger.debug('Spectrometer %s: Busy: %s', self.name, busy)
+        # logger.debug('Spectrometer %s: Busy: %s', self.name, busy)
 
         return busy
 
     def taking_series(self):
-        logger.debug('Spectrometer %s: Taking series: %s', self.name,
-            self._taking_series)
+        # logger.debug('Spectrometer %s: Taking series: %s', self.name,
+        #     self._taking_series)
         return self._taking_series
 
     def get_integration_time(self):
@@ -631,7 +631,8 @@ class Spectrometer(object):
 
                 tot_spectrum += 1
 
-                while datetime.datetime.now() - spectrum.get_timestamp() < dt_delta_t:
+                ts = spectrum.get_timestamp()
+                while datetime.datetime.now() -  ts < dt_delta_t:
                     if self._series_abort_event.is_set():
                         break
 
@@ -1880,9 +1881,10 @@ class UVPanel(utils.DevicePanel):
             'Transmission', 'Raw', 'A & T', 'A & T & R', 'A & R', 'T & R'])
         self.autosave_prefix = wx.TextCtrl(series_parent)
         self.autosave_dir = wx.TextCtrl(series_parent, style=wx.TE_READONLY)
-        file_open = wx.ArtProvider.GetBitmap(wx.ART_FOLDER_OPEN, wx.ART_BUTTON)
+        file_open = wx.ArtProvider.GetBitmap(wx.ART_FOLDER_OPEN, wx.ART_BUTTON,
+            size=self._FromDIP((16,16)))
         self.change_dir_btn = wx.BitmapButton(series_parent, bitmap=file_open,
-            size=(file_open.GetWidth()+15, -1))
+            size=self._FromDIP((30, -1)))
         self.collect_series_btn = wx.Button(series_parent,
             label='Collect Spectral Series')
         self.abort_series_btn = wx.Button(series_parent, label='Stop Series')
@@ -1920,7 +1922,7 @@ class UVPanel(utils.DevicePanel):
         series_sizer.Add(wx.StaticText(series_parent, label='Save dir.:'),
             (6,0))
         series_sizer.Add(self.autosave_dir, (6,1), flag=wx.EXPAND)
-        series_sizer.Add(self.change_dir_btn, (6,2), flag=wx.EXPAND)
+        series_sizer.Add(self.change_dir_btn, (6,2))
         series_sizer.Add(start_stop_sizer, (7,0), span=(1,3),
             flag=wx.ALIGN_CENTER_HORIZONTAL)
 
