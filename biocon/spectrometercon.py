@@ -660,7 +660,7 @@ class Spectrometer(object):
 
         return sub_spectrum
 
-    def divide_spectra(self, spectrum1, spectrum2):
+    def divide_spectra(self, spectrum1, spectrum2, spec_type='raw'):
         """Return spectrum1/spectrum2"""
         logger.debug('Spectrometer %s: Dividing spectra')
 
@@ -1200,18 +1200,6 @@ class UVCommThread(utils.CommManager):
         device = self._connected_devices.pop(name, None)
         if device is not None:
             device.disconnect()
-
-        self._return_value((name, 'disconnected', True), comm_name)
-
-        logger.debug("Device %s disconnected", name)
-
-    def _disconnect_device(self, name, **kwargs):
-        logger.info("Disconnecting device %s", name)
-
-        comm_name = kwargs.pop('comm_name', None)
-
-        device = self._connected_devices[name]
-        device.disconnect(**kwargs)
 
         self._return_value((name, 'disconnected', True), comm_name)
 
@@ -2827,7 +2815,7 @@ class InlineUVPanel(utils.DevicePanel):
         if self._current_xtiming != self.settings['xtiming']:
             xtiming_cmd = ['set_xtiming', [self.name,
                 self.settings['xtiming']], {'update_dark': False}]
-            self._send_cmd(smoothing_cmd)
+            self._send_cmd(xtiming_cmd)
 
             update_dark = True
 
@@ -2943,7 +2931,7 @@ class InlineUVPanel(utils.DevicePanel):
             self._current_scan_avg = scan_avg
             self._current_smooth = smooth
             self._current_xtiming = xtiming
-            self._current_abs_wav = abs_wav
+            self._current_abs_wav = abs_wavs
             self._current_abs_win = abs_win
 
             self._dark_spectrum = dark
@@ -3089,7 +3077,7 @@ class InlineUVPanel(utils.DevicePanel):
 
             int_time = min(exp_time/2, max_int_t)
 
-            spec_t = max(int_t*2, 0.05)
+            spec_t = max(int_time*2, 0.05)
 
             scan_avgs = exp_time // spec_t
 
