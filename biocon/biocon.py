@@ -81,8 +81,13 @@ class BioFrame(wx.Frame):
                 logger.info('Setting up %s panel', key)
                 if key == 'trsaxs_scan':
                     label = 'TRSAXS Scan'
+
                 elif key == 'trsaxs_flow':
-                    label='TRSAXS Flow'
+                    label ='TRSAXS Flow'
+
+                elif key == 'uv':
+                    label = 'UV'
+
                 else:
                     label = key.capitalize()
 
@@ -154,6 +159,10 @@ class BioFrame(wx.Frame):
 
             if 'scan' in component_sizers:
                 exp_sizer.Add(component_sizers['scan'], border=5,
+                    flag=wx.EXPAND|wx.ALL)
+
+            if 'uv' in component_sizers:
+                exp_sizer.Add(component_sizers['uv'], border=5,
                     flag=wx.EXPAND|wx.ALL)
 
             panel_sizer.Add(exp_sizer, flag=wx.EXPAND)
@@ -558,6 +567,7 @@ if __name__ == '__main__':
         ('scan',    scancon.ScanPanel),
         ('metadata', metadata.ParamPanel),
         # ('pipeline', pipeline_ctrl.PipelineControl)
+        # ('uv', spectrometercon.InlineUVPanel)
         ])
 
     settings = {
