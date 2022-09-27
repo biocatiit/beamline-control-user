@@ -468,10 +468,10 @@ class ExpCommThread(threading.Thread):
         # dg645_trigger_source.put(1) #Change this to 2 for external falling edges
 
         #Need to clear srs possibly?
-        ab_burst.setup(0.000001, 0.000000, 1, 0, 1, -1)
-        cd_burst.setup(0.000001, 0.000000, 1, 0, 1, -1)
-        ef_burst.setup(0.000001, 0.000000, 1, 0, 1, -1)
-        gh_burst.setup(0.000001, 0.000000, 1, 0, 1, -1)
+        ab_burst.setup(0.000001, 0.000000, 1, 0, 1, 2)
+        cd_burst.setup(0.000001, 0.000000, 1, 0, 1, 2)
+        ef_burst.setup(0.000001, 0.000000, 1, 0, 1, 2)
+        gh_burst.setup(0.000001, 0.000000, 1, 0, 1, 2)
 
         ab_burst.arm()
 
@@ -487,16 +487,16 @@ class ExpCommThread(threading.Thread):
 
         if exp_period > exp_time+0.01 and exp_period >= 0.02:
             #Shutter opens and closes, Takes 4 ms for open and close
-            ab_burst.setup(exp_time+0.007, exp_time+s_open_time, 1, 0, 1, -1)
-            cd_burst.setup(exp_time+0.007, 0.0001, 1, exp_time+s_open_time, 1, -1)
-            ef_burst.setup(exp_time+0.007, exp_time, 1, s_open_time, 1, -1)
-            gh_burst.setup(exp_time+0.007, exp_time, 1, 0, 1, -1)
+            ab_burst.setup(exp_time+0.007, exp_time+s_open_time, 1, 0, 1, 2)
+            cd_burst.setup(exp_time+0.007, 0.0001, 1, exp_time+s_open_time, 1, 2)
+            ef_burst.setup(exp_time+0.007, exp_time, 1, s_open_time, 1, 2)
+            gh_burst.setup(exp_time+0.007, exp_time, 1, 0, 1, 2)
         else:
             #Shutter will be open continuously, via dio_out9
-            ab_burst.setup(exp_time+0.001, exp_time, 1, 0, 1, -1) #Irrelevant
-            cd_burst.setup(exp_time+0.001, 0.0001, 1, exp_time+0.00015, 1, -1)
-            ef_burst.setup(exp_time+0.001, exp_time, 1, 0, 1, -1)
-            gh_burst.setup(exp_time+0.001, exp_time, 1, 0, 1, -1)
+            ab_burst.setup(exp_time+0.001, exp_time, 1, 0, 1, 2) #Irrelevant
+            cd_burst.setup(exp_time+0.001, 0.0001, 1, exp_time+0.00015, 1, 2)
+            ef_burst.setup(exp_time+0.001, exp_time, 1, 0, 1, 2)
+            gh_burst.setup(exp_time+0.001, exp_time, 1, 0, 1, 2)
 
         # Flow stuff starts here
         if tr_flow:
@@ -954,16 +954,16 @@ class ExpCommThread(threading.Thread):
 
         if not continuous_exp:
             #Shutter opens and closes, Takes 4 ms for open and close
-            ab_burst.setup(exp_period, exp_time+s_open_time, num_frames, 0, 1, -1)
-            cd_burst.setup(exp_period, 0.0001, num_frames, exp_time+s_open_time, 1, -1)
-            ef_burst.setup(exp_period, exp_time, num_frames, s_open_time, 1, -1)
-            gh_burst.setup(exp_period, exp_time, num_frames, 0, 1, -1)
+            ab_burst.setup(exp_period, exp_time+s_open_time, num_frames, 0, 1, 2)
+            cd_burst.setup(exp_period, 0.0001, num_frames, exp_time+s_open_time, 1, 2)
+            ef_burst.setup(exp_period, exp_time, num_frames, s_open_time, 1, 2)
+            gh_burst.setup(exp_period, exp_time, num_frames, 0, 1, 2)
         else:
             #Shutter will be open continuously, via dio_out9
-            ab_burst.setup(exp_period, exp_time, num_frames, 0, 1, -1) #Irrelevant
-            cd_burst.setup(exp_period, 0.0001, num_frames, exp_time+0.00015, 1, -1)
-            ef_burst.setup(exp_period, exp_time, num_frames, 0, 1, -1)
-            gh_burst.setup(exp_period, exp_time, num_frames, 0, 1, -1)
+            ab_burst.setup(exp_period, exp_time, num_frames, 0, 1, 2) #Irrelevant
+            cd_burst.setup(exp_period, 0.0001, num_frames, exp_time+0.00015, 1, 2)
+            ef_burst.setup(exp_period, exp_time, num_frames, 0, 1, 2)
+            gh_burst.setup(exp_period, exp_time, num_frames, 0, 1, 2)
             continuous_exp = True
 
         # if det.get_status() !=0:
@@ -1263,16 +1263,16 @@ class ExpCommThread(threading.Thread):
 
             # if not continuous_exp:
             #     #Shutter opens and closes, Takes 4 ms for open and close
-            #     ab_burst.setup(exp_period, exp_time+s_open_time, num_frames, 0, 1, -1)
-            #     cd_burst.setup(exp_period, 0.0001, num_frames, exp_time+s_open_time, 1, -1)
-            #     ef_burst.setup(exp_period, exp_time, num_frames, s_open_time, 1, -1)
-            #     gh_burst.setup(exp_period, exp_time, num_frames, 0, 1, -1)
+            #     ab_burst.setup(exp_period, exp_time+s_open_time, num_frames, 0, 1, 2)
+            #     cd_burst.setup(exp_period, 0.0001, num_frames, exp_time+s_open_time, 1, 2)
+            #     ef_burst.setup(exp_period, exp_time, num_frames, s_open_time, 1, 2)
+            #     gh_burst.setup(exp_period, exp_time, num_frames, 0, 1, 2)
             # else:
             #     #Shutter will be open continuously, via dio_out9
-            #     ab_burst.setup(exp_period, exp_time, num_frames, 0, 1, -1) #Irrelevant
-            #     cd_burst.setup(exp_period, 0.0001, num_frames, exp_time+0.00015, 1, -1)
-            #     ef_burst.setup(exp_period, exp_time, num_frames, 0, 1, -1)
-            #     gh_burst.setup(exp_period, exp_time, num_frames, 0, 1, -1)
+            #     ab_burst.setup(exp_period, exp_time, num_frames, 0, 1, 2) #Irrelevant
+            #     cd_burst.setup(exp_period, 0.0001, num_frames, exp_time+0.00015, 1, 2)
+            #     ef_burst.setup(exp_period, exp_time, num_frames, 0, 1, 2)
+            #     gh_burst.setup(exp_period, exp_time, num_frames, 0, 1, 2)
             #     continuous_exp = True
 
             if det.get_status() !=0:
@@ -1622,18 +1622,18 @@ class ExpCommThread(threading.Thread):
         #     dg645_trigger_source2.put(1)
 
         #Need to clear srs possibly?
-        ab_burst.setup(0.000001, 0.000000, 1, 0, 1, -1)
-        cd_burst.setup(0.000001, 0.000000, 1, 0, 1, -1)
-        ef_burst.setup(0.000001, 0.000000, 1, 0, 1, -1)
-        gh_burst.setup(0.000001, 0.000000, 1, 0, 1, -1)
+        ab_burst.setup(0.000001, 0.000000, 1, 0, 1, 2)
+        cd_burst.setup(0.000001, 0.000000, 1, 0, 1, 2)
+        ef_burst.setup(0.000001, 0.000000, 1, 0, 1, 2)
+        gh_burst.setup(0.000001, 0.000000, 1, 0, 1, 2)
 
         ab_burst.arm()
 
         if exp_type == 'muscle':
-            ab_burst_2.setup(0.000001, 0.000000, 1, 0, 1, -1)
-            cd_burst_2.setup(0.000001, 0.000000, 1, 0, 1, -1)
-            ef_burst_2.setup(0.000001, 0.000000, 1, 0, 1, -1)
-            gh_burst_2.setup(0.000001, 0.000000, 1, 0, 1, -1)
+            ab_burst_2.setup(0.000001, 0.000000, 1, 0, 1, 2)
+            cd_burst_2.setup(0.000001, 0.000000, 1, 0, 1, 2)
+            ef_burst_2.setup(0.000001, 0.000000, 1, 0, 1, 2)
+            gh_burst_2.setup(0.000001, 0.000000, 1, 0, 1, 2)
 
             ab_burst_2.arm()
 
@@ -1646,11 +1646,11 @@ class ExpCommThread(threading.Thread):
 
         if not continuous_exp:
             #Shutter opens and closes
-            ab_burst.setup(exp_period, exp_time+s_open_time, num_frames, 0, 1, -1)
+            ab_burst.setup(exp_period, exp_time+s_open_time, num_frames, 0, 1, 2)
             cd_burst.setup(exp_period, (exp_period-(exp_time+s_open_time))/10.,
-                num_frames, exp_time+s_open_time, 1, -1)
-            ef_burst.setup(exp_period, exp_time, num_frames, s_open_time, 1, -1)
-            gh_burst.setup(exp_period, 0, num_frames, s_open_time, 1, -1) #Irrelevant
+                num_frames, exp_time+s_open_time, 1, 2)
+            ef_burst.setup(exp_period, exp_time, num_frames, s_open_time, 1, 2)
+            gh_burst.setup(exp_period, 0, num_frames, s_open_time, 1, 2) #Irrelevant
         else:
             #Shutter will be open continuously
             if exp_type == 'muscle':
@@ -1658,17 +1658,17 @@ class ExpCommThread(threading.Thread):
             else:
                 offset = 0
 
-            ab_burst.setup(exp_period, exp_time, num_frames, 0, 1, -1) #Irrelevant
+            ab_burst.setup(exp_period, exp_time, num_frames, 0, 1, 2) #Irrelevant
             cd_burst.setup(exp_period, (exp_period-exp_time)/10.,
-                num_frames, exp_time+(exp_period-exp_time)/10., 1, -1)
-            ef_burst.setup(exp_period, exp_time, num_frames, offset, 1, -1)
-            gh_burst.setup(exp_period, exp_period*(1.-1./1000.), num_frames, 0, 1, -1)
+                num_frames, exp_time+(exp_period-exp_time)/10., 1, 2)
+            ef_burst.setup(exp_period, exp_time, num_frames, offset, 1, 2)
+            gh_burst.setup(exp_period, exp_period*(1.-1./1000.), num_frames, 0, 1, 2)
 
         if exp_type == 'muscle':
-            ab_burst_2.setup(struck_meas_time, 0, struck_num_meas+1, 0, 1, -1) #Irrelevant
-            cd_burst_2.setup(struck_meas_time, struck_meas_time/2., struck_num_meas+1, 0, 1, -1)
-            ef_burst_2.setup(struck_meas_time, 0, struck_num_meas+1, 0, 1, -1) #Irrelevant
-            gh_burst_2.setup(struck_meas_time, 0, struck_num_meas+1, 0, 1, -1) #Irrelevant
+            ab_burst_2.setup(struck_meas_time, 0, struck_num_meas+1, 0, 1, 2) #Irrelevant
+            cd_burst_2.setup(struck_meas_time, struck_meas_time/2., struck_num_meas+1, 0, 1, 2)
+            ef_burst_2.setup(struck_meas_time, 0, struck_num_meas+1, 0, 1, 2) #Irrelevant
+            gh_burst_2.setup(struck_meas_time, 0, struck_num_meas+1, 0, 1, 2) #Irrelevant
 
         for cur_trig in range(1,num_trig+1):
             #Runs a loop for each expected trigger signal (internal or external)
