@@ -1058,8 +1058,12 @@ class CoflowPanel(wx.Panel):
         self.Layout()
         self.Refresh()
         self.SendSizeEvent()
-        wx.FindWindowByName('biocon').Layout()
-        wx.FindWindowByName('biocon').Fit()
+
+        try:
+            wx.FindWindowByName('biocon').Layout()
+            wx.FindWindowByName('biocon').Fit()
+        except Exception:
+            pass
 
     def showMessageDialog(self, parent, msg, title, style):
         dialog = wx.MessageDialog(parent, msg, title, style=style)
@@ -2126,7 +2130,7 @@ class CoflowFrame(wx.Frame):
     Only meant to be used when the pumpcon module is run directly,
     rather than when it is imported into another program.
     """
-    def __init__(self, settings, connect=True, *args, **kwargs):
+    def __init__(self, settings, connect, *args, **kwargs):
         """
         Initializes the pump frame. Takes args and kwargs for the wx.Frame class.
         """
@@ -2144,7 +2148,7 @@ class CoflowFrame(wx.Frame):
 
     def _create_layout(self, settings, connect):
         """Creates the layout"""
-        self.coflow_panel = CoflowPanel(settings, self, connect=connect)
+        self.coflow_panel = CoflowPanel(settings, parent=self)
 
         self.coflow_sizer = wx.BoxSizer(wx.HORIZONTAL)
         self.coflow_sizer.Add(self.coflow_panel, proportion=1, flag=wx.EXPAND)
@@ -2184,8 +2188,7 @@ if __name__ == '__main__':
     # logger.addHandler(h1)
 
     #Settings
-    settings = {
-        'components'                : ['coflow'],
+    coflow_settings = {
         'show_advanced_options'     : False,
         'device_communication'      : 'remote',
         'remote_pump_ip'            : '164.54.204.53',
@@ -2197,10 +2200,10 @@ if __name__ == '__main__':
         'remote_valve_port'         : '5558',
         'flow_units'                : 'mL/min',
         'sheath_pump'               : ('VICI_M50', 'COM3', [629.48, 13.442], {}),
-        'outlet_pump'               : ('VICI_M50', 'COM4', [629.16, 12.354], {}),
+        'outlet_pump'               : ('VICI_M50', 'COM4', [625.28, 7.905], {}),
         'sheath_fm'                 : ('BFS', 'COM5', [], {}),
         'outlet_fm'                 : ('BFS', 'COM6', [], {}),
-        'sheath_valve'              : ('Cheminert', 'COM6', [], {'positions' : 10}),
+        'sheath_valve'              : ('Cheminert', 'COM7', [], {'positions' : 10}),
         'sheath_ratio'              : 0.3,
         'sheath_excess'             : 1.5,
         'warning_threshold_low'     : 0.8,
@@ -2217,6 +2220,8 @@ if __name__ == '__main__':
         'sheath_valve_hellmanex_pos': 8,
         'sheath_valve_ethanol_pos'  : 9,
         }
+
+    coflow_settings['components'] = ['coflow']
 
     app = wx.App()
 
@@ -2235,7 +2240,7 @@ if __name__ == '__main__':
     # logger.addHandler(h2)
 
     logger.debug('Setting up wx app')
-    frame = CoflowFrame(settings, None, connect=False, title='Coflow Control')
+    frame = CoflowFrame(coflow_settings, True, parent=None, title='Coflow Control')
     frame.Show()
     app.MainLoop()
 
