@@ -247,7 +247,7 @@ class ControlServer(threading.Thread):
                         else:
                             logger.debug('Sending command response: %s', answer)
                             answer = ['response', answer]
-                            self.socket.send_pyobj(answer)
+                            self.socket.send_pyobj(answer, protocol=2)
 
                     except Exception:
                         device = command['device']
@@ -271,7 +271,7 @@ class ControlServer(threading.Thread):
                             status = ['status', status]
 
                             logger.debug('Sending command response: %s', status)
-                            self.socket.send_pyobj(status)
+                            self.socket.send_pyobj(status, protocol=2)
 
 
                 if not cmds_run:
@@ -370,7 +370,7 @@ if __name__ == '__main__':
         ip = '164.54.204.53'
         # ip = '164.54.204.24'
 
-        setup_pumps = [('sheath', 'VICI M50', 'COM3', ['629.48', '13.442'], {}, {}),
+        setup_pumps = [('sheath', 'VICI M50', 'COM3', ['628.6', '9.479'], {}, {}),
             ('outlet', 'VICI M50', 'COM4', ['625.28', '7.905'], {}, {})
             ]
 
@@ -382,7 +382,9 @@ if __name__ == '__main__':
             ]
 
         setup_uv = [
-            {'name': 'CoflowUV', 'args': ['StellarNet'], 'kwargs': {}},
+            {'name': 'CoflowUV', 'args': ['StellarNet'], 'kwargs': 
+            {'shutter_pv_name': '18ID:LJT4:3:DI11',
+            'trigger_pv_name' : '18ID:LJT4:3:DI12'}},
             ]
 
     elif exp_type.startswith('trsaxs'):
