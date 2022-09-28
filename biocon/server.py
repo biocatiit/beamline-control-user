@@ -221,6 +221,10 @@ class ControlServer(threading.Thread):
                                 thread.remove_status_cmd(status_cmd)
 
                         else:
+                            if get_response:
+                                answer_q = self._device_control[device]['answer_q']
+                                answer_q.clear()
+
                             logger.debug("For device %s, processing cmd '%s' with args: %s and kwargs: %s ",
                                 device, device_cmd[0], ', '.join(['{}'.format(a) for a in device_cmd[1]]),
                                 ', '.join(['{}:{}'.format(kw, item) for kw, item in device_cmd[2].items()]))
@@ -244,9 +248,9 @@ class ControlServer(threading.Thread):
 
                         if answer == '':
                             logger.exception('No response received from device')
-                        else:
-                            logger.debug('Sending command response: %s', answer)
+                        else:                            
                             answer = ['response', answer]
+                            logger.debug('Sending command response: %s', answer)
                             self.socket.send_pyobj(answer, protocol=2)
 
                     except Exception:
@@ -269,8 +273,7 @@ class ControlServer(threading.Thread):
                             status = status_q.popleft()
 
                             status = ['status', status]
-
-                            logger.debug('Sending command response: %s', status)
+                            logger.debug('Sending status: %s', status)
                             self.socket.send_pyobj(status, protocol=2)
 
 
@@ -383,8 +386,8 @@ if __name__ == '__main__':
 
         setup_uv = [
             {'name': 'CoflowUV', 'args': ['StellarNet'], 'kwargs': 
-            {'shutter_pv_name': '18ID:LJT4:3:DI11',
-            'trigger_pv_name' : '18ID:LJT4:3:DI12'}},
+            {'shutter_pv_name': '18ID:LJT4:2:DO11',
+            'trigger_pv_name' : '18ID:LJT4:2:DO12'}},
             ]
 
     elif exp_type.startswith('trsaxs'):
