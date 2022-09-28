@@ -3217,6 +3217,10 @@ class ExpPanel(wx.Panel):
             # Will have to figure that out once I have that metadata available
             self.pipeline_ctrl.stop_current_experiment()
 
+        if 'uv' in self.settings['components']:
+            uv_panel = wx.FindWindowByName('uv')
+            uv_panel.on_exposure_stop(self)
+
     def set_status(self, status):
         self.status.SetLabel(status)
 
@@ -3595,9 +3599,12 @@ class ExpPanel(wx.Panel):
 
         if 'uv' in self.settings['components']:
             uv_panel = wx.FindWindowByName('uv')
-            uv_values, uv_valid = uv_panel.on_exposure_start()
+            uv_values, uv_valid = uv_panel.on_exposure_start(self)
             if uv_values is not None:
                 comp_settings['uv'] = uv_values
+
+        else:
+            uv_valid = True
 
         if not coflow_started:
             msg = ('Coflow failed to start, so exposure has been canceled. '
@@ -3725,7 +3732,7 @@ class ExpPanel(wx.Panel):
                 if key == 'Column:':
                     column = value
 
-        if 'uv' in self.settings['uv']:
+        if 'uv' in self.settings['components']:
             uv_panel = wx.FindWindowByName('uv')
             uv_metadata = uv_panel.metadata()
 

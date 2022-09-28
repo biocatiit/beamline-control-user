@@ -41,6 +41,7 @@ import trcon
 import metadata
 import scancon
 import pipeline_ctrl
+import spectrometercon
 
 class BioFrame(wx.Frame):
     """
@@ -267,9 +268,9 @@ if __name__ == '__main__':
         'tr_muscle_exp'         : False,
         'slow_mode_thres'       : 0.1,
         'fast_mode_max_exp_time': 2000,
-        'wait_for_trig'         : False,
+        'wait_for_trig'         : True,
         'num_trig'              : '1',
-        'show_advanced_options' : False,
+        'show_advanced_options' : True,
         'fe_shutter_pv'         : 'FE:18:ID:FEshutter',
         'd_shutter_pv'          : 'PA:18ID:STA_D_SDS_OPEN_PL.VAL',
         'col_vac_pv'            : '18ID:VAC:D:Cols',
@@ -543,8 +544,8 @@ if __name__ == '__main__':
                                 'preparation'   : 'Intact',
                                 'notes'         : '',
                                 },
-        # 'metadata_type'     : 'auto',
-        'metadata_type'     : 'muscle',
+        'metadata_type'     : 'auto',
+        # 'metadata_type'     : 'muscle',
         }
 
     pipeline_settings = {
@@ -557,17 +558,43 @@ if __name__ == '__main__':
         'output_basedir': '/nas_data/SAXS',
         }
 
+    spectrometer_settings = {
+        'name'                  :  'CoflowUV',
+        'device_init'           : {'name': 'CoflowUV', 'args': ['StellarNet'],
+            'kwargs': {'shutter_pv_name': '18ID:LJT4:2:DO11',
+            'trigger_pv_name' : '18ID:LJT4:2:DO12'}},
+        'max_int_t'             : 0.025, # in s
+        'scan_avg'              : 1,
+        'smoothing'             : 0,
+        'xtiming'               : 3,
+        'spectrum_type'         : 'Absorbance', #Absorbance, Transmission, Raw
+        'dark_correct'          : True,
+        'auto_dark'             : True,
+        'auto_dark_t'           : 60*60, #in s
+        'dark_avgs'             : 1,
+        'ref_avgs'              : 1,
+        'history_t'             : 60*60*24, #in s
+        'save_subdir'           : 'UV',
+        'save_type'             : 'Absorbance',
+        'series_ref_at_start'   : True,
+        'abs_wav'               : [280, 260],
+        'abs_window'            : 1,
+        'remote_ip'             : '164.54.204.53',
+        'remote_port'           : '5559',
+        'remote_dir_prefix'     : {'local' : '/nas_data', 'remote' : 'Y:\\'}
+    }
+
     biocon_settings = {}
 
     components = OrderedDict([
         ('exposure', expcon.ExpPanel),
-        # ('coflow', coflowcon.CoflowPanel),
+        ('coflow', coflowcon.CoflowPanel),
         # ('trsaxs_scan', trcon.TRScanPanel),
         # ('trsaxs_flow', trcon.TRFlowPanel),
-        ('scan',    scancon.ScanPanel),
+        # ('scan',    scancon.ScanPanel),
         ('metadata', metadata.ParamPanel),
-        # ('pipeline', pipeline_ctrl.PipelineControl)
-        # ('uv', spectrometercon.InlineUVPanel)
+        ('pipeline', pipeline_ctrl.PipelineControl),
+        ('uv', spectrometercon.InlineUVPanel),
         ])
 
     settings = {
@@ -578,6 +605,7 @@ if __name__ == '__main__':
         'scan'          : scan_settings,
         'metadata'      : metadata_settings,
         'pipeline'      : pipeline_settings,
+        'uv'            : spectrometer_settings,
         'components'    : components,
         'biocon'        : biocon_settings,
         }

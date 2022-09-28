@@ -164,7 +164,7 @@ class ControlClient(threading.Thread):
             else:
                 self.connect_error = 0
 
-            # logger.debug('Command response: %s' %(answer))
+            logger.debug('Command response: %s', answer)
 
             if get_response:
                 self.answer_queue.append(answer)
@@ -209,7 +209,9 @@ class ControlClient(threading.Thread):
 
         while time.time()-start_time < timeout:
             if self.socket.poll(10) > 0:
-                res_type, response = self.socket.recv_pyobj()
+                resp = self.socket.recv_pyobj()
+                logger.debug('Received message: %s', resp)
+                res_type, response = resp
 
                 if res_type == 'status':
                     logger.debug('Recevied status %s', response)
@@ -218,7 +220,7 @@ class ControlClient(threading.Thread):
 
                 elif res_type == 'response':
                     answer = response
-                    logger.debug('Recevied status %s', answer)
+                    logger.debug('Recevied response %s', answer)
                     break
 
         return answer
@@ -228,7 +230,9 @@ class ControlClient(threading.Thread):
 
         while True:
             if self.socket.poll(10) > 0:
-                res_type, response = self.socket.recv_pyobj()
+                resp = self.socket.recv_pyobj()
+                logger.debug('Received status message: %s', resp)
+                res_type, response = resp
 
                 if res_type == 'status':
                     logger.debug('Recevied status %s', response)

@@ -42,9 +42,12 @@ import numpy as np
 import wx
 import epics
 
-# Uses stellarnet python driver, available from the manufacturer
-sys.path.append('C:\\Users\\biocat\\Stellarnet\\stellarnet_driverLibs')#add the path of the stellarnet_demo.py
-import stellarnet_driver3 as sn
+try:
+    # Uses stellarnet python driver, available from the manufacturer
+    sys.path.append('C:\\Users\\biocat\\Stellarnet\\stellarnet_driverLibs')#add the path of the stellarnet_demo.py
+    import stellarnet_driver3 as sn
+except ImportError:
+    pass
 
 import client
 import utils
@@ -689,7 +692,8 @@ class Spectrometer(object):
             history = self._history
 
         history['spectra'].append(spectrum)
-        history['timestamps'].append(spectrum.get_timestamp().timestamp())
+        history['timestamps'].append((spectrum.get_timestamp() - 
+            datetime.datetime(1970,1,1)).total_seconds())
 
         history = self._prune_history(history)
 
@@ -704,7 +708,8 @@ class Spectrometer(object):
         logger.debug('Spectrometer %s: Pruning history', self.name)
 
         if len(history['timestamps']) > 0:
-            now = datetime.datetime.now().timestamp()
+            now = (datetime.datetime.now()- 
+                datetime.datetime(1970,1,1)).total_seconds()
 
             if len(history['timestamps']) == 1:
                 if now - history['timestamps'][0] > self._history_length:
@@ -760,7 +765,8 @@ class Spectrometer(object):
         else:
             history = self._history
 
-        now = datetime.datetime.now().timestamp()
+        now = (datetime.datetime.now() - 
+            datetime.datetime(1970,1,1)).total_seconds()
 
         index = -1
         while (abs(index) <= len(history['timestamps'])
@@ -897,8 +903,8 @@ class StellarnetUVVis(Spectrometer):
     Stellarnet black comet UV-Vis spectrometer
     """
 
-    def __init__(self, name, shutter_pv_name='18ID:LJT4:3:DI11',
-        trigger_pv_name='18ID:LJT4:3:DI12'):
+    def __init__(self, name, shutter_pv_name='18ID:LJT4:2:DI11',
+        trigger_pv_name='18ID:LJT4:2:DI12'):
 
         Spectrometer.__init__(self, name)
 
@@ -1161,6 +1167,9 @@ class UVCommThread(utils.CommManager):
             'abort_collection'  : self._abort_collection,
             'get_busy'          : self._get_busy,
             'get_spec_settings' : self._get_spec_settings,
+            'set_ls_shutter'    : self._set_lightsource_shutter,
+            'get_ls_shutter'    : self._get_lightsource_shutter,
+            'set_int_trig'      : self._set_internal_trigger,
         }
 
         self._connected_devices = OrderedDict()
@@ -1689,6 +1698,42 @@ class UVCommThread(utils.CommManager):
 
         logger.debug('Got device %s settings: %s', name, ret_vals)
 
+    def _set_lightsource_shutter(self, name, val, **kwargs):
+        logger.debug("Device %s setting lightsource shutter %s", name, val)
+
+        comm_name = kwargs.pop('comm_name', None)
+
+        device = self._connected_devices[name]
+        device.set_lightsource_shutter(val, **kwargs)
+
+        self._return_value((name, 'set_ls_shutter', True), comm_name)
+
+        logger.debug("Device %s lightsource shutter set", name)
+
+    def _get_lightsource_shutter(self, name, **kwargs):
+        logger.debug("Getting device %s lightsource shutter", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+
+        device = self._connected_devices[name]
+        val = device.get_lightsource_shutter(**kwargs)
+
+        self._return_value((name, 'get_ls_shutter', val), comm_name)
+
+        logger.debug("Device %s lightsource shutter: %s", name, val)
+
+    def _set_internal_trigger(self, name, val, **kwargs):
+        logger.debug("Device %s setting internal_trigger %s", name, val)
+
+        comm_name = kwargs.pop('comm_name', None)
+
+        device = self._connected_devices[name]
+        device.set_int_trigger(val, **kwargs)
+
+        self._return_value((name, 'set_int_trig', True), comm_name)
+
+        logger.debug("Device %s internal_trigger set", name)
+
     def _monitor_series(self, name):
         device = self._connected_devices[name]
 
@@ -2173,11 +2218,16 @@ class UVPanel(utils.DevicePanel):
             data_dir = self.autosave_dir.GetValue()
             data_dir = os.path.abspath(os.path.expanduser(data_dir))
 
+            data_dir = data_dir.replace(self.settings['remote_dir_prefix']['local'], 
+                self.settings['remote_dir_prefix']['remote'])
+
             kwargs = {
                 'save_raw'      : save_raw,
                 'save_trans'    : save_trans,
                 'save_abs'      : save_abs,
             }
+
+            logger.info(kwargs)
 
             cmd = ['set_autosave_param', [self.name, data_dir, prefix], kwargs]
 
@@ -2303,7 +2353,8 @@ class UVPanel(utils.DevicePanel):
 
         if history is not None:
             history['spectra'].append(spectrum)
-            history['timestamps'].append(spectrum.get_timestamp().timestamp())
+            history['timestamps'].append((spectrum.get_timestamp() - 
+                datetime.datetime(1970,1,1)).total_seconds())
 
             history = self._prune_history(history)
 
@@ -2318,7 +2369,8 @@ class UVPanel(utils.DevicePanel):
         logger.debug('Pruning history')
 
         if len(history['timestamps']) > 0:
-            now = datetime.datetime.now().timestamp()
+            now = (datetime.datetime.now() - 
+                datetime.datetime(1970,1,1)).total_seconds()
 
             if len(history['timestamps']) == 1:
                 if now - history['timestamps'][0] > self._history_length:
@@ -2398,7 +2450,7 @@ class InlineUVPanel(utils.DevicePanel):
         """Creates the layout for the panel."""
 
         status_parent = wx.StaticBox(self, label='Status:')
-        self.status = wx.StaticText(status_parent, size=(150, -1),
+        self.status = wx.StaticText(status_parent, size=(225, -1),
             style=wx.ST_NO_AUTORESIZE)
         self.status.SetForegroundColour(wx.RED)
         fsize = self.GetFont().GetPointSize()
@@ -2586,6 +2638,8 @@ class InlineUVPanel(utils.DevicePanel):
         else:
             answer = None
 
+        logger.debug('Spec command response: %s', answer)
+
         return answer
 
     def _init_connections(self, settings):
@@ -2647,6 +2701,7 @@ class InlineUVPanel(utils.DevicePanel):
         self.auto_dark_period.SetValue('{}'.format(self.settings['auto_dark_t']))
         self.dark_avgs.SetValue('{}'.format(self.settings['dark_avgs']))
         self.ref_avgs.SetValue('{}'.format(self.settings['dark_avgs']))
+        self.int_time.SetValue('{}'.format(self.settings['max_int_t']))
 
         self._history_length = self.settings['history_t']
         self.history_time.SafeChangeValue('{}'.format(self.settings['history_t']))
@@ -2742,14 +2797,14 @@ class InlineUVPanel(utils.DevicePanel):
         else:
             wx.CallAfter(self._show_busy_msg)
 
-    def _collect_series(self, num_spectra, exp_time, scan_avgs):
+    def _collect_series(self, num_spectra, int_time, scan_avgs, exp_period, exp_time):
         is_busy = self._get_busy()
 
         if not is_busy:
-            self._set_exposure_settings(exp_time, scan_avgs)
+            self._set_exposure_settings(int_time, scan_avgs)
             self._set_abs_params()
 
-            dark_correct = self.dark_correct.GetValue()
+            dark_correct = self.settings['dark_correct']
             auto_dark = self.auto_dark.GetValue()
             dark_time = float(self.auto_dark_period.GetValue())
 
@@ -2774,6 +2829,7 @@ class InlineUVPanel(utils.DevicePanel):
                 'dark_time'     : dark_time,
                 'take_ref'      : take_ref,
                 'ref_avgs'      : ref_avgs,
+                'delta_t_min'   : (exp_period-exp_time)/1.1,
             }
 
             cmd = ['collect_series', [self.name, num_spectra], kwargs]
@@ -2826,7 +2882,7 @@ class InlineUVPanel(utils.DevicePanel):
 
         for wav in self.settings['abs_wav']:
             if wav not in self._current_abs_wav:
-                cmd = ['set_abs_wav', [self.name, wav], {}]
+                cmd = ['add_abs_wav', [self.name, wav], {}]
                 self._send_cmd(cmd)
 
         for wav in self._current_abs_wav:
@@ -2834,8 +2890,8 @@ class InlineUVPanel(utils.DevicePanel):
                 cmd = ['remove_abs_wav', [self.name, wav], {}]
                 self._send_cmd(cmd)
 
-        if self._current_abs_win != self.settings['abs_win']:
-            cmd = ['set_abs_window', [self.name, self.settings['abs_win']], {}]
+        if self._current_abs_win != self.settings['abs_window']:
+            cmd = ['set_abs_window', [self.name, self.settings['abs_window']], {}]
             self._send_cmd(cmd)
 
     def _get_busy(self):
@@ -2889,6 +2945,14 @@ class InlineUVPanel(utils.DevicePanel):
 
         data_dir = os.path.abspath(os.path.expanduser(data_dir))
         data_dir = os.path.join(data_dir, self.settings['save_subdir'])
+
+        if not os.path.exists(data_dir):
+            os.mkdir(data_dir)
+
+        data_dir = data_dir.replace(self.settings['remote_dir_prefix']['local'], 
+                self.settings['remote_dir_prefix']['remote'])
+
+        logger.info(data_dir)
 
         kwargs = {
             'save_raw'      : save_raw,
@@ -3007,7 +3071,8 @@ class InlineUVPanel(utils.DevicePanel):
 
         if history is not None:
             history['spectra'].append(spectrum)
-            history['timestamps'].append(spectrum.get_timestamp().timestamp())
+            history['timestamps'].append((spectrum.get_timestamp() - 
+                datetime.datetime(1970,1,1)).total_seconds())
 
             history = self._prune_history(history)
 
@@ -3022,7 +3087,8 @@ class InlineUVPanel(utils.DevicePanel):
         logger.debug('Pruning history')
 
         if len(history['timestamps']) > 0:
-            now = datetime.datetime.now().timestamp()
+            now = (datetime.datetime.now() - 
+                datetime.datetime(1970,1,1)).total_seconds()
 
             if len(history['timestamps']) == 1:
                 if now - history['timestamps'][0] > self._history_length:
@@ -3056,11 +3122,10 @@ class InlineUVPanel(utils.DevicePanel):
         self._transmission_history = self._send_cmd(trans_cmd, True)
         self._history = self._send_cmd(raw_cmd, True)
 
-    def on_exposure_start(self):
+    def on_exposure_start(self, exp_panel):
         uv_values = None
         uv_valid = True
 
-        exp_panel = wx.FindWindowByName('exp')
         exp_metadata = exp_panel.metadata()
 
         prefix = exp_metadata['File prefix:']
@@ -3081,17 +3146,31 @@ class InlineUVPanel(utils.DevicePanel):
 
             scan_avgs = exp_time // spec_t
 
-            ext_trig_cmd = ['set_external_trigger', [self.name, True], {}]
+            ext_trig_cmd = ['set_external_trig', [self.name, True], {}]
             self._send_cmd(ext_trig_cmd)
 
             self._set_autosave_parameters(prefix, data_dir)
-            valid = self._collect_series(num_frames, int_time, scan_avgs)
+            valid = self._collect_series(num_frames, int_time, scan_avgs, exp_period, exp_time)
 
             if valid:
-                while not self._is_busy():
+                while not self._get_busy():
                     time.sleep(0.01)
 
         return uv_values, uv_valid
+
+    def on_exposure_stop(self, exp_panel):
+
+        abort_cmd = ['abort_collection', [self.name, True], {}]
+        self._send_cmd(abort_cmd)
+
+        trig_cmd = ['set_int_trig', [self.name, True], {}]
+        self._send_cmd(trig_cmd)
+
+        time.sleep(0.1)
+
+        trig_cmd = ['set_int_trig', [self.name, False], {}]
+        self._send_cmd(trig_cmd)
+
 
     def metadata(self):
         metadata = OrderedDict()
@@ -3423,9 +3502,9 @@ if __name__ == '__main__':
     spectrometer_settings = {
         'name'                  :  'CoflowUV',
         'device_init'           : {'name': 'CoflowUV', 'args': ['StellarNet'],
-            'kwargs': {'shutter_pv_name': '18ID:LJT4:3:DI11',
-            'trigger_pv_name' : '18ID:LJT4:3:DI12'}},
-        'max_int_t'             : 0.1, # in s
+            'kwargs': {'shutter_pv_name': '18ID:LJT4:2:DI11',
+            'trigger_pv_name' : '18ID:LJT4:2:DI12'}},
+        'max_int_t'             : 0.025, # in s
         'scan_avg'              : 1,
         'smoothing'             : 0,
         'xtiming'               : 3,
@@ -3443,6 +3522,7 @@ if __name__ == '__main__':
         'abs_window'            : 1,
         'remote_ip'             : '164.54.204.53',
         'remote_port'           : '5559',
+        'remote_dir_prefix'     : {'local' : '/nas_data', 'remote' : 'Y:\\'}
     }
 
 

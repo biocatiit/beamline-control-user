@@ -753,8 +753,13 @@ class DevicePanel(wx.Panel):
         self.name = device_data['name']
         self.parent = parent
 
-        wx.Panel.__init__(self, parent, panel_id, *args, name=self.name,
-            **kwargs)
+        print(kwargs)
+        print(self.name)
+
+        if 'name' not in kwargs:
+            kwargs['name'] = self.name
+
+        wx.Panel.__init__(self, parent, panel_id, *args, **kwargs)
 
         logger.debug('Initializing UVPanel for device %s', self.name)
 
