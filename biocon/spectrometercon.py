@@ -3423,7 +3423,8 @@ if __name__ == '__main__':
     spectrometer_settings = {
         'name'                  :  'CoflowUV',
         'device_init'           : {'name': 'CoflowUV', 'args': ['StellarNet'],
-            'kwargs': {}},
+            'kwargs': {'shutter_pv_name': '18ID:LJT4:3:DI11',
+            'trigger_pv_name' : '18ID:LJT4:3:DI12'}},
         'max_int_t'             : 0.1, # in s
         'scan_avg'              : 1,
         'smoothing'             : 0,
