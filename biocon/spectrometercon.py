@@ -372,8 +372,8 @@ class Spectrometer(object):
                 all_spectra = []
 
                 for i in range(averages):
-                    spectrum = self._collect_spectrum(True)
                     timestamp = datetime.datetime.now()
+                    spectrum = self._collect_spectrum(True)
 
                     all_spectra.append(spectrum)
 
@@ -503,8 +503,8 @@ class Spectrometer(object):
 
     def _collect_spectrum_inner(self, dark_correct, int_trigger):
         logger.debug('Spectrometer %s: Getting raw spectrum', self.name)
-        spectrum = self._collect_spectrum(int_trigger)
         timestamp = datetime.datetime.now()
+        spectrum = self._collect_spectrum(int_trigger)
 
         spectrum = SpectraData(spectrum, timestamp,
             absorbance_window=self._absorbance_window,
@@ -604,6 +604,8 @@ class Spectrometer(object):
                     spectrum = self._collect_spectrum_inner(dark_correct,
                         int_trigger)
 
+                spec_ts = datetime.datetime.now()
+
                 if self._autosave_on:
                     s_base = '{}_{:06}'.format(self._autosave_prefix , tot_spectrum+1)
 
@@ -635,7 +637,7 @@ class Spectrometer(object):
                 tot_spectrum += 1
 
                 ts = spectrum.get_timestamp()
-                while datetime.datetime.now() -  ts < dt_delta_t:
+                while datetime.datetime.now() -  spec_ts < dt_delta_t:
                     if self._series_abort_event.is_set():
                         break
 
@@ -958,7 +960,7 @@ class StellarnetUVVis(Spectrometer):
             'each collected spectra to %s', self.name, num_avgs)
 
         if num_avgs != self._scan_avg:
-            self._set_config(self._integration_time/1000, num_avgs,
+            self._set_config(self._integration_time, num_avgs,
                 self._smoothing, self._x_timing)
 
             self.collect_dark()
@@ -1091,14 +1093,15 @@ class StellarnetUVVis(Spectrometer):
 
     # function defination to set parameter
     def _set_config(self, int_time, num_avgs, smooth, xtiming):
-        int_time = round(int_time*1000)
+        int_time = int(round(int_time*1000))
         self._integration_time = int_time/1000
-        self._scan_avg = num_avgs
-        self._smoothing = smooth
-        self._x_timing = xtiming
+        self._scan_avg = int(num_avgs)
+        self._smoothing = int(smooth)
+        self._x_timing = int(xtiming)
 
-        self.spectrometer['device'].set_config(int_time=int_time, scans_to_avg=num_avgs,
-            x_smooth=smooth, x_timing=xtiming)
+        self.spectrometer['device'].set_config(int_time=int_time, 
+            scans_to_avg=self._scan_avg, x_smooth=self._smoothing, 
+            x_timing=self._x_timing)
 
         self._collect_spectrum(True)
 
