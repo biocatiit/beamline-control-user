@@ -372,8 +372,8 @@ class Spectrometer(object):
                 all_spectra = []
 
                 for i in range(averages):
-                    timestamp = datetime.datetime.now()
                     spectrum = self._collect_spectrum(True)
+                    timestamp = datetime.datetime.now()
 
                     all_spectra.append(spectrum)
 
@@ -503,8 +503,9 @@ class Spectrometer(object):
 
     def _collect_spectrum_inner(self, dark_correct, int_trigger):
         logger.debug('Spectrometer %s: Getting raw spectrum', self.name)
-        timestamp = datetime.datetime.now()
+
         spectrum = self._collect_spectrum(int_trigger)
+        timestamp = datetime.datetime.now()
 
         spectrum = SpectraData(spectrum, timestamp,
             absorbance_window=self._absorbance_window,
@@ -586,6 +587,11 @@ class Spectrometer(object):
             if take_ref:
                 self._collect_reference_spectrum_inner(ref_avgs)
 
+            if spec_type == 'abs':
+                abs_wavs = self.get_absorbance_wavelengths()
+
+                absorbance = {wav : [] for wav in abs_wavs}
+
             while tot_spectrum < num_spectra:
                 if self._series_abort_event.is_set():
                     break
@@ -603,8 +609,6 @@ class Spectrometer(object):
                 else:
                     spectrum = self._collect_spectrum_inner(dark_correct,
                         int_trigger)
-
-                spec_ts = datetime.datetime.now()
 
                 if self._autosave_on:
                     s_base = '{}_{:06}'.format(self._autosave_prefix , tot_spectrum+1)
@@ -625,6 +629,11 @@ class Spectrometer(object):
                         s_name = s_base + '.csv'
                         spectrum.save_spectrum(s_name, self._autosave_dir, 'abs')
 
+                    if spec_type == 'abs':
+                        for wav, abs_list in absorbance.items():
+                            abs_list.append(spectrum.get_absorbance(wav))
+
+
                 if return_q is not None:
                     logger.debug('Spectrometer %s: Returning series spectra %s',
                         self.name, tot_spectrum+1)
@@ -637,11 +646,23 @@ class Spectrometer(object):
                 tot_spectrum += 1
 
                 ts = spectrum.get_timestamp()
-                while datetime.datetime.now() -  spec_ts < dt_delta_t:
+                while datetime.datetime.now() -  ts < dt_delta_t:
                     if self._series_abort_event.is_set():
                         break
 
                     time.sleep(0.01)
+
+            if self._autosave_on and spec_type == 'abs':
+                out_file = os.path.join(self._ausave_dir,
+                    '{}_absorbance.csv'.format(s_base))
+
+                out_data = np.column_stack([absorbance[wav] for wav in absorbance])
+                header = 'Absorbance\n#Averaging window: {} nm\n#'.format(self.get_absorbance_window())
+                for wav in absorbance:
+                    header += 'Abs_{}_nm_(Au),'.format(wav)
+                header.rstrip(',')
+
+                np.savetxt(out_file, out_data, delimiter=',', header=header)
 
             self._taking_series = False
 
@@ -1124,6 +1145,17 @@ class StellarnetUVVis(Spectrometer):
 
     def get_external_trigger(self):
         return self.ext_trig
+
+    def abort_collection(self):
+        logger.info('Spectrometer %s: Aborting collection', self.name)
+        self._series_abort_event.set()
+
+        int_trig = self.get_int_trigger()
+
+        if not int_trig:
+            self.set_int_trigger(self, True)
+            time.sleep(0.1)
+            self.set_int_trigger(self, False):
 
 
 class UVCommThread(utils.CommManager):
@@ -2446,6 +2478,8 @@ class InlineUVPanel(utils.DevicePanel):
         self._series_exp_time = None
         self._series_scan_avg = None
 
+        self._ls_shutter = None
+
         self._init_controls()
         wx.CallLater(500, self._init_device_part2)
 
@@ -2557,14 +2591,39 @@ class InlineUVPanel(utils.DevicePanel):
         single_spectrum_box_sizer.Add(single_spectrum_sizer, flag=wx.EXPAND|wx.ALL,
             border=self._FromDIP(5))
 
+
+        ls_parent = wx.StaticBox(ad_win, label='Light Source Control')
+
+        self.ls_status = wx.StaticText(ls_parent, size=(150,-1),
+            style=wx.ST_NO_AUTORESIZE)
+        self.ls_open = wx.Button(ls_parent, label='Open Shutter')
+        self.ls_close = wx.Button(ls_parent, label='Close Shutter')
+
+        self.ls_open.Bind(wx.EVT_BUTTON, self._on_ls_shutter)
+        self.ls_close.Bind(wx.EVT_BUTTON, self._on_ls_shutter)
+
+        ls_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(5),
+            hgap=self._FromDIP(5))
+        ls_sizer.Add(wx.StaticText(ls_parent, label='Status:'))
+        ls_sizer.Add(self.ls_status, flag=wx.EXPAND|wx.ALIGN_CENTER_VERTICAL)
+        ls_sizer.Add(self.ls_open, flag=wx.ALIGN_CENTER_VERTICAL)
+        ls_sizer.Add(self.ls_close, flag=wx.ALIGN_CENTER_VERTICAL)
+
+        ls_box_sizer = wx.StaticBoxSizer(ls_parent,
+            wx.VERTICAL)
+        ls_box_sizer.Add(ls_sizer, flag=wx.EXPAND|wx.ALL,
+            border=self._FromDIP(5))
+
+
         adv_sizer = wx.BoxSizer(wx.VERTICAL)
         adv_sizer.Add(adv_settings_box_sizer, 1, flag=wx.EXPAND|wx.ALL,
             border=self._FromDIP(5))
         adv_sizer.Add(single_spectrum_box_sizer, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM,
             border=self._FromDIP(5))
+        adv_sizer.Add(ls_box_sizer, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM,
+            border=self._FromDIP(5))
 
         adv_win.SetSizer(adv_sizer)
-
 
 
         top_sizer = wx.BoxSizer(wx.VERTICAL)
@@ -2746,6 +2805,32 @@ class InlineUVPanel(utils.DevicePanel):
             self._collect_spectrum('dark')
         elif obj == self.collect_ref_btn:
             self._collect_spectrum('ref')
+
+    def _on_ls_shutter(self, evt):
+        obj = evt.GetEventObject()
+
+        if obj == self.ls_open:
+            shutter = True
+        elif obj == self.ls_close:
+            shutter = False
+
+        self._open_ls_shutter(shutter)
+
+    def _open_ls_shutter(self, shutter_open):
+        ls_cmd = ['set_ls_shutter', [self.name, shutter_open], {}]
+        self._send_cmd(ls_cmd)
+
+        ls_status_cmd = ['get_ls_shutter', [self.name,], {}]
+        resp = self._send_cmd(ls_status_cmd, True)
+
+        self._ls_shutter = resp
+
+        if resp:
+            ls_status = 'Open'
+        else:
+            ls_status = 'Closed'
+
+        self.ls_status.SetLabel(ls_status)
 
     def _collect_spectrum(self, stype='normal'):
         is_busy = self._get_busy()
@@ -2988,6 +3073,7 @@ class InlineUVPanel(utils.DevicePanel):
             abs_wavs = val['abs_wavs']
             abs_win = val['abs_win']
             hist_t = val['hist_t']
+            ls_shutter = val['ls_shutter']
 
             self.history_time.SafeChangeValue(str(hist_t))
 
@@ -3001,6 +3087,15 @@ class InlineUVPanel(utils.DevicePanel):
 
             self._dark_spectrum = dark
             self._reference_spectrum = ref
+
+            self._ls_shutter = ls_shutter
+
+            if self._ls_shutter:
+                ls_status = 'Open'
+            else:
+                ls_status = 'Closed'
+
+            self.ls_status.SetLabel(ls_status)
 
         elif cmd == 'collect_spec':
             self._add_new_spectrum(val)
@@ -3147,8 +3242,14 @@ class InlineUVPanel(utils.DevicePanel):
 
             scan_avgs = exp_time // spec_t
 
+            abort_cmd = ['abort_collection', [self.name,], {}]
+            self._send_cmd(abort_cmd)
+
             ext_trig_cmd = ['set_external_trig', [self.name, True], {}]
             self._send_cmd(ext_trig_cmd)
+
+            int_trig_cmd = ['set_int_trig', [self.name, False], {}]
+            self._send_cmd(int_trig_cmd)
 
             self._set_autosave_parameters(prefix, data_dir)
             valid = self._collect_series(num_frames, int_time, scan_avgs, exp_period, exp_time)
@@ -3163,14 +3264,6 @@ class InlineUVPanel(utils.DevicePanel):
 
         abort_cmd = ['abort_collection', [self.name,], {}]
         self._send_cmd(abort_cmd)
-
-        trig_cmd = ['set_int_trig', [self.name, True], {}]
-        self._send_cmd(trig_cmd)
-
-        time.sleep(0.1)
-
-        trig_cmd = ['set_int_trig', [self.name, False], {}]
-        self._send_cmd(trig_cmd)
 
 
     def metadata(self):

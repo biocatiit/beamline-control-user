@@ -3042,11 +3042,6 @@ class ExpPanel(wx.Panel):
         if not exp_valid:
             return
 
-        comp_valid, comp_settings = self._check_components(exp_only)
-
-        if not comp_valid:
-            return
-
         metadata, metadata_valid = self._get_metadata()
 
         if metadata_valid:
@@ -3101,6 +3096,11 @@ class ExpPanel(wx.Panel):
         overwrite_valid = self._check_overwrite(exp_values)
 
         if not overwrite_valid:
+            return
+
+        comp_valid, comp_settings = self._check_components(exp_only)
+
+        if not comp_valid:
             return
 
         cont = True
