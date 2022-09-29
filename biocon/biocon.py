@@ -594,7 +594,7 @@ if __name__ == '__main__':
         # ('scan',    scancon.ScanPanel),
         ('metadata', metadata.ParamPanel),
         ('pipeline', pipeline_ctrl.PipelineControl),
-        ('uv', spectrometercon.InlineUVPanel),
+        # ('uv', spectrometercon.InlineUVPanel),
         ])
 
     settings = {

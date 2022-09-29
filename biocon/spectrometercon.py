@@ -2955,8 +2955,6 @@ class InlineUVPanel(utils.DevicePanel):
         data_dir = data_dir.replace(self.settings['remote_dir_prefix']['local'], 
                 self.settings['remote_dir_prefix']['remote'])
 
-        logger.info(data_dir)
-
         kwargs = {
             'save_raw'      : save_raw,
             'save_trans'    : save_trans,
@@ -3163,7 +3161,7 @@ class InlineUVPanel(utils.DevicePanel):
 
     def on_exposure_stop(self, exp_panel):
 
-        abort_cmd = ['abort_collection', [self.name, True], {}]
+        abort_cmd = ['abort_collection', [self.name,], {}]
         self._send_cmd(abort_cmd)
 
         trig_cmd = ['set_int_trig', [self.name, True], {}]
