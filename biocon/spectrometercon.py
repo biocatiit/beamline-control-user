@@ -1153,9 +1153,9 @@ class StellarnetUVVis(Spectrometer):
         int_trig = self.get_int_trigger()
 
         if not int_trig:
-            self.set_int_trigger(self, True)
+            self.set_int_trigger(True)
             time.sleep(0.1)
-            self.set_int_trigger(self, False)
+            self.set_int_trigger(False)
 
 
 class UVCommThread(utils.CommManager):
@@ -2594,7 +2594,7 @@ class InlineUVPanel(utils.DevicePanel):
             border=self._FromDIP(5))
 
 
-        ls_parent = wx.StaticBox(ad_win, label='Light Source Control')
+        ls_parent = wx.StaticBox(adv_win, label='Light Source Control')
 
         self.ls_status = wx.StaticText(ls_parent, size=(150,-1),
             style=wx.ST_NO_AUTORESIZE)
@@ -2821,7 +2821,7 @@ class InlineUVPanel(utils.DevicePanel):
     def _open_ls_shutter(self, shutter_open):
         ls_cmd = ['set_ls_shutter', [self.name, shutter_open], {}]
         self._send_cmd(ls_cmd)
-
+        time.sleep(0.1)
         ls_status_cmd = ['get_ls_shutter', [self.name,], {}]
         resp = self._send_cmd(ls_status_cmd, True)
 
@@ -2919,7 +2919,6 @@ class InlineUVPanel(utils.DevicePanel):
                 'dark_time'     : dark_time,
                 'take_ref'      : take_ref,
                 'ref_avgs'      : ref_avgs,
-                'delta_t_min'   : (exp_period-exp_time)/1.1,
             }
 
             cmd = ['collect_series', [self.name, num_spectra], kwargs]
@@ -3598,8 +3597,8 @@ if __name__ == '__main__':
     spectrometer_settings = {
         'name'                  :  'CoflowUV',
         'device_init'           : {'name': 'CoflowUV', 'args': ['StellarNet'],
-            'kwargs': {'shutter_pv_name': '18ID:LJT4:2:DI11',
-            'trigger_pv_name' : '18ID:LJT4:2:DI12'}},
+            'kwargs': {'shutter_pv_name': '18ID:LJT4:2:DO11',
+            'trigger_pv_name' : '18ID:LJT4:2:DO12'}},
         'max_int_t'             : 0.025, # in s
         'scan_avg'              : 1,
         'smoothing'             : 0,
