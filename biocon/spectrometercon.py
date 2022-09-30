@@ -2910,9 +2910,16 @@ class InlineUVPanel(utils.DevicePanel):
             take_ref = self.settings['series_ref_at_start']
             ref_avgs = int(self.ref_avgs.GetValue())
 
+            uv_time = max(int_time*self.settings['int_t_scale'], 0.05)*scan_avgs
+
+            delta_t_min = (exp_time-uv_time)*1.05
+
+            if delta_t_min < 0.01:
+                delta_t_min = 0
+
             kwargs = {
                 'spec_type'     : spec_type,
-                'delta_t_min'   : 0,
+                'delta_t_min'   : delta_t_min,
                 'dark_correct'  : dark_correct,
                 'int_trigger'   : False,
                 'auto_dark'     : auto_dark,
@@ -2923,7 +2930,7 @@ class InlineUVPanel(utils.DevicePanel):
 
             cmd = ['collect_series', [self.name, num_spectra], kwargs]
 
-            self._send_cmd(cmd)
+            self._send_cmd(cmd, True)
 
         else:
             wx.CallAfter(self._show_busy_msg)
@@ -3231,7 +3238,7 @@ class InlineUVPanel(utils.DevicePanel):
         exp_period = exp_metadata['Exposure period/frame [s]:']
         num_frames = exp_metadata['Number of frames:']
 
-        if exp_time < 0.05:
+        if exp_time < 0.125 or exp_period - exp_time < 0.01:
             uv_valid = False
 
         else:
@@ -3239,7 +3246,7 @@ class InlineUVPanel(utils.DevicePanel):
 
             int_time = min(exp_time/2, max_int_t)
 
-            spec_t = max(int_time*2, 0.05)
+            spec_t = max(int_time*self.settings['int_t_scale'], 0.05)
 
             scan_avgs = exp_time // spec_t
 
@@ -3262,9 +3269,10 @@ class InlineUVPanel(utils.DevicePanel):
         return uv_values, uv_valid
 
     def on_exposure_stop(self, exp_panel):
-
         abort_cmd = ['abort_collection', [self.name,], {}]
         self._send_cmd(abort_cmd)
+
+        self._open_ls_shutter(False)
 
 
     def metadata(self):
@@ -3607,14 +3615,15 @@ if __name__ == '__main__':
         'dark_correct'          : True,
         'auto_dark'             : True,
         'auto_dark_t'           : 60*60, #in s
-        'dark_avgs'             : 1,
-        'ref_avgs'              : 1,
+        'dark_avgs'             : 10,
+        'ref_avgs'              : 10,
         'history_t'             : 60*60*24, #in s
         'save_subdir'           : 'UV',
         'save_type'             : 'Absorbance',
         'series_ref_at_start'   : True,
         'abs_wav'               : [280, 260],
         'abs_window'            : 1,
+        'int_t_scale'           : 2,
         'remote_ip'             : '164.54.204.53',
         'remote_port'           : '5559',
         'remote_dir_prefix'     : {'local' : '/nas_data', 'remote' : 'Y:\\'}

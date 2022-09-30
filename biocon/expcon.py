@@ -1538,7 +1538,7 @@ class ExpCommThread(threading.Thread):
         ab_burst = self._mx_data['ab_burst']   #Shutter control signal
         cd_burst = self._mx_data['cd_burst']   #Struck LNE/channel advance signal
         ef_burst = self._mx_data['ef_burst']   #Pilatus trigger signal
-        gh_burst = self._mx_data['gh_burst']   #Continuous exposure shutter for waiting for trigger
+        gh_burst = self._mx_data['gh_burst']   #UV trigger
         # dg645_trigger_source = self._mx_data['dg645_trigger_source']
 
         if exp_type == 'muscle':
@@ -1650,7 +1650,7 @@ class ExpCommThread(threading.Thread):
             cd_burst.setup(exp_period, (exp_period-(exp_time+s_open_time))/10.,
                 num_frames, exp_time+s_open_time, 1, 2)
             ef_burst.setup(exp_period, exp_time, num_frames, s_open_time, 1, 2)
-            gh_burst.setup(exp_period, min(0.1, exp_time/2), num_frames, s_open_time, 1, 2) #Irrelevant
+            gh_burst.setup(exp_period, exp_time/1.1, num_frames, s_open_time, 1, 2)
         else:
             #Shutter will be open continuously
             if exp_type == 'muscle':
@@ -1662,7 +1662,7 @@ class ExpCommThread(threading.Thread):
             cd_burst.setup(exp_period, (exp_period-exp_time)/10.,
                 num_frames, exp_time+(exp_period-exp_time)/10., 1, 2)
             ef_burst.setup(exp_period, exp_time, num_frames, offset, 1, 2)
-            gh_burst.setup(exp_period, min(0.1, exp_time/2), num_frames, s_open_time, 1, 2) #Irrelevant
+            gh_burst.setup(exp_period, exp_time/1.1, num_frames, s_open_time, 1, 2)
 
         if exp_type == 'muscle':
             ab_burst_2.setup(struck_meas_time, 0, struck_num_meas+1, 0, 1, 2) #Irrelevant
@@ -3624,7 +3624,13 @@ class ExpPanel(wx.Panel):
                     'number of scans.'))
 
         if not uv_valid:
-            errors.append(['UV collection failed to start'])
+            if self.current_exposure_values['exp_time'] < 0.125:
+                errors.append('Exposure time with UV data collection must be >= 0.125 s')
+
+            if (self.current_exposure_values['exp_period'] 
+                - self.current_exposure_values['exp_time'] < 0.01):
+                errors.append(('Exposure period must be at least 0.01 s longer '
+                    'than exposure time with UV data collection'))
 
         if len(errors) > 0:
             msg = 'The following field(s) have invalid values:'

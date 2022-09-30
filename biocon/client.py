@@ -149,7 +149,7 @@ class ControlClient(threading.Thread):
 
 
     def _send_cmd(self, command):
-        logger.debug('Sending command %s', command)
+        # logger.debug('Sending command %s', command)
         device = command['device']
         device_cmd = command['command']
         get_response = command['response']
@@ -157,14 +157,14 @@ class ControlClient(threading.Thread):
         try:
             self.socket.send_json(command)
 
-            answer = self._wait_for_response(5)
+            answer = self._wait_for_response(60)
 
             if answer == '':
                 raise zmq.ZMQError(msg="Could not get a response from the server")
             else:
                 self.connect_error = 0
 
-            logger.debug('Command response: %s', answer)
+            # logger.debug('Command response: %s', answer)
 
             if get_response:
                 self.answer_queue.append(answer)
@@ -210,17 +210,17 @@ class ControlClient(threading.Thread):
         while time.time()-start_time < timeout:
             if self.socket.poll(10) > 0:
                 resp = self.socket.recv_pyobj()
-                logger.debug('Received message: %s', resp)
+                # logger.debug('Received message: %s', resp)
                 res_type, response = resp
 
                 if res_type == 'status':
-                    logger.debug('Recevied status %s', response)
+                    # logger.debug('Recevied status %s', response)
                     if self.status_queue is not None:
                         self.status_queue.append(response)
 
                 elif res_type == 'response':
                     answer = response
-                    logger.debug('Recevied response %s', answer)
+                    # logger.debug('Recevied response %s', answer)
                     break
 
         return answer
@@ -231,11 +231,11 @@ class ControlClient(threading.Thread):
         while True:
             if self.socket.poll(10) > 0:
                 resp = self.socket.recv_pyobj()
-                logger.debug('Received status message: %s', resp)
+                # logger.debug('Received status message: %s', resp)
                 res_type, response = resp
 
                 if res_type == 'status':
-                    logger.debug('Recevied status %s', response)
+                    # logger.debug('Recevied status %s', response)
                     if self.status_queue is not None:
                         self.status_queue.append(response)
 
@@ -260,7 +260,7 @@ class ControlClient(threading.Thread):
                 answer = self._wait_for_response(1)
 
                 if answer == 'ping received':
-                    logger.debug("Connection to server verified")
+                    # logger.debug("Connection to server verified")
                     connect_tries = 5
                 else:
                     logger.error("Could not get a response from the server")

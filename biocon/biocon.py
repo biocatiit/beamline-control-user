@@ -552,6 +552,7 @@ if __name__ == '__main__':
         'components'    : ['pipeline'],
         'server_port'   : '5556',
         'server_ip'     : '164.54.204.142',
+        # 'server_ip'     : '164.54.204.82',
         # 'raw_settings'  : '/nas_data/Pilatus1M/2021_Run1/20210129_Hopkins/setup/calibration/pipeline_SAXS.cfg',
         'local_basedir' : '/nas_data/Eiger2xe9M',
         'data_basedir'  : '/nas_data/Eiger2xe9M',
@@ -571,14 +572,15 @@ if __name__ == '__main__':
         'dark_correct'          : True,
         'auto_dark'             : True,
         'auto_dark_t'           : 60*60, #in s
-        'dark_avgs'             : 1,
-        'ref_avgs'              : 1,
+        'dark_avgs'             : 2,
+        'ref_avgs'              : 2,
         'history_t'             : 60*60*24, #in s
         'save_subdir'           : 'UV',
         'save_type'             : 'Absorbance',
         'series_ref_at_start'   : True,
         'abs_wav'               : [280, 260],
         'abs_window'            : 1,
+        'int_t_scale'           : 2,
         'remote_ip'             : '164.54.204.53',
         'remote_port'           : '5559',
         'remote_dir_prefix'     : {'local' : '/nas_data', 'remote' : 'Y:\\'}
@@ -588,13 +590,13 @@ if __name__ == '__main__':
 
     components = OrderedDict([
         ('exposure', expcon.ExpPanel),
-        ('coflow', coflowcon.CoflowPanel),
+        # ('coflow', coflowcon.CoflowPanel),
         # ('trsaxs_scan', trcon.TRScanPanel),
         # ('trsaxs_flow', trcon.TRFlowPanel),
         # ('scan',    scancon.ScanPanel),
         ('metadata', metadata.ParamPanel),
         ('pipeline', pipeline_ctrl.PipelineControl),
-        # ('uv', spectrometercon.InlineUVPanel),
+        ('uv', spectrometercon.InlineUVPanel),
         ])
 
     settings = {

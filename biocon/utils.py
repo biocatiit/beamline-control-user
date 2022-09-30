@@ -753,9 +753,6 @@ class DevicePanel(wx.Panel):
         self.name = device_data['name']
         self.parent = parent
 
-        print(kwargs)
-        print(self.name)
-
         if 'name' not in kwargs:
             kwargs['name'] = self.name
 
