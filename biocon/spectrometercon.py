@@ -1716,6 +1716,7 @@ class UVCommThread(utils.CommManager):
         abs_wavs = device.get_absorbance_wavelengths()
         abs_win = device.get_absorbance_window()
         hist_t = device.get_history_time(**kwargs)
+        ls_shutter = device.get_lightsource_shutter()
 
         ret_vals = {
             'int_time'  : int_time,
@@ -1727,6 +1728,7 @@ class UVCommThread(utils.CommManager):
             'abs_wavs'  : abs_wavs,
             'abs_win'   : abs_win,
             'hist_t'    : hist_t,
+            'ls_shutter': ls_shutter,
         }
 
         self._return_value((name, 'get_spec_settings', ret_vals), comm_name)
