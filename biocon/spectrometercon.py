@@ -236,6 +236,12 @@ class Spectrometer(object):
         self._dark_spectrum = None
         self._series_abort_event = threading.Event()
         self._series_thread = None
+        self.series_ready_event = threading.Event()
+        self._autosave_queue = deque()
+        self._stop_autosave_event = threading.Event()
+        self._autosave_thread = threading.Thread(target=self._series_autosave_thread)
+        self._autosave_thread.daemon = True
+        self._autosave_thread.start()
 
         self._integration_time = 1
         self._scan_avg = 1
@@ -265,6 +271,7 @@ class Spectrometer(object):
 
     def disconnect(self):
         logger.info('Spectrometer %s: Disconnecting', self.name)
+        self._stop_autosave_event.set()
 
     def set_integration_time(self, int_time, update_dark=True):
         logger.info('Spectrometer %s: Setting integration time to %s s',
@@ -592,12 +599,17 @@ class Spectrometer(object):
 
                 absorbance = {wav : [] for wav in abs_wavs}
 
+                abs_t = []
+
             while tot_spectrum < num_spectra:
                 if self._series_abort_event.is_set():
                     break
 
                 logger.debug('Spectrometer %s: Collecting series spectra %s',
                     self.name, tot_spectrum+1)
+
+                if tot_spectrum == 0:
+                    self.series_ready_event.set()
 
                 if spec_type == 'abs':
                     spectrum = self._collect_absorbance_spectrum_inner(dark_correct,
@@ -609,6 +621,65 @@ class Spectrometer(object):
                 else:
                     spectrum = self._collect_spectrum_inner(dark_correct,
                         int_trigger)
+
+                if self._autosave_on:
+                    self._autosave_queue.append([spectrum, tot_spectrum, spec_type])
+
+                    if tot_spectrum == 0:
+                        initial_spec_ts = spectrum.get_timestamp()
+
+                    dt = spectrum.get_timestamp()-initial_spec_ts
+                    abs_t.append(dt.total_seconds())
+
+                    if spec_type == 'abs':
+                        for wav, abs_list in absorbance.items():
+                            abs_list.append(spectrum.get_absorbance(wav))
+
+                if return_q is not None:
+                    logger.debug('Spectrometer %s: Returning series spectra %s',
+                        self.name, tot_spectrum+1)
+
+                    try:
+                        return_q.put_nowait(spectrum)
+                    except:
+                        return_q.append(spectrum)
+
+                tot_spectrum += 1
+
+                ts = spectrum.get_timestamp()
+
+                while datetime.datetime.now() -  ts < dt_delta_t:
+                    if self._series_abort_event.is_set():
+                        break
+
+                    time.sleep(0.01)
+
+            if self._autosave_on and spec_type == 'abs':
+                out_file = os.path.join(self._autosave_dir,
+                    '{}_absorbance.csv'.format(self._autosave_prefix))
+
+                out_list = [abs_t] + [absorbance[wav] for wav in absorbance]
+                out_data = np.column_stack(out_list)
+                header = ('Absorbance\n#Averaging window: {} nm\n#Time_(s),'
+                    .format(self.get_absorbance_window())
+                                )
+                for wav in absorbance:
+                    header += 'Abs_{}_nm_(Au),'.format(wav)
+                header.rstrip(',')
+
+                if out_data.size > 0:
+                    np.savetxt(out_file, out_data, delimiter=',', header=header)
+
+            self._taking_series = False
+            self.series_ready_event.clear()
+
+            logger.info('Spectrometer %s: Finished Collecting a series of '
+                '%s spectra', self.name, num_spectra)
+
+    def _series_autosave_thread(self):
+        while True:
+            if len(self._autosave_queue) > 0:
+                spectrum, tot_spectrum, spec_type = self._autosave_queue.popleft()
 
                 if self._autosave_on:
                     s_base = '{}_{:06}'.format(self._autosave_prefix , tot_spectrum+1)
@@ -628,46 +699,11 @@ class Spectrometer(object):
                         logger.debug('Autosaving abs spectra')
                         s_name = s_base + '.csv'
                         spectrum.save_spectrum(s_name, self._autosave_dir, 'abs')
-
-                    if spec_type == 'abs':
-                        for wav, abs_list in absorbance.items():
-                            abs_list.append(spectrum.get_absorbance(wav))
-
-
-                if return_q is not None:
-                    logger.debug('Spectrometer %s: Returning series spectra %s',
-                        self.name, tot_spectrum+1)
-
-                    try:
-                        return_q.put_nowait(spectrum)
-                    except:
-                        return_q.append(spectrum)
-
-                tot_spectrum += 1
-
-                ts = spectrum.get_timestamp()
-                while datetime.datetime.now() -  ts < dt_delta_t:
-                    if self._series_abort_event.is_set():
-                        break
-
-                    time.sleep(0.01)
-
-            if self._autosave_on and spec_type == 'abs':
-                out_file = os.path.join(self._ausave_dir,
-                    '{}_absorbance.csv'.format(s_base))
-
-                out_data = np.column_stack([absorbance[wav] for wav in absorbance])
-                header = 'Absorbance\n#Averaging window: {} nm\n#'.format(self.get_absorbance_window())
-                for wav in absorbance:
-                    header += 'Abs_{}_nm_(Au),'.format(wav)
-                header.rstrip(',')
-
-                np.savetxt(out_file, out_data, delimiter=',', header=header)
-
-            self._taking_series = False
-
-            logger.info('Spectrometer %s: Finished Collecting a series of '
-                '%s spectra', self.name, num_spectra)
+            else:
+                if self._stop_autosave_event.is_set():
+                    break
+                else:
+                    time.sleep(0.1)
 
     def subtract_spectra(self, spectrum1, spectrum2, spec_type='raw'):
         """Return spectrum1 - spectrum2"""
@@ -965,6 +1001,7 @@ class StellarnetUVVis(Spectrometer):
         if self.is_busy():
             self.abort_collection()
         self.spectrometer['device'].__del__()
+        self._stop_autosave_event.set()
 
     def set_integration_time(self, int_time, update_dark=True):
         logger.info('Spectrometer %s: Setting integration time to %s s',
@@ -1154,7 +1191,7 @@ class StellarnetUVVis(Spectrometer):
 
         if not int_trig:
             self.set_int_trigger(True)
-            time.sleep(0.1)
+            time.sleep(1)
             self.set_int_trigger(False)
 
 
@@ -1457,6 +1494,9 @@ class UVCommThread(utils.CommManager):
         monitor_thread.start()
 
         self._monitor_threads[name] = monitor_thread
+
+        while not device.series_ready_event.is_set():
+            time.sleep(0.01)
 
         self._return_value((name, 'collect_series', True), comm_name)
 
