@@ -1155,7 +1155,7 @@ class StellarnetUVVis(Spectrometer):
         if not int_trig:
             self.set_int_trigger(self, True)
             time.sleep(0.1)
-            self.set_int_trigger(self, False):
+            self.set_int_trigger(self, False)
 
 
 class UVCommThread(utils.CommManager):
