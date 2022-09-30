@@ -467,25 +467,25 @@ if __name__ == '__main__':
 
     # Both
 
-    pump_frame = pumpcon.PumpFrame(pump_local_comm_locks, setup_pumps, None,
-        title='Pump Control')
-    pump_frame.Show()
+    # pump_frame = pumpcon.PumpFrame(pump_local_comm_locks, setup_pumps, None,
+    #     title='Pump Control')
+    # pump_frame.Show()
 
-    valve_frame = valvecon.ValveFrame(valve_comm_locks, setup_valves,
-        None, title='Valve Control')
-    valve_frame.Show()
+    # valve_frame = valvecon.ValveFrame(valve_comm_locks, setup_valves,
+    #     None, title='Valve Control')
+    # valve_frame.Show()
 
-    control_server_pump = ControlServer(ip, port1, name='PumpControlServer',
-        pump_comm_locks = pump_comm_locks, start_pump=True)
-    control_server_pump.start()
+    # control_server_pump = ControlServer(ip, port1, name='PumpControlServer',
+    #     pump_comm_locks = pump_comm_locks, start_pump=True)
+    # control_server_pump.start()
 
-    control_server_fm = ControlServer(ip, port2, name='FMControlServer',
-        start_fm=True)
-    control_server_fm.start()
+    # control_server_fm = ControlServer(ip, port2, name='FMControlServer',
+    #     start_fm=True)
+    # control_server_fm.start()
 
-    control_server_valve = ControlServer(ip, port3, name='ValveControlServer',
-        valve_comm_locks = valve_comm_locks, start_valve=True)
-    control_server_valve.start()
+    # control_server_valve = ControlServer(ip, port3, name='ValveControlServer',
+    #     valve_comm_locks = valve_comm_locks, start_valve=True)
+    # control_server_valve.start()
 
 
     if exp_type == 'coflow':
@@ -507,14 +507,14 @@ if __name__ == '__main__':
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        control_server_pump.stop()
-        control_server_pump.join()
+        # control_server_pump.stop()
+        # control_server_pump.join()
 
-        control_server_fm.stop()
-        control_server_fm.join()
+        # control_server_fm.stop()
+        # control_server_fm.join()
 
-        control_server_valve.stop()
-        control_server_valve.join()
+        # control_server_valve.stop()
+        # control_server_valve.join()
 
         if exp_type == 'coflow':
             control_server_uv.stop()
