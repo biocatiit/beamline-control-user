@@ -317,10 +317,10 @@ if __name__ == '__main__':
             ],
         'warnings'              : {'shutter' : True, 'col_vac' : {'check': True,
             'thresh': 0.04}, 'guard_vac' : {'check': True, 'thresh': 0.04},
-            'sample_vac': {'check': False, 'thresh': 0.04}, 'sc_vac':
-            {'check': False, 'thresh':0.04}},
+            'sample_vac': {'check': True, 'thresh': 0.04}, 'sc_vac':
+            {'check': True, 'thresh':0.04}},
         # 'base_data_dir'         : '/nas_data/Pilatus1M/2022_Run2', #CHANGE ME
-        'base_data_dir'         : '/nas_data/Eiger2xe9M/2022_Run3', #CHANGE ME and pipeline local_basedir
+        'base_data_dir'         : '/nas_data/Eiger2x/2022_Run3', #CHANGE ME and pipeline local_basedir
         }
 
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']
@@ -336,7 +336,7 @@ if __name__ == '__main__':
         'remote_valve_ip'           : '164.54.204.53',
         'remote_valve_port'         : '5558',
         'flow_units'                : 'mL/min',
-        'sheath_pump'               : ('VICI_M50', 'COM3', [629.48, 13.442], {}),
+        'sheath_pump'               : ('VICI_M50', 'COM3', [627.72, 9.814], {}),
         'outlet_pump'               : ('VICI_M50', 'COM4', [625.28, 7.905], {}),
         'sheath_fm'                 : ('BFS', 'COM5', [], {}),
         'outlet_fm'                 : ('BFS', 'COM6', [], {}),
@@ -554,8 +554,8 @@ if __name__ == '__main__':
         'server_ip'     : '164.54.204.142',
         # 'server_ip'     : '164.54.204.82',
         # 'raw_settings'  : '/nas_data/Pilatus1M/2021_Run1/20210129_Hopkins/setup/calibration/pipeline_SAXS.cfg',
-        'local_basedir' : '/nas_data/Eiger2xe9M',
-        'data_basedir'  : '/nas_data/Eiger2xe9M',
+        'local_basedir' : '/nas_data/Eiger2x',
+        'data_basedir'  : '/nas_data/Eiger2x',
         'output_basedir': '/nas_data/SAXS',
         }
 
