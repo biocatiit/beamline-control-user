@@ -1741,7 +1741,7 @@ class CoflowPanel(wx.Panel):
 
         metadata = OrderedDict()
 
-        if self.coflow_control.coflow_on:
+        if self.coflow_control.coflow_on or self.auto_flow.GetValue():
             metadata['Coflow on:'] = True
             metadata['LC flow rate [{}]:'.format(self.settings['flow_units'])] = self.coflow_control.lc_flow_rate
             metadata['Outlet flow rate [{}]:'.format(self.settings['flow_units'])] = self.coflow_control.outlet_setpoint
