@@ -3126,6 +3126,7 @@ class ExpPanel(wx.Panel):
             # experiments and file prefixes. Right now, the only processing
             # the pipeline will do for batch mode is radial averaging, since
             # it doesn't know the associated sample and buffer files
+            print('starting experiment in pipeline')
             self.pipeline_ctrl.start_experiment(fprefix, exp_type, local_data_dir,
                 fprefix, num_frames)
 

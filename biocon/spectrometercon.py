@@ -2547,15 +2547,21 @@ class InlineUVPanel(utils.DevicePanel):
 
         self.int_time =wx.TextCtrl(settings_parent,
             validator=utils.CharValidator('float_te'))
+        self.collect_uv = wx.CheckBox(settings_parent, label='Collect UV')
+        self.collect_uv.SetValue(True)
 
-        self.settings_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(5),
+        self.settings_sizer = wx.GridBagSizer(vgap=self._FromDIP(5),
             hgap=self._FromDIP(5))
-        self.settings_sizer.AddGrowableCol(1)
 
         self.settings_sizer.Add(wx.StaticText(settings_parent,
-            label='Max int. time (s):'), flag=wx.ALIGN_CENTER_VERTICAL)
-        self.settings_sizer.Add(self.int_time,
+            label='Max int. time (s):'), (0,0), flag=wx.ALIGN_CENTER_VERTICAL)
+        self.settings_sizer.Add(self.int_time, (0,1),
             flag=wx.EXPAND|wx.ALIGN_CENTER_VERTICAL)
+        self.settings_sizer.Add(self.collect_uv, (1,0), span=(1,2),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+
+
+        self.settings_sizer.AddGrowableCol(1)
 
         settings_box_sizer = wx.StaticBoxSizer(settings_parent, wx.VERTICAL)
         settings_box_sizer.Add(self.settings_sizer, flag=wx.EXPAND|wx.ALL,
@@ -3270,41 +3276,46 @@ class InlineUVPanel(utils.DevicePanel):
         uv_values = None
         uv_valid = True
 
-        exp_metadata = exp_panel.metadata()
+        if self.collect_uv.GetValue():
 
-        prefix = exp_metadata['File prefix:']
-        data_dir =  exp_metadata['Save directory:']
-        exp_time = exp_metadata['Exposure time/frame [s]:']
-        exp_period = exp_metadata['Exposure period/frame [s]:']
-        num_frames = exp_metadata['Number of frames:']
+            exp_metadata = exp_panel.metadata()
 
-        if exp_time < 0.125 or exp_period - exp_time < 0.01:
-            uv_valid = False
+            prefix = exp_metadata['File prefix:']
+            data_dir =  exp_metadata['Save directory:']
+            exp_time = exp_metadata['Exposure time/frame [s]:']
+            exp_period = exp_metadata['Exposure period/frame [s]:']
+            num_frames = exp_metadata['Number of frames:']
 
-        else:
-            max_int_t = float(self.int_time.GetValue())
+            if exp_time < 0.125 or exp_period - exp_time < 0.01:
+                uv_valid = False
 
-            int_time = min(exp_time/2, max_int_t)
+            else:
+                max_int_t = float(self.int_time.GetValue())
 
-            spec_t = max(int_time*self.settings['int_t_scale'], 0.05)
+                int_time = min(exp_time/2, max_int_t)
 
-            scan_avgs = exp_time // spec_t
+                spec_t = max(int_time*self.settings['int_t_scale'], 0.05)
 
-            abort_cmd = ['abort_collection', [self.name,], {}]
-            self._send_cmd(abort_cmd)
+                scan_avgs = exp_time // spec_t
 
-            ext_trig_cmd = ['set_external_trig', [self.name, True], {}]
-            self._send_cmd(ext_trig_cmd)
+                abort_cmd = ['abort_collection', [self.name,], {}]
+                self._send_cmd(abort_cmd)
 
-            int_trig_cmd = ['set_int_trig', [self.name, False], {}]
-            self._send_cmd(int_trig_cmd)
+                ext_trig_cmd = ['set_external_trig', [self.name, True], {}]
+                self._send_cmd(ext_trig_cmd)
 
-            self._set_autosave_parameters(prefix, data_dir)
-            valid = self._collect_series(num_frames, int_time, scan_avgs, exp_period, exp_time)
+                int_trig_cmd = ['set_int_trig', [self.name, False], {}]
+                self._send_cmd(int_trig_cmd)
 
-            if valid:
-                while not self._get_busy():
-                    time.sleep(0.01)
+                if 'pipeline' in self.settings['components']:
+                    data_dir = os.path.split(data_dir)[0]
+
+                self._set_autosave_parameters(prefix, data_dir)
+                valid = self._collect_series(num_frames, int_time, scan_avgs, exp_period, exp_time)
+
+                if valid:
+                    while not self._get_busy():
+                        time.sleep(0.01)
 
         return uv_values, uv_valid
 
