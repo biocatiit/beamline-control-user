@@ -2295,8 +2295,8 @@ class UVPanel(utils.DevicePanel):
             data_dir = self.autosave_dir.GetValue()
             data_dir = os.path.abspath(os.path.expanduser(data_dir))
 
-            data_dir = data_dir.replace(self.settings['remote_dir_prefix']['local'], 
-                self.settings['remote_dir_prefix']['remote'])
+            # data_dir = data_dir.replace(self.settings['remote_dir_prefix']['local'], 
+            #     self.settings['remote_dir_prefix']['remote'])
 
             kwargs = {
                 'save_raw'      : save_raw,
