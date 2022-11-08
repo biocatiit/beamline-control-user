@@ -577,22 +577,34 @@ class Spectrometer(object):
 
         else:
             self._series_abort_event.clear()
-            self._taking_series = True
-
+            
             tot_spectrum = 0
 
             dt_delta_t = datetime.timedelta(seconds=delta_t_min)
 
             if self._series_abort_event.is_set():
+                self._taking_series = False
+                self.series_ready_event.clear()
                 return
 
             if auto_dark:
                 self._auto_dark(dark_time)
 
+            ds = self.get_dark()
+
+            ds.save_spectrum('{}_dark'.format(self._autosave_prefix),
+                self._autosave_dir, 'raw')
+
             self._check_light_conditions()
+
+            # time.sleep(0.1)
 
             if take_ref:
                 self._collect_reference_spectrum_inner(ref_avgs)
+
+            ref = self.get_reference_spectrum()
+            ref.save_spectrum('{}_ref'.format(self._autosave_prefix),
+                self._autosave_dir, 'raw')
 
             if spec_type == 'abs':
                 abs_wavs = self.get_absorbance_wavelengths()
@@ -600,6 +612,8 @@ class Spectrometer(object):
                 absorbance = {wav : [] for wav in abs_wavs}
 
                 abs_t = []
+
+            self._taking_series = True
 
             while tot_spectrum < num_spectra:
                 if self._series_abort_event.is_set():
@@ -1056,6 +1070,8 @@ class StellarnetUVVis(Spectrometer):
             self.shutter_pv.put(1, wait=True)
         else:
             self.shutter_pv.put(0, wait=True)
+
+        time.sleep(0.1)
 
     def get_lightsource_shutter(self):
         status = self.shutter_pv.get()
