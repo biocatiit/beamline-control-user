@@ -41,6 +41,7 @@ import trcon
 import metadata
 import scancon
 import pipeline_ctrl
+import spectrometercon
 
 class BioFrame(wx.Frame):
     """
@@ -81,8 +82,13 @@ class BioFrame(wx.Frame):
                 logger.info('Setting up %s panel', key)
                 if key == 'trsaxs_scan':
                     label = 'TRSAXS Scan'
+
                 elif key == 'trsaxs_flow':
-                    label='TRSAXS Flow'
+                    label ='TRSAXS Flow'
+
+                elif key == 'uv':
+                    label = 'UV'
+
                 else:
                     label = key.capitalize()
 
@@ -154,6 +160,10 @@ class BioFrame(wx.Frame):
 
             if 'scan' in component_sizers:
                 exp_sizer.Add(component_sizers['scan'], border=5,
+                    flag=wx.EXPAND|wx.ALL)
+
+            if 'uv' in component_sizers:
+                exp_sizer.Add(component_sizers['uv'], border=5,
                     flag=wx.EXPAND|wx.ALL)
 
             panel_sizer.Add(exp_sizer, flag=wx.EXPAND)
@@ -231,7 +241,7 @@ if __name__ == '__main__':
         'remote_dir_root'       : '/nas_data/Eiger2xe9M',
         'detector'              : '18ID:EIG2:_epics',
         'det_args'              :  {'use_tiff_writer': False, 'use_file_writer': True,
-                                    'photon_energy' : 12.0, 'images_per_file': 1},
+                                    'photon_energy' : 12.0, 'images_per_file': 100},
         'add_file_postfix'      : False,
 
         # 'shutter_speed_open'    : 0.004, #in s      NM vacuum shutter, broken
@@ -307,10 +317,10 @@ if __name__ == '__main__':
             ],
         'warnings'              : {'shutter' : True, 'col_vac' : {'check': True,
             'thresh': 0.04}, 'guard_vac' : {'check': True, 'thresh': 0.04},
-            'sample_vac': {'check': False, 'thresh': 0.04}, 'sc_vac':
-            {'check': False, 'thresh':0.04}},
-        # 'base_data_dir'         : '/nas_data/Pilatus1M/2021_Run3', #CHANGE ME
-        'base_data_dir'         : '/nas_data/Eiger2xe9M/2022_Run1', #CHANGE ME and pipeline local_basedir
+            'sample_vac': {'check': True, 'thresh': 0.04}, 'sc_vac':
+            {'check': True, 'thresh':0.04}},
+        # 'base_data_dir'         : '/nas_data/Pilatus1M/2022_Run2', #CHANGE ME
+        'base_data_dir'         : '/nas_data/Eiger2x/2022_Run3', #CHANGE ME and pipeline local_basedir
         }
 
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']
@@ -326,7 +336,7 @@ if __name__ == '__main__':
         'remote_valve_ip'           : '164.54.204.53',
         'remote_valve_port'         : '5558',
         'flow_units'                : 'mL/min',
-        'sheath_pump'               : ('VICI_M50', 'COM3', [629.48, 13.442], {}),
+        'sheath_pump'               : ('VICI_M50', 'COM3', [627.72, 9.814], {}),
         'outlet_pump'               : ('VICI_M50', 'COM4', [625.28, 7.905], {}),
         'sheath_fm'                 : ('BFS', 'COM5', [], {}),
         'outlet_fm'                 : ('BFS', 'COM6', [], {}),
@@ -361,7 +371,7 @@ if __name__ == '__main__':
         'scan_speed'            : 2,
         'num_scans'             : 1,
         'return_speed'          : 20,
-        'scan_acceleration'     : 110,
+        'scan_acceleration'     : 10,
         'return_acceleration'   : 100,
         'constant_scan_speed'   : True,
         'scan_start_offset_dist': 0,
@@ -410,14 +420,17 @@ if __name__ == '__main__':
         #     ['20 mL, Medline P.C.', '3'], {}, {'flow_rate' : '10',
         #     'refill_rate' : '10', 'dual_syringe': False}),
         'sample_pump'           : ('Sample', 'SSI Next Gen', 'COM15',
-            [], {}, {'continuous_flow': True, 'flow_accel': 0.0,
-            'max_pressure': 1100},  True),
+            [], {'flow_rate_scale': 1.0204, 'flow_rate_offset': 15.346/1000,
+                     'scale_type': 'up'}, {'continuous_flow': True, 'flow_accel': 0.0,
+            'max_pressure': 1500},  True),
         'buffer1_pump'           : ('Buffer 1', 'SSI Next Gen', 'COM17',
-            [], {}, {'continuous_flow': True, 'flow_accel': 0.0,
-            'max_pressure': 1100}, True),
+            [], {'flow_rate_scale': 1.0478, 'flow_rate_offset': -72.82/1000,
+                    'scale_type': 'up'}, {'continuous_flow': True, 'flow_accel': 0.0,
+            'max_pressure': 1750}, True),
         'buffer2_pump'          : ('Buffer 2', 'SSI Next Gen', 'COM18',
-            [], {}, {'continuous_flow': True, 'flow_accel': 0.0,
-            'max_pressure': 1100}, True),
+            [], {'flow_rate_scale': 1.0179, 'flow_rate_offset': -20.842/1000,
+                    'scale_type': 'up'}, {'continuous_flow': True, 'flow_accel': 0.0,
+            'max_pressure': 1700}, True),
         'outlet_fm'             : ('BFS', 'COM5', [], {}),
         # 'injection_valve'       : [('Rheodyne', 'COM6', [], {'positions' : 2}, 'Injection'),], #Laminar flow
         # 'sample_valve'          : [('Rheodyne', 'COM9', [], {'positions' : 6}, 'Sample'),],
@@ -539,22 +552,51 @@ if __name__ == '__main__':
         'components'    : ['pipeline'],
         'server_port'   : '5556',
         'server_ip'     : '164.54.204.142',
+        # 'server_ip'     : '164.54.204.82',
         # 'raw_settings'  : '/nas_data/Pilatus1M/2021_Run1/20210129_Hopkins/setup/calibration/pipeline_SAXS.cfg',
-        'local_basedir' : '/nas_data/Eiger2xe9M',
-        'data_basedir'  : '/nas_data/Eiger2xe9M',
+        'local_basedir' : '/nas_data/Eiger2x',
+        'data_basedir'  : '/nas_data/Eiger2x',
         'output_basedir': '/nas_data/SAXS',
         }
+
+    spectrometer_settings = {
+        'name'                  :  'CoflowUV',
+        'device_init'           : {'name': 'CoflowUV', 'args': ['StellarNet'],
+            'kwargs': {'shutter_pv_name': '18ID:LJT4:2:DO11',
+            'trigger_pv_name' : '18ID:LJT4:2:DO12'}},
+        'max_int_t'             : 0.025, # in s
+        'scan_avg'              : 1,
+        'smoothing'             : 0,
+        'xtiming'               : 3,
+        'spectrum_type'         : 'Absorbance', #Absorbance, Transmission, Raw
+        'dark_correct'          : True,
+        'auto_dark'             : True,
+        'auto_dark_t'           : 60*60, #in s
+        'dark_avgs'             : 2,
+        'ref_avgs'              : 2,
+        'history_t'             : 60*60*24, #in s
+        'save_subdir'           : 'UV',
+        'save_type'             : 'Absorbance',
+        'series_ref_at_start'   : True,
+        'abs_wav'               : [280, 260],
+        'abs_window'            : 1,
+        'int_t_scale'           : 2,
+        'remote_ip'             : '164.54.204.53',
+        'remote_port'           : '5559',
+        'remote_dir_prefix'     : {'local' : '/nas_data', 'remote' : 'Y:\\'}
+    }
 
     biocon_settings = {}
 
     components = OrderedDict([
         ('exposure', expcon.ExpPanel),
-        # ('coflow', coflowcon.CoflowPanel),
-        ('trsaxs_scan', trcon.TRScanPanel),
-        ('trsaxs_flow', trcon.TRFlowPanel),
+        ('coflow', coflowcon.CoflowPanel),
+        # ('trsaxs_scan', trcon.TRScanPanel),
+        # ('trsaxs_flow', trcon.TRFlowPanel),
         # ('scan',    scancon.ScanPanel),
         ('metadata', metadata.ParamPanel),
-        # ('pipeline', pipeline_ctrl.PipelineControl)
+        ('pipeline', pipeline_ctrl.PipelineControl),
+        ('uv', spectrometercon.InlineUVPanel),
         ])
 
     settings = {
@@ -565,6 +607,7 @@ if __name__ == '__main__':
         'scan'          : scan_settings,
         'metadata'      : metadata_settings,
         'pipeline'      : pipeline_settings,
+        'uv'            : spectrometer_settings,
         'components'    : components,
         'biocon'        : biocon_settings,
         }
@@ -586,7 +629,7 @@ if __name__ == '__main__':
 
     h2 = handlers.RotatingFileHandler(os.path.join(info_dir, 'biocon.log'), maxBytes=10e6, backupCount=5, delay=True)
     h2.setLevel(logging.INFO)
-    # h2.setLevel(logging.DEBUG)
+    h2.setLevel(logging.DEBUG)
     formatter2 = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
     h2.setFormatter(formatter2)
 

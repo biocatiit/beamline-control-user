@@ -990,6 +990,9 @@ class TRScanPanel(wx.Panel):
                             pco_end = y_end
                         pco_speed = vect_scan_speed[1]
 
+                    if abs(pco_start-pco_end) % pco_step == 0:
+                        pco_end -= min(encoder_resolution, pco_step)
+
                     if pco_start % encoder_resolution != 0:
                         pco_start = self.round_to(pco_start, encoder_precision,
                             encoder_resolution)
@@ -1602,6 +1605,8 @@ class TRScanPanel(wx.Panel):
                 scan_values['pco_pulse_width'] = self.settings['pco_pulse_width']
                 scan_values['pco_encoder_settle_t'] =  self.settings['pco_encoder_settle_t']
 
+            logger.info(scan_values)
+
         return scan_values, valid
 
     def _calc_vector_params(self, x_start, x_end, y_start, y_end, scan_speed,
@@ -1986,6 +1991,8 @@ class TRFlowPanel(wx.Panel):
 
             if dual_syringe is not None:
                 kwargs['dual_syringe'] = dual_syringe
+
+            kwargs.update(pump[1][4])
 
             if not self.local_devices:
                 cmd = ('connect_remote', args, kwargs)

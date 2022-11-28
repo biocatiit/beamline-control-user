@@ -123,6 +123,7 @@ class PipelineControl(object):
         cmd = ('start_experiment', [exp_name, exp_type, pipeline_data_dir, fprefix, 
             pipeline_output_dir],
             cmd_kwargs)
+
         client_cmd = {'command': cmd, 'response': False}
         self.cmd_q.append(client_cmd)
 
