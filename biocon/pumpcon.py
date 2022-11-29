@@ -869,7 +869,7 @@ class PHD4400Pump(Pump):
         rate = self._convert_flow_rate(rate, self.units, self._pump_base_units)
 
         self._refill_rate = self.round(rate)
-        logger.info('Checking volume')
+        # logger.info('Checking volume')
 
         #Have to do this or can lose aspirate/dispense volume
         volume = self._volume
@@ -1254,7 +1254,7 @@ class PicoPlusPump(Pump):
         rate = self._convert_flow_rate(rate, self.units, self._pump_base_units)
 
         self._refill_rate = self.round(rate)
-        logger.info('Checking volume')
+        # logger.info('Checking volume')
 
         #Have to do this or can lose aspirate/dispense volume
         volume = self._volume
@@ -1292,28 +1292,17 @@ class PicoPlusPump(Pump):
 
     @property
     def volume(self):
+        flowing = self.is_flowing(True)
+
         volume = self._volume
 
-        currently_flowing = copy.copy(self._is_flowing)
-
-        if self.is_flowing(True):
+        if flowing:
             vol = self.get_delivered_volume()
 
             if self._flow_dir > 0:
                 volume = volume - vol
             elif self._flow_dir < 0:
                 volume = volume + vol
-
-        else:
-            if currently_flowing:
-                vol = self.get_delivered_volume()
-
-                if self._flow_dir > 0:
-                    self._volume = self._volume - vol
-                elif self._flow_dir < 0:
-                    self._volume = self._volume + vol
-
-                volume = self._volume
 
         return volume
 
@@ -1374,6 +1363,8 @@ class PicoPlusPump(Pump):
         """
         ret = self.send_cmd("")
 
+        old_move = copy.copy(self._is_flowing)
+
         if ret.endswith('>'):
             moving = True
             self._flow_dir = 1
@@ -1383,7 +1374,17 @@ class PicoPlusPump(Pump):
         else:
             moving = False
 
+        if not moving and old_move:
+            vol = self.get_delivered_volume()
+
+            if self._flow_dir > 0:
+                self._volume = self._volume - vol
+            elif self._flow_dir < 0:
+                self._volume = self._volume + vol
+
         self._is_flowing = moving
+
+
 
         return moving
 
@@ -5193,7 +5194,7 @@ class PumpFrame(wx.Frame):
             #         {'flow_rate' : '5', 'refill_rate' : '5'}),
             #     ('Pump 3', 'Pico Plus', 'COM20', ['6 mL, Medline P.C.', '00', False], {},
             #         {'flow_rate' : '5', 'refill_rate' : '5'}),
-                # ]
+            #     ]
 
         elif len(setup_pumps) > 0:
             if not self.pumps:
