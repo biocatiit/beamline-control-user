@@ -355,6 +355,11 @@ class Pump(object):
         # flow rates above or below set rate, but perhaps you only want to scale
         # up, and otherwise use the set rate)
 
+        # Defines the base units that the pump hardware expects the flow rate
+        # (and volume) in
+        self._pump_base_units = 'mL/min'
+
+
     def __repr__(self):
         return '{}({}, {})'.format(self.__class__.__name__, self.name, self.device)
 
@@ -420,23 +425,25 @@ class Pump(object):
             logger.warning("Failed to change pump %s units, units supplied were invalid: %s", self.name, units)
 
     def _convert_volume(self, volume, u1, u2):
-        if u1 in ['nL', 'uL', 'mL'] and u2 in ['nL', 'uL', 'mL']:
-            if u1 != u2:
-                if (u1 == 'nL' and u2 == 'uL') or (u1 == 'uL' and u2 == 'mL'):
+        if u1.lower() in ['nl', 'ul', 'ml'] and u2.lower() in ['nl', 'ul', 'ml']:
+            if u1.lower() != u2.lower():
+                if ((u1.lower() == 'nl' and u2.lower() == 'ul')
+                    or (u1.lower() == 'ul' and u2.lower() == 'ml')):
                     volume = volume/1000.
-                elif u1 == 'nL' and u2 == 'mL':
+                elif u1.lower() == 'nl' and u2.lower() == 'ml':
                     volume = volume/1000000.
-                elif (u1 == 'mL' and u2 == 'uL') or (u1 == 'uL' and u2 == 'nL'):
+                elif ((u1.lower() == 'ml' and u2.lower() == 'ul')
+                    or (u1.lower() == 'ul' and u2.lower() == 'nl')):
                     volume = volume*1000.
-                elif u1 == 'mL' and u2 == 'nL':
+                elif u1.lower() == 'ml' and u2.lower() == 'nl':
                     volume = volume*1000000.
 
         return volume
 
     def _convert_time(self, time, u1, u2):
-        if u1 in ['s', 'min'] and u2 in ['s', 'min']:
-            if u1 != u2:
-                if u1 == 'min':
+        if u1.lower() in ['s', 'min'] and u2.lower() in ['s', 'min']:
+            if u1.lower() != u2.lower():
+                if u1.lower() == 'min':
                     time = time/60
                 else:
                     time = time*60
@@ -591,6 +598,7 @@ class M50Pump(Pump):
         self._is_dispensing = False
 
         self._units = 'uL/min'
+        self._pump_base_units = 'uL/s'
         self._flow_rate = 0
         self._flow_dir = 0
 
@@ -605,13 +613,7 @@ class M50Pump(Pump):
     def flow_rate(self):
         rate = self._flow_rate/self.cal
 
-        if self.units.split('/')[1] == 'min':
-            rate = rate*60.
-
-        if self.units.split('/')[0] == 'mL':
-            rate = rate/1000.
-        elif self.units.split('/')[0] == 'nL':
-            rate = rate*1000
+        rate = self._convert_flow_rate(rate, self._pump_base_units, self.units)
 
         return rate
 
@@ -619,13 +621,7 @@ class M50Pump(Pump):
     def flow_rate(self, rate):
         logger.info("Setting pump %s flow rate to %f %s", self.name, rate, self.units)
 
-        if self.units.split('/')[0] == 'mL':
-            rate = rate*1000.
-        elif self.units.split('/')[0] == 'nL':
-            rate = rate/1000.
-
-        if self.units.split('/')[1] == 'min':
-            rate = rate/60.
+        rate = self._convert_flow_rate(rate, self.units, self._pump_base_units)
 
         #Maximum continuous flow rate is 25 mL/min
         if rate>25000/60.:
@@ -704,14 +700,13 @@ class M50Pump(Pump):
             self.stop()
 
         if vol > 0:
-            logger.info("Pump %s dispensing %f %s at %f %s", self.name, vol, units, self.flow_rate, self.units)
+            logger.info("Pump %s dispensing %f %s at %f %s", self.name, vol, units,
+                self.flow_rate, self.units)
         elif vol < 0:
-            logger.info("Pump %s aspirating %f %s at %f %s", self.name, abs(vol), units, self.flow_rate, self.units)
+            logger.info("Pump %s aspirating %f %s at %f %s", self.name, abs(vol),
+                units, self.flow_rate, self.units)
 
-        if units == 'mL':
-            vol = vol*1000.
-        elif units == 'nL':
-            vol = vol/1000.
+        vol = self._convert_volume(vol, units, self._pump_base_units.split('/')[0])
 
         if vol > 0 and self._flow_dir < 0:
             vol = vol + self._backlash_cal
@@ -781,6 +776,8 @@ class PHD4400Pump(Pump):
         self._is_dispensing = False
 
         self._units = 'mL/min'
+        self._pump_base_units = 'mL/min'
+
         self._flow_rate = 0
         self._refill_rate = 0
         self._flow_dir = 0
@@ -818,13 +815,7 @@ class PHD4400Pump(Pump):
         """
         rate = self._flow_rate
 
-        if self.units.split('/')[1] == 's':
-            rate = rate/60.
-
-        if self.units.split('/')[0] == 'uL':
-            rate = rate*1000.
-        elif self.units.split('/')[0] == 'nL':
-            rate = rate*1.e6
+        rate = self._convert_flow_rate(rate, self._pump_base_units, self.units)
 
         return rate
 
@@ -832,13 +823,7 @@ class PHD4400Pump(Pump):
     def flow_rate(self, rate):
         logger.info("Setting pump %s infuse flow rate to %f %s", self.name, rate, self.units)
 
-        if self.units.split('/')[0] == 'uL':
-            rate = rate/1000.
-        elif self.units.split('/')[0] == 'nL':
-            rate = rate/1.e6
-
-        if self.units.split('/')[1] == 's':
-            rate = rate*60.
+        rate = self._convert_flow_rate(rate, self.units, self._pump_base_units)
 
         self._flow_rate = self.round(rate)
 
@@ -873,13 +858,7 @@ class PHD4400Pump(Pump):
         """
         rate = self._refill_rate
 
-        if self.units.split('/')[1] == 's':
-            rate = rate/60.
-
-        if self.units.split('/')[0] == 'uL':
-            rate = rate*1000.
-        elif self.units.split('/')[0] == 'nL':
-            rate = rate*1.e6
+        rate = self._convert_flow_rate(rate, self._pump_base_units, self.units)
 
         return rate
 
@@ -887,13 +866,7 @@ class PHD4400Pump(Pump):
     def refill_rate(self, rate):
         logger.info("Setting pump %s refill flow rate to %f %s", self.name, rate, self.units)
 
-        if self.units.split('/')[0] == 'uL':
-            rate = rate/1000.
-        elif self.units.split('/')[0] == 'nL':
-            rate = rate/1.e6
-
-        if self.units.split('/')[1] == 's':
-            rate = rate*60.
+        rate = self._convert_flow_rate(rate, self.units, self._pump_base_units)
 
         self._refill_rate = self.round(rate)
         logger.info('Checking volume')
@@ -917,7 +890,9 @@ class PHD4400Pump(Pump):
     def volume(self):
         volume = self._volume
 
-        if self._is_dispensing:
+        currently_flowing = copy.copy(self._is_flowing)
+
+        if self.is_flowing(True):
             vol = self.get_delivered_volume()
 
             if self._flow_dir > 0:
@@ -925,12 +900,22 @@ class PHD4400Pump(Pump):
             elif self._flow_dir < 0:
                 volume = volume + vol
 
+        else:
+            if currently_flowing:
+                vol = self.get_delivered_volume()
+
+                if self._flow_dir > 0:
+                    self._volume = self._volume - vol
+                elif self._flow_dir < 0:
+                    self._volume = self._volume + vol
+
+                volume = self._volume
+
         return volume
 
     @volume.setter
     def volume(self, volume):
-
-        if self._is_dispensing:
+        if self.is_flowing(True):
             vol = self.get_delivered_volume()
 
             if self._flow_dir > 0:
@@ -986,6 +971,12 @@ class PHD4400Pump(Pump):
 
         return self._is_dispensing
 
+    def is_flowing(self, update=False):
+        if update:
+            self.is_moving()
+
+        return self._is_flowing
+
     def get_delivered_volume(self):
         ret = self.send_cmd("DEL")
 
@@ -994,11 +985,12 @@ class PHD4400Pump(Pump):
         return vol
 
     def dispense_all(self, blocking=True):
-        if self._is_flowing or self._is_dispensing:
+        if self._is_flowing:
             logger.debug("Stopping pump %s current motion before infusing", self.name)
             self.stop()
 
-        self.dispense(self.volume, blocking=blocking)
+        if self.volume > 0:
+            self.dispense(self.volume, blocking=blocking)
 
     def dispense(self, vol, units='mL', blocking=True):
         """
@@ -1010,12 +1002,9 @@ class PHD4400Pump(Pump):
         :param units: Volume units, defaults to mL, also accepts uL or nL
         :type units: str
         """
-        if units == 'uL':
-            vol = vol/1000.
-        elif units == 'nL':
-            vol = vol/1e6
+        vol = self._convert_volume(vol, units, self._pump_base_units.split('/')[0])
 
-        if self._is_flowing or self._is_dispensing:
+        if self._is_flowing:
             logger.debug("Stopping pump %s current motion before infusing", self.name)
             self.stop()
 
@@ -1026,13 +1015,13 @@ class PHD4400Pump(Pump):
                 "current volume of the syringe ({} mL)".format(vol, self.volume)))
             cont = False
 
+        vol = self.round(vol)
+
         if vol <= 0:
             logger.error(("Infuse volume must be positive."))
             cont = False
 
         if cont:
-            vol = self.round(vol)
-
             logger.info("Pump %s infusing %f %s at %f %s", self.name, vol, units, self.flow_rate, self.units)
 
             self.send_cmd("DIR INF")
@@ -1044,11 +1033,11 @@ class PHD4400Pump(Pump):
             self._flow_dir = 1
 
     def aspirate_all(self):
-        if self._is_flowing or self._is_dispensing:
+        if self._is_flowing:
             logger.debug("Stopping pump %s current motion before aspirating", self.name)
             self.stop()
 
-        if self.max_volume - self.volume > 0:
+        if self.round(self.max_volume - self.volume) > 0:
             self.aspirate(self.max_volume - self.volume)
         else:
             logger.error(("Already at maximum volume, can't aspirate more."))
@@ -1064,12 +1053,9 @@ class PHD4400Pump(Pump):
         :type units: str
         """
 
-        if units == 'uL':
-            vol = vol/1000.
-        elif units == 'nL':
-            vol = vol/1e6
+        vol = self._convert_volume(vol, units, self._pump_base_units.split('/')[0])
 
-        if self._is_flowing or self._is_dispensing:
+        if self._is_flowing:
             logger.debug("Stopping pump %s current motion before refilling", self.name)
             self.stop()
 
@@ -1081,13 +1067,13 @@ class PHD4400Pump(Pump):
                 "({} mL)".format(vol, self.max_volume)))
             cont = False
 
+        vol = self.round(vol)
+
         if vol <= 0:
             logger.error(("Refill volume must be positive."))
             cont = False
 
         if cont:
-            vol = self.round(vol)
-
             logger.info("Pump %s refilling %f %s at %f %s", self.name, vol, units, self.refill_rate, self.units)
 
             self.send_cmd("DIR REF")
@@ -1103,7 +1089,7 @@ class PHD4400Pump(Pump):
         logger.info("Pump %s stopping all motions", self.name)
         self.send_cmd("STP")
 
-        if self._is_dispensing:
+        if self._is_flowing:
             vol = self.get_delivered_volume()
 
             if self._flow_dir > 0:
@@ -1111,7 +1097,6 @@ class PHD4400Pump(Pump):
             elif self._flow_dir < 0:
                 self._volume = self._volume + vol
 
-        self._is_dispensing = False
         self._is_flowing = False
         self._flow_dir = 0
 
@@ -1172,9 +1157,9 @@ class PicoPlusPump(Pump):
             self.pump_comm = PicoPlusSerialComm(device, baudrate=115200)
 
         self._is_flowing = False
-        self._is_dispensing = False
 
         self._units = 'mL/min'
+        self._pump_base_units = 'mL/min'
         # self._flow_rate = 0
         # self._refill_rate = 0
         self._flow_dir = 0
@@ -1215,13 +1200,7 @@ class PicoPlusPump(Pump):
         """
         rate = self._flow_rate
 
-        if self.units.split('/')[1] == 's':
-            rate = rate/60.
-
-        if self.units.split('/')[0] == 'uL':
-            rate = rate*1000.
-        elif self.units.split('/')[0] == 'nL':
-            rate = rate*1.e6
+        rate = self._convert_flow_rate(rate, self._pump_base_units, self.units)
 
         return rate
 
@@ -1229,20 +1208,14 @@ class PicoPlusPump(Pump):
     def flow_rate(self, rate):
         logger.info("Setting pump %s infuse flow rate to %f %s", self.name, rate, self.units)
 
-        if self.units.split('/')[0] == 'uL':
-            rate = rate/1000.
-        elif self.units.split('/')[0] == 'nL':
-            rate = rate/1.e6
-
-        if self.units.split('/')[1] == 's':
-            rate = rate*60.
+        rate = self._convert_flow_rate(rate, self.units, self._pump_base_units)
 
         self._flow_rate = self.round(rate)
 
         #Have to do this or can lose aspirate/dispense volume
         volume = self._volume
 
-        if self._is_dispensing and not self.is_moving():
+        if not self.is_moving():
             vol = self.get_delivered_volume()
 
             if self._flow_dir > 0:
@@ -1270,13 +1243,7 @@ class PicoPlusPump(Pump):
         """
         rate = self._refill_rate
 
-        if self.units.split('/')[1] == 's':
-            rate = rate/60.
-
-        if self.units.split('/')[0] == 'uL':
-            rate = rate*1000.
-        elif self.units.split('/')[0] == 'nL':
-            rate = rate*1.e6
+        rate = self._convert_flow_rate(rate, self._pump_base_units, self.units)
 
         return rate
 
@@ -1284,13 +1251,7 @@ class PicoPlusPump(Pump):
     def refill_rate(self, rate):
         logger.info("Setting pump %s refill flow rate to %f %s", self.name, rate, self.units)
 
-        if self.units.split('/')[0] == 'uL':
-            rate = rate/1000.
-        elif self.units.split('/')[0] == 'nL':
-            rate = rate/1.e6
-
-        if self.units.split('/')[1] == 's':
-            rate = rate*60.
+        rate = self._convert_flow_rate(rate, self.units, self._pump_base_units)
 
         self._refill_rate = self.round(rate)
         logger.info('Checking volume')
@@ -1298,7 +1259,7 @@ class PicoPlusPump(Pump):
         #Have to do this or can lose aspirate/dispense volume
         volume = self._volume
 
-        if self._is_dispensing and not self.is_moving():
+        if not self.is_moving():
             vol = self.get_delivered_volume()
 
             if self._flow_dir > 0:
@@ -1323,55 +1284,8 @@ class PicoPlusPump(Pump):
         fr = float(fr)
         rr = float(rr)
 
-        if fr_units.split('/')[1].lower() == 's' and self.units.split('/')[1] == 'min':
-            fr = rate*60.
-
-        elif fr_units.split('/')[1].lower() == 'min' and self.units.split('/')[1] == 's':
-            fr = rate/60
-
-
-        if rr_units.split('/')[1].lower() == 's' and self.units.split('/')[1] == 'min':
-            rr = rate*60.
-
-        elif rr_units.split('/')[1].lower() == 'min' and self.units.split('/')[1] == 's':
-            rr = rate/60
-
-
-        if fr_units.split('/')[0].lower() == 'ml' and self.units.split('/')[0] == 'uL':
-            fr = fr*1000.
-
-        elif fr_units.split('/')[0].lower() == 'ml' and self.units.split('/')[0] == 'nL':
-            fr = fr*1e6
-
-        elif fr_units.split('/')[0].lower() == 'ul' and self.units.split('/')[0] == 'mL':
-            fr = fr/1000
-
-        elif fr_units.split('/')[0].lower() == 'ul' and self.units.split('/')[0] == 'nL':
-            fr = fr*1000
-
-        elif fr_units.split('/')[0].lower() == 'nl' and self.units.split('/')[0] == 'mL':
-            fr = fr/1e6
-
-        elif fr_units.split('/')[0].lower() == 'nl' and self.units.split('/')[0] == 'uL':
-            fr = fr/1000
-
-        if rr_units.split('/')[0].lower() == 'ml' and self.units.split('/')[0] == 'uL':
-            rr = rr*1000.
-
-        elif rr_units.split('/')[0].lower() == 'ml' and self.units.split('/')[0] == 'nL':
-            rr = rr*1e6
-
-        elif rr_units.split('/')[0].lower() == 'ul' and self.units.split('/')[0] == 'mL':
-            rr = rr/1000
-
-        elif rr_units.split('/')[0].lower() == 'ul' and self.units.split('/')[0] == 'nL':
-            rr = rr*1000
-
-        elif rr_units.split('/')[0].lower() == 'nl' and self.units.split('/')[0] == 'mL':
-            rr = rr/1e6
-
-        elif rr_units.split('/')[0].lower() == 'nl' and self.units.split('/')[0] == 'uL':
-            rr = rr/1000
+        fr = self._convert_flow_rate(fr, fr_units, self._pump_base_units)
+        rr = self._convert_flow_rate(rr, rr_units, self._pump_base_units)
 
         self._flow_rate = fr
         self._refill_rate = rr
@@ -1462,22 +1376,16 @@ class PicoPlusPump(Pump):
 
         if ret.endswith('>'):
             moving = True
-            self._is_dispensing = True
+            self._flow_dir = 1
         elif ret.endswith('<'):
             moving = True
-            self._is_dispensing = False
+            self._flow_dir = -1
         else:
             moving = False
 
         self._is_flowing = moving
 
         return moving
-
-    def is_dispensing(self, update=False):
-        if update:
-            self.is_moving()
-
-        return self._is_dispensing
 
     def is_flowing(self, update=False):
         if update:
@@ -1494,12 +1402,10 @@ class PicoPlusPump(Pump):
             ret = self.send_cmd("wvolume")
             vol = ret.split('\r\n')[0].split(':')[1]
             vol, units = vol.split()
+
         vol = float(vol)
 
-        if units.lower() == 'ul':
-            vol = vol/1000.
-        elif units.lower() == 'nl':
-            vol = vol/1e6
+        vol = self._convert_volume(vol, units, self._pump_base_units.split('/')[0])
 
         return vol
 
@@ -1521,10 +1427,7 @@ class PicoPlusPump(Pump):
         :param units: Volume units, defaults to mL, also accepts uL or nL
         :type units: str
         """
-        if units == 'uL':
-            vol = vol/1000.
-        elif units == 'nL':
-            vol = vol/1e6
+        vol = self._convert_volume(vol, units, self._pump_base_units.split('/')[0])
 
         if self._is_flowing:
             logger.debug("Stopping pump %s current motion before infusing", self.name)
@@ -1552,7 +1455,6 @@ class PicoPlusPump(Pump):
             self.send_cmd("tvolume {} ml".format(vol))
             self.send_cmd("irun")
 
-            self._is_dispensing = True
             self._flow_dir = 1
 
     def aspirate_all(self):
@@ -1576,10 +1478,7 @@ class PicoPlusPump(Pump):
         :type units: str
         """
 
-        if units == 'uL':
-            vol = vol/1000.
-        elif units == 'nL':
-            vol = vol/1e6
+        vol = self._convert_volume(vol, units, self._pump_base_units.split('/')[0])
 
         if self._is_flowing:
             logger.debug("Stopping pump %s current motion before refilling", self.name)
@@ -1608,7 +1507,6 @@ class PicoPlusPump(Pump):
             self.send_cmd("tvolume {} ml".format(vol))
             self.send_cmd("wrun")
 
-            self._is_dispensing = True
             self._flow_dir = -1
 
     def stop(self):
@@ -1688,6 +1586,8 @@ class NE500Pump(Pump):
         self._is_dispensing = False
 
         self._units = 'mL/min'
+        self._pump_base_units = 'mL/min'
+
         self._flow_rate = 0
         self._refill_rate = 0
         self._flow_dir = 0
@@ -1723,13 +1623,7 @@ class NE500Pump(Pump):
         """
         rate = self._flow_rate
 
-        if self.units.split('/')[1] == 's':
-            rate = rate/60.
-
-        if self.units.split('/')[0] == 'uL':
-            rate = rate*1000.
-        elif self.units.split('/')[0] == 'nL':
-            rate = rate*1.e6
+        rate = self._convert_flow_rate(rate, self._pump_base_units, self.units)
 
         return rate
 
@@ -1737,13 +1631,7 @@ class NE500Pump(Pump):
     def flow_rate(self, rate):
         logger.info("Setting pump %s infuse flow rate to %f %s", self.name, rate, self.units)
 
-        if self.units.split('/')[0] == 'uL':
-            rate = rate/1000.
-        elif self.units.split('/')[0] == 'nL':
-            rate = rate/1.e6
-
-        if self.units.split('/')[1] == 's':
-            rate = rate*60.
+        rate = self._convert_flow_rate(rate, self.units, self._pump_base_units)
 
         self._flow_rate = self.round(rate)
 
@@ -1766,13 +1654,7 @@ class NE500Pump(Pump):
         """
         rate = self._refill_rate
 
-        if self.units.split('/')[1] == 's':
-            rate = rate/60.
-
-        if self.units.split('/')[0] == 'uL':
-            rate = rate*1000.
-        elif self.units.split('/')[0] == 'nL':
-            rate = rate*1.e6
+        rate = self._convert_flow_rate(rate, self._pump_base_units, self.units)
 
         return rate
 
@@ -1780,13 +1662,7 @@ class NE500Pump(Pump):
     def refill_rate(self, rate):
         logger.info("Setting pump %s refill flow rate to %f %s", self.name, rate, self.units)
 
-        if self.units.split('/')[0] == 'uL':
-            rate = rate/1000.
-        elif self.units.split('/')[0] == 'nL':
-            rate = rate/1.e6
-
-        if self.units.split('/')[1] == 's':
-            rate = rate*60.
+        rate = self._convert_flow_rate(rate, self.units, self._pump_base_units)
 
         self._refill_rate = self.round(rate)
 
@@ -1902,10 +1778,7 @@ class NE500Pump(Pump):
         :param units: Volume units, defaults to mL, also accepts uL or nL
         :type units: str
         """
-        if units == 'uL':
-            vol = vol/1000.
-        elif units == 'nL':
-            vol = vol/1e6
+        vol = self._convert_volume(vol, units, self._pump_base_units.split('/')[0])
 
         if self._is_flowing or self._is_dispensing:
             logger.debug("Stopping pump %s current motion before infusing", self.name)
@@ -1957,10 +1830,7 @@ class NE500Pump(Pump):
         :type units: str
         """
 
-        if units == 'uL':
-            vol = vol/1000.
-        elif units == 'nL':
-            vol = vol/1e6
+        vol = self._convert_volume(vol, units, self._pump_base_units.split('/')[0])
 
         if self._is_flowing or self._is_dispensing:
             logger.debug("Stopping pump %s current motion before refilling", self.name)
@@ -2089,6 +1959,7 @@ class SSINextGenPump(Pump):
 
         # All internal variables are stored in mL/min and psi, regardless of user/pump units
         self._units = 'mL/min'
+        self._pump_base_units = 'mL/min'
         self._pressure_units = 'psi'
         self._pump_pressure_unit = 'psi'
         self._flow_rate_val = 0 #Current set flow rate
@@ -2199,7 +2070,7 @@ class SSINextGenPump(Pump):
 
         rate = self._flow_rate
 
-        rate = self._convert_flow_rate(rate, 'mL/min', self.units)
+        rate = self._convert_flow_rate(rate, self._pump_base_units, self.units)
 
         return rate
 
@@ -2208,7 +2079,7 @@ class SSINextGenPump(Pump):
         logger.info("Setting pump %s flow rate to %f %s", self.name, rate, self.units)
 
         #Convert rate to ml/min for pump
-        rate = self._convert_flow_rate(rate, self.units, 'mL/min')
+        rate = self._convert_flow_rate(rate, self.units, self._pump_base_units)
 
         #Maximum continuous flow rate is 25 mL/min
         if rate>self.max_flow_rate:
@@ -2256,7 +2127,7 @@ class SSINextGenPump(Pump):
     def max_flow_rate(self):
         rate = self._max_flow_rate
 
-        rate = self._convert_flow_rate(rate, 'mL/min', self.units)
+        rate = self._convert_flow_rate(rate, self._pump_base_units, self.units)
 
         return rate
 
@@ -2264,7 +2135,7 @@ class SSINextGenPump(Pump):
     def max_flow_rate(self, rate):
         logger.info("Setting pump %s max flow rate to %f %s", self.name, rate, self.units)
 
-        rate = self._convert_flow_rate(rate, self.units, 'mL/min')
+        rate = self._convert_flow_rate(rate, self.units, self._pump_base_units)
 
 
         if self._pump_max_flow_rate != -1 and rate > self._pump_max_flow_rate:
@@ -2288,7 +2159,7 @@ class SSINextGenPump(Pump):
     def flow_rate_acceleration(self):
         rate = self._flow_rate_acceleration
 
-        rate = self._convert_flow_accel(rate, 'mL/min', self.units)
+        rate = self._convert_flow_accel(rate, self._pump_base_units, self.units)
 
         return rate
 
@@ -2296,7 +2167,7 @@ class SSINextGenPump(Pump):
     def flow_rate_acceleration(self, rate):
         logger.info("Setting pump %s flow rate acceleration to %f %s", self.name, rate, self.units)
 
-        rate = self._convert_flow_accel(rate, self.units, 'mL/min')
+        rate = self._convert_flow_accel(rate, self.units, self._pump_base_units)
 
         self._flow_rate_acceleration = rate
 
@@ -2407,12 +2278,14 @@ class SSINextGenPump(Pump):
         return self._is_flowing
 
     def start_flow(self, wait=True):
-        logger.info("Pump %s starting continuous flow at %f %s", self.name, self.flow_rate, self.units)
+        logger.info("Pump %s starting continuous flow at %f %s", self.name,
+            self.flow_rate, self.units)
 
         if not self.is_moving():
             logger.debug('pump is not moving')
             target_flow_rate = copy.copy(self.flow_rate)
-            target_flow_rate = self._convert_flow_rate(target_flow_rate, self.units, 'mL/min')
+            target_flow_rate = self._convert_flow_rate(target_flow_rate, self.units,
+                self._pump_base_units)
             self.flow_rate = 0
             self.send_cmd("RU")
 
@@ -2425,7 +2298,8 @@ class SSINextGenPump(Pump):
                         break
                         logger.error('TImed out waiting for pump %s to start', self.name)
 
-            ramp_thread = threading.Thread(target=self._ramp_flow, args=(self.flow_rate, target_flow_rate))
+            ramp_thread = threading.Thread(target=self._ramp_flow, args=(self.flow_rate,
+                target_flow_rate))
             ramp_thread.start()
 
         else:
@@ -2443,7 +2317,8 @@ class SSINextGenPump(Pump):
 
     def start_immediate(self, wait=True):
         # Starts with no ramp! Really should only be used for testing!
-        logger.info("Pump %s starting continuous flow at %f %s", self.name, self.flow_rate, self.units)
+        logger.info("Pump %s starting continuous flow at %f %s", self.name,
+            self.flow_rate, self.units)
 
         self.send_cmd("RU")
 
@@ -2597,7 +2472,7 @@ class SSINextGenPump(Pump):
         self.send_cmd('FI{}'.format(rate_str))
 
     def dispense(self, vol, units='mL'):
-        vol = self._convert_volume(vol, units, 'mL')
+        vol = self._convert_volume(vol, units, self._pump_base_units.split('/')[0])
 
         self._dispensing_volume = vol
         self._is_dispensing = True
@@ -2795,6 +2670,7 @@ class SoftPump(Pump):
         self._is_aspirating = False
 
         self._units = 'mL/min'
+        self._pump_base_units = 'mL/s'
         self._flow_rate = 0
         self._refill_rate = 0
         self._flow_dir = 0
@@ -2819,53 +2695,16 @@ class SoftPump(Pump):
 
         :type: float
         """
-        return self._flow_rate
+        rate = self._flow_rate
+
+        rate = self._convert_flow_rate(rate, self._pump_base_units, self.units)
+
+        return rate
 
     @flow_rate.setter
     def flow_rate(self, rate):
+        rate = self._convert_flow_rate(rate, self.units, self._pump_base_units)
         self._flow_rate = rate
-
-    @property
-    def units(self):
-        """
-        Sets and returns the pump flow rate units. This can be set to:
-        nL/s, nL/min, uL/s, uL/min, mL/s, mL/min. Changing units keeps the
-        flow rate constant, i.e. if the flow rate was set to 100 uL/min, and
-        the units are changed to mL/min, the flow rate is set to 0.1 mL/min.
-
-        :type: str
-        """
-        return self._units
-
-    @units.setter
-    def units(self, units):
-        old_units = self._units
-        flow_rate = self.flow_rate
-
-        if units in ['nL/s', 'nL/min', 'uL/s', 'uL/min', 'mL/s', 'mL/min']:
-            self._units = units
-            old_vu, old_tu = old_units.split('/')
-            new_vu, new_tu = self._units.split('/')[0]
-            if old_vu != new_vu:
-                if (old_vu == 'nL' and new_vu == 'uL') or (old_vu == 'uL' and new_vu == 'mL'):
-                    flow_rate = flow_rate/1000.
-                elif old_vu == 'nL' and new_vu == 'mL':
-                    flow_rate = flow_rate/1000000.
-                elif (old_vu == 'mL' and new_vu == 'uL') or (old_vu == 'uL' and new_vu == 'nL'):
-                    flow_rate = flow_rate*1000.
-                elif old_vu == 'mL' and new_vu == 'nL':
-                    flow_rate = flow_rate*1000000.
-            if old_tu != new_tu:
-                if old_tu == 'min':
-                    flow_rate = flow_rate/60
-                else:
-                    flow_rate = flow_rate*60
-
-            self._flow_rate = flow_rate
-
-            logger.info("Changed pump %s units from %s to %s", self.name, old_units, units)
-        else:
-            logger.warning("Failed to change pump %s units, units supplied were invalid: %s", self.name, units)
 
     def is_moving(self):
         """
@@ -2893,10 +2732,7 @@ class SoftPump(Pump):
         :param units: Volume units, defaults to uL, also accepts mL or nL
         :type units: str
         """
-        if units == 'uL':
-            vol = vol/1000
-        elif units == 'nL':
-            vol = vol/1e6
+        vol = self._convert_volume(vol, units, self._pump_base_units.split('/')[0])
 
         self._dispensing_volume = vol
         self._is_dispensing = True
@@ -2914,10 +2750,7 @@ class SoftPump(Pump):
         :param units: Volume units, defaults to uL, also accepts mL or nL
         :type units: str
         """
-        if units == 'uL':
-            vol = vol/1000
-        elif units == 'nL':
-            vol = vol/1e6
+        vol = self._convert_volume(vol, units, self._pump_base_units.split('/')[0])
 
         self._aspirating_volume = vol
         self._is_aspirating = True
@@ -2925,35 +2758,11 @@ class SoftPump(Pump):
 
         pass #Should be implimented in each subclass
 
-    def _get_flow_rate_ml_s(self):
-        units = self._units
-        flow_rate = self.flow_rate
-
-        if units in ['nL/s', 'nL/min', 'uL/s', 'uL/min', 'mL/s', 'mL/min']:
-            old_vu, old_tu = units.split('/')
-            new_vu, new_tu = 'mL/s'.split('/')
-            if old_vu != new_vu:
-                if (old_vu == 'nL' and new_vu == 'uL') or (old_vu == 'uL' and new_vu == 'mL'):
-                    flow_rate = flow_rate/1000.
-                elif old_vu == 'nL' and new_vu == 'mL':
-                    flow_rate = flow_rate/1000000.
-                elif (old_vu == 'mL' and new_vu == 'uL') or (old_vu == 'uL' and new_vu == 'nL'):
-                    flow_rate = flow_rate*1000.
-                elif old_vu == 'mL' and new_vu == 'nL':
-                    flow_rate = flow_rate*1000000.
-            if old_tu != new_tu:
-                if old_tu == 'min':
-                    flow_rate = flow_rate/60
-                else:
-                    flow_rate = flow_rate*60
-
-        return flow_rate
-
     def _sim_flow(self):
         previous_time = time.time()
 
         while self._connected:
-            flow_rate = self._get_flow_rate_ml_s()
+            flow_rate = self._flow_rate
 
             if self._is_dispensing:
                 delta_vol = flow_rate*(time.time()-previous_time)
@@ -3014,6 +2823,7 @@ class SoftSyringePump(Pump):
 
 
         self._units = 'mL/min'
+        self._pump_base_units = 'mL/s'
         self._flow_rate = 0
         self._refill_rate = 0
         self._flow_dir = 0
@@ -3042,11 +2852,18 @@ class SoftSyringePump(Pump):
 
         :type: float
         """
-        return self._flow_rate
+        rate = self._flow_rate
+
+        rate = self._convert_flow_rate(rate, self._pump_base_units, self.units)
+
+        return rate
 
     @flow_rate.setter
     def flow_rate(self, rate):
         logger.info("Setting pump %s infuse flow rate to %f %s", self.name, rate, self.units)
+
+        rate = self._convert_flow_rate(rate, self.units, self._pump_base_units)
+
         self._flow_rate = rate
 
     @property
@@ -3065,13 +2882,7 @@ class SoftSyringePump(Pump):
         """
         rate = self._refill_rate
 
-        if self.units.split('/')[1] == 's':
-            rate = rate/60.
-
-        if self.units.split('/')[0] == 'uL':
-            rate = rate*1000.
-        elif self.units.split('/')[0] == 'nL':
-            rate = rate*1.e6
+        rate = self._convert_flow_rate(rate, self._pump_base_units, self.units)
 
         return rate
 
@@ -3079,13 +2890,7 @@ class SoftSyringePump(Pump):
     def refill_rate(self, rate):
         logger.info("Setting pump %s refill flow rate to %f %s", self.name, rate, self.units)
 
-        if self.units.split('/')[0] == 'uL':
-            rate = rate/1000.
-        elif self.units.split('/')[0] == 'nL':
-            rate = rate/1.e6
-
-        if self.units.split('/')[1] == 's':
-            rate = rate*60.
+        rate = self._convert_flow_rate(rate, self.units, self._pump_base_units)
 
         self._refill_rate = rate
 
@@ -3096,48 +2901,6 @@ class SoftSyringePump(Pump):
     @volume.setter
     def volume(self, volume):
         self._volume = volume
-
-    @property
-    def units(self):
-        """
-        Sets and returns the pump flow rate units. This can be set to:
-        nL/s, nL/min, uL/s, uL/min, mL/s, mL/min. Changing units keeps the
-        flow rate constant, i.e. if the flow rate was set to 100 uL/min, and
-        the units are changed to mL/min, the flow rate is set to 0.1 mL/min.
-
-        :type: str
-        """
-        return self._units
-
-    @units.setter
-    def units(self, units):
-        old_units = self._units
-        flow_rate = self.flow_rate
-
-        if units in ['nL/s', 'nL/min', 'uL/s', 'uL/min', 'mL/s', 'mL/min']:
-            self._units = units
-            old_vu, old_tu = old_units.split('/')
-            new_vu, new_tu = self._units.split('/')[0]
-            if old_vu != new_vu:
-                if (old_vu == 'nL' and new_vu == 'uL') or (old_vu == 'uL' and new_vu == 'mL'):
-                    flow_rate = flow_rate/1000.
-                elif old_vu == 'nL' and new_vu == 'mL':
-                    flow_rate = flow_rate/1000000.
-                elif (old_vu == 'mL' and new_vu == 'uL') or (old_vu == 'uL' and new_vu == 'nL'):
-                    flow_rate = flow_rate*1000.
-                elif old_vu == 'mL' and new_vu == 'nL':
-                    flow_rate = flow_rate*1000000.
-            if old_tu != new_tu:
-                if old_tu == 'min':
-                    flow_rate = flow_rate/60
-                else:
-                    flow_rate = flow_rate*60
-
-            self._flow_rate = flow_rate
-
-            logger.info("Changed pump %s units from %s to %s", self.name, old_units, units)
-        else:
-            logger.warning("Failed to change pump %s units, units supplied were invalid: %s", self.name, units)
 
     def is_moving(self):
         """
@@ -3172,10 +2935,7 @@ class SoftSyringePump(Pump):
         :param units: Volume units, defaults to uL, also accepts mL or nL
         :type units: str
         """
-        if units == 'uL':
-            vol = vol/1000
-        elif units == 'nL':
-            vol = vol/1e6
+        vol = self._convert_volume(vol, units, self._pump_base_units.split('/')[0])
 
         if self._is_flowing or self._is_dispensing or self._is_aspirating:
             logger.debug("Stopping pump %s current motion before infusing", self.name)
@@ -3217,10 +2977,7 @@ class SoftSyringePump(Pump):
         :param units: Volume units, defaults to uL, also accepts mL or nL
         :type units: str
         """
-        if units == 'uL':
-            vol = vol/1000
-        elif units == 'nL':
-            vol = vol/1e6
+        vol = self._convert_volume(vol, units, self._pump_base_units.split('/')[0])
 
         if self._is_flowing or self._is_dispensing or self._is_aspirating:
             logger.debug("Stopping pump %s current motion before infusing", self.name)
@@ -3243,70 +3000,12 @@ class SoftSyringePump(Pump):
             self._is_aspirating = True
             self._is_flowing = True
 
-    def _get_flow_rate_ml_s(self):
-        units = self._units
-        flow_rate = self.flow_rate
-
-        if units in ['nL/s', 'nL/min', 'uL/s', 'uL/min', 'mL/s', 'mL/min']:
-            old_vu, old_tu = units.split('/')
-            new_vu, new_tu = 'mL/s'.split('/')
-            if old_vu != new_vu:
-                if (old_vu == 'nL' and new_vu == 'uL') or (old_vu == 'uL' and new_vu == 'mL'):
-                    flow_rate = flow_rate/1000.
-                elif old_vu == 'nL' and new_vu == 'mL':
-                    flow_rate = flow_rate/1000000.
-                elif (old_vu == 'mL' and new_vu == 'uL') or (old_vu == 'uL' and new_vu == 'nL'):
-                    flow_rate = flow_rate*1000.
-                elif old_vu == 'mL' and new_vu == 'nL':
-                    flow_rate = flow_rate*1000000.
-            if old_tu != new_tu:
-                if old_tu == 'min':
-                    flow_rate = flow_rate/60
-                else:
-                    flow_rate = flow_rate*60
-
-        return flow_rate
-
-    def _get_refill_rate_ml_s(self):
-        units = self._units
-        flow_rate = self.refill_rate
-
-        if units in ['nL/s', 'nL/min', 'uL/s', 'uL/min', 'mL/s', 'mL/min']:
-            old_vu, old_tu = units.split('/')
-            new_vu, new_tu = 'mL/s'.split('/')
-            if old_vu != new_vu:
-                if (old_vu == 'nL' and new_vu == 'uL') or (old_vu == 'uL' and new_vu == 'mL'):
-                    flow_rate = flow_rate/1000.
-                elif old_vu == 'nL' and new_vu == 'mL':
-                    flow_rate = flow_rate/1000000.
-                elif (old_vu == 'mL' and new_vu == 'uL') or (old_vu == 'uL' and new_vu == 'nL'):
-                    flow_rate = flow_rate*1000.
-                elif old_vu == 'mL' and new_vu == 'nL':
-                    flow_rate = flow_rate*1000000.
-            if old_tu != new_tu:
-                if old_tu == 'min':
-                    flow_rate = flow_rate/60
-                else:
-                    flow_rate = flow_rate*60
-
-        return flow_rate
-
-    def _convert_volume_ml(self, volume):
-        vol_units = self.units.split('/')[0]
-
-        if vol_units == 'uL':
-            volume = volume*1000
-        elif vol_units == 'nL':
-            volume = volume*1e6
-
-        return volume
-
     def _sim_flow(self):
         previous_time = time.time()
 
         while self._connected:
             if self._is_dispensing:
-                flow_rate = self._get_flow_rate_ml_s()
+                flow_rate = self._flow_rate
 
                 delta_vol = flow_rate*(time.time()-previous_time)
                 previous_time = time.time()
@@ -3315,11 +3014,10 @@ class SoftSyringePump(Pump):
                 if self._dispensing_volume <= 0:
                     self.stop()
 
-                delta_vol_cor = self._convert_volume_ml(delta_vol)
-                self.volume = self.volume - delta_vol_cor
+                self.volume = self.volume - delta_vol
 
             elif self._is_aspirating:
-                flow_rate = self._get_refill_rate_ml_s()
+                flow_rate = self._refill_rate
 
                 delta_vol = flow_rate*(time.time()-previous_time)
                 previous_time = time.time()
@@ -3328,8 +3026,7 @@ class SoftSyringePump(Pump):
                 if self._aspirating_volume <= 0:
                     self.stop()
 
-                delta_vol_cor = self._convert_volume_ml(delta_vol)
-                self.volume = self.volume + delta_vol_cor
+                self.volume = self.volume + delta_vol
 
             else:
                 previous_time = time.time()
