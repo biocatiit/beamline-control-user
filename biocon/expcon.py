@@ -427,44 +427,6 @@ class ExpCommThread(threading.Thread):
                     except (mp.Device_Action_Failed_Error, mp.Unparseable_String_Error):
                         pass
 
-        # det_datadir.put(data_dir)
-        # while det_datadir.get().rstrip('/') != data_dir.rstrip('/'):
-        #     time.sleep(0.001)
-
-        # det.set_duration_mode(num_frames)
-        # det.set_trigger_mode(2)
-        # det_exp_time.put(exp_time)
-        # det_exp_period.put(exp_period)
-
-        current_run = 1
-        exp_start_num = '000001'
-
-        if wait_for_trig:
-            cur_fprefix = '{}_{:04}'.format(fprefix, current_run)
-        else:
-            cur_fprefix = fprefix
-
-        if self._settings['add_file_postfix']:
-            new_fname = '{}_{}.tif'.format(cur_fprefix, exp_start_num)
-        else:
-            new_fname = cur_fprefix
-
-        det.set_filename(new_fname)
-
-        tot_frames = num_frames*num_runs
-        logger.info(tot_frames)
-        det.set_data_dir(data_dir)
-        det.set_num_frames(tot_frames)
-        det.set_trigger_mode('ext_enable')
-        det.set_exp_time(exp_time)
-        det.set_exp_period(exp_period)
-        det.arm()
-
-        # struck_mode_pv.caput(1, timeout=5)
-        struck.set_measurement_time(exp_time)   #Ignored for external LNE of Struck
-        struck.set_num_measurements(num_frames)
-        struck.set_trigger_mode(0x8|0x2)    #Sets 'autotrigger' mode, i.e. counting as soon as armed
-
         # dg645_trigger_source.put(1) #Change this to 2 for external falling edges
 
         #Need to clear srs possibly?
@@ -484,6 +446,21 @@ class ExpCommThread(threading.Thread):
         while (status & 0x1) != 0:
             time.sleep(0.01)
             status = ab_burst.get_status()
+
+        tot_frames = num_frames*num_runs
+        logger.info(tot_frames)
+        det.set_data_dir(data_dir)
+        det.set_num_frames(tot_frames)
+        det.set_trigger_mode('ext_enable')
+        det.set_exp_time(exp_time)
+        det.set_exp_period(exp_period)
+        det.arm()
+
+        # struck_mode_pv.caput(1, timeout=5)
+        struck.set_measurement_time(exp_time)   #Ignored for external LNE of Struck
+        struck.set_num_measurements(num_frames)
+        struck.set_trigger_mode(0x8|0x2)    #Sets 'autotrigger' mode, i.e. counting as soon as armed
+
 
         if exp_period > exp_time+0.01 and exp_period >= 0.02:
             #Shutter opens and closes, Takes 4 ms for open and close
@@ -653,11 +630,7 @@ class ExpCommThread(threading.Thread):
 
                         y_positions = [pos for i in range(num_frames)]
 
-                    # motor_cmd_q.append(('move_absolute', ('TR_motor',
-                    #     (step_x_start, step_y_start)), {}))
-
                     step_fprefix = '{}_s{:03}'.format(fprefix, step_num+1)
-
 
                     self._inner_tr_exp(det, exp_time, exp_period, exp_settings,
                         data_dir, step_fprefix, num_frames, current_run, struck, ab_burst, dio_out6,
@@ -709,10 +682,7 @@ class ExpCommThread(threading.Thread):
 
         exp_start_num = '000001'
 
-        if wait_for_trig:
-            cur_fprefix = '{}_{:04}'.format(fprefix, current_run)
-        else:
-            cur_fprefix = fprefix
+        cur_fprefix = '{}_{:04}'.format(fprefix, current_run)
 
         if self._settings['add_file_postfix']:
             new_fname = '{}_{}.tif'.format(cur_fprefix, exp_start_num)
@@ -724,18 +694,14 @@ class ExpCommThread(threading.Thread):
         struck.start()
         ab_burst.arm()
 
-        #If the softglue is running, could replace this by a put to a variable that ors with the XPS enable signal?
-        # if continuous_exp:
-        #     dio_out9.write(1)
-
-        # logger.info("Waiting to start scan %s", current_run)
+        det.set_filename(new_fname)
 
         start = time.time()
         timeout = False
-        x, y = motor.position
+        # x, y = motor.position
 
-        logger.info(x)
-        logger.info(y)
+        # logger.info(x)
+        # logger.info(y)
 
         if x != x_start and y != y_start: 
             while not motor.is_moving() and not timeout:
@@ -754,35 +720,6 @@ class ExpCommThread(threading.Thread):
             self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6,
                 comp_settings, exp_time)
             return
-
-        # logger.info('Waiting for detector to finish')
-        # start = time.time()
-        # timeout = False
-        # while det.get_status() !=0 and not timeout:
-        #     time.sleep(0.001)
-        #     if self._abort_event.is_set():
-        #         self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6,
-        #             comp_settings, exp_time)
-        #         break
-
-        #     # Is this long enough? Should it be based off of the scan/return time?
-        #     if time.time() - start > 5:
-        #         timeout = True
-        #         logger.error('Timeout while waiting for detector to finish!')
-
-        #         if det.get_status() !=0:
-        #             try:
-        #                 det.abort()
-        #             except (mp.Device_Action_Failed_Error, mp.Unparseable_String_Error):
-        #                 pass
-        #             try:
-        #                 det.abort()
-        #             except (mp.Device_Action_Failed_Error, mp.Unparseable_String_Error):
-        #                 pass
-
-        # det_filename.put(new_fname)
-        det.set_filename(new_fname)
-        # det.arm()
 
         if motor_type == 'Newport_XPS':
             if pco_direction == 'x':
@@ -1707,6 +1644,7 @@ class ExpCommThread(threading.Thread):
             dio_out10.write(0)
         else:
             logger.info("Waiting for trigger {}".format(cur_trig))
+            self.return_queue.append(['waiting', None])
             ab_burst.get_status() #Maybe need to clear this status?
             waiting = True
             while waiting:
@@ -1721,6 +1659,8 @@ class ExpCommThread(threading.Thread):
 
                 if det.get_status() == 0:
                     break #In case you miss the srs trigger
+
+            self.return_queue.append(['exposing', None])
 
     def get_experiment_status(self, ab_burst, ab_burst_2, det, timeouts):
         try:
@@ -3049,50 +2989,6 @@ class ExpPanel(wx.Panel):
         else:
             return
 
-        if self.pipeline_ctrl is not None:
-            exp_type = None
-
-            if 'Experiment type:' in exp_values['metadata']:
-                md_exp_type =  exp_values['metadata']['Experiment type:']
-
-                if md_exp_type == 'Batch mode SAXS':
-                    if ('Needs Separate Buffer Measurement:' in exp_values['metadata']
-                        and not exp_values['metadata']['Needs Separate Buffer Measurement:']):
-                        # batch mode experiments where the running buffer is
-                        # good for subtraction can be treated like SEC experiments
-                        # in the pipeline
-                        exp_type = 'SEC'
-
-                    else:
-                        exp_type = 'Batch'
-
-                elif md_exp_type == 'SEC-SAXS' or md_exp_type == 'SEC-MALS-SAXS':
-                    exp_type = 'SEC'
-
-                elif md_exp_type == 'TR-SAXS':
-                    exp_type = 'TR'
-
-                else:
-                    exp_type = 'Other'
-
-                if exp_type is not None:
-                    data_dir = os.path.join(exp_values['data_dir'], 'images')
-                    exp_values['data_dir'] = data_dir
-
-                    local_data_dir = data_dir.replace(self.settings['remote_dir_root'],
-                        self.settings['local_dir_root'], 1)
-
-                    fprefix = exp_values['fprefix']
-                    num_frames = exp_values['num_frames']
-
-                    if exp_type == 'TR':
-                        logger.info(exp_values['metadata'])
-                        num_scans = exp_values['metadata']['Number of scans:']
-                        num_frames *= num_scans
-
-                    if not os.path.exists(local_data_dir):
-                        os.mkdir(local_data_dir)
-
         overwrite_valid = self._check_overwrite(exp_values)
 
         if not overwrite_valid:
@@ -3118,19 +3014,7 @@ class ExpPanel(wx.Panel):
         if not cont:
             return
 
-        if self.pipeline_ctrl is not None and exp_type is not None:
-
-            # Note, in the future this should get parameters for batch
-            # mode experiments out of the autosampler metadata, where you
-            # define number of expeirments, and related sample and buffer
-            # experiments and file prefixes. Right now, the only processing
-            # the pipeline will do for batch mode is radial averaging, since
-            # it doesn't know the associated sample and buffer files
-            print('starting experiment in pipeline')
-            self.pipeline_ctrl.start_experiment(fprefix, exp_type, local_data_dir,
-                fprefix, num_frames)
-
-
+        self._pipeline_start_exp()
 
         self.set_status('Preparing exposure')
         self.start_exp_btn.Disable()
@@ -3170,35 +3054,18 @@ class ExpPanel(wx.Panel):
             trsaxs_flow_panel = wx.FindWindowByName('trsaxs_flow')
             trsaxs_flow_panel.prepare_for_exposure(comp_settings['trsaxs_flow'])
 
-        start_thread = threading.Thread(target=self._wait_for_exp_start)
+        start_thread = threading.Thread(target=self.monitor_exp_status)
         start_thread.daemon = True
         start_thread.start()
-
-        return
-
-    def _wait_for_exp_start(self):
-        while not self.exp_event.is_set() and not self.abort_event.is_set():
-            time.sleep(0.001)
-
-        if self.abort_event.is_set():
-            wx.CallAfter(self._on_exp_finish)
-        else:
-            self.initial_time = time.time()
-            wx.CallAfter(self.tr_timer.Start, 1000)
-            wx.CallAfter(self.set_status, 'Exposing')
 
         return
 
     def stop_exp(self):
         self.abort_event.set()
         self.set_status('Aborting')
-        wx.CallAfter(self._on_exp_finish)
 
     def _on_exp_finish(self):
         self.tr_timer.Stop()
-
-        while self.exp_event.is_set():
-                time.sleep(0.001)
 
         self.start_exp_btn.Enable()
         self.stop_exp_btn.Disable()
@@ -3247,16 +3114,121 @@ class ExpPanel(wx.Panel):
 
             self.set_time_remaining(tr)
 
-            if len(self.exp_ret_q) > 0:
-                status, val = self.exp_ret_q.popleft()
+    def monitor_exp_status(self):
+        while not self.exp_event.is_set() and not self.abort_event.is_set():
+            time.sleep(0.001)
+            self._check_exp_status()
 
-                if status == 'scan':
-                    self.set_scan_number(val)
-                elif status == 'timeout':
-                    self._show_timeout_dialog(val)
+        if self.exp_event.is_set():
+            self.initial_time = time.time()
+            wx.CallAfter(self.tr_timer.Start, 1000)
+            wx.CallAfter(self.set_status, 'Exposing')
 
-        else:
-            self._on_exp_finish()
+            while self.exp_event.is_set():
+                status, val = self._check_exp_status()
+                if status is not None and status == 'scan':
+                    if val is not None and int(val) > 1:
+
+                        if self.pipeline_ctrl is not None:
+                            self.pipeline_ctrl.stop_current_experiment()
+
+                        self._pipeline_start_exp(int(val))
+
+                time.sleep(0.01)
+
+        wx.CallAfter(self._on_exp_finish)
+
+        return
+
+    def _check_exp_status(self):
+        status = None
+        val = None
+
+        if len(self.exp_ret_q) > 0:
+            status, val = self.exp_ret_q.popleft()
+
+            if status == 'scan':
+                wx.CallAfter(self.set_scan_number, val)
+            elif status == 'timeout':
+                wx.CallAfter(self._show_timeout_dialog, val)
+            elif status == 'waiting':
+                wx.CallAfter(self.set_status, 'Waiting for Trigger')
+            elif status == 'exposing':
+                wx.CallAfter(self.set_status, 'Exposing')
+
+        return status
+
+    def _pipeline_start_exp(self, scan_num=1):
+        if self.pipeline_ctrl is not None:
+            exp_type = None
+
+            if 'Experiment type:' in self.current_metadata:
+                md_exp_type =  self.current_metadata['Experiment type:']
+
+                if md_exp_type == 'Batch mode SAXS':
+                    if ('Needs Separate Buffer Measurement:' in self.current_metadata
+                        and not self.current_metadata['Needs Separate Buffer Measurement:']):
+                        # batch mode experiments where the running buffer is
+                        # good for subtraction can be treated like SEC experiments
+                        # in the pipeline
+                        exp_type = 'SEC'
+
+                    else:
+                        exp_type = 'Batch'
+
+                elif md_exp_type == 'SEC-SAXS' or md_exp_type == 'SEC-MALS-SAXS':
+                    exp_type = 'SEC'
+
+                elif md_exp_type == 'TR-SAXS':
+                    exp_type = 'TR'
+
+                else:
+                    exp_type = 'Other'
+
+                if exp_type is not None:
+                    data_dir = os.path.join(self.current_exposure_values['data_dir'], 'images')
+                    self.current_exposure_values['data_dir'] = data_dir
+
+                    local_data_dir = data_dir.replace(self.settings['remote_dir_root'],
+                        self.settings['local_dir_root'], 1)
+
+                    fprefix = self.current_exposure_values['fprefix']
+                    num_frames = self.current_exposure_values['num_frames']
+
+                    if exp_type == 'TR':
+                        logger.info(self.current_metadata)
+                        num_scans = self.current_metadata['Number of scans:']
+                        # num_frames *= num_scans
+
+                    else:
+                        if self.current_metadata['Wait for trigger:']:
+                            num_scans = self.current_metadata['Number of triggers:']
+                        else:
+                            num_scans = 1
+
+                    if not os.path.exists(local_data_dir):
+                        os.mkdir(local_data_dir)
+
+        if self.pipeline_ctrl is not None and exp_type is not None:
+
+            # Note, in the future this should get parameters for batch
+            # mode experiments out of the autosampler metadata, where you
+            # define number of expeirments, and related sample and buffer
+            # experiments and file prefixes. Right now, the only processing
+            # the pipeline will do for batch mode is radial averaging, since
+            # it doesn't know the associated sample and buffer files
+            if exp_type == 'TR':
+                scan_fprefix = '{}_{:04}'.format(fprefix, scan_num)
+                self.pipeline_ctrl.start_experiment(scan_fprefix, exp_type,
+                    local_data_dir, scan_fprefix, num_frames)
+
+            elif num_scans > 1:
+                scan_fprefix = '{}_{:04}'.format(fprefix, scan_num)
+                self.pipeline_ctrl.start_experiment(scan_fprefix, exp_type,
+                    local_data_dir, scan_fprefix, num_frames)
+            else:
+                self.pipeline_ctrl.start_experiment(fprefix, exp_type, local_data_dir,
+                    fprefix, num_frames)
 
     def _show_warning_dialog(self, msg):
         if self.warning_dialog is None:
@@ -3794,6 +3766,9 @@ class ExpPanel(wx.Panel):
                 metadata_valid = True
             else:
                 metadata_valid = False
+
+        if metadata_valid:
+            self.current_metadata = metadata
 
         return metadata, metadata_valid
 
