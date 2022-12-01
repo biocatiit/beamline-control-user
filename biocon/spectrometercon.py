@@ -2134,15 +2134,22 @@ class UVPanel(utils.DevicePanel):
         series_box_sizer.Add(series_sizer, flag=wx.EXPAND|wx.ALL,
             border=self._FromDIP(5))
 
-        top_sizer = wx.BoxSizer(wx.VERTICAL)
-        top_sizer.Add(status_sizer, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
+        control_sizer = wx.BoxSizer(wx.VERTICAL)
+        control_sizer.Add(status_sizer, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
             border=self._FromDIP(5))
-        top_sizer.Add(settings_box_sizer, flag=wx.EXPAND|wx.ALL,
+        control_sizer.Add(settings_box_sizer, flag=wx.EXPAND|wx.ALL,
             border=self._FromDIP(5))
-        top_sizer.Add(single_spectrum_box_sizer,
+        control_sizer.Add(single_spectrum_box_sizer,
             flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM, border=self._FromDIP(5))
-        top_sizer.Add(series_box_sizer, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM,
+        control_sizer.Add(series_box_sizer, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM,
             border=self._FromDIP(5))
+
+        plot_parent = self
+        self.uv_plot = UVPlot(plot_parent)
+
+        top_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        top_sizer.Add(control_sizer, flag=wx.EXPAND)
+        top_sizer.Add(self.uv_plot, proportion=1, flag=wx.EXPAND)
 
         self.SetSizer(top_sizer)
 
@@ -2493,6 +2500,8 @@ class UVPanel(utils.DevicePanel):
             self._series_count = 0
 
     def _add_new_spectrum(self, val):
+        self.uv_plot.update_spectrum(val)
+
         if val.spectrum is not None:
             self._add_spectrum_to_history(val)
 
@@ -2501,6 +2510,7 @@ class UVPanel(utils.DevicePanel):
 
         if val.abs_spectrum is not None:
             self._add_spectrum_to_history(val, 'abs')
+
 
     def _set_status_commands(self):
         settings_cmd = ['get_spec_settings', [self.name], {}]
@@ -3471,6 +3481,152 @@ class InlineUVPanel(utils.DevicePanel):
 
         self.close()
 
+class UVPlot(wx.Panel):
+
+    def __init__(self, data_update_callback, *args, **kwargs):
+
+        super(UVPlot, self).__init__(*args, **kwargs)
+
+        self.data_update_callback = data_update_callback
+
+        self.plot_type = 'Spectrum'
+
+        self.spectrum = None
+
+        self.spectrum_line = None
+        self.abs_lines = []
+
+        self._create_layout()
+
+        self.Bind(wx.EVT_CLOSE, self._on_exit)
+
+        # Connect the callback for the draw_event so that window resizing works:
+        self.cid = self.canvas.mpl_connect('draw_event', self.ax_redraw)
+        self.canvas.mpl_connect('motion_notify_event', self._onMouseMotionEvent)
+
+        self.Raise()
+        self.Show()
+
+    def _create_layout(self):
+
+        self.fig = Figure((5,4), 75)
+
+        self.subplot = self.fig.add_subplot(1,1,1)
+        self.subplot.set_xlabel('Wavelength [nm]')
+        self.subplot.set_ylabel('Absorbance (Au)')
+
+        self.fig.subplots_adjust(left = 0.13, bottom = 0.1, right = 0.93, top = 0.93, hspace = 0.26)
+        self.fig.set_facecolor('white')
+
+        self.canvas = FigureCanvasWxAgg(self, wx.ID_ANY, self.fig)
+        self.canvas.SetBackgroundColour('white')
+
+        self.toolbar = utils.CustomPlotToolbar(self.canvas)
+        self.toolbar.Realize()
+
+        plot_sizer = wx.BoxSizer(wx.VERTICAL)
+        plot_sizer.Add(self.canvas, 1, wx.EXPAND)
+        plot_sizer.Add(self.toolbar, 0, wx.EXPAND)
+
+
+        top_sizer = wx.BoxSizer(wx.VERTICAL)
+        top_sizer.Add(plot_sizer, proportion=1, border=5, flag=wx.EXPAND|wx.TOP)
+        self.SetSizer(top_sizer)
+
+    def update_spectrum(self, spectrum):
+        self.spectrum = spectrum
+
+        self.plot_data()
+
+    def ax_redraw(self, widget=None):
+        ''' Redraw plots on window resize event '''
+        self.background = self.canvas.copy_from_bbox(self.subplot.bbox)
+
+        self.canvas.mpl_disconnect(self.cid)
+        self.updatePlot()
+        self.cid = self.canvas.mpl_connect('draw_event', self.ax_redraw)
+
+    def plot_data(self):
+        self.canvas.mpl_disconnect(self.cid)
+
+        if self.plot_type == 'Spectrum':
+            if self.spectrum is not None:
+                data  = self.spectrum.get_spectrum('abs')
+
+                if data is not None:
+                    x_data = data[:, 0]
+                    spectrum_data = data[:, 1]
+
+                    if self.spectrum_line is not None:
+                        self.spectrum_line.set_visible(True)
+
+                else:
+                    spectrum_data = None
+
+            else:
+                spectrum_data = None
+
+        redraw = False
+
+        if spectrum_data is not None:
+            if self.spectrum_line is None:
+                self.spectrum_line, = self.subplot.plot(xdata, spectrum_data,
+                    animated=True, label='Spectrum')
+                redraw = True
+            else:
+                self.spectrum_line.set_xdata(xdata)
+                self.spectrum_line.set_ydata(spectrum_data)
+
+        if redraw:
+            self.canvas.draw()
+            self.background = self.canvas.copy_from_bbox(self.subplot.bbox)
+            self.subplot.legend()
+
+        self.updatePlot()
+
+        self.cid = self.canvas.mpl_connect('draw_event', self.ax_redraw)
+
+    def updatePlot(self, redraw=False):
+
+        oldx = self.subplot.get_xlim()
+        oldy = self.subplot.get_ylim()
+
+        self.subplot.relim()
+        self.subplot.autoscale_view()
+
+        newx = self.subplot.get_xlim()
+        newy = self.subplot.get_ylim()
+
+        if newx != oldx or newy != oldy:
+            redraw = True
+
+        if redraw:
+            self.canvas.draw()
+
+        self.canvas.restore_region(self.background)
+
+        if self.spectrum_line is not None:
+            self.subplot.draw_artist(self.spectrum_line)
+
+        self.canvas.blit(self.subplot.bbox)
+
+    def _onMouseMotionEvent(self, event):
+
+        if event.inaxes:
+            x, y = event.xdata, event.ydata
+            xlabel = self.subplot.xaxis.get_label().get_text()
+            ylabel = self.subplot.yaxis.get_label().get_text()
+
+            if abs(y) > 0.001 and abs(y) < 1000:
+                y_val = '{:.3f}'.format(round(y, 3))
+            else:
+                y_val = '{:.3E}'.format(y)
+
+            self.toolbar.set_status('{} = {}, {} = {}'.format(xlabel, x, ylabel, y_val))
+
+        else:
+            self.toolbar.set_status('')
+
 class UVFrame(utils.DeviceFrame):
 
     def __init__(self, name, setup_devices, com_thread, *args, **kwargs):
@@ -3801,7 +3957,7 @@ if __name__ == '__main__':
         'abs_wav'               : [280, 260],
         'abs_window'            : 1,
         'int_t_scale'           : 2,
-        'wavelength_range'      : [200, 800],
+        'wavelength_range'      : [200, 838.39],
         'remote_ip'             : '164.54.204.53',
         'remote_port'           : '5559',
         'remote_dir_prefix'     : {'local' : '/nas_data', 'remote' : 'Y:\\'}
