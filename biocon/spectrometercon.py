@@ -63,7 +63,7 @@ class SpectraData(object):
         logger.debug('Creating SpectraData with %s spectrum', spec_type)
 
         if len(wl_range_idx) > 0:
-            sprectrum = sprectrum[wl_range_idx[0]:wl_range_idx[1]+1]
+            spectrum = spectrum[wl_range_idx[0]:wl_range_idx[1]+1]
 
         self.timestamp = timestamp
         self.wavelength = spectrum[:,0]
@@ -195,7 +195,8 @@ class SpectraData(object):
 
     def save_spectrum(self, name, save_dir, spec_type='abs'):
 
-        fname = os.path.join(save_dir, name)
+        name, _ = os.path.splitext(name)
+        fname = os.path.join(save_dir, '{}.csv'.format(name))
         logger.debug('SpectraData: Saving to %s', fname)
 
         h_start = '{}\nWavelength_(nm),'.format(self.timestamp.isoformat())
@@ -469,8 +470,7 @@ class Spectrometer(object):
 
         avg_spec = SpectraData(avg_spectrum, avg_timestamp,
             absorbance_window=self._absorbance_window,
-            absorbance_wavelengths=self._absorbance_wavelengths,
-            wl_range_idx=self._wavelength_range_idx)
+            absorbance_wavelengths=self._absorbance_wavelengths)
 
         self.set_reference_spectrum(avg_spec)
 
@@ -603,7 +603,7 @@ class Spectrometer(object):
 
             ds = self.get_dark()
 
-            ds.save_spectrum('{}_dark'.format(self._autosave_prefix),
+            ds.save_spectrum('{}_dark.csv'.format(self._autosave_prefix),
                 self._autosave_dir, 'raw')
 
             self._check_light_conditions()
@@ -614,7 +614,7 @@ class Spectrometer(object):
                 self._collect_reference_spectrum_inner(ref_avgs)
 
             ref = self.get_reference_spectrum()
-            ref.save_spectrum('{}_ref'.format(self._autosave_prefix),
+            ref.save_spectrum('{}_ref.csv'.format(self._autosave_prefix),
                 self._autosave_dir, 'raw')
 
             if spec_type == 'abs':
@@ -973,7 +973,7 @@ class Spectrometer(object):
         return self._autosave_on
 
     def set_wavelength_range(self, start, end):
-        logger.info('Spectrometer %s: Setting wavelenght range %s to %s',
+        logger.info('Spectrometer %s: Setting wavelength range %s to %s',
             self.name, start, end)
         if start is not None and start >= self.wavelength[0]:
             self._wavelength_range[0] = start
@@ -1031,6 +1031,8 @@ class StellarnetUVVis(Spectrometer):
 
         self._external_trigger = False
 
+        self.connected = False
+
         self.shutter_pv = epics.PV(shutter_pv_name)
         self.trigger_pv = epics.PV(trigger_pv_name)
 
@@ -1041,15 +1043,18 @@ class StellarnetUVVis(Spectrometer):
         self._get_config()
 
     def connect(self):
-        logger.info('Spectrometer %s: Connecting', self.name)
+        if not self.connected:
+            logger.info('Spectrometer %s: Connecting', self.name)
 
-        spec, wav = sn.array_get_spec(0)
+            spec, wav = sn.array_get_spec(0)
 
-        self.spectrometer = spec
-        self.wav = wav
+            self.spectrometer = spec
+            self.wav = wav
 
-        self.wavelength = self.wav.reshape(self.wav.shape[0])
-        self.set_wavelength_range(self.wavelength[0], self.wavelength[-1])
+            self.wavelength = self.wav.reshape(self.wav.shape[0])
+            self.set_wavelength_range(self.wavelength[0], self.wavelength[-1])
+
+            self.connected = True
 
     def disconnect(self):
         logger.info('Spectrometer %s: Disconnecting', self.name)
