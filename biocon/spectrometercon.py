@@ -59,8 +59,11 @@ class SpectraData(object):
     """
 
     def __init__(self, spectrum, timestamp, spec_type='raw',
-        absorbance_window=1, absorbance_wavelengths={}):
+        absorbance_window=1, absorbance_wavelengths={}, wl_range_idx=[]):
         logger.debug('Creating SpectraData with %s spectrum', spec_type)
+
+        if len(wl_range_idx) > 0:
+            sprectrum = sprectrum[wl_range_idx[0]:wl_range_idx[1]+1]
 
         self.timestamp = timestamp
         self.wavelength = spectrum[:,0]
@@ -252,6 +255,11 @@ class Spectrometer(object):
 
         self.wavelength = None #Wavelength array as returned by spectrometer
 
+        # Sets min and max wavelengths for the spectrometer, must be within
+        # the measured range of the spectrometer
+        self._wavelength_range = [None, None]
+        self._wavelength_range_idx = [None, None]
+
         self._autosave_dir = None
         self._autosave_prefix = None
         self._autosave_raw = False
@@ -396,7 +404,8 @@ class Spectrometer(object):
 
                 avg_spec = SpectraData(avg_spectrum, avg_timestamp,
                     absorbance_window=self._absorbance_window,
-                    absorbance_wavelengths=self._absorbance_wavelengths)
+                    absorbance_wavelengths=self._absorbance_wavelengths,
+                    wl_range_idx=self._wavelength_range_idx)
 
                 self.set_dark(avg_spec)
             else:
@@ -460,7 +469,8 @@ class Spectrometer(object):
 
         avg_spec = SpectraData(avg_spectrum, avg_timestamp,
             absorbance_window=self._absorbance_window,
-            absorbance_wavelengths=self._absorbance_wavelengths)
+            absorbance_wavelengths=self._absorbance_wavelengths,
+            wl_range_idx=self._wavelength_range_idx)
 
         self.set_reference_spectrum(avg_spec)
 
@@ -516,7 +526,8 @@ class Spectrometer(object):
 
         spectrum = SpectraData(spectrum, timestamp,
             absorbance_window=self._absorbance_window,
-            absorbance_wavelengths=self._absorbance_wavelengths)
+            absorbance_wavelengths=self._absorbance_wavelengths,
+            wl_range_idx=self._wavelength_range_idx)
 
         if dark_correct:
             dark_spectrum = self.get_dark()
@@ -961,6 +972,36 @@ class Spectrometer(object):
         logger.debug('Spectrometer %s: Getting series autosave', self.name)
         return self._autosave_on
 
+    def set_wavelength_range(self, start, end):
+        logger.info('Spectrometer %s: Setting wavelenght range %s to %s',
+            self.name, start, end)
+        if start is not None and start >= self.wavelength[0]:
+            self._wavelength_range[0] = start
+
+            val, idx = utils.find_closest(start, self.wavelength)
+            self._wavelength_range_idx[0] = idx
+
+        elif start is None or start < self.wavelength[0]:
+            self._wavelength_range[0] = None
+            self._wavelength_range_idx[0] = 0
+
+        if end is not None and end <= self.wavelength[-1]:
+            self._wavelength_range[1] = end
+
+            val, idx = utils.find_closest(end, self.wavelength)
+            self._wavelength_range_idx[1] = idx
+
+        elif end is None or end > self.wavelength[-1]:
+            self._wavelength_range[1] = None
+            self._wavelength_range_idx[1] = len(self.wavelength)
+
+        self._reference_spectrum = None
+        self._dark_spectrum = None
+
+    def get_wavelength_range(self):
+        logger.debug('Sepctrometer %s: Getting wavelength range', self.name)
+        return self._wavelength_range
+
     def get_autosave_parameters(self):
         logger.debug('Spectrometer %s: Getting series autosave parameters',
             self.name)
@@ -1008,6 +1049,7 @@ class StellarnetUVVis(Spectrometer):
         self.wav = wav
 
         self.wavelength = self.wav.reshape(self.wav.shape[0])
+        self.set_wavelength_range(self.wavelength[0], self.wavelength[-1])
 
     def disconnect(self):
         logger.info('Spectrometer %s: Disconnecting', self.name)
@@ -1258,6 +1300,8 @@ class UVCommThread(utils.CommManager):
             'set_ls_shutter'    : self._set_lightsource_shutter,
             'get_ls_shutter'    : self._get_lightsource_shutter,
             'set_int_trig'      : self._set_internal_trigger,
+            'set_wl_range'      : self._set_wavelength_range,
+            'get_wl_range'      : self._get_wavelength_range,
         }
 
         self._connected_devices = OrderedDict()
@@ -1773,6 +1817,7 @@ class UVCommThread(utils.CommManager):
         abs_win = device.get_absorbance_window()
         hist_t = device.get_history_time(**kwargs)
         ls_shutter = device.get_lightsource_shutter()
+        wl_range = device.get_wavelength_range()
 
         ret_vals = {
             'int_time'  : int_time,
@@ -1785,6 +1830,7 @@ class UVCommThread(utils.CommManager):
             'abs_win'   : abs_win,
             'hist_t'    : hist_t,
             'ls_shutter': ls_shutter,
+            'wl_range'  : wl_range,
         }
 
         self._return_value((name, 'get_spec_settings', ret_vals), comm_name)
@@ -1826,6 +1872,32 @@ class UVCommThread(utils.CommManager):
         self._return_value((name, 'set_int_trig', True), comm_name)
 
         logger.debug("Device %s internal_trigger set", name)
+
+    def _set_wavelength_range(self, name, start, end, **kwargs):
+        logger.debug("Device %s setting wavelength range %s to %s", name,
+            start, end)
+
+        comm_name = kwargs.pop('comm_name', None)
+
+        device = self._connected_devices[name]
+        device.set_wavelength_range(start, end, **kwargs)
+
+        self._return_value((name, 'set_wl_range', True), comm_name)
+
+        logger.debug("Device %s wavelength range set", name)
+
+    def _get_wavelength_range(self, name, **kwargs):
+        logger.debug("Getting device %s wavelength range", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+
+        device = self._connected_devices[name]
+        val = device.get_wavelength_range(**kwargs)
+
+        self._return_value((name, 'get_wl_range', val), comm_name)
+
+        logger.debug("Device %s wavelength range: %s to %s", name, val[0],
+            val[1])
 
     def _monitor_series(self, name):
         device = self._connected_devices[name]
@@ -2532,6 +2604,7 @@ class InlineUVPanel(utils.DevicePanel):
         self._current_xtiming = None
         self._current_abs_wav = None
         self._current_abs_win = None
+        self._current_wav_range = None
 
         self._series_exp_time = None
         self._series_scan_avg = None
@@ -2832,8 +2905,6 @@ class InlineUVPanel(utils.DevicePanel):
         self._history_length = self.settings['history_t']
         self.history_time.SafeChangeValue('{}'.format(self.settings['history_t']))
 
-
-
     def _init_device_part2(self):
         # Need some kind of delay or I get a USB error message from the stellarnet driver
         cmd = ['set_hist_time', [self.name, float(self._history_length)], {}]
@@ -2845,6 +2916,13 @@ class InlineUVPanel(utils.DevicePanel):
 
         if not is_busy:
             self._init_dark_and_ref()
+
+        cmd = ['get_spec_settings', [self.name,], {}]
+        ret = self._send_cmd(cmd, True)
+        self._set_status('get_spec_settings', ret)
+
+        if not is_busy:
+            self._set_wavelength_range()
 
         self._set_status_commands()
 
@@ -2900,6 +2978,7 @@ class InlineUVPanel(utils.DevicePanel):
         is_busy = self._get_busy()
 
         if not is_busy:
+            self._set_wavelength_range()
             dark_correct = self.settings['dark_correct']
             auto_dark = self.auto_dark.GetValue()
             dark_time = float(self.auto_dark_period.GetValue())
@@ -2953,6 +3032,7 @@ class InlineUVPanel(utils.DevicePanel):
         is_busy = self._get_busy()
 
         if not is_busy:
+            self._set_wavelength_range()
             self._set_exposure_settings(int_time, scan_avgs)
             self._set_abs_params()
 
@@ -3052,6 +3132,29 @@ class InlineUVPanel(utils.DevicePanel):
             cmd = ['set_abs_window', [self.name, self.settings['abs_window']], {}]
             self._send_cmd(cmd)
 
+    def _set_wavelength_range(self):
+        update = False
+        if self._current_wav_range is not None:
+            if ((self._current_wav_range[0] is None
+                and self.settings['wavelength_range'][0] is not None) or
+                (self._current_wav_range[0] is not None
+                and self.settings['wavelength_range'][0] is None) or
+                (self._current_wav_range[0] != self.settings['wavelength_range'][0])
+                or (self._current_wav_range[1] is None
+                and self.settings['wavelength_range'][1] is not None) or
+                (self._current_wav_range[1] is not None
+                and self.settings['wavelength_range'][1] is None) or
+                (self._current_wav_range[1] != self.settings['wavelength_range'][1])):
+                update = True
+
+        else:
+            update = True
+
+        if update:
+            cmd = ['set_wl_range', [self.name, self.settings['wavelength_range'][0],
+                self.settings['wavelength_range'][1]], {}]
+            self._send_cmd(cmd)
+
     def _get_busy(self):
         busy_cmd = ['get_busy', [self.name,], {}]
         is_busy = self._send_cmd(busy_cmd, True)
@@ -3144,6 +3247,7 @@ class InlineUVPanel(utils.DevicePanel):
             abs_win = val['abs_win']
             hist_t = val['hist_t']
             ls_shutter = val['ls_shutter']
+            wl_range = val['wl_range']
 
             self.history_time.SafeChangeValue(str(hist_t))
 
@@ -3154,6 +3258,7 @@ class InlineUVPanel(utils.DevicePanel):
             self._current_xtiming = xtiming
             self._current_abs_wav = abs_wavs
             self._current_abs_win = abs_win
+            self._current_wav_range = wl_range
 
             self._dark_spectrum = dark
             self._reference_spectrum = ref
@@ -3691,6 +3796,7 @@ if __name__ == '__main__':
         'abs_wav'               : [280, 260],
         'abs_window'            : 1,
         'int_t_scale'           : 2,
+        'wavelength_range'      : [200, 800],
         'remote_ip'             : '164.54.204.53',
         'remote_port'           : '5559',
         'remote_dir_prefix'     : {'local' : '/nas_data', 'remote' : 'Y:\\'}
