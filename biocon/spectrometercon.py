@@ -41,6 +41,11 @@ if __name__ != '__main__':
 import numpy as np
 import wx
 import epics
+import matplotlib
+from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg
+from matplotlib.figure import Figure
+
+matplotlib.rcParams['backend'] = 'WxAgg'
 
 try:
     # Uses stellarnet python driver, available from the manufacturer
@@ -103,7 +108,10 @@ class SpectraData(object):
         elif spec_type == 'abs':
             spec = self.abs_spectrum
 
-        spectrum = np.column_stack((self.wavelength, spec))
+        if spec is not None:
+            spectrum = np.column_stack((self.wavelength, spec))
+        else:
+            spectrum = None
 
         return spectrum
 
@@ -603,8 +611,9 @@ class Spectrometer(object):
 
             ds = self.get_dark()
 
-            ds.save_spectrum('{}_dark.csv'.format(self._autosave_prefix),
-                self._autosave_dir, 'raw')
+            if self._autosave_on:
+                ds.save_spectrum('{}_dark.csv'.format(self._autosave_prefix),
+                    self._autosave_dir, 'raw')
 
             self._check_light_conditions()
 
@@ -614,8 +623,10 @@ class Spectrometer(object):
                 self._collect_reference_spectrum_inner(ref_avgs)
 
             ref = self.get_reference_spectrum()
-            ref.save_spectrum('{}_ref.csv'.format(self._autosave_prefix),
-                self._autosave_dir, 'raw')
+
+            if self._autosave_on:
+                ref.save_spectrum('{}_ref.csv'.format(self._autosave_prefix),
+                    self._autosave_dir, 'raw')
 
             if spec_type == 'abs':
                 abs_wavs = self.get_absorbance_wavelengths()
@@ -776,8 +787,9 @@ class Spectrometer(object):
             history = self._history
 
         history['spectra'].append(spectrum)
-        history['timestamps'].append((spectrum.get_timestamp() - 
-            datetime.datetime(1970,1,1)).total_seconds())
+        history['timestamps'].append((spectrum.get_timestamp().astimezone() -
+            datetime.datetime(1970,1,1,
+                tzinfo=datetime.timezone.utc)).total_seconds())
 
         history = self._prune_history(history)
 
@@ -792,8 +804,8 @@ class Spectrometer(object):
         logger.debug('Spectrometer %s: Pruning history', self.name)
 
         if len(history['timestamps']) > 0:
-            now = (datetime.datetime.now()- 
-                datetime.datetime(1970,1,1)).total_seconds()
+            now = (datetime.datetime.now(datetime.timezone.utc)- datetime.datetime(1970,1,1,
+                    tzinfo=datetime.timezone.utc)).total_seconds()
 
             if len(history['timestamps']) == 1:
                 if now - history['timestamps'][0] > self._history_length:
@@ -849,8 +861,8 @@ class Spectrometer(object):
         else:
             history = self._history
 
-        now = (datetime.datetime.now() - 
-            datetime.datetime(1970,1,1)).total_seconds()
+        now = (datetime.datetime.now(datetime.timezone.utc) - datetime.datetime(1970,1,1,
+            tzinfo=datetime.timezon.utc)).total_seconds()
 
         index = -1
         while (abs(index) <= len(history['timestamps'])
@@ -1952,6 +1964,16 @@ class UVPanel(utils.DevicePanel):
         self._series_count = 0
         self._series_total = 0
 
+        self._live_update_evt = threading.Event()
+        self._live_update_evt.clear()
+        self._live_update_stop = threading.Event()
+        self._live_update_stop.clear()
+        self._live_update_thread = threading.Thread(target=self._live_update_plot)
+        self._live_update_thread.daemon = True
+        self._live_update_thread.start()
+
+        self._current_abs_wav = None
+
     def _create_layout(self):
         """Creates the layout for the panel."""
 
@@ -2143,13 +2165,37 @@ class UVPanel(utils.DevicePanel):
             flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM, border=self._FromDIP(5))
         control_sizer.Add(series_box_sizer, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM,
             border=self._FromDIP(5))
+        control_sizer.AddStretchSpacer(1)
 
-        plot_parent = self
+
+        plot_parent = wx.StaticBox(self, label='Plot')
+
+        self.auto_update = wx.CheckBox(plot_parent, label='Autoupdate')
+        self.auto_update.SetValue(False)
+        self.auto_update.Bind(wx.EVT_CHECKBOX, self._on_autoupdate)
+
+        self.update_period = utils.ValueEntry(self._on_plot_update_change,
+            plot_parent, validator=utils.CharValidator('float_te'),
+            size=self._FromDIP((50,-1)))
+        self.update_period.ChangeValue('0.5')
+        self._on_plot_update_change(self.update_period, '0.5')
+
+        plot_settings_sizer = wx.FlexGridSizer(cols=4, vgap=self._FromDIP(5),
+            hgap=self._FromDIP(5))
+        plot_settings_sizer.Add(self.auto_update, flag=wx.ALIGN_CENTER_VERTICAL)
+        plot_settings_sizer.Add(wx.StaticText(plot_parent, label='Update period (s):'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        plot_settings_sizer.Add(self.update_period, flag=wx.ALIGN_CENTER_VERTICAL)
+
         self.uv_plot = UVPlot(plot_parent)
+
+        plot_sizer = wx.StaticBoxSizer(plot_parent, wx.VERTICAL)
+        plot_sizer.Add(plot_settings_sizer, flag=wx.EXPAND)
+        plot_sizer.Add(self.uv_plot, proportion=1, flag=wx.EXPAND)
 
         top_sizer = wx.BoxSizer(wx.HORIZONTAL)
         top_sizer.Add(control_sizer, flag=wx.EXPAND)
-        top_sizer.Add(self.uv_plot, proportion=1, flag=wx.EXPAND)
+        top_sizer.Add(plot_sizer, proportion=1, flag=wx.EXPAND)
 
         self.SetSizer(top_sizer)
 
@@ -2170,12 +2216,23 @@ class UVPanel(utils.DevicePanel):
         # Need some kind of delay or I get a USB error message from the stellarnet driver
         is_busy = self._get_busy()
 
-        wx.CallLater(500, self._get_full_history)
+        self._get_full_history()
 
         if not is_busy:
-            wx.CallLater(510, self._init_dark_and_ref)
+           self._init_dark_and_ref()
 
-        wx.CallLater(600, self._set_status_commands)
+        cmd = ['get_spec_settings', [self.name,], {}]
+        ret = self._send_cmd(cmd, True)
+        self._set_status('get_spec_settings', ret)
+
+        if not is_busy:
+            if self._current_abs_wav is None or len(self._current_abs_wav) == 0:
+                cmd = ['add_abs_wav', [self.name, 500], {}]
+                self._send_cmd(cmd)
+                # cmd = ['add_abs_wav', [self.name, 260], {}]
+                # self._send_cmd(cmd)
+
+        self._set_status_commands()
 
         if args[1] != 'StellarNet':
             self.settings_sizer.Hide(self.xtiming_label)
@@ -2225,8 +2282,36 @@ class UVPanel(utils.DevicePanel):
         if cmd is not None:
             self._send_cmd(cmd)
 
+    def _on_autoupdate(self, evt):
+        if self.auto_update.GetValue():
+            self._live_update_evt.set()
+        else:
+            self._live_update_evt.clear()
+
+    def _on_plot_update_change(self, obj, val):
+        self._plot_update_period = float(val)
+
+    def _live_update_plot(self):
+        update_time = time.time()
+
+        while True:
+            if self._live_update_stop.is_set():
+                break
+
+            if self._live_update_evt.is_set():
+                if time.time() - update_time > self._plot_update_period:
+                    self._collect_spectrum()
+                    update_time = time.time()
+                else:
+                    time.sleep(self._plot_update_period/3)
+            else:
+                time.sleep(0.5)
+
     def _on_collect_single(self, evt):
         obj = evt.GetEventObject()
+
+        self.auto_update.SetValue(False)
+        self._live_update_evt.clear()
 
         if obj == self.collect_dark_btn:
             self._collect_spectrum('dark')
@@ -2289,6 +2374,8 @@ class UVPanel(utils.DevicePanel):
             wx.CallAfter(self._show_busy_msg)
 
     def _on_collect_series(self, evt):
+        self.auto_update.SetValue(False)
+        self._live_update_evt.clear()
         self._collect_series()
 
     def _collect_series(self):
@@ -2461,6 +2548,7 @@ class UVPanel(utils.DevicePanel):
 
             self._dark_spectrum = dark
             self._reference_spectrum = ref
+            self._current_abs_wav = abs_wavs
 
         elif cmd == 'collect_spec':
             self._add_new_spectrum(val)
@@ -2500,8 +2588,6 @@ class UVPanel(utils.DevicePanel):
             self._series_count = 0
 
     def _add_new_spectrum(self, val):
-        self.uv_plot.update_spectrum(val)
-
         if val.spectrum is not None:
             self._add_spectrum_to_history(val)
 
@@ -2510,6 +2596,9 @@ class UVPanel(utils.DevicePanel):
 
         if val.abs_spectrum is not None:
             self._add_spectrum_to_history(val, 'abs')
+
+        self.uv_plot.update_plot_data(val, self._absorbance_history,
+            self._current_abs_wav)
 
 
     def _set_status_commands(self):
@@ -2533,8 +2622,9 @@ class UVPanel(utils.DevicePanel):
 
         if history is not None:
             history['spectra'].append(spectrum)
-            history['timestamps'].append((spectrum.get_timestamp() - 
-                datetime.datetime(1970,1,1)).total_seconds())
+            history['timestamps'].append((spectrum.get_timestamp().astimezone() -
+                datetime.datetime(1970,1,1,
+                tzinfo=datetime.timezone.utc)).total_seconds())
 
             history = self._prune_history(history)
 
@@ -2549,8 +2639,8 @@ class UVPanel(utils.DevicePanel):
         logger.debug('Pruning history')
 
         if len(history['timestamps']) > 0:
-            now = (datetime.datetime.now() - 
-                datetime.datetime(1970,1,1)).total_seconds()
+            now = (datetime.datetime.now(datetime.timezone.utc) - datetime.datetime(1970,1,1,
+                tzinfo=datetime.timezone.utc)).total_seconds()
 
             if len(history['timestamps']) == 1:
                 if now - history['timestamps'][0] > self._history_length:
@@ -2586,7 +2676,8 @@ class UVPanel(utils.DevicePanel):
 
     def _on_close(self):
         """Device specific stuff goes here"""
-        pass
+        self._live_update_stop.set()
+        self._live_update_thread.join()
 
 
 class InlineUVPanel(utils.DevicePanel):
@@ -3357,8 +3448,9 @@ class InlineUVPanel(utils.DevicePanel):
 
         if history is not None:
             history['spectra'].append(spectrum)
-            history['timestamps'].append((spectrum.get_timestamp() - 
-                datetime.datetime(1970,1,1)).total_seconds())
+            history['timestamps'].append((spectrum.get_timestamp().astimezone() -
+                datetime.datetime(1970,1,1,
+                    tzinfo=datetime.timezone.utc)).total_seconds())
 
             history = self._prune_history(history)
 
@@ -3373,8 +3465,8 @@ class InlineUVPanel(utils.DevicePanel):
         logger.debug('Pruning history')
 
         if len(history['timestamps']) > 0:
-            now = (datetime.datetime.now() - 
-                datetime.datetime(1970,1,1)).total_seconds()
+            now = (datetime.datetime.now(datetime.timezone.utc) - datetime.datetime(1970,1,1,
+                    tzinfo=datetime.timezone.utc)).total_seconds()
 
             if len(history['timestamps']) == 1:
                 if now - history['timestamps'][0] > self._history_length:
@@ -3483,22 +3575,27 @@ class InlineUVPanel(utils.DevicePanel):
 
 class UVPlot(wx.Panel):
 
-    def __init__(self, data_update_callback, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
 
         super(UVPlot, self).__init__(*args, **kwargs)
 
-        self.data_update_callback = data_update_callback
-
         self.plot_type = 'Spectrum'
+        self.spectrum_type = 'abs'
 
         self.spectrum = None
+        self.abs_history = None
+        self.abs_wvl = None
+        self.abs_data = None
 
         self.spectrum_line = None
         self.abs_lines = []
 
+        self._time_window = 10
+        self._time_zero = time.time()
+
         self._create_layout()
 
-        self.Bind(wx.EVT_CLOSE, self._on_exit)
+        # self.Bind(wx.EVT_CLOSE, self._on_exit)
 
         # Connect the callback for the draw_event so that window resizing works:
         self.cid = self.canvas.mpl_connect('draw_event', self.ax_redraw)
@@ -3507,34 +3604,147 @@ class UVPlot(wx.Panel):
         self.Raise()
         self.Show()
 
+    def _FromDIP(self, size):
+        # This is a hack to provide easy back compatibility with wxpython < 4.1
+        try:
+            return self.FromDIP(size)
+        except Exception:
+            return size
+
     def _create_layout(self):
+
+        plot_parent = self
+
+        self.plot_type_ctrl = wx.Choice(plot_parent, choices=['Spectrum',
+            'Absorbance'])
+        self.plot_type_ctrl.SetStringSelection(self.plot_type)
+        self.plot_type_ctrl.Bind(wx.EVT_CHOICE, self._on_plot_type)
+
+        self.spectrum_type_ctrl = wx.Choice(plot_parent, choices=['Absorbance',
+            'Transmission', 'Raw'])
+        self.spectrum_type_ctrl.SetStringSelection('Absorbance')
+        self.spectrum_type_ctrl.Bind(wx.EVT_CHOICE, self._on_spectrum_type)
+
+        self.t_window = utils.ValueEntry(self._on_twindow_change,
+            plot_parent, validator=utils.CharValidator('float_te'),
+            size=self._FromDIP((50,-1)))
+        self.t_window.ChangeValue(str(self._time_window))
+        self.t_window.Disable()
+
+        self.zero_time = wx.Button(plot_parent, label='Zero Time')
+        self.zero_time.Bind(wx.EVT_BUTTON, self._on_zero_time)
+        self.zero_time.Disable()
+
+        self.auto_limits = wx.CheckBox(plot_parent, label='Auto Limits')
+        self.auto_limits.SetValue(True)
+
+        ctrl_sizer = wx.FlexGridSizer(cols=4, vgap=self._FromDIP(5),
+            hgap=self._FromDIP(5))
+        ctrl_sizer.Add(wx.StaticText(plot_parent, label='Plot type:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        ctrl_sizer.Add(self.plot_type_ctrl, flag=wx.ALIGN_CENTER_VERTICAL)
+        ctrl_sizer.Add(wx.StaticText(plot_parent, label='Spectrum type:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        ctrl_sizer.Add(self.spectrum_type_ctrl, flag=wx.ALIGN_CENTER_VERTICAL)
+        ctrl_sizer.Add(wx.StaticText(plot_parent, label='Time range [min]:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        ctrl_sizer.Add(self.t_window, flag=wx.ALIGN_CENTER_VERTICAL)
+        ctrl_sizer.Add(self.auto_limits, flag=wx.ALIGN_CENTER_VERTICAL)
+        ctrl_sizer.Add(self.zero_time, flag=wx.ALIGN_CENTER_VERTICAL)
 
         self.fig = Figure((5,4), 75)
 
         self.subplot = self.fig.add_subplot(1,1,1)
         self.subplot.set_xlabel('Wavelength [nm]')
-        self.subplot.set_ylabel('Absorbance (Au)')
+        self.subplot.set_ylabel('Absorbance [Au]')
 
-        self.fig.subplots_adjust(left = 0.13, bottom = 0.1, right = 0.93, top = 0.93, hspace = 0.26)
+        self.fig.subplots_adjust(left = 0.13, bottom = 0.1, right = 0.93,
+            top = 0.93, hspace = 0.26)
         self.fig.set_facecolor('white')
 
-        self.canvas = FigureCanvasWxAgg(self, wx.ID_ANY, self.fig)
+        self.canvas = FigureCanvasWxAgg(plot_parent, wx.ID_ANY, self.fig)
         self.canvas.SetBackgroundColour('white')
+
+        self.background = self.canvas.copy_from_bbox(self.subplot.bbox)
 
         self.toolbar = utils.CustomPlotToolbar(self.canvas)
         self.toolbar.Realize()
 
         plot_sizer = wx.BoxSizer(wx.VERTICAL)
-        plot_sizer.Add(self.canvas, 1, wx.EXPAND)
-        plot_sizer.Add(self.toolbar, 0, wx.EXPAND)
+        plot_sizer.Add(ctrl_sizer, flag=wx.EXPAND)
+        plot_sizer.Add(self.canvas, proportion=1, flag=wx.EXPAND)
+        plot_sizer.Add(self.toolbar, proportion=0, flag=wx.EXPAND)
 
 
         top_sizer = wx.BoxSizer(wx.VERTICAL)
-        top_sizer.Add(plot_sizer, proportion=1, border=5, flag=wx.EXPAND|wx.TOP)
+        top_sizer.Add(plot_sizer, proportion=1, border=self._FromDIP(5),
+            flag=wx.EXPAND|wx.TOP)
         self.SetSizer(top_sizer)
 
-    def update_spectrum(self, spectrum):
+    def _on_plot_type(self, evt):
+        self.plot_type = self.plot_type_ctrl.GetStringSelection()
+
+        if self.plot_type == 'Spectrum':
+            self.subplot.set_xlabel('Wavelength [nm]')
+            self.spectrum_type_ctrl.Enable()
+            self.t_window.Disable()
+            self.zero_time.Disable()
+        elif self.plot_type == 'Absorbance':
+            self.subplot.set_xlabel('Time [min]')
+            self.subplot.set_ylabel('Absorbance [Au]')
+            self.spectrum_type_ctrl.Disable()
+            self.t_window.Enable()
+            self.zero_time.Enable()
+
+        self.plot_data()
+
+    def _on_spectrum_type(self, evt):
+        stype = self.spectrum_type_ctrl.GetStringSelection()
+
+        if stype == 'Absorbance':
+            self.spectrum_type = 'abs'
+            self.subplot.set_ylabel('Absorbance [Au]')
+        elif stype == 'Transmission':
+            self.spectrum_type = 'trans'
+            self.subplot.set_ylabel('Transmission')
+        elif stype == 'Raw':
+            self.spectrum_type = 'raw'
+            self.subplot.set_ylabel('Raw')
+
+        self.plot_data()
+
+    def _on_twindow_change(self, obj, val):
+        self._time_window = float(val)
+
+        self.canvas.mpl_disconnect(self.cid)
+        self.updatePlot()
+        self.cid = self.canvas.mpl_connect('draw_event', self.ax_redraw)
+
+    def _on_zero_time(self, evt):
+        self._time_zero = time.time()
+        self.update_plot_data(self.spectrum, self.abs_history, self.abs_wvl)
+
+    def update_plot_data(self, spectrum, abs_history, abs_wvl):
         self.spectrum = spectrum
+        self.abs_history = abs_history
+        self.abs_wvl = abs_wvl
+
+        if abs_history is not None and len(abs_history['spectra']) > 0:
+            current_time = time.time()
+            timestamps = np.array(abs_history['timestamps'])
+            time_data = (timestamps - self._time_zero)/60
+
+            abs_data = []
+
+            if abs_wvl is not None:
+                for wvl in abs_wvl:
+                    spec_abs = [spectra.get_absorbance(wvl) for spectra in
+                            abs_history['spectra']]
+                    abs_data.append([time_data, np.array(spec_abs), str(wvl)])
+        else:
+            abs_data = []
+
+        self.abs_data = abs_data
 
         self.plot_data()
 
@@ -3551,10 +3761,10 @@ class UVPlot(wx.Panel):
 
         if self.plot_type == 'Spectrum':
             if self.spectrum is not None:
-                data  = self.spectrum.get_spectrum('abs')
+                data  = self.spectrum.get_spectrum(self.spectrum_type)
 
                 if data is not None:
-                    x_data = data[:, 0]
+                    xdata = data[:, 0]
                     spectrum_data = data[:, 1]
 
                     if self.spectrum_line is not None:
@@ -3566,21 +3776,84 @@ class UVPlot(wx.Panel):
             else:
                 spectrum_data = None
 
+            for line in self.abs_lines:
+                line.set_visible(False)
+
+        elif self.plot_type == 'Absorbance':
+            abs_ydata = []
+            abs_labels = []
+            if self.abs_data is not None:
+
+                for i, data in enumerate(self.abs_data):
+                    xdata = data[0]
+                    abs_ydata.append(data[1])
+                    abs_labels.append(data[2])
+
+                for line in self.abs_lines:
+                    line.set_visible(True)
+
+            if self.spectrum_line is not None:
+                self.spectrum_line.set_visible(False)
+
         redraw = False
 
-        if spectrum_data is not None:
+        if self.plot_type == 'Spectrum' and spectrum_data is not None:
             if self.spectrum_line is None:
                 self.spectrum_line, = self.subplot.plot(xdata, spectrum_data,
-                    animated=True, label='Spectrum')
+                    animated=True)
                 redraw = True
             else:
                 self.spectrum_line.set_xdata(xdata)
                 self.spectrum_line.set_ydata(spectrum_data)
 
+            legend = self.subplot.get_legend()
+            print(legend)
+            if legend is not None:
+                legend.remove()
+                redraw=True
+
+        elif self.plot_type == 'Absorbance' and len(abs_ydata) > 0:
+            if len(self.abs_lines) > len(self.abs_data):
+                for i in range(len(self.abs_data), len(self.abs_lines)):
+                    line = self.abs_lines.pop()
+                    line.remove()
+                    redraw = True
+
+            for i, ydata in enumerate(abs_ydata):
+                if i < len(self.abs_lines):
+                    line = self.abs_lines[i]
+                    line.set_xdata(xdata)
+                    line.set_ydata(ydata)
+
+                    label = line.get_label()
+                    if label != abs_labels[i]:
+                        line.set_label(abs_labels[i])
+                        redraw = True
+                else:
+                    line, = self.subplot.plot(xdata, ydata, animated=True,
+                        label=abs_labels[i]+' nm')
+
+                    self.abs_lines.append(line)
+                    redraw = True
+
+            legend = self.subplot.get_legend()
+            print(legend)
+            if legend is None:
+                self.subplot.legend()
+                redraw=True
+            else:
+                leg_lines = self.subplot.get_legend().get_lines()
+                if len(leg_lines) == len(self.abs_lines):
+                    for i in range(len(leg_lines)):
+                        if self.abs_lines[i].get_label() != leg_lines[i].get_label():
+                            redraw = True
+                            break
+                else:
+                    redraw=True
+
         if redraw:
             self.canvas.draw()
             self.background = self.canvas.copy_from_bbox(self.subplot.bbox)
-            self.subplot.legend()
 
         self.updatePlot()
 
@@ -3588,30 +3861,147 @@ class UVPlot(wx.Panel):
 
     def updatePlot(self, redraw=False):
 
-        oldx = self.subplot.get_xlim()
-        oldy = self.subplot.get_ylim()
+        if self.auto_limits.GetValue():
+            oldx = self.subplot.get_xlim()
+            oldy = self.subplot.get_ylim()
 
-        self.subplot.relim()
-        self.subplot.autoscale_view()
+            if self.spectrum_line is not None and self.plot_type == 'Spectrum':
+                xdata = self.spectrum_line.get_xdata()
+                ydata = self.spectrum_line.get_ydata()
 
-        newx = self.subplot.get_xlim()
-        newy = self.subplot.get_ylim()
+                xmin = min(xdata[np.isfinite(xdata)])
+                xmax = max(xdata[np.isfinite(xdata)])
 
-        if newx != oldx or newy != oldy:
-            redraw = True
+
+                if xmin != oldx[0] or xmax != oldx[1]:
+                    newx = [xmin, xmax]
+
+                else:
+                    newx = oldx
+
+                _, start_idx = utils.find_closest(newx[0], xdata)
+                _, end_idx = utils.find_closest(newx[1], xdata)
+
+                ymin = min(ydata[np.isfinite(ydata[start_idx:end_idx+1])])
+                ymax = max(ydata[np.isfinite(ydata[start_idx:end_idx+1])])
+
+                offset = abs(ymax - ymin)*0.05
+
+                if ymin < oldy[0] or oldy[0] < ymin-offset:
+                        new_ymin = ymin-offset
+                else:
+                    new_ymin = oldy[0]
+
+                if ymax > oldy[1] or oldy[1] > ymax+offset:
+                        new_ymax = ymax+offset
+                else:
+                    new_ymax = oldy[1]
+
+                newy = [new_ymin, new_ymax]
+
+            elif len(self.abs_lines) > 0 and self.plot_type == 'Absorbance':
+                cur_xmin = None
+                cur_xmax = None
+                cur_ymin = None
+                cur_ymax = None
+
+                for line in self.abs_lines:
+                    xdata = np.array(line.get_xdata())
+
+                    data_range = xdata[np.isfinite(xdata)]
+                    xmin = min(data_range)
+                    xmax = max(data_range)
+
+                    if cur_xmin is not None:
+                        cur_xmin = min(xmin, cur_xmin)
+                    else:
+                        cur_xmin = xmin
+
+                    if cur_xmax is not None:
+                        cur_xmax = max(xmax, cur_xmax)
+                    else:
+                        cur_xmax = xmax
+
+                if cur_xmax > oldx[1] or cur_xmax < oldx[1] - self._time_window*0.1:
+                    new_trange = True
+                else:
+                    new_trange = False
+
+                if new_trange:
+                    if cur_xmax - cur_xmin < self._time_window:
+                        new_xmin = cur_xmin
+                        new_xmax = cur_xmin + self._time_window
+                    else:
+                        new_xmax = cur_xmax + self._time_window*0.1
+                        new_xmin = new_xmax - self._time_window
+
+                else:
+                    new_xmin = oldx[0]
+                    new_xmax = oldx[1]
+
+                newx = [new_xmin, new_xmax]
+
+                _, start_idx = utils.find_closest(newx[0], xdata)
+                _, end_idx = utils.find_closest(newx[1], xdata)
+
+                for line in self.abs_lines:
+                    ydata = np.array(line.get_ydata())
+
+                    data_range = ydata[start_idx:end_idx+1][np.isfinite(ydata[start_idx:end_idx+1])]
+
+                    ymin = min(data_range)
+                    ymax = max(data_range)
+
+                    if cur_ymin is not None:
+                        cur_ymin = min(ymin, cur_ymin)
+                    else:
+                        cur_ymin = ymin
+
+                    if cur_ymax is not None:
+                        cur_ymax = max(ymax, cur_ymax)
+                    else:
+                        cur_ymax = ymax
+
+                offset = abs(cur_ymax - cur_ymin)*0.05
+
+                if cur_ymin < oldy[0] or oldy[0] < cur_ymin-offset:
+                        new_ymin = cur_ymin-offset
+                else:
+                    new_ymin = oldy[0]
+
+                if cur_ymax > oldy[1] or oldy[1] > cur_ymax+offset:
+                        new_ymax = cur_ymax+offset
+                else:
+                    new_ymax = oldy[1]
+
+                newy = [new_ymin, new_ymax]
+
+            else:
+                self.subplot.relim()
+                self.subplot.autoscale_view()
+
+                newx = self.subplot.get_xlim()
+                newy = self.subplot.get_ylim()
+
+            if newx[0] != oldx[0] or newx[1] != oldx[1] or newy[0] != oldy[0] or newy[1] != oldy[1]:
+                self.subplot.set_xlim(newx)
+                self.subplot.set_ylim(newy)
+                redraw = True
 
         if redraw:
             self.canvas.draw()
 
         self.canvas.restore_region(self.background)
 
-        if self.spectrum_line is not None:
+        if self.spectrum_line is not None and self.plot_type == 'Spectrum':
             self.subplot.draw_artist(self.spectrum_line)
+        elif len(self.abs_lines) > 0 and self.plot_type == 'Absorbance':
+            for line in self.abs_lines:
+                self.subplot.draw_artist(line)
 
         self.canvas.blit(self.subplot.bbox)
 
     def _onMouseMotionEvent(self, event):
-
         if event.inaxes:
             x, y = event.xdata, event.ydata
             xlabel = self.subplot.xaxis.get_label().get_text()
@@ -3622,7 +4012,7 @@ class UVPlot(wx.Panel):
             else:
                 y_val = '{:.3E}'.format(y)
 
-            self.toolbar.set_status('{} = {}, {} = {}'.format(xlabel, x, ylabel, y_val))
+            self.toolbar.set_status('{} = {}, {} = {}'.format(xlabel, round(x, 3), ylabel, y_val))
 
         else:
             self.toolbar.set_status('')
