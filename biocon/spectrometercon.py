@@ -1971,6 +1971,7 @@ class UVPanel(utils.DevicePanel):
         self._live_update_thread = threading.Thread(target=self._live_update_plot)
         self._live_update_thread.daemon = True
         self._live_update_thread.start()
+        self._restart_live_update = False
 
         self._current_abs_wav = None
 
@@ -2285,8 +2286,10 @@ class UVPanel(utils.DevicePanel):
     def _on_autoupdate(self, evt):
         if self.auto_update.GetValue():
             self._live_update_evt.set()
+            self._restart_live_update = True
         else:
             self._live_update_evt.clear()
+            self._restart_live_update = False
 
     def _on_plot_update_change(self, obj, val):
         self._plot_update_period = float(val)
@@ -2374,7 +2377,6 @@ class UVPanel(utils.DevicePanel):
             wx.CallAfter(self._show_busy_msg)
 
     def _on_collect_series(self, evt):
-        self.auto_update.SetValue(False)
         self._live_update_evt.clear()
         self._collect_series()
 
@@ -2582,10 +2584,14 @@ class UVPanel(utils.DevicePanel):
             self._series_running = True
             self._series_count = 0
             self._series_total = val
+            wx.CallAfter(self.uv_plot.set_time_zero)
 
         elif cmd == 'collect_series_end':
             self._series_running = True
             self._series_count = 0
+
+            if self._restart_live_update:
+                self._live_update_evt.set()
 
     def _add_new_spectrum(self, val):
         if val.spectrum is not None:
@@ -3721,6 +3727,9 @@ class UVPlot(wx.Panel):
         self.cid = self.canvas.mpl_connect('draw_event', self.ax_redraw)
 
     def _on_zero_time(self, evt):
+        self.set_time_zero()
+
+    def set_time_zero(self):
         self._time_zero = time.time()
         self.update_plot_data(self.spectrum, self.abs_history, self.abs_wvl)
 
@@ -3807,7 +3816,7 @@ class UVPlot(wx.Panel):
                 self.spectrum_line.set_ydata(spectrum_data)
 
             legend = self.subplot.get_legend()
-            print(legend)
+
             if legend is not None:
                 legend.remove()
                 redraw=True
@@ -3837,7 +3846,7 @@ class UVPlot(wx.Panel):
                     redraw = True
 
             legend = self.subplot.get_legend()
-            print(legend)
+
             if legend is None:
                 self.subplot.legend()
                 redraw=True
@@ -4038,7 +4047,7 @@ class UVFrame(utils.DeviceFrame):
         self.sizer = wx.BoxSizer(wx.HORIZONTAL)
 
         top_sizer = wx.BoxSizer(wx.VERTICAL)
-        top_sizer.Add(self.sizer, flag=wx.EXPAND)
+        top_sizer.Add(self.sizer, 1, flag=wx.EXPAND)
 
         return top_sizer
 
