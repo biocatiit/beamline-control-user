@@ -2228,7 +2228,7 @@ class UVPanel(utils.DevicePanel):
 
         if not is_busy:
             if self._current_abs_wav is None or len(self._current_abs_wav) == 0:
-                cmd = ['add_abs_wav', [self.name, 500], {}]
+                cmd = ['add_abs_wav', [self.name, 280], {}]
                 self._send_cmd(cmd)
                 # cmd = ['add_abs_wav', [self.name, 260], {}]
                 # self._send_cmd(cmd)
@@ -3035,15 +3035,15 @@ class InlineUVPanel(utils.DevicePanel):
 
         self._get_full_history()
 
-        if not is_busy:
-            self._init_dark_and_ref()
-
         cmd = ['get_spec_settings', [self.name,], {}]
         ret = self._send_cmd(cmd, True)
         self._set_status('get_spec_settings', ret)
 
         if not is_busy:
             self._set_wavelength_range()
+
+        if not is_busy:
+            self._init_dark_and_ref()
 
         self._set_status_commands()
 
@@ -3275,6 +3275,7 @@ class InlineUVPanel(utils.DevicePanel):
             cmd = ['set_wl_range', [self.name, self.settings['wavelength_range'][0],
                 self.settings['wavelength_range'][1]], {}]
             self._send_cmd(cmd)
+            self._current_wav_range = self.settings['wavelength_range']
 
     def _get_busy(self):
         busy_cmd = ['get_busy', [self.name,], {}]
@@ -3434,7 +3435,7 @@ class InlineUVPanel(utils.DevicePanel):
             self._series_count = 0
 
     def _add_new_spectrum(self, val):
-        self.self._current_spectrum = val
+        self._current_spectrum = val
 
         if val.spectrum is not None:
             self._add_spectrum_to_history(val)
