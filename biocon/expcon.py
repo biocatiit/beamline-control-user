@@ -2994,6 +2994,10 @@ class ExpPanel(wx.Panel):
         if not overwrite_valid:
             return
 
+        if self.pipeline_ctrl is not None:
+            data_dir = os.path.join(self.current_exposure_values['data_dir'], 'images')
+            self.current_exposure_values['data_dir'] = data_dir
+
         comp_valid, comp_settings = self._check_components(exp_only)
 
         if not comp_valid:
@@ -3134,6 +3138,10 @@ class ExpPanel(wx.Panel):
 
                         self._pipeline_start_exp(int(val))
 
+                        if 'uv' in self.settings['components']:
+                            uv_panel = wx.FindWindowByName('uv')
+                            uv_values, uv_valid = uv_panel.on_exposure_start(self, int(val))
+
                 time.sleep(0.01)
 
         wx.CallAfter(self._on_exp_finish)
@@ -3156,7 +3164,7 @@ class ExpPanel(wx.Panel):
             elif status == 'exposing':
                 wx.CallAfter(self.set_status, 'Exposing')
 
-        return status
+        return status, val
 
     def _pipeline_start_exp(self, scan_num=1):
         if self.pipeline_ctrl is not None:
@@ -3186,8 +3194,7 @@ class ExpPanel(wx.Panel):
                     exp_type = 'Other'
 
                 if exp_type is not None:
-                    data_dir = os.path.join(self.current_exposure_values['data_dir'], 'images')
-                    self.current_exposure_values['data_dir'] = data_dir
+                    data_dir = self.current_exposure_values['data_dir']
 
                     local_data_dir = data_dir.replace(self.settings['remote_dir_root'],
                         self.settings['local_dir_root'], 1)

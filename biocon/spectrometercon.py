@@ -3601,19 +3601,20 @@ class InlineUVPanel(utils.DevicePanel):
         self._transmission_history = self._send_cmd(trans_cmd, True)
         self._history = self._send_cmd(raw_cmd, True)
 
-    def on_exposure_start(self, exp_panel):
+    def on_exposure_start(self, exp_panel, trig=1):
         uv_values = None
         uv_valid = True
 
         if self.collect_uv.GetValue():
 
-            exp_metadata = exp_panel.metadata()
+            exp_params = exp_panel.current_exposure_values
 
-            prefix = exp_metadata['File prefix:']
-            data_dir =  exp_metadata['Save directory:']
-            exp_time = exp_metadata['Exposure time/frame [s]:']
-            exp_period = exp_metadata['Exposure period/frame [s]:']
-            num_frames = exp_metadata['Number of frames:']
+            prefix = exp_params['fprefix']
+            data_dir =  exp_params['data_dir']
+            exp_time = exp_params['exp_time']
+            exp_period = exp_params['exp_period']
+            num_frames = exp_params['num_frames']
+            num_trig = int(exp_params['num_trig'])
 
             if exp_time < 0.125 or exp_period - exp_time < 0.01:
                 uv_valid = False
@@ -3638,6 +3639,9 @@ class InlineUVPanel(utils.DevicePanel):
 
                 if 'pipeline' in self.settings['components']:
                     data_dir = os.path.split(data_dir)[0]
+
+                if num_trig > 1:
+                    prefix = '{}_{:04}'.format(prefix, trig)
 
                 self._set_autosave_parameters(prefix, data_dir)
                 valid = self._collect_series(num_frames, int_time, scan_avgs, exp_period, exp_time)
