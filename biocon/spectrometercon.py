@@ -1346,7 +1346,7 @@ class UVCommThread(utils.CommManager):
 
             self._series_q[name] = deque()
 
-        self._return_value((name, 'connected', True), comm_name)
+        self._return_value((name, 'connect', True), comm_name)
 
         logger.debug("Device %s connected", name)
 
@@ -1359,7 +1359,7 @@ class UVCommThread(utils.CommManager):
         if device is not None:
             device.disconnect()
 
-        self._return_value((name, 'disconnected', True), comm_name)
+        self._return_value((name, 'disconnect', True), comm_name)
 
         logger.debug("Device %s disconnected", name)
 
@@ -1419,7 +1419,7 @@ class UVCommThread(utils.CommManager):
         device = self._connected_devices[name]
         val = device.get_integration_time(**kwargs)
 
-        self._return_value((name, 'int_time', val), comm_name)
+        self._return_value((name, 'get_int_time', val), comm_name)
 
         logger.debug("Device %s integration time is %s s", name, val)
 
@@ -1431,7 +1431,7 @@ class UVCommThread(utils.CommManager):
         device = self._connected_devices[name]
         val = device.get_scan_avg(**kwargs)
 
-        self._return_value((name, 'scan_avg', val), comm_name)
+        self._return_value((name, 'get_scan_avg', val), comm_name)
 
         logger.debug("Device %s scan averages: %s", name, val)
 
@@ -1443,7 +1443,7 @@ class UVCommThread(utils.CommManager):
         device = self._connected_devices[name]
         val = device.get_smoothing(**kwargs)
 
-        self._return_value((name, 'smoothing', val), comm_name)
+        self._return_value((name, 'get_smoothing', val), comm_name)
 
         logger.debug("Device %s smoothing: %s", name, val)
 
@@ -1455,7 +1455,7 @@ class UVCommThread(utils.CommManager):
         device = self._connected_devices[name]
         val = device.get_xtiming(**kwargs)
 
-        self._return_value((name, 'xtiming', val), comm_name)
+        self._return_value((name, 'get_xtiming', val), comm_name)
 
         logger.debug("Device %s xtiming: %s", name, val)
 
@@ -1482,7 +1482,7 @@ class UVCommThread(utils.CommManager):
         except RuntimeError:
             val = None
 
-        self._return_value((name, 'dark', val), comm_name)
+        self._return_value((name, 'get_dark', val), comm_name)
 
         logger.debug("Device %s dark: %s", name, val)
 
@@ -1522,7 +1522,7 @@ class UVCommThread(utils.CommManager):
         except RuntimeError:
             val = None
 
-        self._return_value((name, 'ref', val), comm_name)
+        self._return_value((name, 'get_ref', val), comm_name)
 
         logger.debug("Device %s ref: %s", name, val)
 
@@ -1587,7 +1587,7 @@ class UVCommThread(utils.CommManager):
         device = self._connected_devices[name]
         hist = device.get_last_n_spectra(val, **kwargs)
 
-        self._return_value((name, 'get_history', hist), comm_name)
+        self._return_value((name, 'get_last_n', hist), comm_name)
 
         logger.debug("Device %s history returned", name)
 
@@ -1599,7 +1599,7 @@ class UVCommThread(utils.CommManager):
         device = self._connected_devices[name]
         hist = device.get_spectra_in_last_t(val, **kwargs)
 
-        self._return_value((name, 'get_history', hist), comm_name)
+        self._return_value((name, 'get_last_t', hist), comm_name)
 
         logger.debug("Device %s history returned", name)
 
@@ -1611,7 +1611,7 @@ class UVCommThread(utils.CommManager):
         device = self._connected_devices[name]
         val = device.get_full_history(**kwargs)
 
-        self._return_value((name, 'get_history', val), comm_name)
+        self._return_value((name, 'get_full_hist', val), comm_name)
 
         logger.debug("Device %s history returned", name)
 
@@ -1623,7 +1623,7 @@ class UVCommThread(utils.CommManager):
         device = self._connected_devices[name]
         val = device.get_full_history_ts(**kwargs)
 
-        self._return_value((name, 'get_history', val), comm_name)
+        self._return_value((name, 'get_full_hist_ts', val), comm_name)
 
         logger.debug("Device %s history returned", name)
 
@@ -1635,7 +1635,7 @@ class UVCommThread(utils.CommManager):
         device = self._connected_devices[name]
         device.set_history_time(val, **kwargs)
 
-        self._return_value((name, 'set_history_time', True), comm_name)
+        self._return_value((name, 'set_hist_time', True), comm_name)
 
         logger.debug("Device %s history length set", name)
 
@@ -1647,7 +1647,7 @@ class UVCommThread(utils.CommManager):
         device = self._connected_devices[name]
         val = device.get_history_time(**kwargs)
 
-        self._return_value((name, 'get_history_time', val), comm_name)
+        self._return_value((name, 'get_hist_time', val), comm_name)
 
         logger.debug("Device %s history time: %s s", name, val)
 
@@ -2723,6 +2723,9 @@ class InlineUVPanel(utils.DevicePanel):
 
         self._ls_shutter = None
 
+        self.uvplot_frame = None
+        self.uv_plot = None
+
         self._init_controls()
         wx.CallLater(500, self._init_device_part2)
 
@@ -2737,11 +2740,16 @@ class InlineUVPanel(utils.DevicePanel):
         font = wx.Font(fsize, wx.DEFAULT, wx.NORMAL, wx.BOLD)
         self.status.SetFont(font)
 
+        self.show_uv_plot = wx.Button(status_parent, label='Show Plot')
+        self.show_uv_plot.Bind(wx.EVT_BUTTON, self._on_show_uv_plot)
+
         status_sizer = wx.StaticBoxSizer(status_parent, wx.HORIZONTAL)
         status_sizer.Add(wx.StaticText(status_parent, label='Status:'),
-            flag=wx.ALL, border=self._FromDIP(5))
-        status_sizer.Add(self.status, flag=wx.TOP|wx.BOTTOM|wx.LEFT,
-            border=self._FromDIP(5))
+            flag=wx.ALL|wx.ALIGN_CENTER_VERTICAL, border=self._FromDIP(5))
+        status_sizer.Add(self.status, border=self._FromDIP(5),
+            flag=wx.TOP|wx.BOTTOM|wx.LEFT|wx.ALIGN_CENTER_VERTICAL)
+        status_sizer.Add(self.show_uv_plot, border=self._FromDIP(5),
+            flag=wx.TOP|wx.BOTTOM|wx.LEFT|wx.ALIGN_CENTER_VERTICAL)
         status_sizer.AddStretchSpacer(1)
 
         settings_parent = wx.StaticBox(self, label='Settings')
@@ -2950,6 +2958,8 @@ class InlineUVPanel(utils.DevicePanel):
             answer = None
 
         logger.debug('Spec command response: %s', answer)
+
+        # print(answer)
 
         return answer
 
@@ -3417,6 +3427,9 @@ class InlineUVPanel(utils.DevicePanel):
             self._series_count = 0
             self._series_total = val
 
+            if self.uv_plot is not None:
+                wx.CallAfter(self.uv_plot.set_time_zero)
+
         elif cmd == 'collect_series_end':
             self._series_running = True
             self._series_count = 0
@@ -3430,6 +3443,11 @@ class InlineUVPanel(utils.DevicePanel):
 
         if val.abs_spectrum is not None:
             self._add_spectrum_to_history(val, 'abs')
+
+        print(self._absorbance_history)
+        if self.uv_plot is not None:
+            self.uv_plot.update_plot_data(val, self._absorbance_history,
+                self._current_abs_wav)
 
     def _set_status_commands(self):
         settings_cmd = ['get_spec_settings', [self.name], {}]
@@ -3447,6 +3465,8 @@ class InlineUVPanel(utils.DevicePanel):
 
         if spec_type == 'abs':
             history = self._absorbance_history
+            print('here')
+            print(history)
         elif spec_type == 'trans':
             history = self._transmission_history
         else:
@@ -3462,6 +3482,8 @@ class InlineUVPanel(utils.DevicePanel):
 
             if spec_type == 'abs':
                 self._absorbance_history = history
+                print('here 2')
+                print(history)
             elif spec_type == 'trans':
                 self._transmission_history = history
             else:
@@ -3498,6 +3520,7 @@ class InlineUVPanel(utils.DevicePanel):
         return history
 
     def _get_full_history(self):
+        print('getting full history')
         abs_cmd = ['get_full_hist_ts', [self.name,], {}]
         trans_cmd = ['get_full_hist_ts', [self.name,], {'spec_type': 'trans'}]
         raw_cmd = ['get_full_hist_ts', [self.name,], {'spec_type': 'raw'}]
@@ -3505,6 +3528,10 @@ class InlineUVPanel(utils.DevicePanel):
         self._absorbance_history = self._send_cmd(abs_cmd, True)
         self._transmission_history = self._send_cmd(trans_cmd, True)
         self._history = self._send_cmd(raw_cmd, True)
+
+        print(self._absorbance_history)
+        print(self._transmission_history)
+        print(self._history)
 
     def on_exposure_start(self, exp_panel):
         uv_values = None
@@ -3567,6 +3594,19 @@ class InlineUVPanel(utils.DevicePanel):
 
         return metadata
 
+    def _on_show_uv_plot(self, evt):
+        if self.uvplot_frame is None:
+            self.uvplot_frame = UVPlotFrame(self, title='UV Plot',
+                size=self._FromDIP((500, 500)))
+
+            self.uv_plot = self.uvplot_frame.uv_plot
+        else:
+            self.uvplot_frame.Raise()
+
+    def on_uv_frame_close(self):
+        self.uvplot_frame = None
+        self.uv_plot = None
+
     def _on_close(self):
         """Device specific stuff goes here"""
         pass
@@ -3601,14 +3641,10 @@ class UVPlot(wx.Panel):
 
         self._create_layout()
 
-        # self.Bind(wx.EVT_CLOSE, self._on_exit)
-
         # Connect the callback for the draw_event so that window resizing works:
         self.cid = self.canvas.mpl_connect('draw_event', self.ax_redraw)
         self.canvas.mpl_connect('motion_notify_event', self._onMouseMotionEvent)
 
-        self.Raise()
-        self.Show()
 
     def _FromDIP(self, size):
         # This is a hack to provide easy back compatibility with wxpython < 4.1
@@ -3738,6 +3774,8 @@ class UVPlot(wx.Panel):
         self.abs_history = abs_history
         self.abs_wvl = abs_wvl
 
+        print(self.abs_history)
+
         if abs_history is not None and len(abs_history['spectra']) > 0:
             current_time = time.time()
             timestamps = np.array(abs_history['timestamps'])
@@ -3754,6 +3792,8 @@ class UVPlot(wx.Panel):
             abs_data = []
 
         self.abs_data = abs_data
+
+        print(self.abs_data)
 
         self.plot_data()
 
@@ -3997,6 +4037,9 @@ class UVPlot(wx.Panel):
                 self.subplot.set_ylim(newy)
                 redraw = True
 
+            print(newx)
+            print(newy)
+
         if redraw:
             self.canvas.draw()
 
@@ -4025,6 +4068,29 @@ class UVPlot(wx.Panel):
 
         else:
             self.toolbar.set_status('')
+
+class UVPlotFrame(wx.Frame):
+    def __init__(self, *args, **kwargs):
+        super(UVPlotFrame, self).__init__(*args, **kwargs)
+
+        self._create_layout()
+
+        self.Bind(wx.EVT_CLOSE, self._on_exit)
+
+        self.Raise()
+        self.Show()
+
+    def _create_layout(self):
+        self.uv_plot = UVPlot(self)
+
+        sizer = wx.BoxSizer(wx.HORIZONTAL)
+        sizer.Add(self.uv_plot, 1, flag=wx.EXPAND)
+
+        self.SetSizer(sizer)
+
+    def _on_exit(self, evt):
+        self.GetParent().on_uv_frame_close()
+        self.Destroy()
 
 class UVFrame(utils.DeviceFrame):
 
@@ -4073,7 +4139,7 @@ if __name__ == '__main__':
     logger.setLevel(logging.DEBUG)
     h1 = logging.StreamHandler(sys.stdout)
     h1.setLevel(logging.DEBUG)
-    # h1.setLevel(logging.INFO)
+    h1.setLevel(logging.INFO)
     # h1.setLevel(logging.WARNING)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
     h1.setFormatter(formatter)
