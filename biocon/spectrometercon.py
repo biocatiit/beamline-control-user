@@ -1953,6 +1953,7 @@ class UVPanel(utils.DevicePanel):
 
         self._dark_spectrum = None
         self._reference_spectrum = None
+        self._current_spectrum = None
 
         self._history_length = 60*60*24
 
@@ -2594,6 +2595,8 @@ class UVPanel(utils.DevicePanel):
                 self._live_update_evt.set()
 
     def _add_new_spectrum(self, val):
+        self._current_spectrum = val
+
         if val.spectrum is not None:
             self._add_spectrum_to_history(val)
 
