@@ -3988,32 +3988,37 @@ class UVPlot(wx.Panel):
 
                     data_range = ydata[start_idx:end_idx+1][np.isfinite(ydata[start_idx:end_idx+1])]
 
-                    ymin = min(data_range)
-                    ymax = max(data_range)
+                    if len(data_range) > 0:
+                        ymin = min(data_range)
+                        ymax = max(data_range)
 
-                    if cur_ymin is not None:
-                        cur_ymin = min(ymin, cur_ymin)
+                        if cur_ymin is not None:
+                            cur_ymin = min(ymin, cur_ymin)
+                        else:
+                            cur_ymin = ymin
+
+                        if cur_ymax is not None:
+                            cur_ymax = max(ymax, cur_ymax)
+                        else:
+                            cur_ymax = ymax
+
+                if cur_ymin is not None:
+                    offset = abs(cur_ymax - cur_ymin)*0.05
+
+                    if cur_ymin < oldy[0] or oldy[0] < cur_ymin-offset:
+                            new_ymin = cur_ymin-offset
                     else:
-                        cur_ymin = ymin
+                        new_ymin = oldy[0]
 
-                    if cur_ymax is not None:
-                        cur_ymax = max(ymax, cur_ymax)
+                    if cur_ymax > oldy[1] or oldy[1] > cur_ymax+offset:
+                            new_ymax = cur_ymax+offset
                     else:
-                        cur_ymax = ymax
+                        new_ymax = oldy[1]
 
-                offset = abs(cur_ymax - cur_ymin)*0.05
+                    newy = [new_ymin, new_ymax]
 
-                if cur_ymin < oldy[0] or oldy[0] < cur_ymin-offset:
-                        new_ymin = cur_ymin-offset
                 else:
-                    new_ymin = oldy[0]
-
-                if cur_ymax > oldy[1] or oldy[1] > cur_ymax+offset:
-                        new_ymax = cur_ymax+offset
-                else:
-                    new_ymax = oldy[1]
-
-                newy = [new_ymin, new_ymax]
+                    newy = oldy
 
             else:
                 self.subplot.relim()
