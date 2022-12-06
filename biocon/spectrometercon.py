@@ -41,6 +41,11 @@ if __name__ != '__main__':
 import numpy as np
 import wx
 import epics
+import matplotlib
+from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg
+from matplotlib.figure import Figure
+
+matplotlib.rcParams['backend'] = 'WxAgg'
 
 try:
     # Uses stellarnet python driver, available from the manufacturer
@@ -59,8 +64,11 @@ class SpectraData(object):
     """
 
     def __init__(self, spectrum, timestamp, spec_type='raw',
-        absorbance_window=1, absorbance_wavelengths={}):
+        absorbance_window=1, absorbance_wavelengths={}, wl_range_idx=[]):
         logger.debug('Creating SpectraData with %s spectrum', spec_type)
+
+        if len(wl_range_idx) > 0:
+            spectrum = spectrum[wl_range_idx[0]:wl_range_idx[1]+1]
 
         self.timestamp = timestamp
         self.wavelength = spectrum[:,0]
@@ -100,7 +108,10 @@ class SpectraData(object):
         elif spec_type == 'abs':
             spec = self.abs_spectrum
 
-        spectrum = np.column_stack((self.wavelength, spec))
+        if spec is not None:
+            spectrum = np.column_stack((self.wavelength, spec))
+        else:
+            spectrum = None
 
         return spectrum
 
@@ -192,7 +203,8 @@ class SpectraData(object):
 
     def save_spectrum(self, name, save_dir, spec_type='abs'):
 
-        fname = os.path.join(save_dir, name)
+        name, _ = os.path.splitext(name)
+        fname = os.path.join(save_dir, '{}.csv'.format(name))
         logger.debug('SpectraData: Saving to %s', fname)
 
         h_start = '{}\nWavelength_(nm),'.format(self.timestamp.isoformat())
@@ -251,6 +263,11 @@ class Spectrometer(object):
         self._absorbance_wavelengths = {}
 
         self.wavelength = None #Wavelength array as returned by spectrometer
+
+        # Sets min and max wavelengths for the spectrometer, must be within
+        # the measured range of the spectrometer
+        self._wavelength_range = [None, None]
+        self._wavelength_range_idx = [None, None]
 
         self._autosave_dir = None
         self._autosave_prefix = None
@@ -396,7 +413,8 @@ class Spectrometer(object):
 
                 avg_spec = SpectraData(avg_spectrum, avg_timestamp,
                     absorbance_window=self._absorbance_window,
-                    absorbance_wavelengths=self._absorbance_wavelengths)
+                    absorbance_wavelengths=self._absorbance_wavelengths,
+                    wl_range_idx=self._wavelength_range_idx)
 
                 self.set_dark(avg_spec)
             else:
@@ -516,7 +534,8 @@ class Spectrometer(object):
 
         spectrum = SpectraData(spectrum, timestamp,
             absorbance_window=self._absorbance_window,
-            absorbance_wavelengths=self._absorbance_wavelengths)
+            absorbance_wavelengths=self._absorbance_wavelengths,
+            wl_range_idx=self._wavelength_range_idx)
 
         if dark_correct:
             dark_spectrum = self.get_dark()
@@ -592,8 +611,9 @@ class Spectrometer(object):
 
             ds = self.get_dark()
 
-            ds.save_spectrum('{}_dark'.format(self._autosave_prefix),
-                self._autosave_dir, 'raw')
+            if self._autosave_on:
+                ds.save_spectrum('{}_dark.csv'.format(self._autosave_prefix),
+                    self._autosave_dir, 'raw')
 
             self._check_light_conditions()
 
@@ -603,8 +623,10 @@ class Spectrometer(object):
                 self._collect_reference_spectrum_inner(ref_avgs)
 
             ref = self.get_reference_spectrum()
-            ref.save_spectrum('{}_ref'.format(self._autosave_prefix),
-                self._autosave_dir, 'raw')
+
+            if self._autosave_on:
+                ref.save_spectrum('{}_ref.csv'.format(self._autosave_prefix),
+                    self._autosave_dir, 'raw')
 
             if spec_type == 'abs':
                 abs_wavs = self.get_absorbance_wavelengths()
@@ -765,8 +787,9 @@ class Spectrometer(object):
             history = self._history
 
         history['spectra'].append(spectrum)
-        history['timestamps'].append((spectrum.get_timestamp() - 
-            datetime.datetime(1970,1,1)).total_seconds())
+        history['timestamps'].append((spectrum.get_timestamp().astimezone() -
+            datetime.datetime(1970,1,1,
+                tzinfo=datetime.timezone.utc)).total_seconds())
 
         history = self._prune_history(history)
 
@@ -781,8 +804,8 @@ class Spectrometer(object):
         logger.debug('Spectrometer %s: Pruning history', self.name)
 
         if len(history['timestamps']) > 0:
-            now = (datetime.datetime.now()- 
-                datetime.datetime(1970,1,1)).total_seconds()
+            now = (datetime.datetime.now(datetime.timezone.utc)- datetime.datetime(1970,1,1,
+                    tzinfo=datetime.timezone.utc)).total_seconds()
 
             if len(history['timestamps']) == 1:
                 if now - history['timestamps'][0] > self._history_length:
@@ -838,8 +861,8 @@ class Spectrometer(object):
         else:
             history = self._history
 
-        now = (datetime.datetime.now() - 
-            datetime.datetime(1970,1,1)).total_seconds()
+        now = (datetime.datetime.now(datetime.timezone.utc) - datetime.datetime(1970,1,1,
+            tzinfo=datetime.timezon.utc)).total_seconds()
 
         index = -1
         while (abs(index) <= len(history['timestamps'])
@@ -961,6 +984,36 @@ class Spectrometer(object):
         logger.debug('Spectrometer %s: Getting series autosave', self.name)
         return self._autosave_on
 
+    def set_wavelength_range(self, start, end):
+        logger.info('Spectrometer %s: Setting wavelength range %s to %s',
+            self.name, start, end)
+        if start is not None and start >= self.wavelength[0]:
+            self._wavelength_range[0] = start
+
+            val, idx = utils.find_closest(start, self.wavelength)
+            self._wavelength_range_idx[0] = idx
+
+        elif start is None or start < self.wavelength[0]:
+            self._wavelength_range[0] = None
+            self._wavelength_range_idx[0] = 0
+
+        if end is not None and end <= self.wavelength[-1]:
+            self._wavelength_range[1] = end
+
+            val, idx = utils.find_closest(end, self.wavelength)
+            self._wavelength_range_idx[1] = idx
+
+        elif end is None or end > self.wavelength[-1]:
+            self._wavelength_range[1] = None
+            self._wavelength_range_idx[1] = len(self.wavelength)
+
+        self._reference_spectrum = None
+        self._dark_spectrum = None
+
+    def get_wavelength_range(self):
+        logger.debug('Sepctrometer %s: Getting wavelength range', self.name)
+        return self._wavelength_range
+
     def get_autosave_parameters(self):
         logger.debug('Spectrometer %s: Getting series autosave parameters',
             self.name)
@@ -990,6 +1043,8 @@ class StellarnetUVVis(Spectrometer):
 
         self._external_trigger = False
 
+        self.connected = False
+
         self.shutter_pv = epics.PV(shutter_pv_name)
         self.trigger_pv = epics.PV(trigger_pv_name)
 
@@ -1000,14 +1055,18 @@ class StellarnetUVVis(Spectrometer):
         self._get_config()
 
     def connect(self):
-        logger.info('Spectrometer %s: Connecting', self.name)
+        if not self.connected:
+            logger.info('Spectrometer %s: Connecting', self.name)
 
-        spec, wav = sn.array_get_spec(0)
+            spec, wav = sn.array_get_spec(0)
 
-        self.spectrometer = spec
-        self.wav = wav
+            self.spectrometer = spec
+            self.wav = wav
 
-        self.wavelength = self.wav.reshape(self.wav.shape[0])
+            self.wavelength = self.wav.reshape(self.wav.shape[0])
+            self.set_wavelength_range(self.wavelength[0], self.wavelength[-1])
+
+            self.connected = True
 
     def disconnect(self):
         logger.info('Spectrometer %s: Disconnecting', self.name)
@@ -1258,6 +1317,8 @@ class UVCommThread(utils.CommManager):
             'set_ls_shutter'    : self._set_lightsource_shutter,
             'get_ls_shutter'    : self._get_lightsource_shutter,
             'set_int_trig'      : self._set_internal_trigger,
+            'set_wl_range'      : self._set_wavelength_range,
+            'get_wl_range'      : self._get_wavelength_range,
         }
 
         self._connected_devices = OrderedDict()
@@ -1285,7 +1346,7 @@ class UVCommThread(utils.CommManager):
 
             self._series_q[name] = deque()
 
-        self._return_value((name, 'connected', True), comm_name)
+        self._return_value((name, 'connect', True), comm_name)
 
         logger.debug("Device %s connected", name)
 
@@ -1298,7 +1359,7 @@ class UVCommThread(utils.CommManager):
         if device is not None:
             device.disconnect()
 
-        self._return_value((name, 'disconnected', True), comm_name)
+        self._return_value((name, 'disconnect', True), comm_name)
 
         logger.debug("Device %s disconnected", name)
 
@@ -1358,7 +1419,7 @@ class UVCommThread(utils.CommManager):
         device = self._connected_devices[name]
         val = device.get_integration_time(**kwargs)
 
-        self._return_value((name, 'int_time', val), comm_name)
+        self._return_value((name, 'get_int_time', val), comm_name)
 
         logger.debug("Device %s integration time is %s s", name, val)
 
@@ -1370,7 +1431,7 @@ class UVCommThread(utils.CommManager):
         device = self._connected_devices[name]
         val = device.get_scan_avg(**kwargs)
 
-        self._return_value((name, 'scan_avg', val), comm_name)
+        self._return_value((name, 'get_scan_avg', val), comm_name)
 
         logger.debug("Device %s scan averages: %s", name, val)
 
@@ -1382,7 +1443,7 @@ class UVCommThread(utils.CommManager):
         device = self._connected_devices[name]
         val = device.get_smoothing(**kwargs)
 
-        self._return_value((name, 'smoothing', val), comm_name)
+        self._return_value((name, 'get_smoothing', val), comm_name)
 
         logger.debug("Device %s smoothing: %s", name, val)
 
@@ -1394,7 +1455,7 @@ class UVCommThread(utils.CommManager):
         device = self._connected_devices[name]
         val = device.get_xtiming(**kwargs)
 
-        self._return_value((name, 'xtiming', val), comm_name)
+        self._return_value((name, 'get_xtiming', val), comm_name)
 
         logger.debug("Device %s xtiming: %s", name, val)
 
@@ -1421,7 +1482,7 @@ class UVCommThread(utils.CommManager):
         except RuntimeError:
             val = None
 
-        self._return_value((name, 'dark', val), comm_name)
+        self._return_value((name, 'get_dark', val), comm_name)
 
         logger.debug("Device %s dark: %s", name, val)
 
@@ -1461,7 +1522,7 @@ class UVCommThread(utils.CommManager):
         except RuntimeError:
             val = None
 
-        self._return_value((name, 'ref', val), comm_name)
+        self._return_value((name, 'get_ref', val), comm_name)
 
         logger.debug("Device %s ref: %s", name, val)
 
@@ -1526,7 +1587,7 @@ class UVCommThread(utils.CommManager):
         device = self._connected_devices[name]
         hist = device.get_last_n_spectra(val, **kwargs)
 
-        self._return_value((name, 'get_history', hist), comm_name)
+        self._return_value((name, 'get_last_n', hist), comm_name)
 
         logger.debug("Device %s history returned", name)
 
@@ -1538,7 +1599,7 @@ class UVCommThread(utils.CommManager):
         device = self._connected_devices[name]
         hist = device.get_spectra_in_last_t(val, **kwargs)
 
-        self._return_value((name, 'get_history', hist), comm_name)
+        self._return_value((name, 'get_last_t', hist), comm_name)
 
         logger.debug("Device %s history returned", name)
 
@@ -1550,7 +1611,7 @@ class UVCommThread(utils.CommManager):
         device = self._connected_devices[name]
         val = device.get_full_history(**kwargs)
 
-        self._return_value((name, 'get_history', val), comm_name)
+        self._return_value((name, 'get_full_hist', val), comm_name)
 
         logger.debug("Device %s history returned", name)
 
@@ -1562,7 +1623,7 @@ class UVCommThread(utils.CommManager):
         device = self._connected_devices[name]
         val = device.get_full_history_ts(**kwargs)
 
-        self._return_value((name, 'get_history', val), comm_name)
+        self._return_value((name, 'get_full_hist_ts', val), comm_name)
 
         logger.debug("Device %s history returned", name)
 
@@ -1574,7 +1635,7 @@ class UVCommThread(utils.CommManager):
         device = self._connected_devices[name]
         device.set_history_time(val, **kwargs)
 
-        self._return_value((name, 'set_history_time', True), comm_name)
+        self._return_value((name, 'set_hist_time', True), comm_name)
 
         logger.debug("Device %s history length set", name)
 
@@ -1586,7 +1647,7 @@ class UVCommThread(utils.CommManager):
         device = self._connected_devices[name]
         val = device.get_history_time(**kwargs)
 
-        self._return_value((name, 'get_history_time', val), comm_name)
+        self._return_value((name, 'get_hist_time', val), comm_name)
 
         logger.debug("Device %s history time: %s s", name, val)
 
@@ -1773,6 +1834,7 @@ class UVCommThread(utils.CommManager):
         abs_win = device.get_absorbance_window()
         hist_t = device.get_history_time(**kwargs)
         ls_shutter = device.get_lightsource_shutter()
+        wl_range = device.get_wavelength_range()
 
         ret_vals = {
             'int_time'  : int_time,
@@ -1785,6 +1847,7 @@ class UVCommThread(utils.CommManager):
             'abs_win'   : abs_win,
             'hist_t'    : hist_t,
             'ls_shutter': ls_shutter,
+            'wl_range'  : wl_range,
         }
 
         self._return_value((name, 'get_spec_settings', ret_vals), comm_name)
@@ -1827,6 +1890,32 @@ class UVCommThread(utils.CommManager):
 
         logger.debug("Device %s internal_trigger set", name)
 
+    def _set_wavelength_range(self, name, start, end, **kwargs):
+        logger.debug("Device %s setting wavelength range %s to %s", name,
+            start, end)
+
+        comm_name = kwargs.pop('comm_name', None)
+
+        device = self._connected_devices[name]
+        device.set_wavelength_range(start, end, **kwargs)
+
+        self._return_value((name, 'set_wl_range', True), comm_name)
+
+        logger.debug("Device %s wavelength range set", name)
+
+    def _get_wavelength_range(self, name, **kwargs):
+        logger.debug("Getting device %s wavelength range", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+
+        device = self._connected_devices[name]
+        val = device.get_wavelength_range(**kwargs)
+
+        self._return_value((name, 'get_wl_range', val), comm_name)
+
+        logger.debug("Device %s wavelength range: %s to %s", name, val[0],
+            val[1])
+
     def _monitor_series(self, name):
         device = self._connected_devices[name]
 
@@ -1864,6 +1953,7 @@ class UVPanel(utils.DevicePanel):
 
         self._dark_spectrum = None
         self._reference_spectrum = None
+        self._current_spectrum = None
 
         self._history_length = 60*60*24
 
@@ -1874,6 +1964,17 @@ class UVPanel(utils.DevicePanel):
         self._series_running = False
         self._series_count = 0
         self._series_total = 0
+
+        self._live_update_evt = threading.Event()
+        self._live_update_evt.clear()
+        self._live_update_stop = threading.Event()
+        self._live_update_stop.clear()
+        self._live_update_thread = threading.Thread(target=self._live_update_plot)
+        self._live_update_thread.daemon = True
+        self._live_update_thread.start()
+        self._restart_live_update = False
+
+        self._current_abs_wav = None
 
     def _create_layout(self):
         """Creates the layout for the panel."""
@@ -2057,15 +2158,74 @@ class UVPanel(utils.DevicePanel):
         series_box_sizer.Add(series_sizer, flag=wx.EXPAND|wx.ALL,
             border=self._FromDIP(5))
 
-        top_sizer = wx.BoxSizer(wx.VERTICAL)
-        top_sizer.Add(status_sizer, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
+        control_sizer = wx.BoxSizer(wx.VERTICAL)
+        control_sizer.Add(status_sizer, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
             border=self._FromDIP(5))
-        top_sizer.Add(settings_box_sizer, flag=wx.EXPAND|wx.ALL,
+        control_sizer.Add(settings_box_sizer, flag=wx.EXPAND|wx.ALL,
             border=self._FromDIP(5))
-        top_sizer.Add(single_spectrum_box_sizer,
+        control_sizer.Add(single_spectrum_box_sizer,
             flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM, border=self._FromDIP(5))
-        top_sizer.Add(series_box_sizer, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM,
+        control_sizer.Add(series_box_sizer, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM,
             border=self._FromDIP(5))
+        control_sizer.AddStretchSpacer(1)
+
+
+        save_parent = wx.StaticBox(self, label='Save')
+
+        self.save_dark = wx.Button(save_parent, label='Save Dark')
+        self.save_dark.Bind(wx.EVT_BUTTON, self._on_save)
+        self.save_ref = wx.Button(save_parent, label='Save Reference')
+        self.save_ref.Bind(wx.EVT_BUTTON, self._on_save)
+        self.save_current = wx.Button(save_parent, label='Save Latest Spectrum')
+        self.save_current.Bind(wx.EVT_BUTTON, self._on_save)
+
+        save_btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        save_btn_sizer.Add(self.save_current, border=self._FromDIP(5),
+            flag=wx.ALL|wx.ALIGN_CENTER_VERTICAL)
+        save_btn_sizer.Add(self.save_ref, border=self._FromDIP(5),
+            flag=wx.RIGHT|wx.TOP|wx.BOTTOM|wx.ALIGN_CENTER_VERTICAL)
+        save_btn_sizer.Add(self.save_dark, border=self._FromDIP(5),
+            flag=wx.RIGHT|wx.TOP|wx.BOTTOM|wx.ALIGN_CENTER_VERTICAL)
+
+        save_sizer = wx.StaticBoxSizer(save_parent, wx.HORIZONTAL)
+        save_sizer.Add(save_btn_sizer, flag=wx.EXPAND)
+        save_sizer.AddStretchSpacer(1)
+
+
+        plot_parent = wx.StaticBox(self, label='Plot')
+
+        self.auto_update = wx.CheckBox(plot_parent, label='Autoupdate')
+        self.auto_update.SetValue(False)
+        self.auto_update.Bind(wx.EVT_CHECKBOX, self._on_autoupdate)
+
+        self.update_period = utils.ValueEntry(self._on_plot_update_change,
+            plot_parent, validator=utils.CharValidator('float_te'),
+            size=self._FromDIP((50,-1)))
+        self.update_period.ChangeValue('0.5')
+        self._on_plot_update_change(self.update_period, '0.5')
+
+        plot_settings_sizer = wx.FlexGridSizer(cols=4, vgap=self._FromDIP(5),
+            hgap=self._FromDIP(5))
+        plot_settings_sizer.Add(self.auto_update, flag=wx.ALIGN_CENTER_VERTICAL)
+        plot_settings_sizer.Add(wx.StaticText(plot_parent, label='Update period (s):'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        plot_settings_sizer.Add(self.update_period, flag=wx.ALIGN_CENTER_VERTICAL)
+
+        self.uv_plot = UVPlot(plot_parent)
+
+        plot_sizer = wx.StaticBoxSizer(plot_parent, wx.VERTICAL)
+        plot_sizer.Add(plot_settings_sizer, border=self._FromDIP(5),
+            flag=wx.EXPAND|wx.BOTTOM)
+        plot_sizer.Add(self.uv_plot, proportion=1, flag=wx.EXPAND)
+
+        right_sizer = wx.BoxSizer(wx.VERTICAL)
+        right_sizer.Add(save_sizer, border=self._FromDIP(5), flag=wx.EXPAND|wx.ALL)
+        right_sizer.Add(plot_sizer, proportion=1, border=self._FromDIP(5),
+            flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM)
+
+        top_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        top_sizer.Add(control_sizer, flag=wx.EXPAND)
+        top_sizer.Add(right_sizer, proportion=1, flag=wx.EXPAND)
 
         self.SetSizer(top_sizer)
 
@@ -2086,12 +2246,23 @@ class UVPanel(utils.DevicePanel):
         # Need some kind of delay or I get a USB error message from the stellarnet driver
         is_busy = self._get_busy()
 
-        wx.CallLater(500, self._get_full_history)
+        self._get_full_history()
 
         if not is_busy:
-            wx.CallLater(510, self._init_dark_and_ref)
+           self._init_dark_and_ref()
 
-        wx.CallLater(600, self._set_status_commands)
+        cmd = ['get_spec_settings', [self.name,], {}]
+        ret = self._send_cmd(cmd, True)
+        self._set_status('get_spec_settings', ret)
+
+        if not is_busy:
+            if self._current_abs_wav is None or len(self._current_abs_wav) == 0:
+                cmd = ['add_abs_wav', [self.name, 280], {}]
+                self._send_cmd(cmd)
+                # cmd = ['add_abs_wav', [self.name, 260], {}]
+                # self._send_cmd(cmd)
+
+        self._set_status_commands()
 
         if args[1] != 'StellarNet':
             self.settings_sizer.Hide(self.xtiming_label)
@@ -2141,8 +2312,38 @@ class UVPanel(utils.DevicePanel):
         if cmd is not None:
             self._send_cmd(cmd)
 
+    def _on_autoupdate(self, evt):
+        if self.auto_update.GetValue():
+            self._live_update_evt.set()
+            self._restart_live_update = True
+        else:
+            self._live_update_evt.clear()
+            self._restart_live_update = False
+
+    def _on_plot_update_change(self, obj, val):
+        self._plot_update_period = float(val)
+
+    def _live_update_plot(self):
+        update_time = time.time()
+
+        while True:
+            if self._live_update_stop.is_set():
+                break
+
+            if self._live_update_evt.is_set():
+                if time.time() - update_time > self._plot_update_period:
+                    self._collect_spectrum()
+                    update_time = time.time()
+                else:
+                    time.sleep(self._plot_update_period/3)
+            else:
+                time.sleep(0.5)
+
     def _on_collect_single(self, evt):
         obj = evt.GetEventObject()
+
+        self.auto_update.SetValue(False)
+        self._live_update_evt.clear()
 
         if obj == self.collect_dark_btn:
             self._collect_spectrum('dark')
@@ -2205,6 +2406,7 @@ class UVPanel(utils.DevicePanel):
             wx.CallAfter(self._show_busy_msg)
 
     def _on_collect_series(self, evt):
+        self._live_update_evt.clear()
         self._collect_series()
 
     def _collect_series(self):
@@ -2377,6 +2579,7 @@ class UVPanel(utils.DevicePanel):
 
             self._dark_spectrum = dark
             self._reference_spectrum = ref
+            self._current_abs_wav = abs_wavs
 
         elif cmd == 'collect_spec':
             self._add_new_spectrum(val)
@@ -2410,12 +2613,18 @@ class UVPanel(utils.DevicePanel):
             self._series_running = True
             self._series_count = 0
             self._series_total = val
+            wx.CallAfter(self.uv_plot.set_time_zero)
 
         elif cmd == 'collect_series_end':
             self._series_running = True
             self._series_count = 0
 
+            if self._restart_live_update:
+                self._live_update_evt.set()
+
     def _add_new_spectrum(self, val):
+        self._current_spectrum = val
+
         if val.spectrum is not None:
             self._add_spectrum_to_history(val)
 
@@ -2424,6 +2633,10 @@ class UVPanel(utils.DevicePanel):
 
         if val.abs_spectrum is not None:
             self._add_spectrum_to_history(val, 'abs')
+
+        self.uv_plot.update_plot_data(val, self._absorbance_history,
+            self._current_abs_wav)
+
 
     def _set_status_commands(self):
         settings_cmd = ['get_spec_settings', [self.name], {}]
@@ -2446,8 +2659,9 @@ class UVPanel(utils.DevicePanel):
 
         if history is not None:
             history['spectra'].append(spectrum)
-            history['timestamps'].append((spectrum.get_timestamp() - 
-                datetime.datetime(1970,1,1)).total_seconds())
+            history['timestamps'].append((spectrum.get_timestamp().astimezone() -
+                datetime.datetime(1970,1,1,
+                tzinfo=datetime.timezone.utc)).total_seconds())
 
             history = self._prune_history(history)
 
@@ -2462,8 +2676,8 @@ class UVPanel(utils.DevicePanel):
         logger.debug('Pruning history')
 
         if len(history['timestamps']) > 0:
-            now = (datetime.datetime.now() - 
-                datetime.datetime(1970,1,1)).total_seconds()
+            now = (datetime.datetime.now(datetime.timezone.utc) - datetime.datetime(1970,1,1,
+                tzinfo=datetime.timezone.utc)).total_seconds()
 
             if len(history['timestamps']) == 1:
                 if now - history['timestamps'][0] > self._history_length:
@@ -2497,9 +2711,55 @@ class UVPanel(utils.DevicePanel):
         self._transmission_history = self._send_cmd(trans_cmd, True)
         self._history = self._send_cmd(raw_cmd, True)
 
+    def _on_save(self, evt):
+        obj = evt.GetEventObject()
+
+        if obj == self.save_current:
+            print('saving current spectrum')
+            spectrum = self._current_spectrum
+        elif obj == self.save_ref:
+            print('saving reference spectrum')
+            spectrum = self._reference_spectrum
+        elif obj == self.save_dark:
+            print('saving dark spectrum')
+            spectrum = self._dark_spectrum
+
+        if spectrum is not None:
+            self._save_spectrum(spectrum)
+        else:
+            msg = "The selected spectrum cannot be saved because it doesn't exist."
+            wx.CallAfter(wx.MessageBox, msg, 'No Spectrum to save')
+
+    def _save_spectrum(self, spectrum):
+        msg = "Please select save directory and enter save file name"
+        dialog = wx.FileDialog(self, message=msg,
+            style=wx.FD_SAVE|wx.FD_OVERWRITE_PROMPT, defaultFile='spectrum.csv')
+
+        if dialog.ShowModal() == wx.ID_OK:
+            path = dialog.GetPath()
+            dialog.Destroy()
+        else:
+            dialog.Destroy()
+            return
+
+        path=os.path.splitext(path)[0]
+        savedir, name = os.path.split(path)
+
+        # spectrum.save_spectrum(name, savedir)
+
+        if spectrum.spectrum is not None:
+            spectrum.save_spectrum(name+'_raw.csv', savedir, 'raw')
+
+        if spectrum.trans_spectrum is not None:
+            spectrum.save_spectrum(name+'_trans.csv', savedir, 'trans')
+
+        if spectrum.abs_spectrum is not None:
+            spectrum.save_spectrum(name+'.csv', savedir, 'abs')
+
     def _on_close(self):
         """Device specific stuff goes here"""
-        pass
+        self._live_update_stop.set()
+        self._live_update_thread.join()
 
 
 class InlineUVPanel(utils.DevicePanel):
@@ -2514,6 +2774,7 @@ class InlineUVPanel(utils.DevicePanel):
 
         self._dark_spectrum = None
         self._reference_spectrum = None
+        self._current_spectrum = None
 
         self._history_length = 60*60*24
 
@@ -2532,11 +2793,15 @@ class InlineUVPanel(utils.DevicePanel):
         self._current_xtiming = None
         self._current_abs_wav = None
         self._current_abs_win = None
+        self._current_wav_range = None
 
         self._series_exp_time = None
         self._series_scan_avg = None
 
         self._ls_shutter = None
+
+        self.uvplot_frame = None
+        self.uv_plot = None
 
         self._init_controls()
         wx.CallLater(500, self._init_device_part2)
@@ -2552,11 +2817,16 @@ class InlineUVPanel(utils.DevicePanel):
         font = wx.Font(fsize, wx.DEFAULT, wx.NORMAL, wx.BOLD)
         self.status.SetFont(font)
 
+        self.show_uv_plot = wx.Button(status_parent, label='Show Plot')
+        self.show_uv_plot.Bind(wx.EVT_BUTTON, self._on_show_uv_plot)
+
         status_sizer = wx.StaticBoxSizer(status_parent, wx.HORIZONTAL)
         status_sizer.Add(wx.StaticText(status_parent, label='Status:'),
-            flag=wx.ALL, border=self._FromDIP(5))
-        status_sizer.Add(self.status, flag=wx.TOP|wx.BOTTOM|wx.LEFT,
-            border=self._FromDIP(5))
+            flag=wx.ALL|wx.ALIGN_CENTER_VERTICAL, border=self._FromDIP(5))
+        status_sizer.Add(self.status, border=self._FromDIP(5),
+            flag=wx.TOP|wx.BOTTOM|wx.LEFT|wx.ALIGN_CENTER_VERTICAL)
+        status_sizer.Add(self.show_uv_plot, border=self._FromDIP(5),
+            flag=wx.TOP|wx.BOTTOM|wx.LEFT|wx.ALIGN_CENTER_VERTICAL)
         status_sizer.AddStretchSpacer(1)
 
         settings_parent = wx.StaticBox(self, label='Settings')
@@ -2832,8 +3102,6 @@ class InlineUVPanel(utils.DevicePanel):
         self._history_length = self.settings['history_t']
         self.history_time.SafeChangeValue('{}'.format(self.settings['history_t']))
 
-
-
     def _init_device_part2(self):
         # Need some kind of delay or I get a USB error message from the stellarnet driver
         cmd = ['set_hist_time', [self.name, float(self._history_length)], {}]
@@ -2842,6 +3110,13 @@ class InlineUVPanel(utils.DevicePanel):
         is_busy = self._get_busy()
 
         self._get_full_history()
+
+        cmd = ['get_spec_settings', [self.name,], {}]
+        ret = self._send_cmd(cmd, True)
+        self._set_status('get_spec_settings', ret)
+
+        if not is_busy:
+            self._set_wavelength_range()
 
         if not is_busy:
             self._init_dark_and_ref()
@@ -2900,6 +3175,7 @@ class InlineUVPanel(utils.DevicePanel):
         is_busy = self._get_busy()
 
         if not is_busy:
+            self._set_wavelength_range()
             dark_correct = self.settings['dark_correct']
             auto_dark = self.auto_dark.GetValue()
             dark_time = float(self.auto_dark_period.GetValue())
@@ -2953,6 +3229,7 @@ class InlineUVPanel(utils.DevicePanel):
         is_busy = self._get_busy()
 
         if not is_busy:
+            self._set_wavelength_range()
             self._set_exposure_settings(int_time, scan_avgs)
             self._set_abs_params()
 
@@ -3052,6 +3329,30 @@ class InlineUVPanel(utils.DevicePanel):
             cmd = ['set_abs_window', [self.name, self.settings['abs_window']], {}]
             self._send_cmd(cmd)
 
+    def _set_wavelength_range(self):
+        update = False
+        if self._current_wav_range is not None:
+            if ((self._current_wav_range[0] is None
+                and self.settings['wavelength_range'][0] is not None) or
+                (self._current_wav_range[0] is not None
+                and self.settings['wavelength_range'][0] is None) or
+                (self._current_wav_range[0] != self.settings['wavelength_range'][0])
+                or (self._current_wav_range[1] is None
+                and self.settings['wavelength_range'][1] is not None) or
+                (self._current_wav_range[1] is not None
+                and self.settings['wavelength_range'][1] is None) or
+                (self._current_wav_range[1] != self.settings['wavelength_range'][1])):
+                update = True
+
+        else:
+            update = True
+
+        if update:
+            cmd = ['set_wl_range', [self.name, self.settings['wavelength_range'][0],
+                self.settings['wavelength_range'][1]], {}]
+            self._send_cmd(cmd)
+            self._current_wav_range = self.settings['wavelength_range']
+
     def _get_busy(self):
         busy_cmd = ['get_busy', [self.name,], {}]
         is_busy = self._send_cmd(busy_cmd, True)
@@ -3144,6 +3445,7 @@ class InlineUVPanel(utils.DevicePanel):
             abs_win = val['abs_win']
             hist_t = val['hist_t']
             ls_shutter = val['ls_shutter']
+            wl_range = val['wl_range']
 
             self.history_time.SafeChangeValue(str(hist_t))
 
@@ -3154,6 +3456,7 @@ class InlineUVPanel(utils.DevicePanel):
             self._current_xtiming = xtiming
             self._current_abs_wav = abs_wavs
             self._current_abs_win = abs_win
+            self._current_wav_range = wl_range
 
             self._dark_spectrum = dark
             self._reference_spectrum = ref
@@ -3200,11 +3503,16 @@ class InlineUVPanel(utils.DevicePanel):
             self._series_count = 0
             self._series_total = val
 
+            if self.uv_plot is not None:
+                wx.CallAfter(self.uv_plot.set_time_zero)
+
         elif cmd == 'collect_series_end':
             self._series_running = True
             self._series_count = 0
 
     def _add_new_spectrum(self, val):
+        self._current_spectrum = val
+
         if val.spectrum is not None:
             self._add_spectrum_to_history(val)
 
@@ -3213,6 +3521,10 @@ class InlineUVPanel(utils.DevicePanel):
 
         if val.abs_spectrum is not None:
             self._add_spectrum_to_history(val, 'abs')
+
+        if self.uv_plot is not None:
+            self.uv_plot.update_plot_data(val, self._absorbance_history,
+                self._current_abs_wav)
 
     def _set_status_commands(self):
         settings_cmd = ['get_spec_settings', [self.name], {}]
@@ -3237,8 +3549,9 @@ class InlineUVPanel(utils.DevicePanel):
 
         if history is not None:
             history['spectra'].append(spectrum)
-            history['timestamps'].append((spectrum.get_timestamp() - 
-                datetime.datetime(1970,1,1)).total_seconds())
+            history['timestamps'].append((spectrum.get_timestamp().astimezone() -
+                datetime.datetime(1970,1,1,
+                    tzinfo=datetime.timezone.utc)).total_seconds())
 
             history = self._prune_history(history)
 
@@ -3253,8 +3566,8 @@ class InlineUVPanel(utils.DevicePanel):
         logger.debug('Pruning history')
 
         if len(history['timestamps']) > 0:
-            now = (datetime.datetime.now() - 
-                datetime.datetime(1970,1,1)).total_seconds()
+            now = (datetime.datetime.now(datetime.timezone.utc) - datetime.datetime(1970,1,1,
+                    tzinfo=datetime.timezone.utc)).total_seconds()
 
             if len(history['timestamps']) == 1:
                 if now - history['timestamps'][0] > self._history_length:
@@ -3349,6 +3662,22 @@ class InlineUVPanel(utils.DevicePanel):
 
         return metadata
 
+    def _on_show_uv_plot(self, evt):
+        if self.uvplot_frame is None:
+            self.uvplot_frame = UVPlotFrame(self, title='UV Plot',
+                size=self._FromDIP((500, 500)))
+
+            self.uv_plot = self.uvplot_frame.uv_plot
+
+            self.uv_plot.update_plot_data(self._current_spectrum,
+                self._absorbance_history, self._current_abs_wav)
+        else:
+            self.uvplot_frame.Raise()
+
+    def on_uv_frame_close(self):
+        self.uvplot_frame = None
+        self.uv_plot = None
+
     def _on_close(self):
         """Device specific stuff goes here"""
         pass
@@ -3360,6 +3689,477 @@ class InlineUVPanel(utils.DevicePanel):
             self.uv_com_thread.join(5)
 
         self.close()
+
+class UVPlot(wx.Panel):
+
+    def __init__(self, *args, **kwargs):
+
+        super(UVPlot, self).__init__(*args, **kwargs)
+
+        self.plot_type = 'Spectrum'
+        self.spectrum_type = 'abs'
+
+        self.spectrum = None
+        self.abs_history = None
+        self.abs_wvl = None
+        self.abs_data = None
+
+        self.spectrum_line = None
+        self.abs_lines = []
+
+        self._time_window = 10
+        self._time_zero = time.time()
+
+        self._create_layout()
+
+        # Connect the callback for the draw_event so that window resizing works:
+        self.cid = self.canvas.mpl_connect('draw_event', self.ax_redraw)
+        self.canvas.mpl_connect('motion_notify_event', self._onMouseMotionEvent)
+
+
+    def _FromDIP(self, size):
+        # This is a hack to provide easy back compatibility with wxpython < 4.1
+        try:
+            return self.FromDIP(size)
+        except Exception:
+            return size
+
+    def _create_layout(self):
+
+        plot_parent = self
+
+        self.plot_type_ctrl = wx.Choice(plot_parent, choices=['Spectrum',
+            'Absorbance'])
+        self.plot_type_ctrl.SetStringSelection(self.plot_type)
+        self.plot_type_ctrl.Bind(wx.EVT_CHOICE, self._on_plot_type)
+
+        self.spectrum_type_ctrl = wx.Choice(plot_parent, choices=['Absorbance',
+            'Transmission', 'Raw'])
+        self.spectrum_type_ctrl.SetStringSelection('Absorbance')
+        self.spectrum_type_ctrl.Bind(wx.EVT_CHOICE, self._on_spectrum_type)
+
+        self.t_window = utils.ValueEntry(self._on_twindow_change,
+            plot_parent, validator=utils.CharValidator('float_te'),
+            size=self._FromDIP((50,-1)))
+        self.t_window.ChangeValue(str(self._time_window))
+        self.t_window.Disable()
+
+        self.zero_time = wx.Button(plot_parent, label='Zero Time')
+        self.zero_time.Bind(wx.EVT_BUTTON, self._on_zero_time)
+        self.zero_time.Disable()
+
+        self.auto_limits = wx.CheckBox(plot_parent, label='Auto Limits')
+        self.auto_limits.SetValue(True)
+
+        ctrl_sizer = wx.FlexGridSizer(cols=4, vgap=self._FromDIP(5),
+            hgap=self._FromDIP(5))
+        ctrl_sizer.Add(wx.StaticText(plot_parent, label='Plot type:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        ctrl_sizer.Add(self.plot_type_ctrl, flag=wx.ALIGN_CENTER_VERTICAL)
+        ctrl_sizer.Add(wx.StaticText(plot_parent, label='Spectrum type:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        ctrl_sizer.Add(self.spectrum_type_ctrl, flag=wx.ALIGN_CENTER_VERTICAL)
+        ctrl_sizer.Add(wx.StaticText(plot_parent, label='Time range [min]:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        ctrl_sizer.Add(self.t_window, flag=wx.ALIGN_CENTER_VERTICAL)
+        ctrl_sizer.Add(self.auto_limits, flag=wx.ALIGN_CENTER_VERTICAL)
+        ctrl_sizer.Add(self.zero_time, flag=wx.ALIGN_CENTER_VERTICAL)
+
+        self.fig = Figure((5,4), 75)
+
+        self.subplot = self.fig.add_subplot(1,1,1)
+        self.subplot.set_xlabel('Wavelength [nm]')
+        self.subplot.set_ylabel('Absorbance [Au]')
+
+        self.fig.subplots_adjust(left = 0.13, bottom = 0.1, right = 0.93,
+            top = 0.93, hspace = 0.26)
+        self.fig.set_facecolor('white')
+
+        self.canvas = FigureCanvasWxAgg(plot_parent, wx.ID_ANY, self.fig)
+        self.canvas.SetBackgroundColour('white')
+
+        self.background = self.canvas.copy_from_bbox(self.subplot.bbox)
+
+        self.toolbar = utils.CustomPlotToolbar(self.canvas)
+        self.toolbar.Realize()
+
+        plot_sizer = wx.BoxSizer(wx.VERTICAL)
+        plot_sizer.Add(ctrl_sizer, flag=wx.EXPAND)
+        plot_sizer.Add(self.canvas, proportion=1, flag=wx.EXPAND)
+        plot_sizer.Add(self.toolbar, proportion=0, flag=wx.EXPAND)
+
+
+        top_sizer = wx.BoxSizer(wx.VERTICAL)
+        top_sizer.Add(plot_sizer, proportion=1, border=self._FromDIP(5),
+            flag=wx.EXPAND|wx.TOP)
+        self.SetSizer(top_sizer)
+
+    def _on_plot_type(self, evt):
+        self.plot_type = self.plot_type_ctrl.GetStringSelection()
+
+        if self.plot_type == 'Spectrum':
+            self.subplot.set_xlabel('Wavelength [nm]')
+            self.spectrum_type_ctrl.Enable()
+            self.t_window.Disable()
+            self.zero_time.Disable()
+        elif self.plot_type == 'Absorbance':
+            self.subplot.set_xlabel('Time [min]')
+            self.subplot.set_ylabel('Absorbance [Au]')
+            self.spectrum_type_ctrl.Disable()
+            self.t_window.Enable()
+            self.zero_time.Enable()
+
+        self.plot_data()
+
+    def _on_spectrum_type(self, evt):
+        stype = self.spectrum_type_ctrl.GetStringSelection()
+
+        if stype == 'Absorbance':
+            self.spectrum_type = 'abs'
+            self.subplot.set_ylabel('Absorbance [Au]')
+        elif stype == 'Transmission':
+            self.spectrum_type = 'trans'
+            self.subplot.set_ylabel('Transmission')
+        elif stype == 'Raw':
+            self.spectrum_type = 'raw'
+            self.subplot.set_ylabel('Raw')
+
+        self.plot_data()
+
+    def _on_twindow_change(self, obj, val):
+        self._time_window = float(val)
+
+        self.canvas.mpl_disconnect(self.cid)
+        self.updatePlot()
+        self.cid = self.canvas.mpl_connect('draw_event', self.ax_redraw)
+
+    def _on_zero_time(self, evt):
+        self.set_time_zero()
+
+    def set_time_zero(self):
+        self._time_zero = time.time()
+        self.update_plot_data(self.spectrum, self.abs_history, self.abs_wvl)
+
+    def update_plot_data(self, spectrum, abs_history, abs_wvl):
+        self.spectrum = spectrum
+        self.abs_history = abs_history
+        self.abs_wvl = abs_wvl
+
+        if abs_history is not None and len(abs_history['spectra']) > 0:
+            current_time = time.time()
+            timestamps = np.array(abs_history['timestamps'])
+            time_data = (timestamps - self._time_zero)/60
+
+            abs_data = []
+
+            if abs_wvl is not None:
+                for wvl in abs_wvl:
+                    spec_abs = [spectra.get_absorbance(wvl) for spectra in
+                            abs_history['spectra']]
+                    abs_data.append([time_data, np.array(spec_abs), str(wvl)])
+        else:
+            abs_data = []
+
+        self.abs_data = abs_data
+
+        self.plot_data()
+
+    def ax_redraw(self, widget=None):
+        ''' Redraw plots on window resize event '''
+        self.background = self.canvas.copy_from_bbox(self.subplot.bbox)
+
+        self.canvas.mpl_disconnect(self.cid)
+        self.updatePlot()
+        self.cid = self.canvas.mpl_connect('draw_event', self.ax_redraw)
+
+    def plot_data(self):
+        self.canvas.mpl_disconnect(self.cid)
+
+        if self.plot_type == 'Spectrum':
+            if self.spectrum is not None:
+                data  = self.spectrum.get_spectrum(self.spectrum_type)
+
+                if data is not None:
+                    xdata = data[:, 0]
+                    spectrum_data = data[:, 1]
+
+                    if self.spectrum_line is not None:
+                        self.spectrum_line.set_visible(True)
+
+                else:
+                    spectrum_data = None
+
+            else:
+                spectrum_data = None
+
+            for line in self.abs_lines:
+                line.set_visible(False)
+
+        elif self.plot_type == 'Absorbance':
+            abs_ydata = []
+            abs_labels = []
+            if self.abs_data is not None:
+
+                for i, data in enumerate(self.abs_data):
+                    xdata = data[0]
+                    abs_ydata.append(data[1])
+                    abs_labels.append(data[2])
+
+                for line in self.abs_lines:
+                    line.set_visible(True)
+
+            if self.spectrum_line is not None:
+                self.spectrum_line.set_visible(False)
+
+        redraw = False
+
+        if self.plot_type == 'Spectrum' and spectrum_data is not None:
+            if self.spectrum_line is None:
+                self.spectrum_line, = self.subplot.plot(xdata, spectrum_data,
+                    animated=True)
+                redraw = True
+            else:
+                self.spectrum_line.set_xdata(xdata)
+                self.spectrum_line.set_ydata(spectrum_data)
+
+            legend = self.subplot.get_legend()
+
+            if legend is not None:
+                legend.remove()
+                redraw=True
+
+        elif self.plot_type == 'Absorbance' and len(abs_ydata) > 0:
+            if len(self.abs_lines) > len(self.abs_data):
+                for i in range(len(self.abs_data), len(self.abs_lines)):
+                    line = self.abs_lines.pop()
+                    line.remove()
+                    redraw = True
+
+            for i, ydata in enumerate(abs_ydata):
+                if i < len(self.abs_lines):
+                    line = self.abs_lines[i]
+                    line.set_xdata(xdata)
+                    line.set_ydata(ydata)
+
+                    label = line.get_label()
+                    if label != abs_labels[i]:
+                        line.set_label(abs_labels[i])
+                        redraw = True
+                else:
+                    line, = self.subplot.plot(xdata, ydata, animated=True,
+                        label=abs_labels[i]+' nm')
+
+                    self.abs_lines.append(line)
+                    redraw = True
+
+            legend = self.subplot.get_legend()
+
+            if legend is None:
+                self.subplot.legend()
+                redraw=True
+            else:
+                leg_lines = self.subplot.get_legend().get_lines()
+                if len(leg_lines) == len(self.abs_lines):
+                    for i in range(len(leg_lines)):
+                        if self.abs_lines[i].get_label() != leg_lines[i].get_label():
+                            redraw = True
+                            break
+                else:
+                    redraw=True
+
+        if redraw:
+            self.canvas.draw()
+            self.background = self.canvas.copy_from_bbox(self.subplot.bbox)
+
+        self.updatePlot()
+
+        self.cid = self.canvas.mpl_connect('draw_event', self.ax_redraw)
+
+    def updatePlot(self, redraw=False):
+
+        if self.auto_limits.GetValue():
+            oldx = self.subplot.get_xlim()
+            oldy = self.subplot.get_ylim()
+
+            if self.spectrum_line is not None and self.plot_type == 'Spectrum':
+                xdata = self.spectrum_line.get_xdata()
+                ydata = self.spectrum_line.get_ydata()
+
+                xmin = min(xdata[np.isfinite(xdata)])
+                xmax = max(xdata[np.isfinite(xdata)])
+
+
+                if xmin != oldx[0] or xmax != oldx[1]:
+                    newx = [xmin, xmax]
+
+                else:
+                    newx = oldx
+
+                _, start_idx = utils.find_closest(newx[0], xdata)
+                _, end_idx = utils.find_closest(newx[1], xdata)
+
+                ymin = min(ydata[np.isfinite(ydata[start_idx:end_idx+1])])
+                ymax = max(ydata[np.isfinite(ydata[start_idx:end_idx+1])])
+
+                offset = abs(ymax - ymin)*0.05
+
+                if ymin < oldy[0] or oldy[0] < ymin-offset:
+                        new_ymin = ymin-offset
+                else:
+                    new_ymin = oldy[0]
+
+                if ymax > oldy[1] or oldy[1] > ymax+offset:
+                        new_ymax = ymax+offset
+                else:
+                    new_ymax = oldy[1]
+
+                newy = [new_ymin, new_ymax]
+
+            elif len(self.abs_lines) > 0 and self.plot_type == 'Absorbance':
+                cur_xmin = None
+                cur_xmax = None
+                cur_ymin = None
+                cur_ymax = None
+
+                for line in self.abs_lines:
+                    xdata = np.array(line.get_xdata())
+
+                    data_range = xdata[np.isfinite(xdata)]
+                    xmin = min(data_range)
+                    xmax = max(data_range)
+
+                    if cur_xmin is not None:
+                        cur_xmin = min(xmin, cur_xmin)
+                    else:
+                        cur_xmin = xmin
+
+                    if cur_xmax is not None:
+                        cur_xmax = max(xmax, cur_xmax)
+                    else:
+                        cur_xmax = xmax
+
+                if cur_xmax > oldx[1] or cur_xmax < oldx[1] - self._time_window*0.1:
+                    new_trange = True
+                else:
+                    new_trange = False
+
+                if new_trange:
+                    if cur_xmax - cur_xmin < self._time_window:
+                        new_xmin = cur_xmin
+                        new_xmax = cur_xmin + self._time_window
+                    else:
+                        new_xmax = cur_xmax + self._time_window*0.1
+                        new_xmin = new_xmax - self._time_window
+
+                else:
+                    new_xmin = oldx[0]
+                    new_xmax = oldx[1]
+
+                newx = [new_xmin, new_xmax]
+
+                _, start_idx = utils.find_closest(newx[0], xdata)
+                _, end_idx = utils.find_closest(newx[1], xdata)
+
+                for line in self.abs_lines:
+                    ydata = np.array(line.get_ydata())
+
+                    data_range = ydata[start_idx:end_idx+1][np.isfinite(ydata[start_idx:end_idx+1])]
+
+                    if len(data_range) > 0:
+                        ymin = min(data_range)
+                        ymax = max(data_range)
+
+                        if cur_ymin is not None:
+                            cur_ymin = min(ymin, cur_ymin)
+                        else:
+                            cur_ymin = ymin
+
+                        if cur_ymax is not None:
+                            cur_ymax = max(ymax, cur_ymax)
+                        else:
+                            cur_ymax = ymax
+
+                if cur_ymin is not None:
+                    offset = abs(cur_ymax - cur_ymin)*0.05
+
+                    if cur_ymin < oldy[0] or oldy[0] < cur_ymin-offset:
+                            new_ymin = cur_ymin-offset
+                    else:
+                        new_ymin = oldy[0]
+
+                    if cur_ymax > oldy[1] or oldy[1] > cur_ymax+offset:
+                            new_ymax = cur_ymax+offset
+                    else:
+                        new_ymax = oldy[1]
+
+                    newy = [new_ymin, new_ymax]
+
+                else:
+                    newy = oldy
+
+            else:
+                self.subplot.relim()
+                self.subplot.autoscale_view()
+
+                newx = self.subplot.get_xlim()
+                newy = self.subplot.get_ylim()
+
+            if newx[0] != oldx[0] or newx[1] != oldx[1] or newy[0] != oldy[0] or newy[1] != oldy[1]:
+                self.subplot.set_xlim(newx)
+                self.subplot.set_ylim(newy)
+                redraw = True
+
+        if redraw:
+            self.canvas.draw()
+
+        self.canvas.restore_region(self.background)
+
+        if self.spectrum_line is not None and self.plot_type == 'Spectrum':
+            self.subplot.draw_artist(self.spectrum_line)
+        elif len(self.abs_lines) > 0 and self.plot_type == 'Absorbance':
+            for line in self.abs_lines:
+                self.subplot.draw_artist(line)
+
+        self.canvas.blit(self.subplot.bbox)
+
+    def _onMouseMotionEvent(self, event):
+        if event.inaxes:
+            x, y = event.xdata, event.ydata
+            xlabel = self.subplot.xaxis.get_label().get_text()
+            ylabel = self.subplot.yaxis.get_label().get_text()
+
+            if abs(y) > 0.001 and abs(y) < 1000:
+                y_val = '{:.3f}'.format(round(y, 3))
+            else:
+                y_val = '{:.3E}'.format(y)
+
+            self.toolbar.set_status('{} = {}, {} = {}'.format(xlabel, round(x, 3), ylabel, y_val))
+
+        else:
+            self.toolbar.set_status('')
+
+class UVPlotFrame(wx.Frame):
+    def __init__(self, *args, **kwargs):
+        super(UVPlotFrame, self).__init__(*args, **kwargs)
+
+        self._create_layout()
+
+        self.Bind(wx.EVT_CLOSE, self._on_exit)
+
+        self.Raise()
+        self.Show()
+
+    def _create_layout(self):
+        self.uv_plot = UVPlot(self)
+
+        sizer = wx.BoxSizer(wx.HORIZONTAL)
+        sizer.Add(self.uv_plot, 1, flag=wx.EXPAND)
+
+        self.SetSizer(sizer)
+
+    def _on_exit(self, evt):
+        self.GetParent().on_uv_frame_close()
+        self.Destroy()
 
 class UVFrame(utils.DeviceFrame):
 
@@ -3382,7 +4182,7 @@ class UVFrame(utils.DeviceFrame):
         self.sizer = wx.BoxSizer(wx.HORIZONTAL)
 
         top_sizer = wx.BoxSizer(wx.VERTICAL)
-        top_sizer.Add(self.sizer, flag=wx.EXPAND)
+        top_sizer.Add(self.sizer, 1, flag=wx.EXPAND)
 
         return top_sizer
 
@@ -3408,7 +4208,7 @@ if __name__ == '__main__':
     logger.setLevel(logging.DEBUG)
     h1 = logging.StreamHandler(sys.stdout)
     h1.setLevel(logging.DEBUG)
-    # h1.setLevel(logging.INFO)
+    h1.setLevel(logging.INFO)
     # h1.setLevel(logging.WARNING)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
     h1.setFormatter(formatter)
@@ -3691,6 +4491,7 @@ if __name__ == '__main__':
         'abs_wav'               : [280, 260],
         'abs_window'            : 1,
         'int_t_scale'           : 2,
+        'wavelength_range'      : [200, 838.39],
         'remote_ip'             : '164.54.204.53',
         'remote_port'           : '5559',
         'remote_dir_prefix'     : {'local' : '/nas_data', 'remote' : 'Y:\\'}
