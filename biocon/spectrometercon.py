@@ -2170,6 +2170,28 @@ class UVPanel(utils.DevicePanel):
         control_sizer.AddStretchSpacer(1)
 
 
+        save_parent = wx.StaticBox(self, label='Save')
+
+        self.save_dark = wx.Button(save_parent, label='Save Dark')
+        self.save_dark.Bind(wx.EVT_BUTTON, self._on_save)
+        self.save_ref = wx.Button(save_parent, label='Save Reference')
+        self.save_ref.Bind(wx.EVT_BUTTON, self._on_save)
+        self.save_current = wx.Button(save_parent, label='Save Latest Spectrum')
+        self.save_current.Bind(wx.EVT_BUTTON, self._on_save)
+
+        save_btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        save_btn_sizer.Add(self.save_current, border=self._FromDIP(5),
+            flag=wx.ALL|wx.ALIGN_CENTER_VERTICAL)
+        save_btn_sizer.Add(self.save_ref, border=self._FromDIP(5),
+            flag=wx.RIGHT|wx.TOP|wx.BOTTOM|wx.ALIGN_CENTER_VERTICAL)
+        save_btn_sizer.Add(self.save_dark, border=self._FromDIP(5),
+            flag=wx.RIGHT|wx.TOP|wx.BOTTOM|wx.ALIGN_CENTER_VERTICAL)
+
+        save_sizer = wx.StaticBoxSizer(save_parent, wx.HORIZONTAL)
+        save_sizer.Add(save_btn_sizer, flag=wx.EXPAND)
+        save_sizer.AddStretchSpacer(1)
+
+
         plot_parent = wx.StaticBox(self, label='Plot')
 
         self.auto_update = wx.CheckBox(plot_parent, label='Autoupdate')
@@ -2192,12 +2214,18 @@ class UVPanel(utils.DevicePanel):
         self.uv_plot = UVPlot(plot_parent)
 
         plot_sizer = wx.StaticBoxSizer(plot_parent, wx.VERTICAL)
-        plot_sizer.Add(plot_settings_sizer, flag=wx.EXPAND)
+        plot_sizer.Add(plot_settings_sizer, border=self._FromDIP(5),
+            flag=wx.EXPAND|wx.BOTTOM)
         plot_sizer.Add(self.uv_plot, proportion=1, flag=wx.EXPAND)
+
+        right_sizer = wx.BoxSizer(wx.VERTICAL)
+        right_sizer.Add(save_sizer, border=self._FromDIP(5), flag=wx.EXPAND|wx.ALL)
+        right_sizer.Add(plot_sizer, proportion=1, border=self._FromDIP(5),
+            flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM)
 
         top_sizer = wx.BoxSizer(wx.HORIZONTAL)
         top_sizer.Add(control_sizer, flag=wx.EXPAND)
-        top_sizer.Add(plot_sizer, proportion=1, flag=wx.EXPAND)
+        top_sizer.Add(right_sizer, proportion=1, flag=wx.EXPAND)
 
         self.SetSizer(top_sizer)
 
@@ -2682,6 +2710,51 @@ class UVPanel(utils.DevicePanel):
         self._absorbance_history = self._send_cmd(abs_cmd, True)
         self._transmission_history = self._send_cmd(trans_cmd, True)
         self._history = self._send_cmd(raw_cmd, True)
+
+    def _on_save(self, evt):
+        obj = evt.GetEventObject()
+
+        if obj == self.save_current:
+            print('saving current spectrum')
+            spectrum = self._current_spectrum
+        elif obj == self.save_ref:
+            print('saving reference spectrum')
+            spectrum = self._reference_spectrum
+        elif obj == self.save_dark:
+            print('saving dark spectrum')
+            spectrum = self._dark_spectrum
+
+        if spectrum is not None:
+            self._save_spectrum(spectrum)
+        else:
+            msg = "The selected spectrum cannot be saved because it doesn't exist."
+            wx.CallAfter(wx.MessageBox, msg, 'No Spectrum to save')
+
+    def _save_spectrum(self, spectrum):
+        msg = "Please select save directory and enter save file name"
+        dialog = wx.FileDialog(self, message=msg,
+            style=wx.FD_SAVE|wx.FD_OVERWRITE_PROMPT, defaultFile='spectrum.csv')
+
+        if dialog.ShowModal() == wx.ID_OK:
+            path = dialog.GetPath()
+            dialog.Destroy()
+        else:
+            dialog.Destroy()
+            return
+
+        path=os.path.splitext(path)[0]
+        savedir, name = os.path.split(path)
+
+        # spectrum.save_spectrum(name, savedir)
+
+        if spectrum.spectrum is not None:
+            spectrum.save_spectrum(name+'_raw.csv', savedir, 'raw')
+
+        if spectrum.trans_spectrum is not None:
+            spectrum.save_spectrum(name+'_trans.csv', savedir, 'trans')
+
+        if spectrum.abs_spectrum is not None:
+            spectrum.save_spectrum(name+'.csv', savedir, 'abs')
 
     def _on_close(self):
         """Device specific stuff goes here"""
