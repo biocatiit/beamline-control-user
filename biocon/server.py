@@ -488,18 +488,18 @@ if __name__ == '__main__':
     control_server_valve.start()
 
 
-    # if exp_type == 'coflow':
-    #     # Coflow only
-    #     control_server_uv = ControlServer(ip, port4, name='UVControlServer',
-    #         start_uv=True)
-    #     control_server_uv.start()
+    if exp_type == 'coflow':
+        # Coflow only
+        control_server_uv = ControlServer(ip, port4, name='UVControlServer',
+            start_uv=True)
+        control_server_uv.start()
 
-    #     time.sleep(1)
-    #     uv_comm_thread = control_server_uv.get_comm_thread('uv')
+        time.sleep(1)
+        uv_comm_thread = control_server_uv.get_comm_thread('uv')
 
-    #     uv_frame = spectrometercon.UVFrame('UVFrame', setup_uv, uv_comm_thread,
-    #         parent=None, title='UV Spectrometer Control')
-    #     uv_frame.Show()
+        uv_frame = spectrometercon.UVFrame('UVFrame', setup_uv, uv_comm_thread,
+            parent=None, title='UV Spectrometer Control')
+        uv_frame.Show()
 
     app.MainLoop()
 
@@ -516,8 +516,8 @@ if __name__ == '__main__':
         control_server_valve.stop()
         control_server_valve.join()
 
-        # if exp_type == 'coflow':
-        #     control_server_uv.stop()
-        #     control_server_uv.join()
+        if exp_type == 'coflow':
+            control_server_uv.stop()
+            control_server_uv.join()
 
     logger.info("Quitting server")
