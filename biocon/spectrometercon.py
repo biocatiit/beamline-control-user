@@ -2698,6 +2698,7 @@ class InlineUVPanel(utils.DevicePanel):
 
         self._dark_spectrum = None
         self._reference_spectrum = None
+        self._current_spectrum = None
 
         self._history_length = 60*60*24
 
@@ -2958,8 +2959,6 @@ class InlineUVPanel(utils.DevicePanel):
             answer = None
 
         logger.debug('Spec command response: %s', answer)
-
-        # print(answer)
 
         return answer
 
@@ -3435,6 +3434,8 @@ class InlineUVPanel(utils.DevicePanel):
             self._series_count = 0
 
     def _add_new_spectrum(self, val):
+        self.self._current_spectrum = val
+
         if val.spectrum is not None:
             self._add_spectrum_to_history(val)
 
@@ -3444,7 +3445,6 @@ class InlineUVPanel(utils.DevicePanel):
         if val.abs_spectrum is not None:
             self._add_spectrum_to_history(val, 'abs')
 
-        print(self._absorbance_history)
         if self.uv_plot is not None:
             self.uv_plot.update_plot_data(val, self._absorbance_history,
                 self._current_abs_wav)
@@ -3465,8 +3465,6 @@ class InlineUVPanel(utils.DevicePanel):
 
         if spec_type == 'abs':
             history = self._absorbance_history
-            print('here')
-            print(history)
         elif spec_type == 'trans':
             history = self._transmission_history
         else:
@@ -3482,8 +3480,6 @@ class InlineUVPanel(utils.DevicePanel):
 
             if spec_type == 'abs':
                 self._absorbance_history = history
-                print('here 2')
-                print(history)
             elif spec_type == 'trans':
                 self._transmission_history = history
             else:
@@ -3520,7 +3516,6 @@ class InlineUVPanel(utils.DevicePanel):
         return history
 
     def _get_full_history(self):
-        print('getting full history')
         abs_cmd = ['get_full_hist_ts', [self.name,], {}]
         trans_cmd = ['get_full_hist_ts', [self.name,], {'spec_type': 'trans'}]
         raw_cmd = ['get_full_hist_ts', [self.name,], {'spec_type': 'raw'}]
@@ -3528,10 +3523,6 @@ class InlineUVPanel(utils.DevicePanel):
         self._absorbance_history = self._send_cmd(abs_cmd, True)
         self._transmission_history = self._send_cmd(trans_cmd, True)
         self._history = self._send_cmd(raw_cmd, True)
-
-        print(self._absorbance_history)
-        print(self._transmission_history)
-        print(self._history)
 
     def on_exposure_start(self, exp_panel):
         uv_values = None
@@ -3600,6 +3591,9 @@ class InlineUVPanel(utils.DevicePanel):
                 size=self._FromDIP((500, 500)))
 
             self.uv_plot = self.uvplot_frame.uv_plot
+
+            self.uv_plot.update_plot_data(self._current_spectrum,
+                self._absorbance_history, self._current_abs_wav)
         else:
             self.uvplot_frame.Raise()
 
@@ -3774,8 +3768,6 @@ class UVPlot(wx.Panel):
         self.abs_history = abs_history
         self.abs_wvl = abs_wvl
 
-        print(self.abs_history)
-
         if abs_history is not None and len(abs_history['spectra']) > 0:
             current_time = time.time()
             timestamps = np.array(abs_history['timestamps'])
@@ -3792,8 +3784,6 @@ class UVPlot(wx.Panel):
             abs_data = []
 
         self.abs_data = abs_data
-
-        print(self.abs_data)
 
         self.plot_data()
 
@@ -4036,9 +4026,6 @@ class UVPlot(wx.Panel):
                 self.subplot.set_xlim(newx)
                 self.subplot.set_ylim(newy)
                 redraw = True
-
-            print(newx)
-            print(newy)
 
         if redraw:
             self.canvas.draw()
