@@ -697,6 +697,8 @@ class CoflowPanel(wx.Panel):
                 self.get_fr_thread.daemon = True
                 self.get_fr_thread.start()
 
+                self.coflow_control.change_flow_rate(float(self.settings['lc_flow_rate']))
+
             elif self.coflow_control.timeout_event.is_set():
                 logger.error('Timeout connecting to the coflow control server.')
 
