@@ -89,6 +89,7 @@ class ControlServer(threading.Thread):
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.PAIR)
         self.socket.set(zmq.LINGER, 0)
+        self.socket.set_hwm(10)
         self.socket.bind("tcp://{}:{}".format(self.ip, self.port))
 
 
@@ -114,14 +115,18 @@ class ControlServer(threading.Thread):
         if self._start_fm:
             fm_cmd_q = deque()
             fm_return_q = deque()
-            fm_abort_event = threading.Event()
-            fm_con = fmcon.FlowMeterCommThread(fm_cmd_q, fm_return_q, fm_abort_event, 'FMCon')
+            fm_status_q = deque()
+            fm_con = fmcon.FlowMeterCommThread('FMCon')
             fm_con.start()
 
-            fm_ctrl = {'queue': fm_cmd_q,
-                'abort': fm_abort_event,
-                'thread': fm_con,
-                'answer_q': fm_return_q
+            fm_con.add_new_communication('zmq_server', fm_cmd_q, fm_return_q,
+                fm_status_q)
+
+            fm_ctrl = {
+                'queue'     : fm_cmd_q,
+                'answer_q'  : fm_return_q,
+                'status_q'  : fm_status_q,
+                'thread'    : fm_con,
                 }
 
             self._device_control['fm'] = fm_ctrl
@@ -248,7 +253,7 @@ class ControlServer(threading.Thread):
 
                         if answer == '':
                             logger.exception('No response received from device')
-                        else:                            
+                        else:
                             answer = ['response', answer]
                             logger.debug('Sending command response: %s', answer)
                             self.socket.send_pyobj(answer, protocol=2)
@@ -266,6 +271,17 @@ class ControlServer(threading.Thread):
                 for device, device_ctrl in self._device_control.items():
                     if 'status_q' in device_ctrl:
                         status_q = device_ctrl['status_q']
+
+                        if len(status_q) > 5:
+                            temp = []
+                            for i in range(5):
+                                temp.append(status_q.pop())
+
+                            temp = temp[::-1]
+                            status_q.clear()
+
+                            for a in temp:
+                                status_q.append(a)
 
                         if len(status_q) > 0:
                             cmds_run =  True
@@ -287,8 +303,13 @@ class ControlServer(threading.Thread):
         self.socket.close(0)
         self.context.destroy(0)
 
-        for device in self._device_control:
-            self._device_control[device]['abort'].set()
+        for device, device_ctrl in self._device_control.items():
+            if 'abort' in device_ctrl:
+                device_ctrl['abort'].set()
+
+            else:
+                device_ctrl['thread'].stop()
+                device_ctrl['thread'].join()
 
         if self._stop_event.is_set():
             self._stop_event.clear()
@@ -319,7 +340,7 @@ if __name__ == '__main__':
     logger.setLevel(logging.DEBUG)
     h1 = logging.StreamHandler(sys.stdout)
     h1.setLevel(logging.DEBUG)
-    h1.setLevel(logging.INFO)
+    # h1.setLevel(logging.INFO)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
     h1.setFormatter(formatter)
     logger.addHandler(h1)
@@ -328,10 +349,12 @@ if __name__ == '__main__':
 
     standard_paths = wx.StandardPaths.Get() #Can't do this until you start the wx app
     info_dir = standard_paths.GetUserLocalDataDir()
-    print (info_dir)
+    print('Log directory: {}'.format(info_dir))
     if not os.path.exists(info_dir):
         os.mkdir(info_dir)
-    h2 = handlers.RotatingFileHandler(os.path.join(info_dir, 'biocon_server.log'), maxBytes=100e6, backupCount=20, delay=True)
+
+    h2 = handlers.RotatingFileHandler(os.path.join(info_dir, 'biocon_server.log'),
+        maxBytes=100e6, backupCount=20, delay=True)
     h2.setLevel(logging.DEBUG)
     formatter2 = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
     h2.setFormatter(formatter2)
@@ -370,8 +393,9 @@ if __name__ == '__main__':
     if exp_type == 'coflow':
         # Coflow
 
-        ip = '164.54.204.53'
+        # ip = '164.54.204.53'
         # ip = '164.54.204.24'
+        ip = '192.168.1.16'
 
         setup_pumps = [('sheath', 'VICI M50', 'COM3', ['627.72', '9.814'], {}, {}),
             ('outlet', 'VICI M50', 'COM4', ['628.68', '9.962'], {}, {})
@@ -385,9 +409,18 @@ if __name__ == '__main__':
             ]
 
         setup_uv = [
-            {'name': 'CoflowUV', 'args': ['StellarNet'], 'kwargs': 
+            {'name': 'CoflowUV', 'args': ['StellarNet'], 'kwargs':
             {'shutter_pv_name': '18ID:LJT4:2:DO11',
             'trigger_pv_name' : '18ID:LJT4:2:DO12'}},
+            ]
+
+        # setup_fms = [
+        #     {'name': 'sheath', 'args' : ['BFS', 'COM5'], 'kwargs': {}}
+        #     {'name': 'outlet', 'args' : ['BFS', 'COM6'], 'kwargs': {}}
+        #     ]
+
+        setup_fms = [
+            {'name': 'sheath', 'args' : ['Soft', None], 'kwargs': {}}
             ]
 
     elif exp_type.startswith('trsaxs'):
@@ -433,6 +466,10 @@ if __name__ == '__main__':
                 # 'Buffer 2'    : valve_comm_locks[setup_valves[3][2]],
                }
 
+            setup_fms = [
+                {'name': 'outlet', 'args' : ['BFS', 'COM5'], 'kwargs': {}}
+                ]
+
         elif exp_type == 'trsaxs_laminar':
             # Laminar flow
             setup_pumps = [
@@ -462,44 +499,61 @@ if __name__ == '__main__':
                 ('Sample', 'Rheodyne', 'COM7', [], {'positions' : 6}),
                 ]
 
+            setup_fms = [
+                {'name': 'outlet', 'args' : ['BFS', 'COM13'], 'kwargs': {}}
+                ]
+
 
 
 
     # Both
 
-    pump_frame = pumpcon.PumpFrame(pump_local_comm_locks, setup_pumps, None,
-        title='Pump Control')
-    pump_frame.Show()
+    # pump_frame = pumpcon.PumpFrame(pump_local_comm_locks, setup_pumps, None,
+    #     title='Pump Control')
+    # pump_frame.Show()
 
-    valve_frame = valvecon.ValveFrame(valve_comm_locks, setup_valves,
-        None, title='Valve Control')
-    valve_frame.Show()
+    # valve_frame = valvecon.ValveFrame(valve_comm_locks, setup_valves,
+    #     None, title='Valve Control')
+    # valve_frame.Show()
 
-    control_server_pump = ControlServer(ip, port1, name='PumpControlServer',
-        pump_comm_locks = pump_comm_locks, start_pump=True)
-    control_server_pump.start()
+    # control_server_pump = ControlServer(ip, port1, name='PumpControlServer',
+    #     pump_comm_locks = pump_comm_locks, start_pump=True)
+    # control_server_pump.start()
 
     control_server_fm = ControlServer(ip, port2, name='FMControlServer',
         start_fm=True)
     control_server_fm.start()
 
-    control_server_valve = ControlServer(ip, port3, name='ValveControlServer',
-        valve_comm_locks = valve_comm_locks, start_valve=True)
-    control_server_valve.start()
+    # control_server_valve = ControlServer(ip, port3, name='ValveControlServer',
+    #     valve_comm_locks = valve_comm_locks, start_valve=True)
+    # control_server_valve.start()
+
+    time.sleep(1)
+    fm_comm_thread = control_server_fm.get_comm_thread('fm')
+
+    fm_settings = {
+        'remote'        : False,
+        'device_init'   : setup_fms,
+        'com_thread'    : fm_comm_thread,
+        }
+
+    fm_frame = fmcon.FlowMeterFrame('FMFrame', fm_settings, parent=None,
+        title='Flow Meter Control')
+    fm_frame.Show()
 
 
-    if exp_type == 'coflow':
-        # Coflow only
-        control_server_uv = ControlServer(ip, port4, name='UVControlServer',
-            start_uv=True)
-        control_server_uv.start()
+    # if exp_type == 'coflow':
+    #     # Coflow only
+    #     control_server_uv = ControlServer(ip, port4, name='UVControlServer',
+    #         start_uv=True)
+    #     control_server_uv.start()
 
-        time.sleep(1)
-        uv_comm_thread = control_server_uv.get_comm_thread('uv')
+    #     time.sleep(1)
+    #     uv_comm_thread = control_server_uv.get_comm_thread('uv')
 
-        uv_frame = spectrometercon.UVFrame('UVFrame', setup_uv, uv_comm_thread,
-            parent=None, title='UV Spectrometer Control')
-        uv_frame.Show()
+    #     uv_frame = spectrometercon.UVFrame('UVFrame', setup_uv, uv_comm_thread,
+    #         parent=None, title='UV Spectrometer Control')
+    #     uv_frame.Show()
 
     app.MainLoop()
 
@@ -507,17 +561,17 @@ if __name__ == '__main__':
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        control_server_pump.stop()
-        control_server_pump.join()
+        # control_server_pump.stop()
+        # control_server_pump.join()
 
         control_server_fm.stop()
         control_server_fm.join()
 
-        control_server_valve.stop()
-        control_server_valve.join()
+        # control_server_valve.stop()
+        # control_server_valve.join()
 
-        if exp_type == 'coflow':
-            control_server_uv.stop()
-            control_server_uv.join()
+        # if exp_type == 'coflow':
+        #     control_server_uv.stop()
+        #     control_server_uv.join()
 
     logger.info("Quitting server")

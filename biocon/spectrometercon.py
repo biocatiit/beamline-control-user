@@ -596,7 +596,7 @@ class Spectrometer(object):
 
         else:
             self._series_abort_event.clear()
-            
+
             tot_spectrum = 0
 
             dt_delta_t = datetime.timedelta(seconds=delta_t_min)
@@ -1232,8 +1232,8 @@ class StellarnetUVVis(Spectrometer):
         self._smoothing = int(smooth)
         self._x_timing = int(xtiming)
 
-        self.spectrometer['device'].set_config(int_time=int_time, 
-            scans_to_avg=self._scan_avg, x_smooth=self._smoothing, 
+        self.spectrometer['device'].set_config(int_time=int_time,
+            scans_to_avg=self._scan_avg, x_smooth=self._smoothing,
             x_timing=self._x_timing)
 
         self._collect_spectrum(True)
@@ -1322,6 +1322,7 @@ class UVCommThread(utils.CommManager):
         }
 
         self._connected_devices = OrderedDict()
+        self._connected_coms = OrderedDict()
 
         self.known_devices = {
             'StellarNet' : StellarnetUVVis,
@@ -1340,15 +1341,20 @@ class UVCommThread(utils.CommManager):
         comm_name = kwargs.pop('comm_name', None)
 
         if name not in self._connected_devices:
-            new_device = self.known_devices[device_type](name, **kwargs)
-            new_device.connect()
-            self._connected_devices[name] = new_device
+            if device not in self._connected_coms:
+                new_device = self.known_devices[device_type](name, **kwargs)
+                new_device.connect()
+                self._connected_devices[name] = new_device
+                self._connected_coms[device] = new_device
+                logger.debug("Device %s connected", name)
+            else:
+                self._connected_devices[name] = self.connected_coms[device]
+                logger.debug("Device already connected on %s", device)
 
             self._series_q[name] = deque()
 
         self._return_value((name, 'connect', True), comm_name)
 
-        logger.debug("Device %s connected", name)
 
     def _disconnect_device(self, name, **kwargs):
         logger.info("Disconnecting device %s", name)
@@ -1980,7 +1986,7 @@ class UVPanel(utils.DevicePanel):
         """Creates the layout for the panel."""
 
         status_parent = wx.StaticBox(self, label='Status:')
-        self.status = wx.StaticText(status_parent, size=(150, -1),
+        self.status = wx.StaticText(status_parent, size=self._FromDIP((150, -1)),
             style=wx.ST_NO_AUTORESIZE)
         self.status.SetForegroundColour(wx.RED)
         fsize = self.GetFont().GetPointSize()
@@ -2513,7 +2519,7 @@ class UVPanel(utils.DevicePanel):
             data_dir = self.autosave_dir.GetValue()
             data_dir = os.path.abspath(os.path.expanduser(data_dir))
 
-            # data_dir = data_dir.replace(self.settings['remote_dir_prefix']['local'], 
+            # data_dir = data_dir.replace(self.settings['remote_dir_prefix']['local'],
             #     self.settings['remote_dir_prefix']['remote'])
 
             kwargs = {
@@ -2543,20 +2549,25 @@ class UVPanel(utils.DevicePanel):
 
     def _set_status(self, cmd, val):
         if cmd == 'set_int_time':
-            self.int_time.SafeChangeValue(str(val))
+            if str(val) != self.int_time.GetValue():
+                self.int_time.SafeChangeValue(str(val))
 
         elif cmd == 'set_scan_avg':
-            self.scan_avg.SafeChangeValue(str(val))
+            if str(val) != self.scan_avg.GetValue():
+                self.scan_avg.SafeChangeValue(str(val))
 
         elif cmd == 'set_smoothing':
-            self.smoothing.SafeChangeValue(str(val))
+            if str(val) != self.smoothing.GetValue():
+                self.smoothing.SafeChangeValue(str(val))
 
         elif cmd == 'set_xtiming':
-            self.xtiming.SafeChangeValue(str(val))
+            if str(val) != self.xtiming.GetValue():
+                self.xtiming.SafeChangeValue(str(val))
 
         elif cmd == 'get_hist_time':
-            self.history_time.SafeChangeValue(str(val))
-            self._history_length = val
+            if val != self._history_length:
+                self.history_time.SafeChangeValue(str(val))
+                self._history_length = val
 
         elif cmd == 'get_spec_settings':
             int_time = val['int_time']
@@ -2569,11 +2580,16 @@ class UVPanel(utils.DevicePanel):
             abs_win = val['abs_win']
             hist_t = val['hist_t']
 
-            self.int_time.SafeChangeValue(str(int_time))
-            self.scan_avg.SafeChangeValue(str(scan_avg))
-            self.smoothing.SafeChangeValue(str(smooth))
-            self.xtiming.SafeChangeValue(str(xtiming))
-            self.history_time.SafeChangeValue(str(hist_t))
+            if str(int_time) != self.int_time.GetValue():
+                self.int_time.SafeChangeValue(str(int_time))
+            if str(scan_avg) != self.scan_avg.GetValue():
+                self.scan_avg.SafeChangeValue(str(scan_avg))
+            if str(smooth) != self.smoothing.GetValue():
+                self.smoothing.SafeChangeValue(str(smooth))
+            if str(xtiming) != self.xtiming.GetValue():
+                self.xtiming.SafeChangeValue(str(xtiming))
+            if hist_t != self._history_length:
+                self.history_time.SafeChangeValue(str(hist_t))
 
             self._history_length = hist_t
 
@@ -2607,7 +2623,10 @@ class UVPanel(utils.DevicePanel):
                     msg = 'Collecting'
                 self.status.SetLabel(msg)
             else:
-                self.status.SetLabel('Ready')
+                msg = 'Ready'
+
+            if msg != self.status.GetLabel():
+                self.status.SetLabel(msg)
 
         elif cmd == 'collect_series_start':
             self._series_running = True
@@ -3408,7 +3427,7 @@ class InlineUVPanel(utils.DevicePanel):
         if not os.path.exists(data_dir):
             os.mkdir(data_dir)
 
-        data_dir = data_dir.replace(self.settings['remote_dir_prefix']['local'], 
+        data_dir = data_dir.replace(self.settings['remote_dir_prefix']['local'],
                 self.settings['remote_dir_prefix']['remote'])
 
         kwargs = {
@@ -3428,11 +3447,13 @@ class InlineUVPanel(utils.DevicePanel):
     def _set_status(self, cmd, val):
         logger.debug('Setting status %s %s', cmd, val)
         if cmd == 'set_int_time':
-            self.int_time.ChangeValue(str(val))
+            if str(val) != self.int_time.GetValue():
+                self.int_time.ChangeValue(str(val))
 
         elif cmd == 'get_hist_time':
-            self.history_time.SafeChangeValue(str(val))
-            self._history_length = val
+            if val != self._history_length:
+                self.history_time.SafeChangeValue(str(val))
+                self._history_length = val
 
         elif cmd == 'get_spec_settings':
             int_time = val['int_time']
@@ -3447,7 +3468,8 @@ class InlineUVPanel(utils.DevicePanel):
             ls_shutter = val['ls_shutter']
             wl_range = val['wl_range']
 
-            self.history_time.SafeChangeValue(str(hist_t))
+            if hist_t != self._history_length:
+                self.history_time.SafeChangeValue(str(hist_t))
 
             self._history_length = hist_t
             self._current_int_time = int_time
@@ -3461,14 +3483,15 @@ class InlineUVPanel(utils.DevicePanel):
             self._dark_spectrum = dark
             self._reference_spectrum = ref
 
-            self._ls_shutter = ls_shutter
+            if ls_shutter != self._ls_shutter:
+                self._ls_shutter = ls_shutter
 
-            if self._ls_shutter:
-                ls_status = 'Open'
-            else:
-                ls_status = 'Closed'
+                if self._ls_shutter:
+                    ls_status = 'Open'
+                else:
+                    ls_status = 'Closed'
 
-            self.ls_status.SetLabel(ls_status)
+                self.ls_status.SetLabel(ls_status)
 
         elif cmd == 'collect_spec':
             self._add_new_spectrum(val)
@@ -3494,9 +3517,12 @@ class InlineUVPanel(utils.DevicePanel):
                         self._series_total))
                 else:
                     msg = 'Collecting'
-                self.status.SetLabel(msg)
+
             else:
-                self.status.SetLabel('Ready')
+                msg = 'Ready'
+
+            if msg != self.status.GetLabel():
+                self.status.SetLabel(msg)
 
         elif cmd == 'collect_series_start':
             self._series_running = True
@@ -4504,7 +4530,7 @@ if __name__ == '__main__':
 
 
     setup_devices = [
-        {'name': 'StellarNet', 'args': ['StellarNet'], 'kwargs': {}},
+        {'name': 'StellarNet', 'args': ['StellarNet',], 'kwargs': {}},
         ]
 
     app = wx.App()

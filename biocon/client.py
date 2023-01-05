@@ -85,6 +85,19 @@ class ControlClient(threading.Thread):
         self.socket.set(zmq.LINGER, 0)
         self.socket.connect("tcp://{}:{}".format(self.ip, self.port))
 
+        # Clear backlog of incomming messages on startup
+        start = time.time()
+        while time.time()-start < 0.1:
+            if self.socket.poll(10) > 0:
+                resp = self.socket.recv_pyobj()
+
+                res_type, response = resp
+
+                if res_type != 'status':
+                    break
+                else:
+                    start = time.time()
+
         while True:
             action_taken = False
 
@@ -214,6 +227,8 @@ class ControlClient(threading.Thread):
                 res_type, response = resp
 
                 if res_type == 'status':
+                    print('got response')
+                    print(response)
                     # logger.debug('Recevied status %s', response)
                     if self.status_queue is not None:
                         self.status_queue.append(response)
@@ -230,9 +245,12 @@ class ControlClient(threading.Thread):
 
         while True:
             if self.socket.poll(10) > 0:
+                print('getting status')
                 resp = self.socket.recv_pyobj()
                 # logger.debug('Received status message: %s', resp)
                 res_type, response = resp
+
+                print(response)
 
                 if res_type == 'status':
                     # logger.debug('Recevied status %s', response)
