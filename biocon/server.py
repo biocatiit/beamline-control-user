@@ -340,7 +340,7 @@ if __name__ == '__main__':
     logger.setLevel(logging.DEBUG)
     h1 = logging.StreamHandler(sys.stdout)
     h1.setLevel(logging.DEBUG)
-    # h1.setLevel(logging.INFO)
+    h1.setLevel(logging.INFO)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
     h1.setFormatter(formatter)
     logger.addHandler(h1)
@@ -397,16 +397,16 @@ if __name__ == '__main__':
         # ip = '164.54.204.24'
         ip = '192.168.1.16'
 
-        setup_pumps = [('sheath', 'VICI M50', 'COM3', ['627.72', '9.814'], {}, {}),
-            ('outlet', 'VICI M50', 'COM4', ['628.68', '9.962'], {}, {})
-            ]
+        # setup_pumps = [('sheath', 'VICI M50', 'COM3', ['627.72', '9.814'], {}, {}),
+        #     ('outlet', 'VICI M50', 'COM4', ['628.68', '9.962'], {}, {})
+        #     ]
 
-        pump_local_comm_locks = {'sheath'    : pump_comm_locks[setup_pumps[0][2]],
-            'outlet'    : pump_comm_locks[setup_pumps[1][2]]
-            }
+        # pump_local_comm_locks = {'sheath'    : pump_comm_locks[setup_pumps[0][2]],
+        #     'outlet'    : pump_comm_locks[setup_pumps[1][2]]
+        #     }
 
-        setup_valves = [('Coflow Sheath', 'Cheminert', 'COM7', [], {'positions' : 10}),
-            ]
+        # setup_valves = [('Coflow Sheath', 'Cheminert', 'COM7', [], {'positions' : 10}),
+        #     ]
 
         setup_uv = [
             {'name': 'CoflowUV', 'args': ['StellarNet'], 'kwargs':
@@ -419,8 +419,22 @@ if __name__ == '__main__':
         #     {'name': 'outlet', 'args' : ['BFS', 'COM6'], 'kwargs': {}}
         #     ]
 
+        setup_pumps = [
+            ('sheath', 'Soft', '', [], {}, {}),
+            ('outlet', 'Soft', '', [], {}, {}),
+            ]
+
+        pump_local_comm_locks = {'sheath'    : pump_comm_locks['COM3'],
+            'outlet'    : pump_comm_locks['COM4']
+            }
+
+        setup_valves = [
+            ('Coflow Sheath', 'Soft', '', [], {'positions': 10}),
+            ]
+
         setup_fms = [
-            {'name': 'sheath', 'args' : ['Soft', None], 'kwargs': {}}
+            {'name': 'sheath', 'args' : ['Soft', None], 'kwargs': {}},
+            {'name': 'outlet', 'args' : ['Soft', None], 'kwargs': {}},
             ]
 
     elif exp_type.startswith('trsaxs'):
@@ -508,25 +522,25 @@ if __name__ == '__main__':
 
     # Both
 
-    # pump_frame = pumpcon.PumpFrame(pump_local_comm_locks, setup_pumps, None,
-    #     title='Pump Control')
-    # pump_frame.Show()
+    pump_frame = pumpcon.PumpFrame(pump_local_comm_locks, setup_pumps, None,
+        title='Pump Control')
+    pump_frame.Show()
 
-    # valve_frame = valvecon.ValveFrame(valve_comm_locks, setup_valves,
-    #     None, title='Valve Control')
-    # valve_frame.Show()
+    valve_frame = valvecon.ValveFrame(valve_comm_locks, setup_valves,
+        None, title='Valve Control')
+    valve_frame.Show()
 
-    # control_server_pump = ControlServer(ip, port1, name='PumpControlServer',
-    #     pump_comm_locks = pump_comm_locks, start_pump=True)
-    # control_server_pump.start()
+    control_server_pump = ControlServer(ip, port1, name='PumpControlServer',
+        pump_comm_locks = pump_comm_locks, start_pump=True)
+    control_server_pump.start()
 
     control_server_fm = ControlServer(ip, port2, name='FMControlServer',
         start_fm=True)
     control_server_fm.start()
 
-    # control_server_valve = ControlServer(ip, port3, name='ValveControlServer',
-    #     valve_comm_locks = valve_comm_locks, start_valve=True)
-    # control_server_valve.start()
+    control_server_valve = ControlServer(ip, port3, name='ValveControlServer',
+        valve_comm_locks = valve_comm_locks, start_valve=True)
+    control_server_valve.start()
 
     time.sleep(1)
     fm_comm_thread = control_server_fm.get_comm_thread('fm')
@@ -561,14 +575,14 @@ if __name__ == '__main__':
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        # control_server_pump.stop()
-        # control_server_pump.join()
+        control_server_pump.stop()
+        control_server_pump.join()
 
         control_server_fm.stop()
         control_server_fm.join()
 
-        # control_server_valve.stop()
-        # control_server_valve.join()
+        control_server_valve.stop()
+        control_server_valve.join()
 
         # if exp_type == 'coflow':
         #     control_server_uv.stop()

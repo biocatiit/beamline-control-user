@@ -84,17 +84,16 @@ class CoflowControl(object):
         self.coflow_pump_cmd_q = deque()
         self.coflow_pump_return_q = deque()
         self.coflow_pump_abort_event = threading.Event()
-        self.coflow_pump_event = threading.Event()
 
         self.coflow_fm_cmd_q = deque()
         self.coflow_fm_return_q = deque()
+        self.coflow_fm_status_q = deque()
         self.coflow_fm_abort_event = threading.Event()
-        self.coflow_fm_event = threading.Event()
+        self.coflow_return_lock = threading.Lock()
 
         self.valve_cmd_q = deque()
         self.valve_return_q = deque()
         self.valve_abort_event = threading.Event()
-        self.valve_event = threading.Event()
 
         self.timeout_event = threading.Event()
 
@@ -102,8 +101,10 @@ class CoflowControl(object):
             self.coflow_pump_con = pumpcon.PumpCommThread(self.coflow_pump_cmd_q,
                 self.coflow_pump_return_q, self.coflow_pump_abort_event, 'PumpCon')
 
-            self.coflow_fm_con = fmcon.fmCommThread(self.coflow_fm_cmd_q,
-                self.coflow_fm_return_q, self.coflow_fm_abort_event, 'FMCon')
+            self.coflow_fm_con = self.settings['coflow_com_thread']
+            self.coflow_fm_con.add_new_communication('coflow_control',
+                self.coflow_fm_cmd_q, self.coflow_fm_return_q,
+                self.coflow_fm_status_q)
 
             self.local_devices = True
 
@@ -112,19 +113,22 @@ class CoflowControl(object):
             pump_port = self.settings['remote_pump_port']
             self.coflow_pump_con = client.ControlClient(pump_ip, pump_port,
                 self.coflow_pump_cmd_q, self.coflow_pump_return_q,
-                self.coflow_pump_abort_event, self.timeout_event, name='PumpControlClient')
+                self.coflow_pump_abort_event, self.timeout_event,
+                name='PumpControlClient')
 
             fm_ip = self.settings['remote_fm_ip']
             fm_port = self.settings['remote_fm_port']
             self.coflow_fm_con = client.ControlClient(fm_ip, fm_port,
                 self.coflow_fm_cmd_q, self.coflow_fm_return_q,
-                self.coflow_fm_abort_event, self.timeout_event, name='FMControlClient')
+                self.coflow_fm_abort_event, self.timeout_event,
+                name='FMControlClient', status_queue=self.coflow_fm_status_q)
 
             valve_ip = self.settings['remote_valve_ip']
             valve_port = self.settings['remote_valve_port']
             self.coflow_valve_con = client.ControlClient(valve_ip, valve_port,
                 self.valve_cmd_q, self.valve_return_q,
-                self.valve_abort_event, self.timeout_event, name='ValveControlClient')
+                self.valve_abort_event, self.timeout_event,
+                name='ValveControlClient')
 
             self.local_devices = False
 
@@ -176,40 +180,45 @@ class CoflowControl(object):
         """
 
         sheath_fm = self.settings['sheath_fm']
+        self.sheath_fm_name = sheath_fm['name']
+        sheath_args = sheath_fm['args']
+        sheath_kwargs = sheath_fm['kwargs']
+        sheath_args.insert(0, self.sheath_fm_name)
+        sheath_connect_cmd = ['connect', sheath_args, sheath_kwargs]
+
         outlet_fm = self.settings['outlet_fm']
+        self.outlet_fm_name = sheath_fm['name']
+        outlet_args = outlet_fm['args']
+        outlet_kwargs = outlet_fm['kwargs']
+        outlet_args.insert(0, self.outlet_fm_name)
+        outlet_connect_cmd = ['connect', sheath_args, sheath_kwargs]
 
         logger.info('Initializing coflow flow meters on startup')
 
-        sheath_args = (sheath_fm[1], 'sheath_fm', sheath_fm[0])
+        self.fm_sheath_init = self._send_fmcmd(sheath_connect_cmd, response=True)
 
-        sheath_init_cmd = ('connect', sheath_args, {})
-
-        outlet_args = (outlet_fm[1], 'outlet_fm', outlet_fm[0])
-
-        outlet_init_cmd = ('connect', outlet_args, {})
-
-        try:
-            _, self.fm_sheath_init = self._send_fmcmd(sheath_init_cmd, response=True)
-        except Exception:
+        if self.fm_sheath_init is None:
             self.fm_sheath_init = False
 
-        try:
-            _, self.fm_outlet_init = self._send_fmcmd(outlet_init_cmd, response=True)
-        except Exception:
+        self.fm_outlet_init = self._send_fmcmd(outlet_connect_cmd, response=True)
+
+        if self.fm_outlet_init is None:
             self.fm_outlet_init = False
 
         if self.fm_outlet_init and self.fm_sheath_init:
-            self._send_fmcmd(('set_units', ('sheath_fm', self.settings['flow_units']), {}))
-            self._send_fmcmd(('set_units', ('outlet_fm', self.settings['flow_units']), {}))
+            self._send_fmcmd(('set_units', (self.sheath_fm_name,
+                self.settings['flow_units']), {}))
+            self._send_fmcmd(('set_units', (self.outlet_fm_name,
+                self.settings['flow_units']), {}))
 
-            self._send_fmcmd(('get_density', ('sheath_fm',), {}), True)
-            self._send_fmcmd(('get_density', ('outlet_fm',), {}), True)
+            self._send_fmcmd(('get_density', (self.sheath_fm_name,), {}), True)
+            self._send_fmcmd(('get_density', (self.outlet_fm_name,), {}), True)
 
-            self._send_fmcmd(('get_temperature', ('sheath_fm',), {}), True)
-            self._send_fmcmd(('get_temperature', ('outlet_fm',), {}), True)
+            self._send_fmcmd(('get_temperature', (self.sheath_fm_name,), {}), True)
+            self._send_fmcmd(('get_temperature', (self.outlet_fm_name,), {}), True)
 
-            self._send_fmcmd(('get_flow_rate', ('sheath_fm',), {}), True)
-            self._send_fmcmd(('get_flow_rate', ('outlet_fm',), {}), True)
+            self._send_fmcmd(('get_flow_rate', (self.sheath_fm_name,), {}), True)
+            self._send_fmcmd(('get_flow_rate', (self.outlet_fm_name,), {}), True)
 
             logger.info('Coflow flow meters initialization successful')
 
@@ -372,11 +381,12 @@ class CoflowControl(object):
         self._send_pumpcmd(outlet_fr_cmd)
 
     def get_sheath_flow_rate(self):
-        sheath_fr_cmd = ('get_flow_rate', ('sheath_fm',), {})
+        sheath_fr_cmd = ('get_flow_rate', (self.sheath_fm_name,), {})
 
         ret = self._send_fmcmd(sheath_fr_cmd, True)
         if ret is not None:
-            ret_type, ret_val = ret
+            ret_type = 'flow_rate'
+            ret_val = ret
         else:
             ret_type = None
             ret_val = None
@@ -384,11 +394,12 @@ class CoflowControl(object):
         return ret_val, ret_type
 
     def get_sheath_density(self):
-        sheath_density_cmd = ('get_density', ('sheath_fm',), {})
+        sheath_density_cmd = ('get_density', (self.sheath_fm_name,), {})
 
         ret = self._send_fmcmd(sheath_density_cmd, True)
         if ret is not None:
-            ret_type, ret_val = ret
+            ret_type = 'density'
+            ret_val = ret
         else:
             ret_type = None
             ret_val = None
@@ -396,11 +407,12 @@ class CoflowControl(object):
         return ret_val, ret_type
 
     def get_sheath_temperature(self):
-        sheath_t_cmd = ('get_temperature', ('sheath_fm',), {})
+        sheath_t_cmd = ('get_temperature', (self.sheath_fm_name,), {})
 
         ret = self._send_fmcmd(sheath_t_cmd, True)
         if ret is not None:
-            ret_type, ret_val = ret
+            ret_type = 'temperature'
+            ret_val = ret
         else:
             ret_type = None
             ret_val = None
@@ -408,11 +420,12 @@ class CoflowControl(object):
         return ret_val, ret_type
 
     def get_outlet_flow_rate(self):
-        outlet_fr_cmd = ('get_flow_rate', ('outlet_fm',), {})
+        outlet_fr_cmd = ('get_flow_rate', (self.outlet_fm_name,), {})
 
         ret = self._send_fmcmd(outlet_fr_cmd, True)
         if ret is not None:
-            ret_type, ret_val = ret
+            ret_type = 'flow_rate'
+            ret_val = ret
         else:
             ret_type = None
             ret_val = None
@@ -420,11 +433,12 @@ class CoflowControl(object):
         return ret_val, ret_type
 
     def get_outlet_density(self):
-        outlet_density_cmd = ('get_density', ('outlet_fm',), {})
+        outlet_density_cmd = ('get_density', (self.outlet_fm_name,), {})
 
         ret = self._send_fmcmd(outlet_density_cmd, True)
         if ret is not None:
-            ret_type, ret_val = ret
+            ret_type = 'density'
+            ret_val = ret
         else:
             ret_type = None
             ret_val = None
@@ -432,11 +446,12 @@ class CoflowControl(object):
         return ret_val, ret_type
 
     def get_outlet_temperature(self):
-        outlet_t_cmd = ('get_temperature', ('outlet_fm',), {})
+        outlet_t_cmd = ('get_temperature', (self.outlet_fm_name,), {})
 
         ret = self._send_fmcmd(outlet_t_cmd, True)
         if ret is not None:
-            ret_type, ret_val = ret
+            ret_type = 'temperature'
+            ret_val = ret
         else:
             ret_type = None
             ret_val = None
@@ -504,23 +519,15 @@ class CoflowControl(object):
         :param str cmd: The command to send, matching the command in the
             :py:class:`FlowMeterCommThread` ``_commands`` dictionary.
         """
-        ret_val = (None, None)
-        if not self.timeout_event.is_set():
-            if not self.local_devices:
-                full_cmd = {'device': 'fm', 'command': cmd, 'response': response}
-            else:
-                full_cmd = cmd
 
-            self.coflow_fm_cmd_q.append(full_cmd)
+        self.coflow_fm_status_q.clear() #For now, do nothing with the status
 
-            if response:
-                while len(self.coflow_fm_return_q) == 0 and not self.timeout_event.is_set():
-                    time.sleep(0.01)
-
-                if not self.timeout_event.is_set():
-                    ret_val = self.coflow_fm_return_q.popleft()
+        ret_val = utils.send_cmd(cmd, self.coflow_fm_cmd_q,
+            self.coflow_fm_return_q, self.timeout_event,
+            self.coflow_return_lock, not self.local_devices, 'fm', response)
 
         return ret_val
+
 
     def _send_valvecmd(self, cmd, response=False):
         ret_val = None
@@ -543,18 +550,12 @@ class CoflowControl(object):
         return ret_val
 
     def disconnect_coflow(self):
-        sheath_fm = ('disconnect', ('sheath_fm', ), {})
-        outlet_fm = ('disconnect', ('outlet_fm', ), {})
-
         sheath_pump = ('disconnect', ('sheath_pump', ), {})
         outlet_pump = ('disconnect', ('outlet_pump', ), {})
 
         sheath_valve = ('disconnect', ('sheath_valve', ), {})
 
         if not self.timeout_event.is_set():
-            self._send_fmcmd(sheath_fm, response=True)
-            self._send_fmcmd(outlet_fm, response=True)
-
             self._send_pumpcmd(sheath_pump, response=True)
             self._send_pumpcmd(outlet_pump, response=True)
 
@@ -1101,7 +1102,7 @@ class CoflowPanel(wx.Panel):
 
         valve_pos = self.get_sheath_valve_position()
 
-        
+
 
         if interactive:
             if int(valve_pos) != int(target_valve_pos):
@@ -1122,7 +1123,7 @@ class CoflowPanel(wx.Panel):
             #Change buffer bottle
             msg = ('Change the buffer bottle in the coflow setup. Click okay to continue. '
                 'Buffer will flow for ~{} mL (~{} minutes) to flush the '
-                'system.'.format(self.settings['buffer_change_vol'], 
+                'system.'.format(self.settings['buffer_change_vol'],
                     round(self.settings['buffer_change_vol']/sheath_flow,1)))
 
             ret = self.showMessageDialog(self, msg, "Change buffer",
@@ -2041,7 +2042,7 @@ class CoflowPlotFrame(wx.Frame):
         # print(oldx)
         # print(newx)
 
-        
+
 
         # # if not x_sim:
         #     # print('new x')
@@ -2193,19 +2194,31 @@ if __name__ == '__main__':
     coflow_settings = {
         'show_advanced_options'     : False,
         'device_communication'      : 'remote',
-        'remote_pump_ip'            : '164.54.204.53',
+        # 'remote_pump_ip'            : '164.54.204.53',
+        # 'remote_pump_port'          : '5556',
+        # 'remote_fm_ip'              : '164.54.204.53',
+        # 'remote_fm_port'            : '5557',
+        # 'remote_overflow_ip'        : '164.54.204.75',
+        # 'remote_valve_ip'           : '164.54.204.53',
+        # 'remote_valve_port'         : '5558',
+        'remote_pump_ip'            : '192.168.1.16',
         'remote_pump_port'          : '5556',
-        'remote_fm_ip'              : '164.54.204.53',
+        'remote_fm_ip'              : '192.168.1.16',
         'remote_fm_port'            : '5557',
-        'remote_overflow_ip'        : '164.54.204.75',
-        'remote_valve_ip'           : '164.54.204.53',
+        'remote_overflow_ip'        : '192.168.1.16',
+        'remote_valve_ip'           : '192.168.1.16',
         'remote_valve_port'         : '5558',
         'flow_units'                : 'mL/min',
-        'sheath_pump'               : ('VICI_M50', 'COM3', [629.48, 13.442], {}),
-        'outlet_pump'               : ('VICI_M50', 'COM4', [625.28, 7.905], {}),
-        'sheath_fm'                 : ('BFS', 'COM5', [], {}),
-        'outlet_fm'                 : ('BFS', 'COM6', [], {}),
-        'sheath_valve'              : ('Cheminert', 'COM7', [], {'positions' : 10}),
+        # 'sheath_pump'               : ('VICI_M50', 'COM3', [627.72, 9.814], {}),
+        # 'outlet_pump'               : ('VICI_M50', 'COM4', [628.68, 9.926], {}),
+        # 'sheath_fm'                 : {'name': 'sheath', 'args': ['BFS', 'COM5'], 'kwargs':{}},
+        # 'outlet_fm'                 : {'name': 'outlet', 'args': ['BFS', 'COM6'], 'kwargs':{}},
+        # 'sheath_valve'              : ('Cheminert', 'COM7', [], {'positions' : 10}),
+        'sheath_pump'               : ('Soft', '', [], {}),
+        'outlet_pump'               : ('Soft', '', [], {}),
+        'sheath_fm'                 : {'name': 'sheath', 'args': ['Soft', None], 'kwargs':{}},
+        'outlet_fm'                 : {'name': 'outlet', 'args': ['Soft', None], 'kwargs':{}},
+        'sheath_valve'              : ('Soft', '', [], {'positions' : 10}),
         'sheath_ratio'              : 0.3,
         'sheath_excess'             : 1.5,
         'warning_threshold_low'     : 0.8,

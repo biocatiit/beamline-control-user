@@ -4643,7 +4643,8 @@ class PumpPanel(wx.Panel):
         else:
             kwargs = {}
 
-        kwargs['comm_lock'] = self.comm_lock
+        if pump != 'Soft' and pump != 'Soft_Syringe':
+            kwargs['comm_lock'] = self.comm_lock
 
         if 'flow_rate_scale' in pump_kwargs:
             kwargs['flow_rate_scale'] = pump_kwargs['flow_rate_scale']

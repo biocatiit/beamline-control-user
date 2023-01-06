@@ -260,6 +260,9 @@ class SoftFlowMeter(FlowMeter):
 
         self._flow_rate = 0
 
+        self.density = 1
+        self.temperature = 20
+
         self.connect()
 
     def connect(self):
@@ -818,7 +821,7 @@ class FlowMeterPanel(utils.DevicePanel):
         self._update_status_cmd(settings_cmd, 5)
 
         flow_cmd = ['get_flow_rate', [self.name,], {}]
-        self._update_status_cmd(flow_cmd, 0.5)
+        self._update_status_cmd(flow_cmd, 1)
 
         self._set_status_label('Connected')
 
@@ -869,7 +872,6 @@ class FlowMeterPanel(utils.DevicePanel):
         self.status.SetLabel(status)
 
     def _set_status(self, cmd, val):
-        print(cmd)
         if cmd == 'get_flow_rate':
             self.flow_rate.SetLabel(str(val))
 

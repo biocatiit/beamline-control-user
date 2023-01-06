@@ -776,6 +776,9 @@ class DevicePanel(wx.Panel):
         if not self.remote:
             self.com_thread = settings['com_thread']
 
+            self.com_timeout_event = None
+            self.remote_dev = None
+
             if self.com_thread is not None:
                 self.com_thread.add_new_communication(self.name, self.cmd_q, self.return_q,
                     self.status_q)
@@ -841,7 +844,7 @@ class DevicePanel(wx.Panel):
             else:
                 self.com_thread.remove_status_cmd(cmd)
 
-    def _send_cmd(self, cmd, wait_for_response=False, is_status=False,
+    def _send_cmd(self, cmd, get_response=False, is_status=False,
         status_period=1, add_status=True):
         """
         Sends commands to the pump using the ``cmd_q`` that was given
@@ -852,51 +855,12 @@ class DevicePanel(wx.Panel):
         """
         logger.debug('Sending device %s command %s', self.name, cmd)
 
-        if self.remote:
-            if is_status:
-                device = '{}_status'.format(self.remote_dev)
-                cmd = [cmd, status_period, add_status]
-            else:
-                device = '{}'.format(self.remote_dev)
-
-            full_cmd = {'device': device, 'command': cmd, 'response': wait_for_response}
-
-        else:
-            full_cmd = cmd
-
-        if wait_for_response:
-            with self._clear_return:
-                self.cmd_q.append(full_cmd)
-                result = self._wait_for_response()
-
-                if result[0] == cmd[1][0] and result[1] == cmd[0]:
-                    ret_val = result[2]
-                else:
-                    ret_val = None
-
-        else:
-            self.cmd_q.append(full_cmd)
-            ret_val = None
+        ret_val = send_cmd(cmd, self.cmd_q, self.return_q, self.com_timeout_event,
+            self._clear_return, self.remote, self.remote_dev,
+            get_response=get_response, is_status=is_status,
+            status_period=status_period, add_status=add_status)
 
         return ret_val
-
-    def _wait_for_response(self):
-        start_count = len(self.return_q)
-        while len(self.return_q) == start_count:
-            time.sleep(0.01)
-
-            if self.remote and self.com_timeout_event.is_set():
-                break
-
-        if self.remote:
-            if not self.com_timeout_event.is_set():
-                answer = self.return_q.pop()
-            else:
-                answer = None
-        else:
-            answer = self.return_q.pop()
-
-        return answer
 
     def _get_status(self):
         while not self._stop_status.is_set():
@@ -940,6 +904,56 @@ class DevicePanel(wx.Panel):
     def _on_close(self):
         """Device specific stuff goes here"""
         pass
+
+def send_cmd(cmd, cmd_q, return_q, timeout_event, return_lock, remote,
+    remote_dev, get_response=False, is_status=False, status_period=1,
+    add_status=True):
+
+    if remote:
+        if is_status:
+            device = '{}_status'.format(remote_dev)
+            cmd = [cmd, status_period, add_status]
+        else:
+            device = '{}'.format(remote_dev)
+
+        full_cmd = {'device': device, 'command': cmd, 'response': get_response}
+
+    else:
+        full_cmd = cmd
+
+    if get_response:
+        with return_lock:
+            cmd_q.append(full_cmd)
+            result = wait_for_response(return_q, timeout_event, remote)
+
+            if result is not None and result[0] == cmd[1][0] and result[1] == cmd[0]:
+                ret_val = result[2]
+            else:
+                ret_val = None
+
+    else:
+        cmd_q.append(full_cmd)
+        ret_val = None
+
+    return ret_val
+
+def wait_for_response(return_q, timeout_event, remote):
+    start_count = len(return_q)
+    while len(return_q) == start_count:
+        time.sleep(0.01)
+
+        if remote and timeout_event.is_set():
+            break
+
+    if remote:
+        if not timeout_event.is_set():
+            answer = return_q.pop()
+        else:
+            answer = None
+    else:
+        answer = return_q.pop()
+
+    return answer
 
 class DeviceFrame(wx.Frame):
     """
