@@ -38,7 +38,10 @@ import wx
 import wx.lib.buttons as buttons
 import numpy as np
 import serial.tools.list_ports as list_ports
-import zaber.serial as zaber #pip install zaber.serial
+try:
+    import zaber.serial as zaber #pip install zaber.serial
+except ModuleNotFoundError:
+    pass
 
 import XPS_C8_drivers as xps_drivers
 import utils

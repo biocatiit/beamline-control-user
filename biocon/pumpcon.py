@@ -3555,7 +3555,7 @@ class PumpCommThread(threading.Thread):
         try:
             faults = pump.get_faults()
         except Exception:
-            faults = {'Faults' : False}
+            faults = {'Fault' : False}
 
         status = {'is_moving' : is_moving, 'volume' : volume,
                 'flow_rate' : flow_rate, 'refill_rate' : refill_rate,

@@ -497,7 +497,7 @@ class FlowMeterCommThread(utils.CommManager):
             val = device.flow_rate
             flow_rates.append(val)
 
-        self._return_value((name, 'get_flow_rate_multiple', [names, flow_rates]),
+        self._return_value((names, 'get_fr_multi', [names, flow_rates]),
             comm_name)
 
     def _get_all_multiple(self, names, **kwargs):
@@ -523,7 +523,7 @@ class FlowMeterCommThread(utils.CommManager):
             flow_rate = fm.flow_rate
             vals.append((flow_rate, density, temperature))
 
-        self._return_value((name, '_get_all_multiple', [names, vals]), comm_name)
+        self._return_value((names, 'get_all_multi', [names, vals]), comm_name)
 
     def _get_density_and_temperature(self, name, **kwargs):
         logger.debug('Getting density and temperature')
@@ -534,7 +534,7 @@ class FlowMeterCommThread(utils.CommManager):
         val_d = device.density
         val_t = device.temperature
 
-        self._return_value((name, '_get_density_and_temperature', [val_d, val_t]),
+        self._return_value((name, 'get_density_and_temperature', [val_d, val_t]),
             comm_name)
 
     def _get_filter(self, name, **kwargs):
