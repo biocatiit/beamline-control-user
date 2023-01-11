@@ -106,7 +106,7 @@ class ControlServer(threading.Thread):
             pump_ctrl = {'queue': pump_cmd_q,
                 'abort': pump_abort_event,
                 'thread': pump_con,
-                'answer_q': pump_return_q
+                'answer_q': pump_return_q,
                 }
 
             self._device_control['pump'] = pump_ctrl
@@ -135,17 +135,18 @@ class ControlServer(threading.Thread):
         if self._start_valve:
             valve_cmd_q = deque()
             valve_return_q = deque()
-            valve_abort_event = threading.Event()
-            valve_con = valvecon.ValveCommThread(valve_cmd_q, valve_return_q, valve_abort_event, 'ValveCon')
+            valve_status_q = deque()
+            valve_con = valvecon.ValveCommThread('ValveCon')
             valve_con.start()
 
-            if self.valve_comm_locks is not None:
-                valve_cmd_q.append(('add_comlocks', (self.valve_comm_locks,), {}))
+            valve_con.add_new_communication('zmq_server', valve_cmd_q, valve_return_q,
+                valve_status_q)
 
-            valve_ctrl = {'queue': valve_cmd_q,
-                'abort': valve_abort_event,
-                'thread': valve_con,
-                'answer_q': valve_return_q
+            valve_ctrl = {
+                'queue'     : valve_cmd_q,
+                'answer_q'  : valve_return_q,
+                'status_q'  : valve_status_q,
+                'thread'    : valve_con,
                 }
 
             self._device_control['valve'] = valve_ctrl
@@ -164,7 +165,7 @@ class ControlServer(threading.Thread):
                 'queue'     : uv_cmd_q,
                 'answer_q'  : uv_return_q,
                 'status_q'  : uv_status_q,
-                'thread'    : uv_con
+                'thread'    : uv_con,
                 }
 
             self._device_control['uv'] = uv_ctrl
@@ -378,15 +379,6 @@ if __name__ == '__main__':
         'COM18' : threading.Lock(),
         }
 
-    valve_comm_locks = {
-        'COM6'  : threading.Lock(),
-        'COM7'  : threading.Lock(),
-        'COM8'  : threading.Lock(),
-        'COM9'  : threading.Lock(),
-        'COM12' : threading.Lock(),
-        'COM14' : threading.Lock(),
-        }
-
     # exp_type = 'coflow' #coflow or trsaxs_laminar or trsaxs_chaotic
     exp_type = 'trsaxs_chaotic'
 
@@ -406,7 +398,9 @@ if __name__ == '__main__':
         #     'outlet'    : pump_comm_locks[setup_pumps[1][2]]
         #     }
 
-        # setup_valves = [('Coflow Sheath', 'Cheminert', 'COM7', [], {'positions' : 10}),
+        # setup_valves = [
+        #     {'name': 'Coflow Sheath', 'args': ['Cheminert', 'COM7'],
+        #         'kwargs': {'positions' : 10}},
         #     ]
 
         setup_uv = [
@@ -430,12 +424,13 @@ if __name__ == '__main__':
             }
 
         setup_valves = [
-            ('Coflow Sheath', 'Soft', '', [], {'positions': 10}),
+            {'name': 'Coflow Sheath', 'args': ['Soft', None], 'kwargs':
+                {'positions': 10}},
             ]
 
         setup_fms = [
-            {'name': 'sheath', 'args' : ['Soft', None], 'kwargs': {}},
-            {'name': 'outlet', 'args' : ['Soft', None], 'kwargs': {}},
+            {'name': 'sheath', 'args': ['Soft', None], 'kwargs': {}},
+            {'name': 'outlet', 'args': ['Soft', None], 'kwargs': {}},
             ]
 
     elif exp_type.startswith('trsaxs'):
@@ -469,18 +464,15 @@ if __name__ == '__main__':
             #     }
 
             # setup_valves = [
-            #     ('Injection', 'Rheodyne', 'COM6', [], {'positions' : 2}),
-            #     # ('Sample', 'Rheodyne', 'COM9', [], {'positions' : 6}),
-            #     # ('Buffer 1', 'Rheodyne', 'COM8', [], {'positions' : 6}),
-            #     # ('Buffer 2', 'Rheodyne', 'COM7', [], {'positions' : 6}),
+            #     {'name': 'Injection', 'args': ['Rheodyne', 'COM6'],
+            #         'kwargs': {'positions' : 2}},
+            #     # {'name': 'Sample', 'args': ['Rheodyne', 'COM9'],
+            #     #     'args': {'positions' : 6}},
+            #     # {'name': 'Buffer 1', 'args': ['Rheodyne', 'COM8']
+            #     #     'kwargs': {'positions' : 6}},
+            #     # {'name': 'Buffer 2', 'args': ['Rheodyne', 'COM7'],
+            #     #     'kwargs': {'positions' : 6}},
             #     ]
-
-            # valve_local_comm_locks = {
-            #     'Injection'    : valve_comm_locks[setup_valves[0][2]],
-            #     # 'Sample'    : valve_comm_locks[setup_valves[1][2]],
-            #     # 'Buffer 1'    : valve_comm_locks[setup_valves[2][2]],
-            #     # 'Buffer 2'    : valve_comm_locks[setup_valves[3][2]],
-            #    }
 
             # setup_fms = [
             #     {'name': 'outlet', 'args' : ['BFS', 'COM5'], 'kwargs': {}}
@@ -498,7 +490,8 @@ if __name__ == '__main__':
                 }
 
             setup_valves = [
-                ('Injection', 'Soft', '', [], {'positions': 2}),
+                {'name': 'Injection', 'args': ['Soft', None],
+                    'kwargs': {'positions': 2}},
                 ]
 
             setup_fms = [
@@ -526,12 +519,18 @@ if __name__ == '__main__':
                 }
 
             setup_valves = [
-                ('Injection', 'Rheodyne', 'COM6', [], {'positions' : 2}),
-                ('Buffer 1', 'Rheodyne', 'COM12', [], {'positions' : 6}),
-                ('Buffer 2', 'Rheodyne', 'COM14', [], {'positions' : 6}),
-                ('Sheath 1', 'Rheodyne', 'COM9', [], {'positions' : 6}),
-                ('Sheath 2', 'Rheodyne', 'COM8', [], {'positions' : 6}),
-                ('Sample', 'Rheodyne', 'COM7', [], {'positions' : 6}),
+                {'name': 'Injection', 'args': ['Rheodyne', 'COM6'],
+                    'kwargs': {'positions' : 2}},
+                {'name': 'Buffer 1', 'args': ['Rheodyne', 'COM12'],
+                    'kwargs': {'positions' : 6}},
+                {'name': 'Buffer 2', 'args': ['Rheodyne', 'COM14'],
+                    'kwargs': {'positions' : 6}},
+                {'name': 'Sheath 1', 'args': ['Rheodyne', 'COM9'],
+                    'kwargs': {'positions' : 6}},
+                {'name': 'Sheath 2', 'args': ['Rheodyne', 'COM8'],
+                    'kwargs': {'positions' : 6}},
+                {'name': 'Sample', 'args': ['Rheodyne', 'COM7'],
+                    'kwargs': {'positions' : 6}},
                 ]
 
             setup_fms = [
@@ -547,10 +546,6 @@ if __name__ == '__main__':
         title='Pump Control')
     pump_frame.Show()
 
-    valve_frame = valvecon.ValveFrame(valve_comm_locks, setup_valves,
-        None, title='Valve Control')
-    valve_frame.Show()
-
     control_server_pump = ControlServer(ip, port1, name='PumpControlServer',
         pump_comm_locks = pump_comm_locks, start_pump=True)
     control_server_pump.start()
@@ -560,10 +555,11 @@ if __name__ == '__main__':
     control_server_fm.start()
 
     control_server_valve = ControlServer(ip, port3, name='ValveControlServer',
-        valve_comm_locks = valve_comm_locks, start_valve=True)
+        start_valve=True)
     control_server_valve.start()
 
     time.sleep(1)
+
     fm_comm_thread = control_server_fm.get_comm_thread('fm')
 
     fm_settings = {
@@ -576,6 +572,18 @@ if __name__ == '__main__':
         title='Flow Meter Control')
     fm_frame.Show()
 
+
+    valve_comm_thread = control_server_valve.get_comm_thread('valve')
+
+    valve_settings = {
+        'remote'        : False,
+        'device_init'   : setup_valves,
+        'com_thread'    : valve_comm_thread,
+        }
+
+    valve_frame = valvecon.ValveFrame('valveFrame', valve_settings, parent=None,
+        title='Flow Meter Control')
+    valve_frame.Show()
 
     # if exp_type == 'coflow':
     #     # Coflow only

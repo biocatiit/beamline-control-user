@@ -89,11 +89,13 @@ class CoflowControl(object):
         self.coflow_fm_return_q = deque()
         self.coflow_fm_status_q = deque()
         self.coflow_fm_abort_event = threading.Event()
-        self.coflow_return_lock = threading.Lock()
+        self.coflow_fm_return_lock = threading.Lock()
 
         self.valve_cmd_q = deque()
         self.valve_return_q = deque()
+        self.valve_status_q = deque()
         self.valve_abort_event = threading.Event()
+        self.valve_return_lock = threading.Lock()
 
         self.timeout_event = threading.Event()
 
@@ -101,10 +103,15 @@ class CoflowControl(object):
             self.coflow_pump_con = pumpcon.PumpCommThread(self.coflow_pump_cmd_q,
                 self.coflow_pump_return_q, self.coflow_pump_abort_event, 'PumpCon')
 
-            self.coflow_fm_con = self.settings['coflow_com_thread']
+            self.coflow_fm_con = self.settings['coflow_fm_com_thread']
             self.coflow_fm_con.add_new_communication('coflow_control',
                 self.coflow_fm_cmd_q, self.coflow_fm_return_q,
                 self.coflow_fm_status_q)
+
+            self.coflow_valve_con = self.settings['coflow_valve_com_thread']
+            self.coflow_valve_con.add_new_communication('coflow_control',
+                self.coflow_valve_cmd_q, self.coflow_valve_return_q,
+                self.coflow_valve_status_q)
 
             self.local_devices = True
 
@@ -128,7 +135,7 @@ class CoflowControl(object):
             self.coflow_valve_con = client.ControlClient(valve_ip, valve_port,
                 self.valve_cmd_q, self.valve_return_q,
                 self.valve_abort_event, self.timeout_event,
-                name='ValveControlClient')
+                name='ValveControlClient', status_queue=self.valve_status_q)
 
             self.local_devices = False
 
@@ -227,22 +234,20 @@ class CoflowControl(object):
         Initializes the valves
         """
 
+        sheath_valve = self.settings['sheath_valve']
+        self.sheath_valve_name = sheath_valve['name']
+        sheath_args = sheath_valve['args']
+        sheath_kwargs = sheath_valve['kwargs']
+        sheath_args.insert(0, self.sheath_valve_name)
+        sheath_connect_cmd = ['connect', sheath_args, sheath_kwargs]
 
         logger.info('Initializing coflow valves on statrtup')
 
-        sheath_valve = self.settings['sheath_valve']
-        vtype = sheath_valve[0].replace(' ', '_')
-        com = sheath_valve[1]
+        self.valve_sheath_init = self._send_valvecmd(sheath_connect_cmd,
+            response=True)
 
-        args = [com, 'sheath_valve', vtype] + sheath_valve[2]
-        kwargs = sheath_valve[3]
-
-        if not self.local_devices:
-            cmd = ('connect_remote', args, kwargs)
-        else:
-            cmd = ('connect', args, kwargs)
-
-        self.valve_sheath_init = self._send_valvecmd(cmd, response=True)
+        if self.valve_sheath_init is None:
+            self.valve_sheath_init = False
 
         if self.valve_sheath_init:
             logger.info('Valve initializiation successful.')
@@ -459,22 +464,21 @@ class CoflowControl(object):
         return ret_val, ret_type
 
     def get_sheath_valve_position(self):
-        cmd = ('get_position', ('sheath_valve',), {})
+        get_sheath_valve_position_cmd = ('get_position',
+            (self.sheath_valve_name,), {})
 
-        position = self._send_valvecmd(cmd, True)
-
-        if position[0] == 'position' and position[1] == 'sheath_valve':
-            position = position[2]
+        position = self._send_valvecmd(get_sheath_valve_position_cmd, True)
 
         return position
 
     def set_sheath_valve_position(self, position):
-        cmd = ('set_position', ('sheath_valve', position), {})
+        set_sheath_valve_position_cmd = ('set_position',
+            (self.sheath_valve_name, position), {})
 
-        ret = self._send_valvecmd(cmd, True)
+        ret = self._send_valvecmd(set_sheath_valve_position_cmd, True)
 
-        if ret is not None and ret[0] == 'set_position':
-            if ret[2]:
+        if ret is not None:
+            if ret:
                 logger.info('Set {} position to {}'.format('sheath_valve', position))
                 success = True
             else:
@@ -524,28 +528,17 @@ class CoflowControl(object):
 
         ret_val = utils.send_cmd(cmd, self.coflow_fm_cmd_q,
             self.coflow_fm_return_q, self.timeout_event,
-            self.coflow_return_lock, not self.local_devices, 'fm', response)
+            self.coflow_fm_return_lock, not self.local_devices, 'fm', response)
 
         return ret_val
 
 
     def _send_valvecmd(self, cmd, response=False):
-        ret_val = None
+        self.valve_status_q.clear() #For now, do nothing with the status
 
-        if not self.timeout_event.is_set():
-            if not self.local_devices:
-                full_cmd = {'device': 'valve', 'command': cmd, 'response': response}
-            else:
-                full_cmd = cmd
-
-            self.valve_cmd_q.append(full_cmd)
-
-            if response:
-                while len(self.valve_return_q) == 0 and not self.timeout_event.is_set():
-                    time.sleep(0.01)
-
-                if not self.timeout_event.is_set():
-                    ret_val = self.valve_return_q.popleft()
+        ret_val = utils.send_cmd(cmd, self.valve_cmd_q,
+            self.valve_return_q, self.timeout_event,
+            self.valve_return_lock, not self.local_devices, 'valve', response)
 
         return ret_val
 
@@ -553,13 +546,9 @@ class CoflowControl(object):
         sheath_pump = ('disconnect', ('sheath_pump', ), {})
         outlet_pump = ('disconnect', ('outlet_pump', ), {})
 
-        sheath_valve = ('disconnect', ('sheath_valve', ), {})
-
         if not self.timeout_event.is_set():
             self._send_pumpcmd(sheath_pump, response=True)
             self._send_pumpcmd(outlet_pump, response=True)
-
-            self._send_valvecmd(sheath_valve, response=True)
 
         self.coflow_pump_con.stop()
         self.coflow_fm_con.stop()
@@ -634,6 +623,8 @@ class CoflowPanel(wx.Panel):
         self.settings = settings
 
         self._create_layout()
+
+        self.current_sheath_valve_position = None
 
         connect = True
 
@@ -909,7 +900,7 @@ class CoflowPanel(wx.Panel):
         valve_box_sizer = wx.StaticBoxSizer(valve_box, wx.HORIZONTAL)
 
         self.sheath_valve_pos = utils.IntSpinCtrl(valve_box, min=1,
-            max=self.settings['sheath_valve'][3]['positions'])
+            max=self.settings['sheath_valve']['kwargs']['positions'])
         self.sheath_valve_pos.Bind(utils.EVT_MY_SPIN, self._on_sheath_valve_position_change)
 
         valve_sizer = wx.FlexGridSizer(cols=2, hgap=self._FromDIP(5),
@@ -1061,6 +1052,10 @@ class CoflowPanel(wx.Panel):
         self.Layout()
         self.Refresh()
         self.SendSizeEvent()
+
+        self.GetParent().Layout()
+        self.GetParent().Refresh()
+        self.GetParent().SendSizeEvent()
 
         try:
             wx.FindWindowByName('biocon').Layout()
@@ -1478,7 +1473,9 @@ class CoflowPanel(wx.Panel):
 
     def _on_sheath_valve_position_change(self, evt):
         pos = self.sheath_valve_pos.GetValue()
-        self.set_sheath_valve_position(pos)
+
+        if int(pos) != self.current_sheath_valve_position:
+            self.set_sheath_valve_position(pos)
 
     def get_sheath_valve_position(self):
         return self.coflow_control.get_sheath_valve_position()
@@ -1507,13 +1504,15 @@ class CoflowPanel(wx.Panel):
                 change_pos = False
 
         if change_pos:
+            self.current_sheath_valve_position = int(position)
             self.coflow_control.set_sheath_valve_position(position)
 
     def check_sheath_valve_pos(self):
         pos = self.get_sheath_valve_position()
 
-        if self.sheath_valve_pos.GetValue() != int(pos):
+        if self.current_sheath_valve_position != int(pos):
             wx.CallAfter(self.sheath_valve_pos.SetValue, int(pos))
+            self.current_sheath_valve_position = int(pos)
 
     def _get_flow_rates(self):
         logger.info('Starting continuous logging of flow rates')
@@ -2211,14 +2210,22 @@ if __name__ == '__main__':
         'flow_units'                : 'mL/min',
         # 'sheath_pump'               : ('VICI_M50', 'COM3', [627.72, 9.814], {}),
         # 'outlet_pump'               : ('VICI_M50', 'COM4', [628.68, 9.926], {}),
-        # 'sheath_fm'                 : {'name': 'sheath', 'args': ['BFS', 'COM5'], 'kwargs':{}},
-        # 'outlet_fm'                 : {'name': 'outlet', 'args': ['BFS', 'COM6'], 'kwargs':{}},
-        # 'sheath_valve'              : ('Cheminert', 'COM7', [], {'positions' : 10}),
+        # 'sheath_fm'                 : {'name': 'sheath', 'args': ['BFS', 'COM5'],
+        #                                 'kwargs':{}},
+        # 'outlet_fm'                 : {'name': 'outlet', 'args': ['BFS', 'COM6'],
+        #                                 'kwargs':{}},
+        # 'sheath_valve'              : {'name': 'Coflow Sheath',
+        #                                 'args':['Cheminert', 'COM7'],
+        #                                 'kwargs': {'positions' : 10}},
         'sheath_pump'               : ('Soft', '', [], {}),
         'outlet_pump'               : ('Soft', '', [], {}),
-        'sheath_fm'                 : {'name': 'sheath', 'args': ['Soft', None], 'kwargs':{}},
-        'outlet_fm'                 : {'name': 'outlet', 'args': ['Soft', None], 'kwargs':{}},
-        'sheath_valve'              : ('Soft', '', [], {'positions' : 10}),
+        'sheath_fm'                 : {'name': 'sheath', 'args': ['Soft', None],
+                                        'kwargs':{}},
+        'outlet_fm'                 : {'name': 'outlet', 'args': ['Soft', None],
+                                        'kwargs':{}},
+        'sheath_valve'              : {'name': 'Coflow Sheath',
+                                        'args': ['Soft', None],
+                                        'kwargs': {'positions' : 10}},
         'sheath_ratio'              : 0.3,
         'sheath_excess'             : 1.5,
         'warning_threshold_low'     : 0.8,

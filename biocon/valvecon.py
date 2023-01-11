@@ -183,11 +183,19 @@ class Valve(object):
 
         self._position = None
 
+        self.connected = False
+
+        self.connect()
+
     def __repr__(self):
         return '{}({}, {})'.format(self.__class__.__name__, self.name, self.device)
 
     def __str__(self):
         return '{} {}, connected to {}'.format(self.__class__.__name__, self.name, self.device)
+
+    def connect(self):
+       if not self.connected:
+            self.connected = True
 
     def get_status(self):
         pass
@@ -236,11 +244,6 @@ class RheodyneValve(Valve):
             self.device))
         logger.info(logstr)
 
-        with self.comm_lock:
-            self.valve_comm = SerialComm(device, 19200)
-
-        self.send_command('M', False) #Homes valve
-
         self.err_msgs = {
             '99'   : 'Valve failure (valve cannot be homed)',
             '88'    : 'Non-volatile memory error',
@@ -253,6 +256,15 @@ class RheodyneValve(Valve):
         self._positions = int(positions)
 
         # logger.exception('Initialization error: {}'.format(error))
+
+    def connect(self):
+        if not self.connected:
+            with self.comm_lock:
+                self.valve_comm = SerialComm(device, 19200)
+
+            self.send_command('M', False) #Homes valve
+
+            self.connected = True
 
     def get_status(self):
         status, success = self.send_command('S')
@@ -287,6 +299,8 @@ class RheodyneValve(Valve):
                 position = None
         else:
             position = None
+
+        self._position = position
 
         return position
 
@@ -346,10 +360,6 @@ class CheminertValve(Valve):
             self.device))
         logger.info(logstr)
 
-        self.comm_lock.acquire()
-        self.valve_comm = SerialComm(device, 9600)
-        self.comm_lock.release()
-
         # self.send_command('IFM1', False) #Sets the response mode to basic
         # self.send_command('SMA', False) #Sets the rotation mode to auto (shortest)
         # self.send_command('AM3', False) #Sets mode to multiposition valve
@@ -357,6 +367,12 @@ class CheminertValve(Valve):
 
         self._positions = int(positions)
 
+    def connect(self):
+        if not self.connected:
+            with self.comm_lock:
+                self.valve_comm = SerialComm(device, 9600)
+
+            self.connected = True
 
     def get_position(self):
         position = self.send_command('CP')[0]
@@ -373,6 +389,8 @@ class CheminertValve(Valve):
         else:
             logger.error('Valve %s could not get position', self.name)
             position = None
+
+        self._position = position
 
         return position
 
@@ -396,9 +414,9 @@ class CheminertValve(Valve):
         return success
 
     def send_command(self, cmd, get_response=True):
-        self.comm_lock.acquire()
-        ret = self.valve_comm.write(cmd, get_response, send_term_char = '\r', term_char='\r')
-        self.comm_lock.release()
+        with self.comm_lock:
+            ret = self.valve_comm.write(cmd, get_response, send_term_char = '\r',
+                term_char='\r')
 
         if '' != ret:
             success = True
@@ -454,7 +472,7 @@ class SoftValve(Valve):
 
         return success
 
-class ValveCommThread(threading.Thread):
+class ValveCommThread(utils.CommManager):
     """
     This class creates a control thread for flow meters attached to the system.
     This thread is designed for using a GUI application. For command line
@@ -484,7 +502,7 @@ class ValveCommThread(threading.Thread):
         my_valvecon.stop()
     """
 
-    def __init__(self, command_queue, return_queue, abort_event, name=None):
+    def __init__(self, name):
         """
         Initializes the custom thread. Important parameters here are the
         list of known commands ``_commands`` and known pumps ``known_fms``.
@@ -498,267 +516,149 @@ class ValveCommThread(threading.Thread):
         :param threading.Event abort_event: An event that is set when the thread
             needs to abort, and otherwise is not set.
         """
-        threading.Thread.__init__(self, name=name)
-        self.daemon = True
+        utils.CommManager.__init__(self, name)
 
         logger.info("Starting valve control thread: %s", self.name)
 
-        self.command_queue = command_queue
-        self.return_queue = return_queue
-        self._abort_event = abort_event
-        self._stop_event = threading.Event()
-
-        self._commands = {'connect'         : self._connect_valve,
+        self._commands = {
+                        'connect'           : self._connect_device,
                         'get_position'      : self._get_position,
                         'set_position'      : self._set_position,
                         'get_status'        : self._get_status,
-                        'add_valve'         : self._add_valve,
                         'disconnect'        : self._disconnect,
-                        'add_comlocks'      : self._add_comlocks,
-                        'connect_remote'    : self._connect_valve_remote,
                         'get_position_multi': self._get_position_multiple,
                         'set_position_multi': self._set_position_multiple,
                         }
 
-        self._connected_valves = OrderedDict()
+        self._connected_devices = OrderedDict()
+        self._connected_coms = OrderedDict()
 
-        self.comm_locks = {}
-
-        self.known_valves = {'Rheodyne' : RheodyneValve,
-            'Soft'  : SoftValve,
+        self.known_devices = {
+            'Rheodyne'  : RheodyneValve,
+            'Soft'      : SoftValve,
             'Cheminert' : CheminertValve,
             }
 
-    def run(self):
-        """
-        Custom run method for the thread.
-        """
-        while True:
-            if len(self.command_queue) > 0:
-                logger.debug("Getting new command")
-                command, args, kwargs = self.command_queue.popleft()
+    def _cleanup_devices(self):
+        for device in self._connected_devices.values():
+            device.stop()
+
+    def _additional_new_comm(self, name):
+        pass
+
+    def _connect_device(self, name, device_type, device, **kwargs):
+
+        logger.info("Connecting device %s", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+
+        if name not in self._connected_devices:
+            if device is None or device not in self._connected_coms:
+                new_device = self.known_devices[device_type](name, device,
+                    **kwargs)
+                new_device.connect()
+                self._connected_devices[name] = new_device
+                self._connected_coms[device] = new_device
+                logger.debug("Device %s connected", name)
             else:
-                command = None
+                self._connected_devices[name] = self._connected_coms[device]
+                logger.debug("Device already connected on %s", device)
 
-            if self._abort_event.is_set():
-                logger.debug("Abort event detected")
-                self._abort()
-                command = None
+        self._return_value((name, 'connect', True), comm_name)
 
-            if self._stop_event.is_set():
-                logger.debug("Stop event detected")
-                self._abort()
-                break
+    def _disconnect(self, name, **kwargs):
+        logger.info("Disconnecting device %s", name)
 
-            if command is not None:
-                logger.debug("Processing cmd '%s' with args: %s and kwargs: %s ", command, ', '.join(['{}'.format(a) for a in args]), ', '.join(['{}:{}'.format(kw, item) for kw, item in kwargs.items()]))
-                try:
-                    self._commands[command](*args, **kwargs)
-                except Exception:
-                    msg = ("Valve control thread failed to run command '%s' "
-                        "with args: %s and kwargs: %s " %(command,
-                        ', '.join(['{}'.format(a) for a in args]),
-                        ', '.join(['{}:{}'.format(kw, item) for kw, item in kwargs.items()])))
-                    logger.exception(msg)
+        comm_name = kwargs.pop('comm_name', None)
 
-                    if command == 'connect' or command == 'disconnect':
-                        self.return_queue.append((command, False))
+        device = self._connected_devices.pop(name, None)
+        if device is not None:
+            device.stop(**kwargs)
 
-            else:
-                time.sleep(0.01)
+        self._return_value((name, 'disconnect', True), comm_name)
 
-        if self._stop_event.is_set():
-            self._stop_event.clear()
-        else:
-            self._abort()
+        logger.debug("Device %s disconnected", name)
 
-        for valve in self._connected_valves.values():
-            valve.stop()
-
-        logger.info("Quitting valve control thread: %s", self.name)
-
-    def _connect_valve(self, device, name, valve_type, **kwargs):
-        """
-        This method connects to a flow meter by creating a new :py:class:`FlowMeter`
-        subclass object (e.g. a new :py:class:`BFS` object). This pump is saved
-        in the thread and can be called later to do stuff. All pumps must be
-        connected before they can be used.
-
-        :param str device: The device comport
-
-        :param str name: A unique identifier for the pump
-
-        :param str pump_type: A pump type in the ``known_fms`` dictionary.
-
-        :param kwargs: This function accepts arbitrary keyword args that
-            are passed directly to the :py:class:`FlowMeter` subclass that is
-            called. For example, for a :py:class:`BFS` you could pass ``bfs_filter``.
-        """
-        logger.info("Connecting valve %s", name)
-        new_valve = self.known_valves[valve_type](device, name, **kwargs)
-        self._connected_valves[name] = new_valve
-        logger.debug("Valve %s connected", name)
-
-        self.return_queue.append(('connected', name, True))
-
-    def _connect_valve_remote(self, device, name, valve_type, **kwargs):
-        """
-        This method connects to a flow meter by creating a new :py:class:`FlowMeter`
-        subclass object (e.g. a new :py:class:`BFS` object). This pump is saved
-        in the thread and can be called later to do stuff. All pumps must be
-        connected before they can be used.
-
-        :param str device: The device comport
-
-        :param str name: A unique identifier for the pump
-
-        :param str pump_type: A pump type in the ``known_fms`` dictionary.
-
-        :param kwargs: This function accepts arbitrary keyword args that
-            are passed directly to the :py:class:`FlowMeter` subclass that is
-            called. For example, for a :py:class:`BFS` you could pass ``bfs_filter``.
-        """
-        logger.info("Connecting valve %s", name)
-        if device in self.comm_locks:
-            kwargs['comm_lock'] = self.comm_locks[device]
-        else:
-            logger.info('creating new comlock!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
-
-        new_valve = self.known_valves[valve_type](device, name, **kwargs)
-        self._connected_valves[name] = new_valve
-        self.return_queue.append(('connected', name, True))
-
-        logger.debug("Valve %s connected", name)
-
-    def _add_valve(self, valve, name, **kwargs):
-        logger.info('Adding valve %s', name)
-        self._connected_valves[name] = valve
-        self.return_queue.append((name, 'add', True))
-        logger.debug('Valve %s added', name)
-
-    def _disconnect(self, name):
-        logger.info("Disconnecting valve %s", name)
-        valve = self._connected_valves[name]
-        valve.stop()
-        del self._connected_valves[name]
-        logger.debug("Valve %s disconnected", name)
-
-        self.return_queue.append(('disconnected', name, True))
-
-    def _get_position(self, name):
-        """
-        This method gets the flow rate measured by a flow meter.
-
-        :param str name: The unique identifier for a flow meter that was used
-            in the :py:func:`_connect_fm` method.
-        """
+    def _get_position(self, name, **kwargs):
         logger.debug("Getting valve %s position", name)
-        valve = self._connected_valves[name]
-        position = valve.get_position()
-        logger.debug("Valve %s position: %s", name, position)
 
-        self.return_queue.append(('position', name, position))
+        comm_name = kwargs.pop('comm_name', None)
 
-    def _get_position_multiple(self, names):
+        device = self._connected_devices[name]
+        val = device.get_position(**kwargs)
+
+        self._return_value((name, 'get_position', val), comm_name)
+
+        logger.debug("Valve %s position: %s", name, val)
+
+    def _get_position_multiple(self, names, **kwargs):
         logger.debug("Getting multiple valve positions")
+
+        comm_name = kwargs.pop('comm_name', None)
+
         positions = []
         for name in names:
-            valve = self._connected_valves[name]
-            position = valve.get_position()
+            device = self._connected_devices[name]
+            position = device.get_position(**kwargs)
 
             positions.append(position)
 
-        self.return_queue.append(('multi_positions', names, positions))
+        self._return_value((names, 'get_position_multi', [names, positions]),
+            comm_name)
 
-    def _get_status(self, name):
-        """
-        This method gets the flow rate measured by a flow meter.
-
-        :param str name: The unique identifier for a flow meter that was used
-            in the :py:func:`_connect_fm` method.
-
-        .. note:: Only the BFS flow meters can read density as well as flow rate.
-        """
+    def _get_status(self, name, **kwargs):
         logger.debug("Getting valve %s status", name)
-        valve = self._connected_valves[name]
-        status = valve.get_status()
+
+        comm_name = kwargs.pop('comm_name', None)
+
+        device = self._connected_devices[name]
+        status = device.get_status(**kwargs)
         logger.debug("Valve %s status: %f", name, status)
 
-        self.return_queue.append(('status', name, status))
+        self._return_value((name, 'get_status', status), comm_name)
 
-    def _set_position(self, name, position):
-        """
-        This method sets the units for the flow rate for a flow meter. This
-        can be set to: nL/s, nL/min, uL/s, uL/min, mL/s, mL/min.
-
-        :param str name: The unique identifier for a flow meter that was used
-            in the :py:func:`_connect_fm` method.
-
-        :param str units: The units for the fm.
-        """
+    def _set_position(self, name, val, **kwargs):
         logger.debug("Setting valve %s position", name)
-        valve = self._connected_valves[name]
-        success = valve.set_position(position)
+
+        comm_name = kwargs.pop('comm_name', None)
+
+        device = self._connected_devices[name]
+        success = device.set_position(val)
         if success:
-            logger.info("Valve %s position set to %i", name, position)
+            logger.info("Valve %s position set to %i", name, val)
         else:
-            logger.info("Failed setting valve %s position to %i", name, position)
+            logger.info("Failed setting valve %s position to %i", name, val)
 
-        self.return_queue.append(('set_position', name, success))
+        self._return_value((name, 'set_position', success), comm_name)
 
-    def _set_position_multiple(self, names, positions):
+    def _set_position_multiple(self, names, positions, **kwargs):
         logger.debug('Setting multiple valve positions')
+
+        comm_name = kwargs.pop('comm_name', None)
+
         success = []
         for i, name in enumerate(names):
             logger.debug("Setting valve %s position", name)
             valve = self._connected_valves[name]
-            t_success = valve.set_position(positions[i])
+            t_success = valve.set_position(positions[i], **kwargs)
             if t_success:
                 logger.info("Valve %s position set to %i", name, positions[i])
             else:
-                logger.info("Failed setting valve %s position to %i", name, positions[i])
+                logger.info("Failed setting valve %s position to %i", name,
+                    positions[i])
             success.append(t_success)
 
         if all(success):
             logger.info('Set all valve positions successfully')
 
-        self.return_queue.append(('set_position_multi', names, success))
+        self._return_value((names, 'set_position_multi', [names, success]),
+            comm_name)
 
 
-    def _add_comlocks(self, comm_locks):
-        self.comm_locks.update(comm_locks)
-
-    def _abort(self):
-        """
-        Clears the ``command_queue`` and the ``return_queue``.
-        """
-        logger.info("Aborting valve control thread %s current and future commands", self.name)
-        self.command_queue.clear()
-        self.return_queue.clear()
-
-        self._abort_event.clear()
-        logger.debug("Valve control thread %s aborted", self.name)
-
-    def stop(self):
-        """Stops the thread cleanly."""
-        logger.info("Starting to clean up and shut down valve control thread: %s", self.name)
-        self._stop_event.set()
-
-class ValvePanel(wx.Panel):
+class ValvePanel(utils.DevicePanel):
     """
-    This flow meter panel supports standard settings, including connection settings,
-    for a flow meter. It is meant to be embedded in a larger application and can
-    be instanced several times, once for each flow meter. It communciates
-    with the flow meters using the :py:class:`FlowMeterCommThread`. Currently
-    it only supports the :py:class:`BFS`, but it should be easy to extend for
-    other flow meters. The only things that should have to be changed are
-    are adding in flow meter-specific readouts, modeled after how the
-    ``bfs_pump_sizer`` is constructed in the :py:func:`_create_layout` function,
-    and then add in type switching in the :py:func:`_on_type` function.
     """
-    def __init__(self, parent, panel_id, panel_name, all_comports, valve_cmd_q,
-        valve_return_q, known_valves, valve_name, valve_type=None, comport=None, valve_args=[],
-        valve_kwargs={}, comm_lock=None):
+    def __init__(self, parent, panel_id, settings, *args, **kwargs):
         """
         Initializes the custom thread. Important parameters here are the
         list of known commands ``_commands`` and known pumps ``known_valves``.
@@ -767,208 +667,89 @@ class ValvePanel(wx.Panel):
 
         :param int panel_id: wx ID for the panel.
 
-        :param str panel_name: Name for the panel
-
-        :param list all_comports: A list containing all comports that the flow meter
-            could be connected to.
-
-        :param collections.deque valve_cmd_q: The ``valve_cmd_q`` that was passed to
-            the :py:class:`FlowMeterCommThread`.
-
-        :param collections.deque valve_return_q: The ``valve_return_q`` that was passed to
-            the :py:class:`FlowMeterCommThread`.
-
-        :param list known_valves: The list of known flow meter types, obtained from
-            the :py:class:`FlowMeterCommThread`.
-
-        :param str valve_name: An identifier for the flow meter, displayed in the
-            flow meter panel.
-
-        :param str valve_type: One of the ``known_valves``, corresponding to the flow
-            meter connected to this panel. Only required if you are connecting
-            the flow meter when the panel is first set up (rather than manually
-            later).
-
-        :param str comport: The comport the flow meter is connected to. Only required
-            if you are connecting the flow meter when the panel is first set up (rather
-            than manually later).
-
-        :param list valve_args: Flow meter specific arguments for initialization.
-            Only required if you are connecting the flow meter when the panel is first
-            set up (rather than manually later).
-
-        :param dict valve_kwargs: Flow meter specific keyword arguments for initialization.
-            Only required if you are connecting the flow meter when the panel is first
-            set up (rather than manually later).
-
         """
 
-        wx.Panel.__init__(self, parent, panel_id, name=panel_name)
-        logger.debug('Initializing ValvePanel for flow meter %s', valve_name)
+        super(ValvePanel, self).__init__(parent, panel_id, settings,
+            *args, **kwargs)
 
-        self.name = valve_name
-        self.valve_cmd_q = valve_cmd_q
-        self.all_comports = all_comports
-        self.known_valves = known_valves
-        self.answer_q = valve_return_q
-        self.connected = False
-        self.position = None
-
-        self.comm_lock = comm_lock
-
-        self.top_sizer = self._create_layout()
-
-        self._position_timer = wx.Timer(self)
-        self.Bind(wx.EVT_TIMER, self._on_position_timer, self._position_timer)
-
-        self.SetSizer(self.top_sizer)
-
-        self._initvalve(valve_type, comport, valve_args, valve_kwargs)
+        self.current_position = None
 
 
     def _create_layout(self):
         """Creates the layout for the panel."""
         self.status = wx.StaticText(self, label='Not connected')
 
-        status_grid = wx.FlexGridSizer(rows=2, cols=2, vgap=2, hgap=2)
+        status_grid = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(2),
+            hgap=self._FromDIP(2))
         status_grid.AddGrowableCol(1)
-        status_grid.Add(wx.StaticText(self, label='Valve name:'))
-        status_grid.Add(wx.StaticText(self, label=self.name), 1, wx.EXPAND)
+        status_grid.Add(wx.StaticText(self, label='Valve name:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        status_grid.Add(wx.StaticText(self, label=self.name), 1,
+            flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
         status_grid.Add(wx.StaticText(self, label='Status: '))
-        status_grid.Add(self.status, 1, wx.EXPAND)
+        status_grid.Add(self.status, 1,
+            flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
 
         status_sizer = wx.StaticBoxSizer(wx.StaticBox(self, label='Info'),
             wx.VERTICAL)
         status_sizer.Add(status_grid, 1, wx.EXPAND)
 
-        self.type_ctrl = wx.Choice(self,
-            choices=[item.replace('_', ' ') for item in self.known_valves.keys()],
-            style=wx.CB_SORT)
-        self.type_ctrl.SetSelection(0)
-        self.com_ctrl = wx.Choice(self, choices=self.all_comports, style=wx.CB_SORT)
-        self.positions_ctrl = wx.TextCtrl(self, size=(60, -1))
-
-        self.type_ctrl.Bind(wx.EVT_CHOICE, self._on_type)
-
-        gen_settings_sizer = wx.FlexGridSizer(rows=4, cols=2, vgap=2, hgap=2)
-        gen_settings_sizer.AddGrowableCol(1)
-        gen_settings_sizer.Add(wx.StaticText(self, label='Valve type:'))
-        gen_settings_sizer.Add(self.type_ctrl, 1, wx.EXPAND)
-        gen_settings_sizer.Add(wx.StaticText(self, label='COM port:'))
-        gen_settings_sizer.Add(self.com_ctrl, 1, wx.EXPAND)
-        gen_settings_sizer.Add(wx.StaticText(self, label='Number of positions:'))
-        gen_settings_sizer.Add(self.positions_ctrl)
-
-
         self.valve_position = utils.IntSpinCtrl(self)
         self.valve_position.Bind(utils.EVT_MY_SPIN, self._on_position_change)
 
-        gen_results_sizer = wx.FlexGridSizer(rows=1, cols=2, vgap=2, hgap=2)
+        gen_results_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(2),
+            hgap=self._FromDIP(2))
         gen_results_sizer.AddGrowableCol(1)
-        gen_results_sizer.Add(wx.StaticText(self, label='Valve position:'))
-        gen_results_sizer.Add(self.valve_position)
+        gen_results_sizer.Add(wx.StaticText(self, label='Valve position:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        gen_results_sizer.Add(self.valve_position, flag=wx.ALIGN_CENTER_VERTICAL)
 
-        self.connect_button = wx.Button(self, label='Connect')
-        self.connect_button.Bind(wx.EVT_BUTTON, self._on_connect)
-
-        self.settings_box_sizer = wx.StaticBoxSizer(wx.StaticBox(self, label='Settings'),
-            wx.VERTICAL)
-        self.settings_box_sizer.Add(gen_settings_sizer, flag=wx.EXPAND)
-        self.settings_box_sizer.Add(self.connect_button, flag=wx.ALIGN_CENTER_HORIZONTAL|wx.TOP, border=2)
-
-        self.results_box_sizer = wx.StaticBoxSizer(wx.StaticBox(self, label='Controls'),
-            wx.VERTICAL)
+        self.results_box_sizer = wx.StaticBoxSizer(wx.StaticBox(self,
+            label='Controls'), wx.VERTICAL)
         self.results_box_sizer.Add(gen_results_sizer, flag=wx.EXPAND)
 
         top_sizer = wx.BoxSizer(wx.VERTICAL)
-        top_sizer.Add(status_sizer, flag=wx.EXPAND)
-        top_sizer.Add(self.results_box_sizer, flag=wx.EXPAND)
-        top_sizer.Add(self.settings_box_sizer, flag=wx.EXPAND)
+        top_sizer.Add(status_sizer, border=self._FromDIP(2),
+            flag=wx.EXPAND|wx.ALL)
+        top_sizer.Add(self.results_box_sizer, border=self._FromDIP(2),
+            flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM)
 
         self.Refresh()
 
-        return top_sizer
+        self.SetSizer(top_sizer)
 
-    def _initvalve(self, valve_type, comport, valve_args, valve_kwargs):
+    def _init_device(self, settings):
         """
-        Initializes the flow meter parameters if any were provided. If enough are
-        provided the flow meter is automatically connected.
-
-        :param str valve_type: The flow meter type, corresponding to a ``known_valve``.
-
-        :param str comport: The comport the flow meter is attached to.
-
-        :param list valve_args: The flow meter positional initialization values.
-            Appropriate values depend on the flow meter.
-
-        :param dict valve_kwargs: The flow meter key word arguments. Appropriate
-            values depend on the flow meter.
+        Initializes the valve.
         """
-        my_valves = [item.replace('_', ' ') for item in self.known_valves.keys()]
-        if valve_type in my_valves:
-            self.type_ctrl.SetStringSelection(valve_type)
+        device_data = settings['device_data']
+        args = device_data['args']
+        kwargs = device_data['kwargs']
 
-        if comport in self.all_comports:
-            self.com_ctrl.SetStringSelection(comport)
+        args.insert(0, self.name)
 
-        if valve_type == 'Rheodyne' or valve_type == 'Soft' or valve_type == 'Cheminert':
-            self.valve_position.SetMin(1)
+        self.valve_type = args[1]
 
-            if 'positions' in valve_kwargs.keys():
-                self.positions_ctrl.SetValue(str(valve_kwargs['positions']))
+        self.valve_position.SetMin(1)
+        self.valve_position.SetMax(kwargs['positions'])
 
-        if valve_type in my_valves and comport in self.all_comports:
-            logger.info('Initialized valve %s on startup', self.name)
-            self._connect()
+        connect_cmd = ['connect', args, kwargs]
 
-        elif valve_type == 'Soft':
-            logger.info('Initialized valve %s on startup', self.name)
-            self._connect()
+        self._send_cmd(connect_cmd, True)
 
-    def _on_type(self, evt):
-        """Called when the valve type is changed in the GUI."""
-        valve = self.type_ctrl.GetStringSelection()
-        logger.info('Changed the valve type to %s for valve %s', valve, self.name)
+        position_cmd = ['get_position', [self.name,], {}]
+        ret = self._send_cmd(position_cmd, True)
 
-    def _on_connect(self, evt):
-        """Called when a valve is connected in the GUI."""
-        self._connect()
+        if ret is not None:
+            self._set_gui_position(ret)
 
-    def _connect(self):
-        """Initializes the valve in the FlowMeterCommThread"""
-        com = self.com_ctrl.GetStringSelection()
-        valve = self.type_ctrl.GetStringSelection().replace(' ', '_')
+        self._update_status_cmd(position_cmd, 1)
 
-        args = (com, self.name)
-        kwargs = {'positions': int(self.positions_ctrl.GetValue()),
-            'comm_lock' : self.comm_lock}
+        self._set_status_label('Connected')
 
-        logger.info('Connected to valve %s', self.name)
-        self.connected = True
-        self.connect_button.SetLabel('Reconnect')
-        # self._send_cmd('connect')
-        # self._set_status('Connected')
+        logger.info('Initialized valve %s on startup', self.name)
 
-        if valve == 'Rheodyne' or valve == 'Soft':
-            self.valve_position.SetMin(1)
-            self.valve_position.SetMax(int(self.positions_ctrl.GetValue()))
-
-        try:
-            self.valve = self.known_valves[valve](*args, **kwargs)
-            self._set_status('Connected')
-            self._send_cmd('add_valve')
-        except Exception as e:
-            logger.error(e)
-            self._set_status('Connection Failed')
-
-        self._position_timer.Start(1000)
-        answer_thread = threading.Thread(target=self._wait_for_answer)
-        answer_thread.daemon = True
-        answer_thread.start()
-
-        return
-
-    def _set_status(self, status):
+    def _set_status_label(self, status):
         """
         Changes the status in the GUI.
 
@@ -977,273 +758,55 @@ class ValvePanel(wx.Panel):
         logger.debug('Setting valve %s status to %s', self.name, status)
         self.status.SetLabel(status)
 
-    def _on_position_timer(self, evt):
-        """
-        Called every 1000 ms when the valve is connected. It gets the
-        position, in case it's been changed locally on the valve.
-        """
-        # self._send_cmd('get_position')
-        pos = self.valve.get_position()
-
+    def _set_gui_position(self, position):
         try:
-            pos = int(pos)
-            if pos != self.position:
-                wx.CallAfter(self.valve_position.SetValue, pos)
-                self.position = pos
+            position = int(position)
+            self.valve_position.SetValue(position)
         except Exception:
             pass
 
     def _on_position_change(self, evt):
-        self._position_timer.Stop()
-        self._send_cmd('set_position')
-        self.position = int(self.valve_position.GetValue())
+        try:
+            pos = int(self.valve_position.GetValue())
+            if pos != self.current_position:
+                pos_cmd = ['set_position', [self.name, pos], {}]
+                self._send_cmd(pos_cmd, False)
+                self.current_position = pos
+        except Exception:
+            pass
 
-        wx.CallLater(2000, self._position_timer.Start, 1000)
-
-    def _send_cmd(self, cmd):
-        """
-        Sends commands to the pump using the ``valve_cmd_q`` that was given
-        to :py:class:`FlowMeterCommThread`.
-
-        :param str cmd: The command to send, matching the command in the
-            :py:class:`FlowMeterCommThread` ``_commands`` dictionary.
-        """
-        logger.debug('Sending valve %s command %s', self.name, cmd)
+    def _set_status(self, cmd, val):
         if cmd == 'get_position':
-            self.valve_cmd_q.append(('get_position', (self.name,), {}))
-        elif cmd == 'set_position':
-            self.valve_cmd_q.append(('set_position', (self.name, int(self.valve_position.GetValue())), {}))
-        elif cmd == 'connect':
-            com = self.com_ctrl.GetStringSelection()
-            valve = self.type_ctrl.GetStringSelection().replace(' ', '_')
+            if val is not None and int(val) != self.current_position:
+                self._set_gui_position(val)
+                self.current_position = val
 
-            args = (com, self.name, valve)
-            kwargs = {'positions': int(self.positions_ctrl.GetValue())}
-
-            self.valve_cmd_q.append(('connect', args, kwargs))
-        elif cmd == 'add_valve':
-            args = (self.valve, self.name)
-
-            self.valve_cmd_q.append(('add_valve', args, {}))
-
-
-    def _wait_for_answer(self):
-        while True:
-            if len(self.answer_q) > 0:
-                answer = self.answer_q.popleft()
-                if answer[0] == 'position' and answer[1] == self.name:
-                    try:
-                        pos = int(answer[2])
-                        logger.debug("Got valve %s position %i", self.name, pos)
-                        wx.CallAfter(self.valve_position.SetValue, pos)
-                    except Exception:
-                        pass
-                elif answer[0] == 'position' and answer[1] != self.name:
-                    try:
-                        pos = int(answer[2])
-                        logger.debug("Got wrong valve position, valve %s position %i", self.name, pos)
-                    except Exception:
-                        pass
-            else:
-                time.sleep(0.05)
-
-    def stop(self):
-        self._position_timer.Stop()
-
-
-class ValveFrame(wx.Frame):
+class ValveFrame(utils.DeviceFrame):
     """
     A lightweight frame allowing one to work with arbitrary number of valves.
     Only meant to be used when the fscon module is run directly,
     rather than when it is imported into another program.
     """
-    def __init__(self, comm_locks, setup_valves, *args, **kwargs):
+    def __init__(self, name, settings, *args, **kwargs):
         """
         Initializes the valve frame. Takes args and kwargs for the wx.Frame class.
         """
-        super(ValveFrame, self).__init__(*args, **kwargs)
-        logger.debug('Setting up the ValveFrame')
-        self.valve_cmd_q = deque()
-        self.valve_return_q = deque()
-        self.abort_event = threading.Event()
-        self.valve_con = ValveCommThread(self.valve_cmd_q, self.valve_return_q,
-            self.abort_event, 'ValveCon')
-        self.valve_con.start()
+        super(ValveFrame, self).__init__(name, settings, ValvePanel,
+            *args, **kwargs)
 
-        self.comm_locks = comm_locks
+        # Enable these to init devices on startup
+        self.setup_devices = self.settings.pop('device_init', None)
 
-        self.Bind(wx.EVT_CLOSE, self._on_exit)
-
-        self._get_ports()
-
-        self.valves =[]
-
-        self._create_layout()
-
-        self.Fit()
-        self.Raise()
-
-        self._initvalves(setup_valves)
+        self._init_devices()
 
     def _create_layout(self):
         """Creates the layout"""
-
-        self.top_panel = wx.Panel(self)
-
-        valve_panel = ValvePanel(self.top_panel, wx.ID_ANY, 'stand_in', self.ports,
-            self.valve_cmd_q, self.valve_return_q, self.valve_con.known_valves, 'stand_in')
-
-        self.valve_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        self.valve_sizer.Add(valve_panel, flag=wx.RESERVE_SPACE_EVEN_IF_HIDDEN)
-
-        self.valve_sizer.Hide(valve_panel, recursive=True)
-
-        button_panel = wx.Panel(self.top_panel)
-
-        add_valve = wx.Button(button_panel, label='Add valve')
-        add_valve.Bind(wx.EVT_BUTTON, self._on_addvalve)
-
-        button_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        button_sizer.Add(add_valve)
-
-        button_panel_sizer = wx.BoxSizer(wx.VERTICAL)
-        button_panel_sizer.Add(wx.StaticLine(button_panel), flag=wx.EXPAND|wx.TOP|wx.BOTTOM, border=2)
-        button_panel_sizer.Add(button_sizer, flag=wx.ALIGN_RIGHT|wx.BOTTOM|wx.RIGHT, border=2)
-
-        button_panel.SetSizer(button_panel_sizer)
-
-        top_panel_sizer = wx.BoxSizer(wx.VERTICAL)
-        top_panel_sizer.Add(self.valve_sizer, flag=wx.EXPAND)
-        top_panel_sizer.Add(button_panel, flag=wx.EXPAND)
-
-        self.top_panel.SetSizer(top_panel_sizer)
+        self.sizer = wx.BoxSizer(wx.HORIZONTAL)
 
         top_sizer = wx.BoxSizer(wx.VERTICAL)
-        top_sizer.Add(self.top_panel, flag=wx.EXPAND, proportion=1)
+        top_sizer.Add(self.sizer, 1, flag=wx.EXPAND)
 
-        self.SetSizer(top_sizer)
-
-    def _initvalves(self, setup_valves):
-        """
-        This is a convenience function for initalizing flow meters on startup, if you
-        already know what flow meters you want to add. You can comment it out in
-        the ``__init__`` if you want to not load any flow meters on startup.
-
-        If you want to add flow meters here, add them to the ``setup_valvess`` list.
-        Each entry should be an iterable with the following parameters: name,
-        flow meter type, comport, arg list, and kwarg dict in that order. How the
-        arg list and kwarg dict are handled are defined in the
-        :py:func:`ValvePanel._initfm` function, and depends on the flow meter type.
-        """
-        if not self.valves:
-            self.valve_sizer.Remove(0)
-
-        if setup_valves is None:
-            # setup_valves = [('Injection', 'Rheodyne', 'COM6', [], {'positions' : 2}),
-            #     ('Sample', 'Rheodyne', 'COM7', [], {'positions' : 6}),
-            #     ('Buffer 1', 'Rheodyne', 'COM8', [], {'positions' : 6}),
-            #     ('Buffer 2', 'Rheodyne', 'COM9', [], {'positions' : 6}),
-            #             ]
-
-            # setup_valves = [('Injection', 'Soft', '', [], {'positions' : 2}),
-            #     ('Sample', 'Soft', '', [], {'positions' : 6}),
-            #     ('Buffer 1', 'Soft', '', [], {'positions' : 6}),
-            #     ('Buffer 2', 'Soft', '', [], {'positions' : 6}),
-            #     ]
-
-            setup_valves = [('Buffer', 'Cheminert', 'COM3', [], {'positions': 10})]
-
-            # setup_valves = [
-            #     ('Injection', 'Rheodyne', 'COM6', [], {'positions' : 2}),
-            #     ('Buffer 1', 'Rheodyne', 'COM12', [], {'positions' : 6}),
-            #     ('Buffer 2', 'Rheodyne', 'COM14', [], {'positions' : 6}),
-            #     ('Sheath 1', 'Rheodyne', 'COM9', [], {'positions' : 6}),
-            #     ('Sheath 2', 'Rheodyne', 'COM8', [], {'positions' : 6}),
-            #     ('Sample', 'Rheodyne', 'COM7', [], {'positions' : 6}),
-            #     ]
-
-        logger.info('Initializing %s valves on startup', str(len(setup_valves)))
-
-        for valve in setup_valves:
-            self._add_valve(valve)
-
-            # new_valve = ValvePanel(self, wx.ID_ANY, valve[0], self.ports, self.valve_cmd_q,
-            #     self.valve_return_q, self.valve_con.known_valves, valve[0], valve[1], valve[2], valve[3], valve[4])
-
-            # self.valve_sizer.Add(new_valve)
-            # self.valves.append(new_valve)
-
-        self.Layout()
-        self.Fit()
-
-    def _on_addvalve(self, evt):
-        """
-        Called when the Add Valve button is used. Adds a new fvalve
-        to the control panel.
-
-        .. note:: Valve names must be distinct.
-        """
-        if not self.valves:
-            self.valve_sizer.Remove(0)
-
-        dlg = wx.TextEntryDialog(self, "Enter valve name:", "Create new valve")
-        if dlg.ShowModal() == wx.ID_OK:
-            name = dlg.GetValue()
-            for valve in self.valves:
-                if name == valve.name:
-                    msg = "Valve names must be distinct. Please choose a different name."
-                    wx.MessageBox(msg, "Failed to add valve")
-                    logger.debug('Attempted to add a valve with the same name (%s) as another pump.', name)
-                    return
-
-
-            valve_vals = (name, None, None, [], {})
-            self._add_valve(valve_vals)
-
-            logger.info('Added new valve %s to the flow meter control panel.', name)
-
-            self.Layout()
-            self.Fit()
-
-        return
-
-    def _add_valve(self, valve):
-        if valve[2] in self.comm_locks:
-            comm_lock = self.comm_locks[valve[2]]
-        else:
-            logger.info('creating new comlock!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
-            comm_lock = threading.Lock()
-
-        new_valve = ValvePanel(self.top_panel, wx.ID_ANY, valve[0], self.ports,
-            self.valve_cmd_q, self.valve_return_q, self.valve_con.known_valves,
-            valve[0], valve[1], valve[2], valve[3], valve[4], comm_lock)
-
-        self.valve_sizer.Add(new_valve)
-        self.valves.append(new_valve)
-
-    def _get_ports(self):
-        """
-        Gets a list of active comports.
-
-        .. note:: This doesn't update after the program is opened, so you need
-            to start the program after all pumps are connected to the computer.
-        """
-        port_info = list_ports.comports()
-        self.ports = [port.device for port in port_info]
-
-        logger.debug('Found the following comports for the ValveFrame: %s', ' '.join(self.ports))
-
-    def _on_exit(self, evt):
-        """Stops all current pump motions and then closes the frame."""
-        logger.debug('Closing the ValveFrame')
-
-        for valve in self.valves:
-            valve.stop()
-
-        self.valve_con.stop()
-        while self.valve_con.is_alive():
-            time.sleep(0.001)
-        self.Destroy()
+        return top_sizer
 
 if __name__ == '__main__':
     logger = logging.getLogger()
@@ -1254,6 +817,14 @@ if __name__ == '__main__':
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
     h1.setFormatter(formatter)
     logger.addHandler(h1)
+
+    # Local
+    com_thread = ValveCommThread('FlowComm')
+    com_thread.start()
+
+    # # Remote
+    # com_thread = None
+
 
     # my_rv67 = RheodyneValve('/dev/cu.usbserial-AC01UZ8O', '6p7_1', 6)
     # my_rv67.get_position()
@@ -1281,17 +852,51 @@ if __name__ == '__main__':
 
     # threading.Lock()
 
-    # comm_locks = {'Injection'   : threading.Lock(),
-    #     'Sample'    : threading.Lock(),
-    #     'Buffer 1'  : threading.Lock(),
-    #     'Buffer 2'  : threading.Lock(),
-    #     }
-    comm_locks = {}
+
+    # Device settings
+    # setup_valves = [('Injection', 'Rheodyne', 'COM6', [], {'positions' : 2}),
+    #         #     ('Sample', 'Rheodyne', 'COM7', [], {'positions' : 6}),
+    #         #     ('Buffer 1', 'Rheodyne', 'COM8', [], {'positions' : 6}),
+    #         #     ('Buffer 2', 'Rheodyne', 'COM9', [], {'positions' : 6}),
+    #         #             ]
+
+    #         # setup_valves = [('Injection', 'Soft', '', [], {'positions' : 2}),
+    #         #     ('Sample', 'Soft', '', [], {'positions' : 6}),
+    #         #     ('Buffer 1', 'Soft', '', [], {'positions' : 6}),
+    #         #     ('Buffer 2', 'Soft', '', [], {'positions' : 6}),
+    #         #     ]
+
+    #         setup_valves = [('Buffer', 'Cheminert', 'COM3', [], {'positions': 10})]
+
+    #         # setup_valves = [
+    #         #     ('Injection', 'Rheodyne', 'COM6', [], {'positions' : 2}),
+    #         #     ('Buffer 1', 'Rheodyne', 'COM12', [], {'positions' : 6}),
+    #         #     ('Buffer 2', 'Rheodyne', 'COM14', [], {'positions' : 6}),
+    #         #     ('Sheath 1', 'Rheodyne', 'COM9', [], {'positions' : 6}),
+    #         #     ('Sheath 2', 'Rheodyne', 'COM8', [], {'positions' : 6}),
+    #         #     ('Sample', 'Rheodyne', 'COM7', [], {'positions' : 6}),
+    #         #     ]
+
+
+    setup_devices = [
+        {'name': 'Coflow Sheath', 'args': ['Soft', None], 'kwargs': {'positions': 10}}
+        ]
+
+    settings = {
+        'remote'        : False,
+        'remote_device' : 'valve',
+        'device_init'   : setup_devices,
+        'remote_ip'     : '192.168.1.16',
+        'remote_port'   : '5558',
+        'com_thread'    : com_thread
+        }
 
     app = wx.App()
     logger.debug('Setting up wx app')
-    frame = ValveFrame(comm_locks, None, None, title='Valve Control')
+    frame = ValveFrame('ValveFrame', settings, parent=None, title='Valve Control')
     frame.Show()
     app.MainLoop()
 
-
+    if com_thread is not None:
+        com_thread.stop()
+        com_thread.join()

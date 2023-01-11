@@ -65,7 +65,7 @@ class FlowMeter(object):
     documentation contains an example.
     """
 
-    def __init__(self, device, name, base_units):
+    def __init__(self, device, name, base_units, comm_lock=None):
         """
         :param str device: The device comport
 
@@ -84,12 +84,22 @@ class FlowMeter(object):
 
         self.connected = False
 
+        if comm_lock is None:
+            self.comm_lock = threading.Lock()
+        else:
+            self.comm_lock = comm_lock
+
 
     def __repr__(self):
         return '{}({}, {})'.format(self.__class__.__name__, self.name, self.device)
 
     def __str__(self):
         return '{} {}, connected to {}'.format(self.__class__.__name__, self.name, self.device)
+
+    def connect(self):
+        # Overwrite
+        if not self.connected:
+            self.connected = True
 
     @property
     def flow_rate(self):
@@ -187,8 +197,9 @@ class BFS(FlowMeter):
             device = "ASRL{}::INSTR".format(com).encode('ascii')
 
             self.instr_ID = ctypes.c_int32()
-            error = Elveflow.BFS_Initialization(device,
-                ctypes.byref(self.instr_ID))
+            with self.comm_lock:
+                error = Elveflow.BFS_Initialization(device,
+                    ctypes.byref(self.instr_ID))
             logger.exception('Initialization error: {}'.format(error))
 
             self.connected = True
@@ -198,7 +209,8 @@ class BFS(FlowMeter):
         self.density
 
         flow = ctypes.c_double(-1)
-        error = Elveflow.BFS_Get_Flow(self.instr_ID.value, ctypes.byref(flow))
+        with self.comm_lock:
+            error = Elveflow.BFS_Get_Flow(self.instr_ID.value, ctypes.byref(flow))
         flow = float(flow.value)*self._flow_mult
         logger.debug('Flow rate ({}): {}'.format(self.units, flow))
 
@@ -207,7 +219,9 @@ class BFS(FlowMeter):
     @property
     def density(self):
         density = ctypes.c_double(-1)
-        error = Elveflow.BFS_Get_Density(self.instr_ID.value, ctypes.byref(density))
+        with self.comm_lock:
+            error = Elveflow.BFS_Get_Density(self.instr_ID.value,
+                ctypes.byref(density))
         density = float(density.value)
         logger.debug('Density: {}'.format(density))
 
@@ -216,7 +230,9 @@ class BFS(FlowMeter):
     @property
     def temperature(self):
         temperature = ctypes.c_double(-1)
-        error = Elveflow.BFS_Get_Temperature(self.instr_ID.value, ctypes.byref(temperature))
+        with self.comm_lock:
+            error = Elveflow.BFS_Get_Temperature(self.instr_ID.value,
+                ctypes.byref(temperature))
         temperature = float(temperature.value)
         logger.debug('Temperature: {}'.format(temperature))
 
@@ -231,10 +247,12 @@ class BFS(FlowMeter):
         self._filter = bfs_filter
 
         cfilter = ctypes.c_double(self._filter) #convert to c_double
-        error = Elveflow.BFS_Set_Filter(self.instr_ID.value, cfilter)
+        with self.comm_lock:
+            error = Elveflow.BFS_Set_Filter(self.instr_ID.value, cfilter)
 
     def stop(self):
-        Elveflow.BFS_Destructor(self.instr_ID.value)
+        with self.comm_lock:
+            Elveflow.BFS_Destructor(self.instr_ID.value)
 
 
 class SoftFlowMeter(FlowMeter):
@@ -265,10 +283,6 @@ class SoftFlowMeter(FlowMeter):
 
         self.connect()
 
-    def connect(self):
-        if not self.connected:
-            self.connected = True
-
     @property
     def flow_rate(self):
         """
@@ -282,7 +296,8 @@ class SoftFlowMeter(FlowMeter):
 
     @flow_rate.setter
     def flow_rate(self, rate):
-        self._flow_rate = rate
+        with self.comm_lock:
+            self._flow_rate = rate
 
 class FlowMeterCommThread(utils.CommManager):
     """
@@ -338,14 +353,14 @@ class FlowMeterCommThread(utils.CommManager):
         comm_name = kwargs.pop('comm_name', None)
 
         if name not in self._connected_devices:
-            if device not in self._connected_coms:
+            if device is None or device not in self._connected_coms:
                 new_device = self.known_devices[device_type](name, device, **kwargs)
                 new_device.connect()
                 self._connected_devices[name] = new_device
                 self._connected_coms[device] = new_device
                 logger.debug("Device %s connected", name)
             else:
-                self._connected_devices[name] = self.connected_coms[device]
+                self._connected_devices[name] = self._connected_coms[device]
                 logger.debug("Device already connected on %s", device)
 
         self._return_value((name, 'connect', True), comm_name)
@@ -623,40 +638,6 @@ class FlowMeterPanel(utils.DevicePanel):
 
         :param int panel_id: wx ID for the panel.
 
-        :param str panel_name: Name for the panel
-
-        :param list all_comports: A list containing all comports that the flow meter
-            could be connected to.
-
-        :param collections.deque fm_cmd_q: The ``fm_cmd_q`` that was passed to
-            the :py:class:`FlowMeterCommThread`.
-
-        :param collections.deque fm_return_q: The ``fm_return_q`` that was passed to
-            the :py:class:`FlowMeterCommThread`.
-
-        :param list known_fms: The list of known flow meter types, obtained from
-            the :py:class:`FlowMeterCommThread`.
-
-        :param str fm_name: An identifier for the flow meter, displayed in the
-            flow meter panel.
-
-        :param str fm_type: One of the ``known_fms``, corresponding to the flow
-            meter connected to this panel. Only required if you are connecting
-            the flow meter when the panel is first set up (rather than manually
-            later).
-
-        :param str comport: The comport the flow meter is connected to. Only required
-            if you are connecting the flow meter when the panel is first set up (rather
-            than manually later).
-
-        :param list fm_args: Flow meter specific arguments for initialization.
-            Only required if you are connecting the flow meter when the panel is first
-            set up (rather than manually later).
-
-        :param dict fm_kwargs: Flow meter specific keyword arguments for initialization.
-            Only required if you are connecting the flow meter when the panel is first
-            set up (rather than manually later).
-
         """
 
         super(FlowMeterPanel, self).__init__(parent, panel_id, settings,
@@ -760,18 +741,7 @@ class FlowMeterPanel(utils.DevicePanel):
 
     def _init_device(self, settings):
         """
-        Initializes the flow meter parameters if any were provided. If enough are
-        provided the flow meter is automatically connected.
-
-        :param str fm_type: The flow meter type, corresponding to a ``known_fm``.
-
-        :param str comport: The comport the flow meter is attached to.
-
-        :param list fm_args: The flow meter positional initialization values.
-            Appropriate values depend on the flow meter.
-
-        :param dict fm_kwargs: The flow meter key word arguments. Appropriate
-            values depend on the flow meter.
+        Initializes the flow meter.
         """
         device_data = settings['device_data']
         args = device_data['args']
@@ -921,8 +891,6 @@ class FlowMeterFrame(utils.DeviceFrame):
 
     def _create_layout(self):
         """Creates the layout"""
-
-        #Overwrite this
         self.sizer = wx.BoxSizer(wx.HORIZONTAL)
 
         top_sizer = wx.BoxSizer(wx.VERTICAL)
@@ -943,6 +911,9 @@ if __name__ == '__main__':
 
     com_thread = FlowMeterCommThread('FlowComm')
     com_thread.start()
+
+    # Remote
+    # com_thread = None
 
     # my_bfs = BFS('COM8', 'BFS1')
     # my_bfs.filter = 1
@@ -971,27 +942,20 @@ if __name__ == '__main__':
 
     # setup_devices = [
     #     {'name': '3', 'args' : ['BFS', 'COM5'], 'kwargs': {}},
-    #     {'name': '4', 'args' : ['BFS', 'COM6'], 'kwargs': {}}
+    #     {'name': '4', 'args' : ['BFS', 'COM6'], 'kwargs': {}},
     #     ]
 
     setup_devices = [
-        {'name': 'sheath', 'args': ['Soft', None], 'kwargs': {}}
+        {'name': 'sheath', 'args': ['Soft', None], 'kwargs': {}},
         ]
 
-    # # Local device settings
-    # settings = {
-    #     'remote'        : False,
-    #     'device_init'   : setup_devices,
-    #     'com_thread'    : com_thread
-    #     }
-
-    # Local device settings
     settings = {
         'remote'        : True,
         'remote_device' : 'fm',
         'device_init'   : setup_devices,
         'remote_ip'     : '192.168.1.16',
         'remote_port'   : '5557',
+        'com_thread'    : com_thread,
         }
 
     app = wx.App()
@@ -1001,5 +965,6 @@ if __name__ == '__main__':
     frame.Show()
     app.MainLoop()
 
-    com_thread.stop()
-    com_thread.join()
+    if com_thread is not None:
+        com_thread.stop()
+        com_thread.join()
