@@ -215,6 +215,9 @@ class Valve(object):
     def stop(self):
         pass
 
+    def disconnect(self):
+        pass
+
 
 class RheodyneValve(Valve):
     """
@@ -525,7 +528,7 @@ class ValveCommThread(utils.CommManager):
                         'get_position'      : self._get_position,
                         'set_position'      : self._set_position,
                         'get_status'        : self._get_status,
-                        'disconnect'        : self._disconnect,
+                        'disconnect'        : self._disconnect_device,
                         'get_position_multi': self._get_position_multiple,
                         'set_position_multi': self._set_position_multiple,
                         }
@@ -546,48 +549,16 @@ class ValveCommThread(utils.CommManager):
     def _additional_new_comm(self, name):
         pass
 
-    def _connect_device(self, name, device_type, device, **kwargs):
-
-        logger.info("Connecting device %s", name)
-
-        comm_name = kwargs.pop('comm_name', None)
-
-        if name not in self._connected_devices:
-            if device is None or device not in self._connected_coms:
-                new_device = self.known_devices[device_type](name, device,
-                    **kwargs)
-                new_device.connect()
-                self._connected_devices[name] = new_device
-                self._connected_coms[device] = new_device
-                logger.debug("Device %s connected", name)
-            else:
-                self._connected_devices[name] = self._connected_coms[device]
-                logger.debug("Device already connected on %s", device)
-
-        self._return_value((name, 'connect', True), comm_name)
-
-    def _disconnect(self, name, **kwargs):
-        logger.info("Disconnecting device %s", name)
-
-        comm_name = kwargs.pop('comm_name', None)
-
-        device = self._connected_devices.pop(name, None)
-        if device is not None:
-            device.stop(**kwargs)
-
-        self._return_value((name, 'disconnect', True), comm_name)
-
-        logger.debug("Device %s disconnected", name)
-
     def _get_position(self, name, **kwargs):
         logger.debug("Getting valve %s position", name)
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         val = device.get_position(**kwargs)
 
-        self._return_value((name, 'get_position', val), comm_name)
+        self._return_value((name, cmd, val), comm_name)
 
         logger.debug("Valve %s position: %s", name, val)
 
@@ -595,6 +566,7 @@ class ValveCommThread(utils.CommManager):
         logger.debug("Getting multiple valve positions")
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         positions = []
         for name in names:
@@ -603,24 +575,26 @@ class ValveCommThread(utils.CommManager):
 
             positions.append(position)
 
-        self._return_value((names, 'get_position_multi', [names, positions]),
+        self._return_value((names, cmd, [names, positions]),
             comm_name)
 
     def _get_status(self, name, **kwargs):
         logger.debug("Getting valve %s status", name)
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         status = device.get_status(**kwargs)
         logger.debug("Valve %s status: %f", name, status)
 
-        self._return_value((name, 'get_status', status), comm_name)
+        self._return_value((name, cmd, status), comm_name)
 
     def _set_position(self, name, val, **kwargs):
         logger.debug("Setting valve %s position", name)
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         success = device.set_position(val)
@@ -629,12 +603,13 @@ class ValveCommThread(utils.CommManager):
         else:
             logger.info("Failed setting valve %s position to %i", name, val)
 
-        self._return_value((name, 'set_position', success), comm_name)
+        self._return_value((name, cmd, success), comm_name)
 
     def _set_position_multiple(self, names, positions, **kwargs):
         logger.debug('Setting multiple valve positions')
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         success = []
         for i, name in enumerate(names):
@@ -651,7 +626,7 @@ class ValveCommThread(utils.CommManager):
         if all(success):
             logger.info('Set all valve positions successfully')
 
-        self._return_value((names, 'set_position_multi', [names, success]),
+        self._return_value((names, cmd, [names, success]),
             comm_name)
 
 
@@ -819,7 +794,7 @@ if __name__ == '__main__':
     logger.addHandler(h1)
 
     # Local
-    com_thread = ValveCommThread('FlowComm')
+    com_thread = ValveCommThread('ValveComm')
     com_thread.start()
 
     # # Remote

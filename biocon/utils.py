@@ -30,7 +30,7 @@ import six
 from six.moves import StringIO as bytesio
 import platform
 import threading
-from collections import deque
+from collections import deque, OrderedDict
 import time
 import copy
 
@@ -545,6 +545,9 @@ class CommManager(threading.Thread):
 
         self._commands = {'example_command' : self._example_command} # overwrite
 
+        self._connected_devices = OrderedDict()
+        self._connected_coms = OrderedDict()
+
         # Need to make run and abort work for multiple queues
         # Need to add a way to set status commands and intervals
         # Need to add a way to add on stop commands?
@@ -571,6 +574,7 @@ class CommManager(threading.Thread):
 
                     if command is not None:
                         kwargs['comm_name'] = comm_name
+                        kwargs['cmd'] = command
                         self._run_command(command, args, kwargs)
 
                         cmds_run = True
@@ -599,6 +603,7 @@ class CommManager(threading.Thread):
 
                     if time.time() - last_t > period:
                         kwargs['comm_name'] = 'status'
+                        kwargs['cmd'] = cmd
                         self._run_command(cmd, args, kwargs)
                         self._status_cmds[status_cmd]['last_run'] = time.time()
 
@@ -689,6 +694,39 @@ class CommManager(threading.Thread):
         comm_name = kwargs.pop('comm_name', None)
         self._return_value((name, 'example_command', None), comm_name)
         pass
+
+    def _connect_device(self, name, device_type, device, **kwargs):
+        logger.info("Connecting device %s", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        if name not in self._connected_devices:
+            if device is None or device not in self._connected_coms:
+                new_device = self.known_devices[device_type](name, device, **kwargs)
+                new_device.connect()
+                self._connected_devices[name] = new_device
+                self._connected_coms[device] = new_device
+                logger.debug("Device %s connected", name)
+            else:
+                self._connected_devices[name] = self._connected_coms[device]
+                logger.debug("Device already connected on %s", device)
+
+        self._return_value((name, cmd, True), comm_name)
+
+    def _disconnect_device(self, name, **kwargs):
+        logger.info("Disconnecting device %s", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices.pop(name, None)
+        if device is not None:
+            device.disconnect()
+
+        self._return_value((name, cmd, True), comm_name)
+
+        logger.debug("Device %s disconnected", name)
 
     def _return_value(self, val, comm_name):
         if comm_name == 'status':
@@ -831,7 +869,7 @@ class DevicePanel(wx.Panel):
         Initializes the device parameters if any were provided. If enough are
         provided the device is automatically connected.
         """
-        device_data = settings['device_init']
+        device_data = settings['device_data']
 
     def _update_status_cmd(self, cmd, status_period, add_status=True):
         if self.remote:

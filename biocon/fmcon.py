@@ -158,6 +158,9 @@ class FlowMeter(object):
     def stop(self):
         pass
 
+    def disconnect(self):
+        pass
+
 class BFS(FlowMeter):
     """
     This class contains information for initializing and communicating with
@@ -347,37 +350,6 @@ class FlowMeterCommThread(utils.CommManager):
     def _additional_new_comm(self, name):
         pass
 
-    def _connect_device(self, name, device_type, device, **kwargs):
-        logger.info("Connecting device %s", name)
-
-        comm_name = kwargs.pop('comm_name', None)
-
-        if name not in self._connected_devices:
-            if device is None or device not in self._connected_coms:
-                new_device = self.known_devices[device_type](name, device, **kwargs)
-                new_device.connect()
-                self._connected_devices[name] = new_device
-                self._connected_coms[device] = new_device
-                logger.debug("Device %s connected", name)
-            else:
-                self._connected_devices[name] = self._connected_coms[device]
-                logger.debug("Device already connected on %s", device)
-
-        self._return_value((name, 'connect', True), comm_name)
-
-    def _disconnect_device(self, name, **kwargs):
-        logger.info("Disconnecting device %s", name)
-
-        comm_name = kwargs.pop('comm_name', None)
-
-        device = self._connected_devices.pop(name, None)
-        if device is not None:
-            device.stop()
-
-        self._return_value((name, 'disconnect', True), comm_name)
-
-        logger.debug("Device %s disconnected", name)
-
     def _get_flow_rate(self, name, **kwargs):
         """
         This method gets the flow rate measured by a flow meter.
@@ -388,11 +360,12 @@ class FlowMeterCommThread(utils.CommManager):
         logger.debug("Getting flow meter %s flow rate", name)
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         val = device.flow_rate
 
-        self._return_value((name, 'get_flow_rate', val), comm_name)
+        self._return_value((name, cmd, val), comm_name)
 
         logger.debug("Flow meter %s flow rate: %f", name, val)
 
@@ -406,11 +379,12 @@ class FlowMeterCommThread(utils.CommManager):
         logger.debug("Setting flow meter %s flow rate", name)
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         device.flow_rate = val
 
-        self._return_value((name, 'set_flow_rate', True), comm_name)
+        self._return_value((name, cmd, True), comm_name)
 
         logger.debug("Flow meter %s flow rate set to: %f", name, val)
 
@@ -426,11 +400,12 @@ class FlowMeterCommThread(utils.CommManager):
         logger.debug("Getting flow meter %s density", name)
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         val = device.density
 
-        self._return_value((name, 'get_density', val), comm_name)
+        self._return_value((name, cmd, val), comm_name)
 
         logger.debug("Flow meter %s density: %f", name, val)
 
@@ -446,11 +421,12 @@ class FlowMeterCommThread(utils.CommManager):
         logger.debug("Getting flow meter %s temperature", name)
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         val = device.temperature
 
-        self._return_value((name, 'get_temperature', val), comm_name)
+        self._return_value((name, cmd, val), comm_name)
 
         logger.debug("Flow meter %s temperature: %f", name, val)
 
@@ -466,11 +442,12 @@ class FlowMeterCommThread(utils.CommManager):
         logger.debug("Getting flow meter %s units", name)
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         val = device.units
 
-        self._return_value((name, 'get_units', val), comm_name)
+        self._return_value((name, cmd, val), comm_name)
 
         logger.debug("Flow meter %s units: %s", name, val)
 
@@ -487,11 +464,12 @@ class FlowMeterCommThread(utils.CommManager):
         logger.info("Setting flow meter %s units", name)
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         device.units = val
 
-        self._return_value((name, 'set_units', True), comm_name)
+        self._return_value((name, cmd, True), comm_name)
 
         logger.debug("Flow meter %s units set", name)
 
@@ -505,6 +483,7 @@ class FlowMeterCommThread(utils.CommManager):
         logger.debug("Getting multiple flow rates")
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         flow_rates = []
         for name in names:
@@ -512,7 +491,7 @@ class FlowMeterCommThread(utils.CommManager):
             val = device.flow_rate
             flow_rates.append(val)
 
-        self._return_value((names, 'get_fr_multi', [names, flow_rates]),
+        self._return_value((names, cmd, [names, flow_rates]),
             comm_name)
 
     def _get_all_multiple(self, names, **kwargs):
@@ -525,6 +504,7 @@ class FlowMeterCommThread(utils.CommManager):
         logger.debug("Getting multiple readouts")
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         vals = []
         for name in names:
@@ -538,12 +518,13 @@ class FlowMeterCommThread(utils.CommManager):
             flow_rate = fm.flow_rate
             vals.append((flow_rate, density, temperature))
 
-        self._return_value((names, 'get_all_multi', [names, vals]), comm_name)
+        self._return_value((names, cmd, [names, vals]), comm_name)
 
     def _get_density_and_temperature(self, name, **kwargs):
         logger.debug('Getting density and temperature')
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         val_d = device.density
@@ -562,11 +543,12 @@ class FlowMeterCommThread(utils.CommManager):
         logger.debug("Getting flow meter %s filter", name)
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         val = device.filter
 
-        self._return_value((name, 'get_filter', val), comm_name)
+        self._return_value((name, cmd, val), comm_name)
 
         logger.debug("Flow meter %s filter: %f", name, val)
 
@@ -580,11 +562,12 @@ class FlowMeterCommThread(utils.CommManager):
         logger.debug("Setting flow meter %s filter", name)
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         device.filter = val
 
-        self._return_value((name, 'set_filter', True), comm_name)
+        self._return_value((name, cmd, True), comm_name)
 
         logger.debug("Flow meter %s filter set to: %f", name, val)
 
@@ -598,6 +581,7 @@ class FlowMeterCommThread(utils.CommManager):
         logger.debug("Getting flow meter %s settings", name)
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         units = device.units
@@ -612,7 +596,7 @@ class FlowMeterCommThread(utils.CommManager):
             'filter'    : filt,
             }
 
-        self._return_value((name, 'get_settings', ret_vals), comm_name)
+        self._return_value((name, cmd, ret_vals), comm_name)
 
         logger.debug("Flow meter %s settings: %s", name, ret_vals)
 
@@ -950,7 +934,7 @@ if __name__ == '__main__':
         ]
 
     settings = {
-        'remote'        : True,
+        'remote'        : False,
         'remote_device' : 'fm',
         'device_init'   : setup_devices,
         'remote_ip'     : '192.168.1.16',
