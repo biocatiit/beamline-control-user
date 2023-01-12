@@ -96,17 +96,18 @@ class ControlServer(threading.Thread):
         if self._start_pump:
             pump_cmd_q = deque()
             pump_return_q = deque()
-            pump_abort_event = threading.Event()
-            pump_con = pumpcon.PumpCommThread(pump_cmd_q, pump_return_q, pump_abort_event, 'PumpCon')
+            pump_status_q = deque()
+            pump_con = pumpcon.PumpCommThread('PumpCon')
             pump_con.start()
 
-            if self.pump_comm_locks is not None:
-                pump_cmd_q.append(('add_comlocks', (self.pump_comm_locks,), {}))
+            pump_con.add_new_communication('zmq_server', pump_cmd_q,
+                pump_return_q, pump_status_q)
 
-            pump_ctrl = {'queue': pump_cmd_q,
-                'abort': pump_abort_event,
-                'thread': pump_con,
-                'answer_q': pump_return_q,
+            pump_ctrl = {
+                'queue'     : pump_cmd_q,
+                'answer_q'  : pump_return_q,
+                'status_q'  : pump_status_q,
+                'thread'    : pump_con,
                 }
 
             self._device_control['pump'] = pump_ctrl
@@ -182,11 +183,6 @@ class ControlServer(threading.Thread):
                         command = None
                 except Exception:
                     command = None
-
-                # if self._abort_event.is_set():
-                #     logger.debug("Abort event detected")
-                #     self._abort()
-                #     command = None
 
                 if self._stop_event.is_set():
                     logger.debug("Stop event detected")
@@ -341,7 +337,7 @@ if __name__ == '__main__':
     logger.setLevel(logging.DEBUG)
     h1 = logging.StreamHandler(sys.stdout)
     h1.setLevel(logging.DEBUG)
-    h1.setLevel(logging.INFO)
+    # h1.setLevel(logging.INFO)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
     h1.setFormatter(formatter)
     logger.addHandler(h1)
@@ -367,20 +363,8 @@ if __name__ == '__main__':
     port3 = '5558'
     port4 = '5559'
 
-    # Both
-
-    pump_comm_locks = {
-        'COM3'  : threading.Lock(),
-        'COM4'  : threading.Lock(),
-        'COM10' : threading.Lock(),
-        'COM11' : threading.Lock(),
-        'COM15' : threading.Lock(),
-        'COM17' : threading.Lock(),
-        'COM18' : threading.Lock(),
-        }
-
-    # exp_type = 'coflow' #coflow or trsaxs_laminar or trsaxs_chaotic
-    exp_type = 'trsaxs_chaotic'
+    exp_type = 'coflow' #coflow or trsaxs_laminar or trsaxs_chaotic
+    # exp_type = 'trsaxs_chaotic'
 
 
     if exp_type == 'coflow':
@@ -415,13 +399,9 @@ if __name__ == '__main__':
         #     ]
 
         setup_pumps = [
-            ('sheath', 'Soft', '', [], {}, {}),
-            ('outlet', 'Soft', '', [], {}, {}),
+            {'name': 'sheath', 'args': ['Soft', None], 'kwargs': {}},
+            {'name': 'outlet', 'args': ['Soft', None], 'kwargs': {}},
             ]
-
-        pump_local_comm_locks = {'sheath'    : pump_comm_locks['COM3'],
-            'outlet'    : pump_comm_locks['COM4']
-            }
 
         setup_valves = [
             {'name': 'Coflow Sheath', 'args': ['Soft', None], 'kwargs':
@@ -542,12 +522,9 @@ if __name__ == '__main__':
 
     # Both
 
-    pump_frame = pumpcon.PumpFrame(pump_local_comm_locks, setup_pumps, None,
-        title='Pump Control')
-    pump_frame.Show()
 
     control_server_pump = ControlServer(ip, port1, name='PumpControlServer',
-        pump_comm_locks = pump_comm_locks, start_pump=True)
+        start_pump=True)
     control_server_pump.start()
 
     control_server_fm = ControlServer(ip, port2, name='FMControlServer',
@@ -559,6 +536,18 @@ if __name__ == '__main__':
     control_server_valve.start()
 
     time.sleep(1)
+
+    pump_comm_thread = control_server_pump.get_comm_thread('pump')
+
+    pump_settings = {
+        'remote'        : False,
+        'device_init'   : setup_pumps,
+        'com_thread'    : pump_comm_thread,
+        }
+
+    pump_frame = pumpcon.PumpFrame('PumpFrame', pump_settings, parent=None,
+        title='Pump Control')
+    pump_frame.Show()
 
     fm_comm_thread = control_server_fm.get_comm_thread('fm')
 
@@ -607,11 +596,11 @@ if __name__ == '__main__':
         control_server_pump.stop()
         control_server_pump.join()
 
-        control_server_fm.stop()
-        control_server_fm.join()
+        # control_server_fm.stop()
+        # control_server_fm.join()
 
-        control_server_valve.stop()
-        control_server_valve.join()
+        # control_server_valve.stop()
+        # control_server_valve.join()
 
         # if exp_type == 'coflow':
         #     control_server_uv.stop()

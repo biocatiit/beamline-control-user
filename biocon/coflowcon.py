@@ -83,7 +83,9 @@ class CoflowControl(object):
     def init_connections(self):
         self.coflow_pump_cmd_q = deque()
         self.coflow_pump_return_q = deque()
+        self.coflow_pump_status_q = deque()
         self.coflow_pump_abort_event = threading.Event()
+        self.coflow_pump_return_lock = threading.Lock()
 
         self.coflow_fm_cmd_q = deque()
         self.coflow_fm_return_q = deque()

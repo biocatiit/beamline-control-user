@@ -162,11 +162,10 @@ class Valve(object):
     It is intended to be subclassed by other valve classes, which contain
     specific information for communicating with a given pump. A valve object
     can be wrapped in a thread for using a GUI, implimented in :py:class:`ValveCommThread`
-    or it can be used directly from the command line. The :py:class:`M5Pump`
-    documentation contains an example.
+    or it can be used directly from the command line.
     """
 
-    def __init__(self, device, name, comm_lock=None):
+    def __init__(self, name, device, comm_lock=None):
         """
         :param str device: The device comport
 
@@ -221,15 +220,9 @@ class Valve(object):
 
 class RheodyneValve(Valve):
     """
-    This class contains information for initializing and communicating with
-    a Elveflow Bronkhurst FLow Sensor (BFS), communicating via the Elveflow SDK.
-    Below is an example that starts communication and prints the flow rate. ::
-
-        >>> my_bfs = BFS("ASRL8::INSTR".encode('ascii'), 'BFS1')
-        >>> print(my_bfs.flow_rate)
     """
 
-    def __init__(self, device, name, positions, comm_lock=None):
+    def __init__(self, name, device, positions, comm_lock=None):
         """
         This makes the initial serial connection, and then sets the MForce
         controller parameters to the correct values.
@@ -237,11 +230,8 @@ class RheodyneValve(Valve):
         :param str device: The device comport as sent to pyserial
 
         :param str name: A unique identifier for the pump
-
-        :param float bfs_filter: Smoothing factor for measurement. 1 = minimum
-            filter, 0.00001 = maximum filter. Defaults to 1
         """
-        Valve.__init__(self, device, name, comm_lock=comm_lock)
+        Valve.__init__(self, name, device, comm_lock=comm_lock)
 
         logstr = ("Initializing valve {} on port {}".format(self.name,
             self.device))
@@ -354,10 +344,10 @@ class CheminertValve(Valve):
     A VICI cheminert valve with universal actuator and serial control.
     """
 
-    def __init__(self, device, name, positions, comm_lock=None):
+    def __init__(self, name, device, positions, comm_lock=None):
         """
         """
-        Valve.__init__(self, device, name, comm_lock=comm_lock)
+        Valve.__init__(self, name, device, comm_lock=comm_lock)
 
         logstr = ("Initializing valve {} on port {}".format(self.name,
             self.device))
@@ -430,22 +420,17 @@ class CheminertValve(Valve):
 
 class SoftValve(Valve):
     """
-    This class contains the settings and communication for a generic valve.
-    It is intended to be subclassed by other valve classes, which contain
-    specific information for communicating with a given pump. A valve object
-    can be wrapped in a thread for using a GUI, implimented in :py:class:`ValveCommThread`
-    or it can be used directly from the command line. The :py:class:`M5Pump`
-    documentation contains an example.
+    Software valve for testing.
     """
 
-    def __init__(self, device, name, positions, comm_lock=None):
+    def __init__(self, name, device, positions, comm_lock=None):
         """
         :param str device: The device comport
 
         :param str name: A unique identifier for the device
         """
 
-        Valve.__init__(self, device, name, comm_lock=comm_lock)
+        Valve.__init__(self, name, device, comm_lock=comm_lock)
 
         self._position = 1
         self._positions = int(positions)
@@ -477,47 +462,13 @@ class SoftValve(Valve):
 
 class ValveCommThread(utils.CommManager):
     """
-    This class creates a control thread for flow meters attached to the system.
-    This thread is designed for using a GUI application. For command line
-    use, most people will find working directly with a flow meter object much
-    more transparent. Below you'll find an example that initializes a
-    :py:class:`BFS` and measures the flow. ::
-
-        import collections
-        import threading
-
-        valve_cmd_q = deque()
-        valve_return_q = deque()
-        abort_event = threading.Event()
-        my_valvecon = ValveCommThread(valve_cmd_q, valve_return_q, abort_event, 'ValveCon')
-        my_valvecon.start()
-        init_cmd = ('connect', ('/dev/cu.usbserial-AC01UZ8O', 'r6p7_1', 'Rheodyne'), {'positions' : 6})
-        get_pos_cmd = ('get_position', ('r6p7_1',), {})
-        set_pos_cmd = ('set_position', ('r6p7_1', 5), {})
-        status_cmd = ('get_status', ('r6p7_1',), {})
-
-        valve_cmd_q.append(init_cmd)
-        time.sleep(0.1)
-        valve_cmd_q.append(get_pos_cmd)
-        valve_cmd_q.append(set_pos_cmd)
-        valve_cmd_q.append(status_cmd)
-        time.sleep(5)
-        my_valvecon.stop()
+    Custom communication thread for valves.
     """
 
     def __init__(self, name):
         """
         Initializes the custom thread. Important parameters here are the
-        list of known commands ``_commands`` and known pumps ``known_fms``.
-
-        :param collections.deque command_queue: The queue used to pass commands
-            to the thread.
-
-        :param collections.deque return_queue: The queue used to return data
-            from the thread.
-
-        :param threading.Event abort_event: An event that is set when the thread
-            needs to abort, and otherwise is not set.
+        list of known commands ``_commands`` and known valves.
         """
         utils.CommManager.__init__(self, name)
 
@@ -635,8 +586,7 @@ class ValvePanel(utils.DevicePanel):
     """
     def __init__(self, parent, panel_id, settings, *args, **kwargs):
         """
-        Initializes the custom thread. Important parameters here are the
-        list of known commands ``_commands`` and known pumps ``known_valves``.
+        Valve control GUI panel, can be instance multiple times for multiple valves
 
         :param wx.Window parent: Parent class for the panel.
 
@@ -759,7 +709,7 @@ class ValvePanel(utils.DevicePanel):
 class ValveFrame(utils.DeviceFrame):
     """
     A lightweight frame allowing one to work with arbitrary number of valves.
-    Only meant to be used when the fscon module is run directly,
+    Only meant to be used when the valvecon module is run directly,
     rather than when it is imported into another program.
     """
     def __init__(self, name, settings, *args, **kwargs):

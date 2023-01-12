@@ -585,7 +585,6 @@ class CommManager(threading.Thread):
 
             if self._stop_event.is_set():
                 logger.debug("Stop event detected")
-                self._abort()
                 break
 
             with self._queue_lock:
@@ -673,7 +672,8 @@ class CommManager(threading.Thread):
     def add_status_cmd(self, cmd, period):
         logger.debug('Adding status command: %s', cmd)
         with self._queue_lock:
-            self._status_cmds[cmd[0]] = {'cmd' : cmd, 'period' : period, 'last_run': 0}
+            cmd_key = '{}_{}'.format(cmd[0], cmd[1][0])
+            self._status_cmds[cmd_key] = {'cmd' : cmd, 'period' : period, 'last_run': 0}
 
         logger.debug('Added status command')
 

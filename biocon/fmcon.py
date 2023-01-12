@@ -65,7 +65,7 @@ class FlowMeter(object):
     documentation contains an example.
     """
 
-    def __init__(self, device, name, base_units, comm_lock=None):
+    def __init__(self, name, device, base_units, comm_lock=None):
         """
         :param str device: The device comport
 
@@ -184,7 +184,7 @@ class BFS(FlowMeter):
             filter, 0.00001 = maximum filter. Defaults to 1
         """
 
-        FlowMeter.__init__(self, device, name, 'uL/min')
+        FlowMeter.__init__(self, name, device, 'uL/min')
 
         logstr = ("Initializing flow meter {} on port {}".format(self.name,
             self.device))
@@ -277,7 +277,7 @@ class SoftFlowMeter(FlowMeter):
         :param str base_unis: Units reported by the flow meter. Should be one
             of: nL/s, nL/min, uL/s, uL/min, mL/s, mL/min
         """
-        FlowMeter.__init__(self, device, name, 'mL/min')
+        FlowMeter.__init__(self, name, device, 'mL/min')
 
         self._flow_rate = 0
 
