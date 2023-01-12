@@ -337,7 +337,7 @@ if __name__ == '__main__':
     logger.setLevel(logging.DEBUG)
     h1 = logging.StreamHandler(sys.stdout)
     h1.setLevel(logging.DEBUG)
-    # h1.setLevel(logging.INFO)
+    h1.setLevel(logging.INFO)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
     h1.setFormatter(formatter)
     logger.addHandler(h1)
@@ -593,14 +593,15 @@ if __name__ == '__main__':
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
+        print('stopping stuff')
         control_server_pump.stop()
         control_server_pump.join()
 
-        # control_server_fm.stop()
-        # control_server_fm.join()
+        control_server_fm.stop()
+        control_server_fm.join()
 
-        # control_server_valve.stop()
-        # control_server_valve.join()
+        control_server_valve.stop()
+        control_server_valve.join()
 
         # if exp_type == 'coflow':
         #     control_server_uv.stop()

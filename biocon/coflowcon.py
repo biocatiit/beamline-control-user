@@ -102,8 +102,10 @@ class CoflowControl(object):
         self.timeout_event = threading.Event()
 
         if self.settings['device_communication'] == 'local':
-            self.coflow_pump_con = pumpcon.PumpCommThread(self.coflow_pump_cmd_q,
-                self.coflow_pump_return_q, self.coflow_pump_abort_event, 'PumpCon')
+            self.coflow_pump_con = self.settings['coflow_pump_com_thread']
+            self.coflow_pump_con.add_new_communication('coflow_control',
+                self.coflow_pump_cmd_q, self.coflow_pump_return_q,
+                self.coflow_pump_status_q)
 
             self.coflow_fm_con = self.settings['coflow_fm_com_thread']
             self.coflow_fm_con.add_new_communication('coflow_control',
@@ -123,7 +125,7 @@ class CoflowControl(object):
             self.coflow_pump_con = client.ControlClient(pump_ip, pump_port,
                 self.coflow_pump_cmd_q, self.coflow_pump_return_q,
                 self.coflow_pump_abort_event, self.timeout_event,
-                name='PumpControlClient')
+                name='PumpControlClient', status_queue=self.coflow_pump_status_q)
 
             fm_ip = self.settings['remote_fm_ip']
             fm_port = self.settings['remote_fm_port']
@@ -141,45 +143,49 @@ class CoflowControl(object):
 
             self.local_devices = False
 
-        self.coflow_pump_con.start()
-        self.coflow_fm_con.start()
-        self.coflow_valve_con.start()
+            self.coflow_pump_con.start()
+            self.coflow_fm_con.start()
+            self.coflow_valve_con.start()
 
     def init_pumps(self):
+
         sheath_pump = self.settings['sheath_pump']
+        self.sheath_pump_name = sheath_pump['name']
+        sheath_args = sheath_pump['args']
+        sheath_kwargs = sheath_pump['kwargs']
+        sheath_args.insert(0, self.sheath_pump_name)
+        sheath_connect_cmd = ['connect', sheath_args, sheath_kwargs]
+
         outlet_pump = self.settings['outlet_pump']
+        self.outlet_pump_name = outlet_pump['name']
+        outlet_args = outlet_pump['args']
+        outlet_kwargs = outlet_pump['kwargs']
+        outlet_args.insert(0, self.outlet_pump_name)
+        outlet_connect_cmd = ['connect', outlet_args, outlet_kwargs]
 
-        logger.info('Initializing coflow pumps on startup')
+        logger.info('Initializing coflow pumps meters on startup')
 
-        sheath_args = (sheath_pump[1], 'sheath_pump', sheath_pump[0])
-        if sheath_pump[0] == 'VICI_M50':
-            sheath_kwargs = {'flow_cal': sheath_pump[2][0],
-                'backlash_cal': sheath_pump[2][1]}
-        else:
-            sheath_kwargs = {}
+        self.pump_sheath_init = self._send_pumpcmd(sheath_connect_cmd, response=True)
 
-        sheath_init_cmd = ('connect_remote', sheath_args, sheath_kwargs)
+        if self.pump_sheath_init is None:
+            self.pump_sheath_init = False
 
-        outlet_args = (outlet_pump[1], 'outlet_pump', outlet_pump[0])
-        if outlet_pump[0] == 'VICI_M50':
-            outlet_kwargs = {'flow_cal': outlet_pump[2][0],
-                'backlash_cal': outlet_pump[2][1]}
-        else:
-            outlet_kwargs = {}
+        self.pump_outlet_init = self._send_pumpcmd(outlet_connect_cmd, response=True)
 
-        outlet_init_cmd = ('connect_remote', outlet_args, outlet_kwargs)
-
-
-        self.pump_sheath_init = self._send_pumpcmd(sheath_init_cmd, response=True)
-        self.pump_outlet_init = self._send_pumpcmd(outlet_init_cmd, response=True)
+        if self.pump_outlet_init is None:
+            self.pump_outlet_init = False
 
         if self.pump_outlet_init and self.pump_sheath_init:
 
-            self._send_pumpcmd(('set_units', ('sheath_pump', self.settings['flow_units']), {}))
-            self._send_pumpcmd(('set_units', ('outlet_pump', self.settings['flow_units']), {}))
+            self._send_pumpcmd(('set_units', (self.sheath_pump_name,
+                self.settings['flow_units']), {}))
+            self._send_pumpcmd(('set_units', (self.outlet_pump_name,
+                self.settings['flow_units']), {}))
 
-            self.sheath_is_moving = self._send_pumpcmd(('is_moving', ('sheath_pump',), {}), response=True)
-            self.outlet_is_moving = self._send_pumpcmd(('is_moving', ('outlet_pump',), {}), response=True)
+            self.sheath_is_moving = self._send_pumpcmd(('is_moving',
+                (self.sheath_pump_name,), {}), response=True)
+            self.outlet_is_moving = self._send_pumpcmd(('is_moving',
+                (self.outlet_pump_name,), {}), response=True)
 
         logger.info('Coflow pumps initialization successful')
 
@@ -196,11 +202,11 @@ class CoflowControl(object):
         sheath_connect_cmd = ['connect', sheath_args, sheath_kwargs]
 
         outlet_fm = self.settings['outlet_fm']
-        self.outlet_fm_name = sheath_fm['name']
+        self.outlet_fm_name = outlet_fm['name']
         outlet_args = outlet_fm['args']
         outlet_kwargs = outlet_fm['kwargs']
         outlet_args.insert(0, self.outlet_fm_name)
-        outlet_connect_cmd = ['connect', sheath_args, sheath_kwargs]
+        outlet_connect_cmd = ['connect', outlet_args, outlet_kwargs]
 
         logger.info('Initializing coflow flow meters on startup')
 
@@ -343,8 +349,8 @@ class CoflowControl(object):
         return lc_flow_rate, is_number, is_extreme
 
     def start_flow(self):
-        sheath_start_cmd = ('start_flow', ('sheath_pump', ), {})
-        outlet_start_cmd = ('start_flow', ('outlet_pump', ), {})
+        sheath_start_cmd = ('start_flow', (self.sheath_pump_name, ), {})
+        outlet_start_cmd = ('start_flow', (self.outlet_pump_name, ), {})
 
         self._send_pumpcmd(sheath_start_cmd)
         self._send_pumpcmd(outlet_start_cmd)
@@ -354,8 +360,8 @@ class CoflowControl(object):
         logger.info('Starting coflow pumps')
 
     def stop_flow(self):
-        sheath_stop_cmd = ('stop', ('sheath_pump', ), {})
-        outlet_stop_cmd = ('stop', ('outlet_pump', ), {})
+        sheath_stop_cmd = ('stop', (self.sheath_pump_name, ), {})
+        outlet_stop_cmd = ('stop', (self.outlet_pump_name, ), {})
 
         self._send_pumpcmd(sheath_stop_cmd)
         self._send_pumpcmd(outlet_stop_cmd)
@@ -377,8 +383,8 @@ class CoflowControl(object):
         self.sheath_setpoint = sheath_flow
         self.outlet_setpoint = outlet_flow
 
-        sheath_fr_cmd = ('set_flow_rate', ('sheath_pump', sheath_flow), {})
-        outlet_fr_cmd = ('set_flow_rate', ('outlet_pump', outlet_flow), {})
+        sheath_fr_cmd = ('set_flow_rate', (self.sheath_pump_name, sheath_flow), {})
+        outlet_fr_cmd = ('set_flow_rate', (self.outlet_pump_name, outlet_flow), {})
 
         logger.info('LC flow input to %f %s', flow_rate, self.settings['flow_units'])
         logger.info('Setting sheath flow to %f %s', sheath_flow, self.settings['flow_units'])
@@ -495,25 +501,10 @@ class CoflowControl(object):
         return success
 
     def _send_pumpcmd(self, cmd, response=False):
-        ret_val = None
-
-        if not self.timeout_event.is_set():
-            if not self.local_devices:
-                full_cmd = {'device': 'pump', 'command': cmd, 'response': response}
-            else:
-                full_cmd = cmd
-
-            self.coflow_pump_cmd_q.append(full_cmd)
-
-            if response:
-                while len(self.coflow_pump_return_q) == 0 and not self.timeout_event.is_set():
-                    time.sleep(0.01)
-
-                if not self.timeout_event.is_set():
-                    ret_val = self.coflow_pump_return_q.popleft()
-
-            # wx.CallAfter(self._show_error_dialog, msg, 'Connection error')
-
+        self.coflow_pump_status_q.clear() #For now, do nothing with the status
+        ret_val = utils.send_cmd(cmd, self.coflow_pump_cmd_q,
+            self.coflow_pump_return_q, self.timeout_event,
+            self.coflow_pump_return_lock, not self.local_devices, 'pump', response)
 
         return ret_val
 
@@ -545,13 +536,6 @@ class CoflowControl(object):
         return ret_val
 
     def disconnect_coflow(self):
-        sheath_pump = ('disconnect', ('sheath_pump', ), {})
-        outlet_pump = ('disconnect', ('outlet_pump', ), {})
-
-        if not self.timeout_event.is_set():
-            self._send_pumpcmd(sheath_pump, response=True)
-            self._send_pumpcmd(outlet_pump, response=True)
-
         self.coflow_pump_con.stop()
         self.coflow_fm_con.stop()
         self.coflow_valve_con.stop()
@@ -1723,12 +1707,14 @@ class CoflowPanel(wx.Panel):
             msg = ('The {} flow rate is unstable. Contact your beamline '
                 'scientist.'.format(flow))
 
-            self.warning_dialog = utils.WarningMessage(self, msg, 'Coflow flow is unstable')
+            self.warning_dialog = utils.WarningMessage(self, msg,
+                'Coflow flow is unstable', self._on_close_flow_warn)
             self.warning_dialog.Show()
 
     def _show_error_dialog(self, msg, title):
         if self.error_dialog is None:
-            self.error_dialog = utils.WarningMessage(self, msg, title)
+            self.error_dialog = utils.WarningMessage(self, msg, title,
+                self._on_close_error_warn)
             self.error_dialog.Show()
 
     def _show_air_warning_dialog(self, loc):
@@ -1738,8 +1724,18 @@ class CoflowPanel(wx.Panel):
             else:
                 msg = ('Air detected in the {} flow.'.format(loc))
 
-            self.air_warning_dialog = utils.WarningMessage(self, msg, 'Air detected')
+            self.air_warning_dialog = utils.WarningMessage(self, msg,
+                'Air detected', self._on_close_air_warn)
             self.air_warning_dialog.Show()
+
+    def _on_close_flow_warn(self):
+        self.warning_dialog = None
+
+    def _on_close_error_warn(self):
+        self.error_dialog = None
+
+    def _on_close_air_warn(self):
+        self.air_warning_dialog = None
 
     def metadata(self):
 
@@ -2219,8 +2215,10 @@ if __name__ == '__main__':
         # 'sheath_valve'              : {'name': 'Coflow Sheath',
         #                                 'args':['Cheminert', 'COM7'],
         #                                 'kwargs': {'positions' : 10}},
-        'sheath_pump'               : ('Soft', '', [], {}),
-        'outlet_pump'               : ('Soft', '', [], {}),
+        'sheath_pump'               : {'name': 'sheath', 'args': ['Soft', None],
+                                        'kwargs': {}},
+        'outlet_pump'               : {'name': 'outlet', 'args': ['Soft', None],
+                                        'kwargs': {}},
         'sheath_fm'                 : {'name': 'sheath', 'args': ['Soft', None],
                                         'kwargs':{}},
         'outlet_fm'                 : {'name': 'outlet', 'args': ['Soft', None],

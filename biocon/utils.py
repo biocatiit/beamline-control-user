@@ -425,7 +425,7 @@ class IntSpinCtrl(wx.Panel):
         self.max = value
 
 class WarningMessage(wx.Frame):
-    def __init__(self, parent, msg, title, *args, **kwargs):
+    def __init__(self, parent, msg, title, callback, *args, **kwargs):
         """
         Initializes the pump frame. Takes args and kwargs for the wx.Frame class.
         """
@@ -435,6 +435,8 @@ class WarningMessage(wx.Frame):
         self.Bind(wx.EVT_CLOSE, self._on_exit)
 
         self._create_layout(msg)
+
+        self.exit_callback = callback
 
         self.Layout()
         self.SendSizeEvent()
@@ -469,8 +471,7 @@ class WarningMessage(wx.Frame):
         self.SetSizer(top_sizer)
 
     def _on_exit(self, evt):
-        parent=self.GetParent()
-        parent.warning_dialog = None
+        self.exit_callback()
 
         self.Destroy()
 

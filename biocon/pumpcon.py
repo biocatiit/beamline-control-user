@@ -4108,21 +4108,21 @@ class PumpPanel(utils.DevicePanel):
             #     force = self.pump.force
             #     self.force.ChangeValue(str(force))
 
-            # is_moving_cmd = ['is_moving', [self.name,], {}]
-            # self._update_status_cmd(is_moving_cmd, 5)
+            is_moving_cmd = ['is_moving', [self.name,], {}]
+            self._update_status_cmd(is_moving_cmd, 1)
 
-            # get_flow_rate_cmd = ['get_flow_rate', [self.name,], {}]
-            # self._update_status_cmd(get_flow_rate_cmd, 5)
+            get_flow_rate_cmd = ['get_flow_rate', [self.name,], {}]
+            self._update_status_cmd(get_flow_rate_cmd, 1)
 
-            # get_pressure_cmd = ['get_pressure', [self.name,], {}]
-            # self._update_status_cmd(get_pressure_cmd, 5)
+            get_pressure_cmd = ['get_pressure', [self.name,], {}]
+            self._update_status_cmd(get_pressure_cmd, 1)
 
-            # get_settings_cmd = ['get_settings', [self.name,], {}]
-            # self._update_status_cmd(get_settings_cmd, 5)
+            get_settings_cmd = ['get_settings', [self.name,], {}]
+            self._update_status_cmd(get_settings_cmd, 5)
 
-            # if self.pump_mode == 'syringe':
-            #     get_volume_cmd = ['get_volume', [self.name,], {}]
-            #     self._update_status_cmd(get_volume_cmd, 5)
+            if self.pump_mode == 'syringe':
+                get_volume_cmd = ['get_volume', [self.name,], {}]
+                self._update_status_cmd(get_volume_cmd, 1)
 
         logger.info('Initialized pump %s on startup', self.name)
 

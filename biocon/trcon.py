@@ -3608,8 +3608,12 @@ class TRFlowPanel(wx.Panel):
 
     def _show_error_dialog(self, msg, title):
         if self.error_dialog is None:
-            self.error_dialog = utils.WarningMessage(self, msg, title)
+            self.error_dialog = utils.WarningMessage(self, msg, title,
+                self._on_close_error_dialog)
             self.error_dialog.Show()
+
+    def _on_close_error_dialog(self):
+        self.error_dialog = None
 
     def _simulated_mode(self):
         valve_start_positions = self.settings['valve_start_positions']
@@ -4584,10 +4588,12 @@ class TRPumpPanel(wx.Panel):
 
     def show_faults_dialog(self, msg):
         if self.faults_dialog is None:
-            self.faults_dialog = utils.WarningMessage(self, msg, 'Fault detected')
+            self.faults_dialog = utils.WarningMessage(self, msg, 'Fault detected',
+                self._on_close_faults_dialog)
             self.faults_dialog.Show()
 
-
+    def _on_close_faults_dialog(self):
+        self.faults_dialog = None
 
 
 class TRFrame(wx.Frame):

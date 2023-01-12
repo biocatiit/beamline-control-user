@@ -703,7 +703,7 @@ class ExpCommThread(threading.Thread):
         # logger.info(x)
         # logger.info(y)
 
-        if x != x_start and y != y_start: 
+        if x != x_start and y != y_start:
             while not motor.is_moving() and not timeout:
                 time.sleep(0.001) #Waits for motion to start
                 if time.time()-start>0.1:
@@ -935,7 +935,7 @@ class ExpCommThread(threading.Thread):
         struck.set_measurement_time(exp_time)   #Ignored for external LNE of Struck
         # struck.set_num_measurements(tot_num_frames)
         struck.set_trigger_mode(0x8|0x2)    #Sets 'autotrigger' mode, i.e. counting as soon as armed
-        
+
         for current_run in range(1,num_scans+1):
             scan_motors = copy.deepcopy(scan_settings['motors'])
 
@@ -948,7 +948,7 @@ class ExpCommThread(threading.Thread):
 
     # def _inner_scan_exp(self, exp_settings, scan_settings, scan_motors,
     #     motor_positions, current_run):
-        
+
     #     motor_num, motor_params = scan_motors.popitem(False)
 
     #     motor_name = motor_params['motor']
@@ -1035,7 +1035,7 @@ class ExpCommThread(threading.Thread):
     #                 dark_counts.append(s_counters[i].get_dark_current())
     #             else:
     #                 dark_counts.append(0)
-        
+
 
     #     for position in mtr_positions:
     #         logger.debug('Position: {}'.format(position))
@@ -1479,7 +1479,7 @@ class ExpCommThread(threading.Thread):
         # dg645_trigger_source = self._mx_data['dg645_trigger_source']
 
         if exp_type == 'muscle':
-            ab_burst_2 = self._mx_data['ab_burst_2'] 
+            ab_burst_2 = self._mx_data['ab_burst_2']
             cd_burst_2 = self._mx_data['cd_burst_2'] #Struck channel advance
             ef_burst_2 = self._mx_data['ef_burst_2']
             gh_burst_2 = self._mx_data['gh_burst_2']
@@ -2136,7 +2136,7 @@ class ExpCommThread(threading.Thread):
             val = "{0}_{1:0{2}d}.tif".format(fprefix, index+1, zpad)
         else:
             val = "{0}_{1:0{2}d}".format(fprefix, index+1, zpad)
-        
+
         val = val + "\t{0}".format(exp_period*index)
 
         exp_time = cvals[0][index]/50.e6
@@ -2378,14 +2378,14 @@ class ExpCommThread(threading.Thread):
                 motor_port = int(motor_params['motor_port'])
                 self.xps = xps_drivers.XPS()
                 motor = motorcon.NewportXPSSingleAxis('Scan', self.xps,
-                    motor_ip, motor_port, 20, np_group, np_axes, 
+                    motor_ip, motor_port, 20, np_group, np_axes,
                     motor_name, np_index)
 
         return motor
 
     def run_test_scan(self, scan_settings, abort_event, end_callback):
         num_scans = scan_settings['num_scans']
-        
+
         for current_run in range(1,num_scans+1):
             scan_motors = copy.deepcopy(scan_settings['motors'])
 
@@ -2462,7 +2462,7 @@ class ExpCommThread(threading.Thread):
         motor.move_absolute(initial_motor_position)
 
         self.test_scan_running = False
-        
+
 
     def fast_mode_abort_cleanup(self, det, struck, ab_burst, ab_burst_2, dio_out9,
         dio_out6, exp_time):
@@ -2812,7 +2812,7 @@ class ExpPanel(wx.Panel):
         self.start_scan_btn.Bind(wx.EVT_BUTTON, self._on_start_exp)
         self.start_scan_btn.Hide()
 
-        if ('scan' in self.settings['components'] 
+        if ('scan' in self.settings['components']
             or 'trsaxs_scan' in self.settings['components']):
             self.start_scan_btn.Show()
 
@@ -3005,7 +3005,7 @@ class ExpPanel(wx.Panel):
 
         cont = True
 
-        if (('trsaxs_scan' in self.settings['components'] and exp_only) or 
+        if (('trsaxs_scan' in self.settings['components'] and exp_only) or
             ('scan' in self.settings['components'] and exp_only)):
             msg = ("Only exposures will be taken, no scan will be done. Are you sure you want to continue?")
             dlg = wx.MessageDialog(None, msg, "Shutter Closed", wx.YES_NO|wx.ICON_EXCLAMATION|wx.NO_DEFAULT)
@@ -3239,7 +3239,8 @@ class ExpPanel(wx.Panel):
 
     def _show_warning_dialog(self, msg):
         if self.warning_dialog is None:
-            self.warning_dialog = utils.WarningMessage(self, msg, 'WARNING')
+            self.warning_dialog = utils.WarningMessage(self, msg, 'WARNING',
+                self._on_close_warning_dialog)
             self.warning_dialog.Show()
 
     def _show_timeout_dialog(self, data):
@@ -3251,8 +3252,15 @@ class ExpPanel(wx.Panel):
             'scientist.'.format(old_dir, new_dir))
 
         if self.timeout_dialog is None:
-            self.timeout_dialog = utils.WarningMessage(self, msg, 'WARNING')
+            self.timeout_dialog = utils.WarningMessage(self, msg, 'WARNING',
+                self._on_close_timeout_dialog)
             self.timeout_dialog.Show()
+
+    def _on_close_warning_dialog(self):
+        self.warning_dialog = None
+
+    def _on_close_timeout_dialog(self):
+        self.timeout_dialog = None
 
     def _check_warnings(self):
         shutter_valid = self._check_shutters()
@@ -3607,7 +3615,7 @@ class ExpPanel(wx.Panel):
             if self.current_exposure_values['exp_time'] < 0.125:
                 errors.append('Exposure time with UV data collection must be >= 0.125 s')
 
-            if (self.current_exposure_values['exp_period'] 
+            if (self.current_exposure_values['exp_period']
                 - self.current_exposure_values['exp_time'] < 0.01):
                 errors.append(('Exposure period must be at least 0.01 s longer '
                     'than exposure time with UV data collection'))
