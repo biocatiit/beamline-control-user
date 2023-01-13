@@ -3683,6 +3683,27 @@ class PumpCommThread(utils.CommManager):
         for name, device in self._connected_devices.items():
             device.stop()
 
+
+# List of syringe calibrations
+known_syringes = {'30 mL, EXEL': {'diameter': 23.5, 'max_volume': 30,
+            'max_rate': 70},
+            '3 mL, Medline P.C.': {'diameter': 9.1, 'max_volume': 3.0,
+            'max_rate': 11},
+            '6 mL, Medline P.C.': {'diameter': 12.8, 'max_volume': 6,
+            'max_rate': 23},
+            '10 mL, Medline P.C.': {'diameter': 16.31, 'max_volume': 10,
+            'max_rate': 31},
+            '20 mL, Medline P.C.': {'diameter': 19.84, 'max_volume': 20,
+            'max_rate': 55},
+            '0.25 mL, Hamilton Glass': {'diameter': 2.30, 'max_volume': 0.25,
+            'max_rate': 11},
+            '0.5 mL, Hamilton Glass': {'diameter': 3.26, 'max_volume': 0.5,
+            'max_rate': 11},
+            '1.0 mL, Hamilton Glass': {'diameter': 4.61, 'max_volume': 1.0,
+            'max_rate': 11},
+            }
+
+
 class PumpPanel(utils.DevicePanel):
     """
     This pump panel supports standard flow controls and settings, including
@@ -3707,23 +3728,7 @@ class PumpPanel(utils.DevicePanel):
         :param str panel_name: Name for the panel
         """
 
-        self.known_syringes = {'30 mL, EXEL': {'diameter': 23.5, 'max_volume': 30,
-            'max_rate': 70},
-            '3 mL, Medline P.C.': {'diameter': 9.1, 'max_volume': 3.0,
-            'max_rate': 11},
-            '6 mL, Medline P.C.': {'diameter': 12.8, 'max_volume': 6,
-            'max_rate': 23},
-            '10 mL, Medline P.C.': {'diameter': 16.31, 'max_volume': 10,
-            'max_rate': 31},
-            '20 mL, Medline P.C.': {'diameter': 19.84, 'max_volume': 20,
-            'max_rate': 55},
-            '0.25 mL, Hamilton Glass': {'diameter': 2.30, 'max_volume': 0.25,
-            'max_rate': 11},
-            '0.5 mL, Hamilton Glass': {'diameter': 3.26, 'max_volume': 0.5,
-            'max_rate': 11},
-            '1.0 mL, Hamilton Glass': {'diameter': 4.61, 'max_volume': 1.0,
-            'max_rate': 11},
-            }
+        self.known_syringes = known_syringes
 
         super(PumpPanel, self).__init__(parent, panel_id, settings,
             *args, **kwargs)
@@ -4075,7 +4080,7 @@ class PumpPanel(utils.DevicePanel):
 
         args.insert(0, self.name)
 
-        #Remote GUI settings
+        #Remove GUI settings
         kwargs.pop('flow_rate', None)
         kwargs.pop('refill_rate', None)
         kwargs.pop('flow_rate_accel', None)

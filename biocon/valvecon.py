@@ -565,7 +565,7 @@ class ValveCommThread(utils.CommManager):
         success = []
         for i, name in enumerate(names):
             logger.debug("Setting valve %s position", name)
-            valve = self._connected_valves[name]
+            valve = self._connected_devices[name]
             t_success = valve.set_position(positions[i], **kwargs)
             if t_success:
                 logger.info("Valve %s position set to %i", name, positions[i])

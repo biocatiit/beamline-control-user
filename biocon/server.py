@@ -363,8 +363,8 @@ if __name__ == '__main__':
     port3 = '5558'
     port4 = '5559'
 
-    exp_type = 'coflow' #coflow or trsaxs_laminar or trsaxs_chaotic
-    # exp_type = 'trsaxs_chaotic'
+    # exp_type = 'coflow' #coflow or trsaxs_laminar or trsaxs_chaotic
+    exp_type = 'trsaxs_chaotic'
 
 
     if exp_type == 'coflow':
@@ -458,25 +458,50 @@ if __name__ == '__main__':
             #     {'name': 'outlet', 'args' : ['BFS', 'COM5'], 'kwargs': {}}
             #     ]
 
-            setup_pumps = [
-            ('Buffer 1', 'Soft', '', [], {}, {}),
-            ('Sample', 'Soft', '', [], {}, {}),
-            ('Buffer 2', 'Soft', '', [], {}, {}),
-            ]
 
-            pump_local_comm_locks = {'Buffer 1'    : pump_comm_locks['COM3'],
-                'Sample'    : pump_comm_locks['COM4'],
-                'Buffer 2'  : pump_comm_locks['COM10'],
-                }
+            # Simulated device, for testing purposes
+
+            setup_fms = [
+                {'name': 'outlet', 'args' : ['Soft', None], 'kwargs': {}},
+                ]
+
+            # # Syringe pumps
+            # setup_pumps = [
+            #     {'name': 'Buffer 1', 'args': ['Soft Syringe', None],
+            #         'kwargs': {'syringe_id': '20 mL, Medline P.C.', 'flow_rate': 1,
+            #             'refill_rate': 10}},
+            #     {'name': 'Sample', 'args': ['Soft Syringe', None],
+            #         'kwargs': {'syringe_id': '10 mL, Medline P.C.', 'flow_rate': 1,
+            #             'refill_rate': 10}},
+            #     {'name': 'Buffer 2', 'args': ['Soft Syringe', None],
+            #         'kwargs': {'syringe_id': '20 mL, Medline P.C.', 'flow_rate': 1,
+            #             'refill_rate': 10}},
+            #     ]
+
+
+            # setup_valves = [
+            #     {'name': 'Injection', 'args': ['Soft', None],
+            #         'kwargs': {'positions': 2}},
+            #     {'name': 'Buffer 1', 'args': ['Soft', None],
+            #         'kwargs': {'positions': 2}},
+            #     {'name': 'Sample', 'args': ['Soft', None],
+            #         'kwargs': {'positions': 2}},
+            #     {'name': 'Buffer 2', 'args': ['Soft', None],
+            #         'kwargs': {'positions': 2}},
+            #     ]
+
+            # Continuous flow pumps
+            setup_pumps = [
+                {'name': 'Buffer 1', 'args': ['Soft', None], 'kwargs': {}},
+                {'name': 'Sample', 'args': ['Soft', None], 'kwargs': {}},
+                {'name': 'Buffer 2', 'args': ['Soft', None], 'kwargs': {}},
+                ]
 
             setup_valves = [
                 {'name': 'Injection', 'args': ['Soft', None],
                     'kwargs': {'positions': 2}},
                 ]
 
-            setup_fms = [
-                {'name': 'outlet', 'args' : ['Soft', None], 'kwargs': {}},
-                ]
 
         elif exp_type == 'trsaxs_laminar':
             # Laminar flow
@@ -571,7 +596,7 @@ if __name__ == '__main__':
         }
 
     valve_frame = valvecon.ValveFrame('valveFrame', valve_settings, parent=None,
-        title='Flow Meter Control')
+        title='Valve Control')
     valve_frame.Show()
 
     # if exp_type == 'coflow':
