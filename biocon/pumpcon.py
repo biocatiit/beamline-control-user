@@ -427,8 +427,8 @@ class Pump(object):
         self._units = self._pump_base_units
         self._flow_rate = 0
 
-        self._is_flowing = False
-        self._is_dispensing = False
+        self._is_flowing = False #Wehther or not the pump is pumping, regardless of fixed/continuous or direction
+        self._is_dispensing = False #Dispensing indicates outputing a fixed volume, in either direction
         self._flow_dir = 0
 
         if comm_lock is None:
@@ -528,7 +528,7 @@ class Pump(object):
         :returns: True if the pump is moving, False otherwise
         :rtype: bool
         """
-        pass #Should be implimented in each subclass
+        return self._is_flowing
 
     def start_flow(self):
         """
@@ -570,6 +570,12 @@ class Pump(object):
 
     def get_pressure(self):
         return None
+
+    def get_flow_dir(self):
+        return self._flow_dir
+
+    def is_dispensing(self):
+        return self._is_dispensing
 
     def stop(self):
         """Stops all pump flow."""
@@ -617,6 +623,295 @@ class SyringePump(Pump):
         max_volume = self._convert_volume(max_volume, self.units.split('/')[0],
             self._pump_base_units.split('/')[0])
         self._max_volume = max_volume
+
+    def is_moving(self):
+        old_move = copy.copy(self._is_flowing)
+
+        moving = self._get_move_status()
+
+        if not moving and old_move:
+            vol = self._get_delivered_volume()
+
+            if self._flow_dir > 0:
+                self._volume = self._volume - vol
+            elif self._flow_dir < 0:
+                self._volume = self._volume + vol
+
+        self._is_flowing = moving
+
+        return moving
+
+    @property
+    def volume(self):
+        flowing = self.is_moving()
+
+        volume = self._volume
+
+        if flowing:
+            vol = self._get_delivered_volume()
+
+            if self._flow_dir > 0:
+                volume = volume - vol
+            elif self._flow_dir < 0:
+                volume = volume + vol
+
+        volume = self._convert_volume(volume, self._pump_base_units.split('/')[0],
+            self.units.split('/')[0])
+
+        return volume
+
+    @volume.setter
+    def volume(self, volume):
+        if self.is_moving():
+            vol = self._get_delivered_volume()
+
+            if self._flow_dir > 0:
+                volume = volume + vol
+            elif self._flow_dir < 0:
+                volume = volume - vol
+
+        volume = self._convert_volume(volume, self.units.split('/')[0],
+            self._pump_base_units.split('/')[0])
+
+        self._volume = volume
+
+    @property
+    def flow_rate(self):
+        """
+        Sets and returns the pump flow rate in units specified by ``Pump.units``.
+        Can be set while the pump is moving, and it will update the flow rate
+        appropriately.
+
+        Pump _flow_rate variable should always be stored in ml/min.
+
+        For these pumps, the flow_rate variable is considered to be the infuse rate,
+        whereas the refill_rate variable is the refill rate.
+
+        :type: float
+        """
+        rate = self._flow_rate
+
+        rate = self._convert_flow_rate(rate, self._pump_base_units, self.units)
+
+        return rate
+
+    @flow_rate.setter
+    def flow_rate(self, rate):
+        logger.info("Setting pump %s infuse flow rate to %f %s", self.name, rate, self.units)
+
+        rate = self._convert_flow_rate(rate, self.units, self._pump_base_units)
+
+        self._flow_rate = self.round(rate)
+
+        #Have to do this or can lose aspirate/dispense volume
+        volume = self._volume
+
+        if not self.is_moving():
+            vol = self._get_delivered_volume()
+
+            if self._flow_dir > 0:
+                volume = volume - vol
+            elif self._flow_dir < 0:
+                volume = volume + vol
+
+        self._volume = volume
+
+        self._set_flow_rate(rate)
+
+    @property
+    def refill_rate(self):
+        """
+        Sets and returns the pump flow rate in units specified by ``Pump.units``.
+        Can be set while the pump is moving, and it will update the flow rate
+        appropriately.
+
+        Pump _refill_rate variable should always be stored in ml/min.
+
+        For these pumps, the refill_rate variable is considered to be the infuse rate,
+        whereas the refill_rate variable is the refill rate.
+
+        :type: float
+        """
+        rate = self._refill_rate
+
+        rate = self._convert_flow_rate(rate, self._pump_base_units, self.units)
+
+        return rate
+
+    @refill_rate.setter
+    def refill_rate(self, rate):
+        logger.info("Setting pump %s refill flow rate to %f %s", self.name, rate, self.units)
+
+        rate = self._convert_flow_rate(rate, self.units, self._pump_base_units)
+
+        self._refill_rate = self.round(rate)
+        # logger.info('Checking volume')
+
+        #Have to do this or can lose aspirate/dispense volume
+        volume = self._volume
+
+        if not self.is_moving():
+            vol = self._get_delivered_volume()
+
+            if self._flow_dir > 0:
+                volume = volume - vol
+            elif self._flow_dir < 0:
+                volume = volume + vol
+
+        self._volume = volume
+
+        self._set_refill_rate()
+
+    def dispense_all(self, blocking=True):
+        if self._is_flowing:
+            logger.debug("Stopping pump %s current motion before infusing", self.name)
+            self.stop()
+
+        if self.volume > 0:
+            self.dispense(self.volume, blocking=blocking)
+
+    def dispense(self, vol, units='mL', blocking=True):
+        """
+        Dispenses a fixed volume.
+
+        :param vol: Volume to dispense
+        :type vol: float
+
+        :param units: Volume units, defaults to mL, also accepts uL or nL
+        :type units: str
+        """
+        vol = self._convert_volume(vol, units, self._pump_base_units.split('/')[0])
+
+        if self._is_flowing:
+            logger.debug("Stopping pump %s current motion before infusing", self.name)
+            self.stop()
+
+        cont = True
+
+        if self.volume - vol < 0:
+            logger.error(("Attempting to infuse {} mL, which is more than the "
+                "current volume of the syringe ({} mL)".format(vol, self.volume)))
+            cont = False
+
+        vol = self.round(vol)
+
+        if vol <= 0:
+            logger.error(("Infuse volume must be positive."))
+            cont = False
+
+        if cont:
+
+            logger.info("Pump %s infusing %f %s at %f %s", self.name, vol, units,
+                self.flow_rate, self.units)
+
+            self._send_dispense_cmd(vol)
+
+            self._flow_dir = 1
+
+    def aspirate_all(self):
+        if self._is_flowing:
+            logger.debug("Stopping pump %s current motion before aspirating", self.name)
+            self.stop()
+
+        if self.round(self.max_volume - self.volume) > 0:
+            self.aspirate(self.max_volume - self.volume)
+        else:
+            logger.error(("Already at maximum volume, can't aspirate more."))
+
+    def aspirate(self, vol, units='mL'):
+        """
+        Aspirates a fixed volume.
+
+        :param vol: Volume to aspirate
+        :type vol: float
+
+        :param units: Volume units, defaults to mL, also accepts uL or nL
+        :type units: str
+        """
+
+        vol = self._convert_volume(vol, units, self._pump_base_units.split('/')[0])
+
+        if self._is_flowing:
+            logger.debug("Stopping pump %s current motion before refilling", self.name)
+            self.stop()
+
+        cont = True
+
+        if self.volume + vol > self.max_volume:
+            logger.error(("Attempting to refill {} mL, which will take the total "
+                "loaded volume to more than the maximum volume of the syringe "
+                "({} mL)".format(vol, self.max_volume)))
+            cont = False
+
+        vol = self.round(vol)
+
+        if vol <= 0:
+            logger.error(("Refill volume must be positive."))
+            cont = False
+
+        if cont:
+            logger.info("Pump %s refilling %f %s at %f %s", self.name, vol, units,
+                self.refill_rate, self.units)
+
+            self._send_aspirate_cmd(vol)
+
+            self._flow_dir = -1
+
+    def stop(self):
+        """Stops all pump flow."""
+        logger.info("Pump %s stopping all motions", self.name)
+        self._send_stop_cmd()
+
+        if self._is_flowing:
+            vol = self._get_delivered_volume()
+
+            if self._flow_dir > 0:
+                self._volume = self._volume - vol
+            elif self._flow_dir < 0:
+                self._volume = self._volume + vol
+
+        self._is_flowing = False
+        self._flow_dir = 0
+
+    def set_pump_cal(self, diameter, max_volume, max_rate, syringe_id):
+        self.diameter = diameter
+        self.max_volume = max_volume
+        self.max_rate = max_rate
+        self.syringe_id = syringe_id
+
+        self._send_pump_cal_cmd()
+
+    def _get_move_status(self):
+        # Pump specific, should return moving as True/False and set self._flow_dir
+        pass
+
+    def _set_flow_rate(self):
+        # Pump specific, sets flow rate to self._flow_rate
+        pass
+
+    def _set_refill_rate(self):
+        # Pump specific, sets refill rate to self._refill_rate
+        pass
+
+    def _get_delivered_volume(self):
+        # Pump specific, returns delivered volume
+        pass
+
+    def _send_dispense_cmd(self, vol):
+        # Pump specific, starts dispensing the volume vol
+        pass
+
+    def _send_aspirate_cmd(self, vol):
+        # Pump specific, starts aspirating the volume vol
+        pass
+
+    def _send_stop_cmd(self):
+        # Pump specific, sends pump stop command
+        pass
+
+    def _send_pump_cal_cmd(self):
+        # Pump specific, sends pump calibration commands
+        pass
 
 class M50Pump(Pump):
     """
@@ -680,6 +975,8 @@ class M50Pump(Pump):
         self.cal = 200*256*self._gear_ratio/self._flow_cal #Calibration value in (micro)steps/useful
             #full steps/rev * microsteps/full step * gear ratio / uL/revolution = microsteps/uL
 
+        self._flow_rate = self.send_cmd('V', True) # Gets current flow rate
+
     def connect(self):
         if not self.connected:
             with self.comm_lock:
@@ -721,9 +1018,9 @@ class M50Pump(Pump):
 
         self._flow_rate = int(round(rate*self.cal))
 
-        if self._is_flowing:
+        if self._is_flowing and not self._is_dispensing:
             self.send_cmd("SL {}".format(self._flow_rate))
-        elif self._is_dispensing:
+        else:
             self.send_cmd("VM {}".format(abs(self._flow_rate)))
 
 
@@ -752,14 +1049,22 @@ class M50Pump(Pump):
         status = self.send_cmd("PR MV")
 
         status = status.split('\r\n')[-2][-1]
-        status = bool(int(status))
+        status = int(status)
 
-        logger.debug("Pump %s moving: %s", self.name, str(status))
+        if status == 1:
+            status = True
+        else:
+            status = False
+            self._is_dispensing = False
 
-        return status
+        self._is_flowing = status
+
+        logger.debug("Pump %s moving: %s", self.name, str(self._is_flowing))
+
+        return self._is_flowing
 
     def start_flow(self):
-        if self._is_flowing or self._is_dispensing:
+        if self._is_flowing:
             logger.debug("Stopping pump %s current motion before starting continuous flow", self.name)
             self.stop()
 
@@ -767,13 +1072,14 @@ class M50Pump(Pump):
         self.send_cmd("SL {}".format(self._flow_rate))
 
         self._is_flowing = True
+
         if self._flow_rate > 0:
             self._flow_dir = 1
         elif self._flow_rate < 0:
             self._flow_dir = -1
 
     def dispense(self, vol, units='uL'):
-        if self._is_flowing or self._is_dispensing:
+        if self._is_flowing:
             logger.debug("Stopping pump %s current motion before starting flow", self.name)
             self.stop()
 
@@ -798,6 +1104,7 @@ class M50Pump(Pump):
         self.send_cmd("VM {}".format(abs(self._flow_rate)))
         self.send_cmd("MR {}".format(vol))
 
+        self._is_flowing = True
         self._is_dispensing = True
         if vol > 0:
             self._flow_dir = 1
@@ -852,138 +1159,6 @@ class PHD4400Pump(SyringePump):
 
             self.connected = True
 
-    @property
-    def flow_rate(self):
-        """
-        Sets and returns the pump flow rate in units specified by ``Pump.units``.
-        Can be set while the pump is moving, and it will update the flow rate
-        appropriately.
-
-        Pump _flow_rate variable should always be stored in ml/min.
-
-        For these pumps, the flow_rate variable is considered to be the infuse rate,
-        whereas the refill_rate variable is the refill rate.
-
-        :type: float
-        """
-        rate = self._flow_rate
-
-        rate = self._convert_flow_rate(rate, self._pump_base_units, self.units)
-
-        return rate
-
-    @flow_rate.setter
-    def flow_rate(self, rate):
-        logger.info("Setting pump %s infuse flow rate to %f %s", self.name, rate, self.units)
-
-        rate = self._convert_flow_rate(rate, self.units, self._pump_base_units)
-
-        self._flow_rate = self.round(rate)
-
-        #Have to do this or can lose aspirate/dispense volume
-        volume = self._volume
-
-        if self._is_dispensing and not self.is_moving():
-            vol = self._get_delivered_volume()
-
-            if self._flow_dir > 0:
-                volume = volume - vol
-            elif self._flow_dir < 0:
-                volume = volume + vol
-
-        self._volume = volume
-
-        self.send_cmd("RAT {} MM".format(self._flow_rate))
-
-    @property
-    def refill_rate(self):
-        """
-        Sets and returns the pump flow rate in units specified by ``Pump.units``.
-        Can be set while the pump is moving, and it will update the flow rate
-        appropriately.
-
-        Pump _refill_rate variable should always be stored in ml/min.
-
-        For these pumps, the refill_rate variable is considered to be the infuse rate,
-        whereas the refill_rate variable is the refill rate.
-
-        :type: float
-        """
-        rate = self._refill_rate
-
-        rate = self._convert_flow_rate(rate, self._pump_base_units, self.units)
-
-        return rate
-
-    @refill_rate.setter
-    def refill_rate(self, rate):
-        logger.info("Setting pump %s refill flow rate to %f %s", self.name, rate, self.units)
-
-        rate = self._convert_flow_rate(rate, self.units, self._pump_base_units)
-
-        self._refill_rate = self.round(rate)
-        # logger.info('Checking volume')
-
-        #Have to do this or can lose aspirate/dispense volume
-        volume = self._volume
-
-        if self._is_dispensing and not self.is_moving():
-            vol = self._get_delivered_volume()
-
-            if self._flow_dir > 0:
-                volume = volume - vol
-            elif self._flow_dir < 0:
-                volume = volume + vol
-
-        self._volume = volume
-
-        self.send_cmd("RFR {} MM".format(self._refill_rate))
-
-    @property
-    def volume(self):
-        volume = self._volume
-
-        currently_flowing = copy.copy(self._is_flowing)
-
-        if self.is_flowing(True):
-            vol = self._get_delivered_volume()
-
-            if self._flow_dir > 0:
-                volume = volume - vol
-            elif self._flow_dir < 0:
-                volume = volume + vol
-
-        else:
-            if currently_flowing:
-                vol = self._get_delivered_volume()
-
-                if self._flow_dir > 0:
-                    self._volume = self._volume - vol
-                elif self._flow_dir < 0:
-                    self._volume = self._volume + vol
-
-                volume = self._volume
-
-        volume = self._convert_volume(volume, self._pump_base_units.split('/')[0],
-            self.units.split('/')[0])
-
-        return volume
-
-    @volume.setter
-    def volume(self, volume):
-        volume = self._convert_volume(volume, self.units.split('/')[0],
-            self._pump_base_units.split('/')[0])
-
-        if self.is_flowing(True):
-            vol = self._get_delivered_volume()
-
-            if self._flow_dir > 0:
-                volume = volume + vol
-            elif self._flow_dir < 0:
-                volume = volume - vol
-
-        self._volume = volume
-
     def send_cmd(self, cmd, get_response=True):
         """
         Sends a command to the pump.
@@ -1004,37 +1179,27 @@ class PHD4400Pump(SyringePump):
 
         return ret
 
-    def is_moving(self):
-        """
-        Queries the pump about whether or not it's moving.
-
-        :returns: True if the pump is moving, False otherwise
-        :rtype: bool
-        """
+    def _get_move_status(self):
         ret = self.send_cmd("")
 
         if ret.endswith('>'):
             moving = True
-            self._is_dispensing = True
+            self._flow_dir = 1
         elif ret.endswith('<'):
             moving = True
-            self._is_dispensing = False
+            self._flow_dir = -1
         else:
             moving = False
 
         return moving
 
-    def is_dispensing(self, update=False):
-        if update:
-            self.is_moving()
+    def _set_flow_rate(self):
+        self._flow_rate = self.round(self._flow_rate)
+        self.send_cmd("RAT {} MM".format(self._flow_rate))
 
-        return self._is_dispensing
-
-    def is_flowing(self, update=False):
-        if update:
-            self.is_moving()
-
-        return self._is_flowing
+    def _set_refill_rate(self):
+        self._refill_rate = self.round(self._refill_rate)
+        self.send_cmd("RFR {} MM".format(self._refill_rate))
 
     def _get_delivered_volume(self):
         ret = self.send_cmd("DEL")
@@ -1043,128 +1208,28 @@ class PHD4400Pump(SyringePump):
 
         return vol
 
-    def dispense_all(self, blocking=True):
-        if self._is_flowing:
-            logger.debug("Stopping pump %s current motion before infusing", self.name)
-            self.stop()
-
-        if self.volume > 0:
-            self.dispense(self.volume, blocking=blocking)
-
-    def dispense(self, vol, units='mL', blocking=True):
-        """
-        Dispenses a fixed volume.
-
-        :param vol: Volume to dispense
-        :type vol: float
-
-        :param units: Volume units, defaults to mL, also accepts uL or nL
-        :type units: str
-        """
-        vol = self._convert_volume(vol, units, self._pump_base_units.split('/')[0])
-
-        if self._is_flowing:
-            logger.debug("Stopping pump %s current motion before infusing", self.name)
-            self.stop()
-
-        cont = True
-
-        if self.volume - vol < 0:
-            logger.error(("Attempting to infuse {} mL, which is more than the "
-                "current volume of the syringe ({} mL)".format(vol, self.volume)))
-            cont = False
-
+    def _send_dispense_cmd(self, vol):
         vol = self.round(vol)
 
-        if vol <= 0:
-            logger.error(("Infuse volume must be positive."))
-            cont = False
-
-        if cont:
-            logger.info("Pump %s infusing %f %s at %f %s", self.name, vol, units, self.flow_rate, self.units)
-
+        if vol > 0:
             self.send_cmd("DIR INF")
             self.send_cmd("CLD")
             self.send_cmd("TGT {}".format(vol))
             self.send_cmd("RUN")
 
-            self._is_dispensing = True
-            self._flow_dir = 1
-
-    def aspirate_all(self):
-        if self._is_flowing:
-            logger.debug("Stopping pump %s current motion before aspirating", self.name)
-            self.stop()
-
-        if self.round(self.max_volume - self.volume) > 0:
-            self.aspirate(self.max_volume - self.volume)
-        else:
-            logger.error(("Already at maximum volume, can't aspirate more."))
-
-    def aspirate(self, vol, units='mL'):
-        """
-        Aspirates a fixed volume.
-
-        :param vol: Volume to aspirate
-        :type vol: float
-
-        :param units: Volume units, defaults to mL, also accepts uL or nL
-        :type units: str
-        """
-
-        vol = self._convert_volume(vol, units, self._pump_base_units.split('/')[0])
-
-        if self._is_flowing:
-            logger.debug("Stopping pump %s current motion before refilling", self.name)
-            self.stop()
-
-        cont = True
-
-        if self.volume + vol > self.max_volume:
-            logger.error(("Attempting to refill {} mL, which will take the total "
-                "loaded volume to more than the maximum volume of the syringe "
-                "({} mL)".format(vol, self.max_volume)))
-            cont = False
-
+    def _send_aspirate_cmd(self, vol):
         vol = self.round(vol)
 
-        if vol <= 0:
-            logger.error(("Refill volume must be positive."))
-            cont = False
-
-        if cont:
-            logger.info("Pump %s refilling %f %s at %f %s", self.name, vol, units, self.refill_rate, self.units)
-
+        if vol > 0:
             self.send_cmd("DIR REF")
             self.send_cmd("CLD")
             self.send_cmd("TGT {}".format(vol))
             self.send_cmd("RUN")
 
-            self._is_dispensing = True
-            self._flow_dir = -1
-
-    def stop(self):
-        """Stops all pump flow."""
-        logger.info("Pump %s stopping all motions", self.name)
+    def _send_stop_cmd(self):
         self.send_cmd("STP")
 
-        if self._is_flowing:
-            vol = self._get_delivered_volume()
-
-            if self._flow_dir > 0:
-                self._volume = self._volume - vol
-            elif self._flow_dir < 0:
-                self._volume = self._volume + vol
-
-        self._is_flowing = False
-        self._flow_dir = 0
-
-    def set_pump_cal(self, diameter, max_volume, max_rate, syringe_id):
-        self.diameter = diameter
-        self.max_volume = max_volume
-        self.max_rate = max_rate
-        self.syringe_id = syringe_id
-
+    def _send_pump_cal_cmd(self):
         self.send_cmd("DIA {}".format(self.diameter))
 
     def round(self, val):
@@ -1218,92 +1283,79 @@ class PicoPlusPump(SyringePump):
 
             self.connected = True
 
-    @property
-    def flow_rate(self):
+    def send_cmd(self, cmd, get_response=True):
         """
-        Sets and returns the pump flow rate in units specified by ``Pump.units``.
-        Can be set while the pump is moving, and it will update the flow rate
-        appropriately.
+        Sends a command to the pump.
 
-        Pump _flow_rate variable should always be stored in ml/min.
-
-        For these pumps, the flow_rate variable is considered to be the infuse rate,
-        whereas the refill_rate variable is the refill rate.
-
-        :type: float
+        :param cmd: The command to send to the pump.
         """
-        rate = self._flow_rate
 
-        rate = self._convert_flow_rate(rate, self._pump_base_units, self.units)
+        logger.debug("Sending pump %s cmd %r", self.name, cmd)
 
-        return rate
+        with self.comm_lock:
 
-    @flow_rate.setter
-    def flow_rate(self, rate):
-        logger.info("Setting pump %s infuse flow rate to %f %s", self.name, rate, self.units)
+            ret = self.pump_comm.write("{:02d}{}".format(self._pump_address, cmd),
+                self._pump_address, get_response=get_response)
 
-        rate = self._convert_flow_rate(rate, self.units, self._pump_base_units)
+            time.sleep(0.01)
 
-        self._flow_rate = self.round(rate)
+        logger.debug("Pump %s returned %r", self.name, ret)
 
-        #Have to do this or can lose aspirate/dispense volume
-        volume = self._volume
+        return ret
 
-        if not self.is_moving():
-            vol = self._get_delivered_volume()
+    def _get_move_status(self):
+        ret = self.send_cmd("")
 
-            if self._flow_dir > 0:
-                volume = volume - vol
-            elif self._flow_dir < 0:
-                volume = volume + vol
+        if ret.endswith('>'):
+            moving = True
+            self._flow_dir = 1
+        elif ret.endswith('<'):
+            moving = True
+            self._flow_dir = -1
+        else:
+            moving = False
 
-        self._volume = volume
-
+    def _set_flow_rate(self):
         self.send_cmd("irate {} ml/min".format(self._flow_rate))
 
-    @property
-    def refill_rate(self):
-        """
-        Sets and returns the pump flow rate in units specified by ``Pump.units``.
-        Can be set while the pump is moving, and it will update the flow rate
-        appropriately.
-
-        Pump _refill_rate variable should always be stored in ml/min.
-
-        For these pumps, the refill_rate variable is considered to be the infuse rate,
-        whereas the refill_rate variable is the refill rate.
-
-        :type: float
-        """
-        rate = self._refill_rate
-
-        rate = self._convert_flow_rate(rate, self._pump_base_units, self.units)
-
-        return rate
-
-    @refill_rate.setter
-    def refill_rate(self, rate):
-        logger.info("Setting pump %s refill flow rate to %f %s", self.name, rate, self.units)
-
-        rate = self._convert_flow_rate(rate, self.units, self._pump_base_units)
-
-        self._refill_rate = self.round(rate)
-        # logger.info('Checking volume')
-
-        #Have to do this or can lose aspirate/dispense volume
-        volume = self._volume
-
-        if not self.is_moving():
-            vol = self._get_delivered_volume()
-
-            if self._flow_dir > 0:
-                volume = volume - vol
-            elif self._flow_dir < 0:
-                volume = volume + vol
-
-        self._volume = volume
-
+    def _set_refill_rate(self):
         self.send_cmd("wrate {} ml/min".format(self._refill_rate))
+
+    def _get_delivered_volume(self):
+        if self._flow_dir > 0:
+            ret = self.send_cmd("ivolume")
+            vol = ret.split('\r\n')[0].split(':')[1]
+            vol, units = vol.split()
+        else:
+            ret = self.send_cmd("wvolume")
+            vol = ret.split('\r\n')[0].split(':')[1]
+            vol, units = vol.split()
+
+        vol = float(vol)
+
+        vol = self._convert_volume(vol, units, self._pump_base_units.split('/')[0])
+
+        return vol
+
+    def _send_dispense_cmd(self, vol):
+        self.send_cmd("cvolume")
+        self.send_cmd("ctime")
+        self.send_cmd("tvolume {} ml".format(vol))
+        self.send_cmd("irun")
+
+    def _send_aspirate_cmd(self, vol):
+        # self.send_cmd("DIR REF")
+        self.send_cmd("cvolume")
+        self.send_cmd("ctime")
+        self.send_cmd("tvolume {} ml".format(vol))
+        self.send_cmd("wrun")
+
+    def _send_stop_cmd(self):
+        self.send_cmd("stop")
+
+    def _send_pump_cal_cmd(self):
+        self.send_cmd("diameter {}".format(self.diameter))
+        self.send_cmd("svolume {} ml".format(self.max_volume))
 
     def _get_rates(self):
         fr = self.send_cmd('irate')
@@ -1325,40 +1377,6 @@ class PicoPlusPump(SyringePump):
         self._refill_rate = rr
 
     @property
-    def volume(self):
-        flowing = self.is_flowing(True)
-
-        volume = self._volume
-
-        if flowing:
-            vol = self._get_delivered_volume()
-
-            if self._flow_dir > 0:
-                volume = volume - vol
-            elif self._flow_dir < 0:
-                volume = volume + vol
-
-        volume = self._convert_volume(volume, self._pump_base_units.split('/')[0],
-            self.units.split('/')[0])
-
-        return volume
-
-    @volume.setter
-    def volume(self, volume):
-        if self.is_flowing(True):
-            vol = self._get_delivered_volume()
-
-            if self._flow_dir > 0:
-                volume = volume + vol
-            elif self._flow_dir < 0:
-                volume = volume - vol
-
-        volume = self._convert_volume(volume, self.units.split('/')[0],
-            self._pump_base_units.split('/')[0])
-
-        self._volume = volume
-
-    @property
     def force(self):
         ret = self.send_cmd('force')
 
@@ -1373,218 +1391,6 @@ class PicoPlusPump(SyringePump):
             self.send_cmd('force {}'.format(force))
         else:
             logger.error(("Force must be between 1 and 100"))
-
-    def send_cmd(self, cmd, get_response=True):
-        """
-        Sends a command to the pump.
-
-        :param cmd: The command to send to the pump.
-        """
-
-        logger.debug("Sending pump %s cmd %r", self.name, cmd)
-
-        with self.comm_lock:
-
-            ret = self.pump_comm.write("{:02d}{}".format(self._pump_address, cmd),
-                self._pump_address, get_response=get_response)
-
-            time.sleep(0.01)
-
-        logger.debug("Pump %s returned %r", self.name, ret)
-
-        return ret
-
-    def is_moving(self):
-        """
-        Queries the pump about whether or not it's moving.
-
-        :returns: True if the pump is moving, False otherwise
-        :rtype: bool
-        """
-        ret = self.send_cmd("")
-
-        old_move = copy.copy(self._is_flowing)
-
-        if ret.endswith('>'):
-            moving = True
-            self._flow_dir = 1
-        elif ret.endswith('<'):
-            moving = True
-            self._flow_dir = -1
-        else:
-            moving = False
-
-        if not moving and old_move:
-            vol = self._get_delivered_volume()
-
-            if self._flow_dir > 0:
-                self._volume = self._volume - vol
-            elif self._flow_dir < 0:
-                self._volume = self._volume + vol
-
-        self._is_flowing = moving
-
-
-
-        return moving
-
-    def is_flowing(self, update=False):
-        if update:
-            self.is_moving()
-
-        return self._is_flowing
-
-    def _get_delivered_volume(self):
-        if self._flow_dir > 0:
-            ret = self.send_cmd("ivolume")
-            vol = ret.split('\r\n')[0].split(':')[1]
-            vol, units = vol.split()
-        else:
-            ret = self.send_cmd("wvolume")
-            vol = ret.split('\r\n')[0].split(':')[1]
-            vol, units = vol.split()
-
-        vol = float(vol)
-
-        vol = self._convert_volume(vol, units, self._pump_base_units.split('/')[0])
-
-        return vol
-
-    def dispense_all(self, blocking=True):
-        if self._is_flowing:
-            logger.debug("Stopping pump %s current motion before infusing", self.name)
-            self.stop()
-
-        if self.volume > 0:
-            self.dispense(self.volume, blocking=blocking)
-
-    def dispense(self, vol, units='mL', blocking=True):
-        """
-        Dispenses a fixed volume.
-
-        :param vol: Volume to dispense
-        :type vol: float
-
-        :param units: Volume units, defaults to mL, also accepts uL or nL
-        :type units: str
-        """
-        vol = self._convert_volume(vol, units, self._pump_base_units.split('/')[0])
-
-        if self._is_flowing:
-            logger.debug("Stopping pump %s current motion before infusing", self.name)
-            self.stop()
-
-        cont = True
-
-        if self.volume - vol < 0:
-            logger.error(("Attempting to infuse {} mL, which is more than the "
-                "current volume of the syringe ({} mL)".format(vol, self.volume)))
-            cont = False
-
-        vol = self.round(vol)
-
-        if vol <= 0:
-            logger.error(("Infuse volume must be positive."))
-            cont = False
-
-        if cont:
-
-            logger.info("Pump %s infusing %f %s at %f %s", self.name, vol, units, self.flow_rate, self.units)
-
-            self.send_cmd("cvolume")
-            self.send_cmd("ctime")
-            self.send_cmd("tvolume {} ml".format(vol))
-            self.send_cmd("irun")
-
-            self._flow_dir = 1
-
-    def aspirate_all(self):
-        if self._is_flowing:
-            logger.debug("Stopping pump %s current motion before aspirating", self.name)
-            self.stop()
-
-        if self.round(self.max_volume - self.volume) > 0:
-            self.aspirate(self.max_volume - self.volume)
-        else:
-            logger.error(("Already at maximum volume, can't aspirate more."))
-
-    def aspirate(self, vol, units='mL'):
-        """
-        Aspirates a fixed volume.
-
-        :param vol: Volume to aspirate
-        :type vol: float
-
-        :param units: Volume units, defaults to mL, also accepts uL or nL
-        :type units: str
-        """
-
-        vol = self._convert_volume(vol, units, self._pump_base_units.split('/')[0])
-
-        if self._is_flowing:
-            logger.debug("Stopping pump %s current motion before refilling", self.name)
-            self.stop()
-
-        cont = True
-
-        if self.volume + vol > self.max_volume:
-            logger.error(("Attempting to refill {} mL, which will take the total "
-                "loaded volume to more than the maximum volume of the syringe "
-                "({} mL)".format(vol, self.max_volume)))
-            cont = False
-
-        vol = self.round(vol)
-
-        if vol <= 0:
-            logger.error(("Refill volume must be positive."))
-            cont = False
-
-        if cont:
-            logger.info("Pump %s refilling %f %s at %f %s", self.name, vol, units, self.refill_rate, self.units)
-
-            # self.send_cmd("DIR REF")
-            self.send_cmd("cvolume")
-            self.send_cmd("ctime")
-            self.send_cmd("tvolume {} ml".format(vol))
-            self.send_cmd("wrun")
-
-            self._flow_dir = -1
-
-    def stop(self):
-        """Stops all pump flow."""
-        logger.info("Pump %s stopping all motions", self.name)
-        self.send_cmd("stop")
-
-        if self._is_flowing:
-            vol = self._get_delivered_volume()
-
-            if self._flow_dir > 0:
-                self._volume = self._volume - vol
-            elif self._flow_dir < 0:
-                self._volume = self._volume + vol
-
-        self._is_flowing = False
-        self._flow_dir = 0
-
-    def set_pump_cal(self, diameter, max_volume, max_rate, syringe_id):
-        self.diameter = diameter
-        self.max_volume = max_volume
-        self.max_rate = max_rate
-        self.syringe_id = syringe_id
-
-        self.send_cmd("diameter {}".format(self.diameter))
-        self.send_cmd("svolume {} ml".format(self.max_volume))
-
-    def round(self, val):
-        oom = int('{:e}'.format(val).split('e')[1])
-
-        if oom < 0:
-            oom = 0
-
-        num_dig = 6-(oom + 2)
-
-        return round(val, num_dig)
-
 
 class NE500Pump(SyringePump):
     """
@@ -1611,109 +1417,12 @@ class NE500Pump(SyringePump):
 
         self._pump_address = pump_address
 
-        self.stop()
-
     def connect(self):
         if not self.connected:
             with self.comm_lock:
                 self.pump_comm = SerialComm(device, baudrate=19200)
 
             self.connected = True
-
-    @property
-    def flow_rate(self):
-        """
-        Sets and returns the pump flow rate in units specified by ``Pump.units``.
-        Can be set while the pump is moving, and it will update the flow rate
-        appropriately.
-
-        Pump _flow_rate variable should always be stored in ml/min.
-
-        For these pumps, the flow_rate variable is considered to be the infuse rate,
-        whereas the refill_rate variable is the refill rate.
-
-        :type: float
-        """
-        rate = self._flow_rate
-
-        rate = self._convert_flow_rate(rate, self._pump_base_units, self.units)
-
-        return rate
-
-    @flow_rate.setter
-    def flow_rate(self, rate):
-        logger.info("Setting pump %s infuse flow rate to %f %s", self.name, rate, self.units)
-
-        rate = self._convert_flow_rate(rate, self.units, self._pump_base_units)
-
-        self._flow_rate = self.round(rate)
-
-        self.send_cmd("RAT{}".format(self._flow_rate))
-
-
-    @property
-    def refill_rate(self):
-        """
-        Sets and returns the pump flow rate in units specified by ``Pump.units``.
-        Can be set while the pump is moving, and it will update the flow rate
-        appropriately.
-
-        Pump _refill_rate variable should always be stored in ml/min.
-
-        For these pumps, the refill_rate variable is considered to be the infuse rate,
-        whereas the refill_rate variable is the refill rate.
-
-        :type: float
-        """
-        rate = self._refill_rate
-
-        rate = self._convert_flow_rate(rate, self._pump_base_units, self.units)
-
-        return rate
-
-    @refill_rate.setter
-    def refill_rate(self, rate):
-        logger.info("Setting pump %s refill flow rate to %f %s", self.name, rate, self.units)
-
-        rate = self._convert_flow_rate(rate, self.units, self._pump_base_units)
-
-        self._refill_rate = self.round(rate)
-
-        self.send_cmd("RAT{}".format(self._refill_rate))
-
-
-    @property
-    def volume(self):
-        volume = self._volume
-
-        if self._is_dispensing:
-            vol = self._get_delivered_volume()
-
-            if self._flow_dir > 0:
-                volume = volume - vol
-            elif self._flow_dir < 0:
-                volume = volume + vol
-
-        volume = self._convert_volume(volume, self._pump_base_units.split('/')[0],
-            self.units.split('/')[0])
-
-        return volume
-
-    @volume.setter
-    def volume(self, volume):
-
-        if self._is_dispensing:
-            vol = self._get_delivered_volume()
-
-            if self._flow_dir > 0:
-                volume = volume + vol
-            elif self._flow_dir < 0:
-                volume = volume - vol
-
-        volume = self._convert_volume(volume, self.units.split('/')[0],
-            self._pump_base_units.split('/')[0])
-
-        self._volume = volume
 
     def send_cmd(self, cmd, get_response=True):
         """
@@ -1741,33 +1450,29 @@ class NE500Pump(SyringePump):
 
         return ret, status
 
-    def is_moving(self):
-        """
-        Queries the pump about whether or not it's moving.
-
-        :returns: True if the pump is moving, False otherwise
-        :rtype: bool
-        """
+    def _get_move_status(self):
         ret, status = self.send_cmd("")
 
         if status == 'I':
             moving = True
-            self._is_dispensing = True
+            self._flow_dir = 1
         elif status == 'W':
             moving = True
-            self._is_dispensing = False
+            self._flow_dir = -1
         elif status == 'X' or status == 'T':
             moving = True
         else:
             moving = False
 
-        return moving
+    def _set_flow_rate(self):
+        self._flow_rate = self.round(self._flow_rate)
 
-    def is_dispensing(self, update=False):
-        if update:
-            self.is_moving()
+        self.send_cmd("RAT{}".format(self._flow_rate))
 
-        return self._is_dispensing
+    def _set_refill_rate(self):
+        self._refill_rate = self.round(self._refill_rate)
+
+        self.send_cmd("RAT{}".format(self._refill_rate))
 
     def _get_delivered_volume(self):
         ret, status = self.send_cmd("DIS")
@@ -1776,134 +1481,34 @@ class NE500Pump(SyringePump):
             vol = ret.split('W')[0].lstrip('I').rstrip('W')
         else:
             vol = ret.split('W')[1].lstrip('I').rstrip('W')[:-2]
+
         vol = float(vol)
 
         return vol
 
-    def dispense_all(self, blocking=True):
-        if self._is_flowing or self._is_dispensing:
-            logger.debug("Stopping pump %s current motion before infusing", self.name)
-            self.stop()
+    def _send_dispense_cmd(self, vol):
+        vol = self.round(vol)
 
-        self.dispense(self.volume, blocking=blocking)
+        self.send_cmd("DIRINF")
+        self.send_cmd("CLDINF")
+        self.send_cmd("RAT{}MM".format(self._flow_rate))
+        self.send_cmd("VOL{}".format(vol))
+        self.send_cmd("RUN")
 
-    def dispense(self, vol, units='mL', blocking=True):
-        """
-        Dispenses a fixed volume.
+    def _send_aspirate_cmd(self, vol):
+        vol = self.round(vol)
 
-        :param vol: Volume to dispense
-        :type vol: float
+        self.send_cmd("DIRWDR")
+        self.send_cmd("CLDWDR")
+        self.send_cmd("RAT{}MM".format(self._refill_rate))
+        self.send_cmd("VOL{}".format(vol))
+        self.send_cmd("RUN")
 
-        :param units: Volume units, defaults to mL, also accepts uL or nL
-        :type units: str
-        """
-        vol = self._convert_volume(vol, units, self._pump_base_units.split('/')[0])
-
-        if self._is_flowing or self._is_dispensing:
-            logger.debug("Stopping pump %s current motion before infusing", self.name)
-            self.stop()
-
-        cont = True
-
-        if self.volume - vol < 0:
-            logger.error(("Attempting to infuse {} mL, which is more than the "
-                "current volume of the syringe ({} mL)".format(vol, self.volume)))
-            cont = False
-
-        if vol <= 0:
-            logger.error(("Infuse volume must be positive."))
-            cont = False
-
-        if cont:
-            vol = self.round(vol)
-
-            logger.info("Pump %s infusing %f %s at %f %s", self.name, vol, units, self.flow_rate, self.units)
-
-            self.send_cmd("DIRINF")
-            self.send_cmd("CLDINF")
-            self.send_cmd("RAT{}MM".format(self._flow_rate))
-            self.send_cmd("VOL{}".format(vol))
-            self.send_cmd("RUN")
-
-            self._is_dispensing = True
-            self._flow_dir = 1
-
-    def aspirate_all(self):
-        if self._is_flowing or self._is_dispensing:
-            logger.debug("Stopping pump %s current motion before aspirating", self.name)
-            self.stop()
-
-        if self.round(self.max_volume - self.volume) > 0:
-            self.aspirate(self.max_volume - self.volume)
-        else:
-            logger.error(("Already at maximum volume, can't aspirate more."))
-
-    def aspirate(self, vol, units='mL'):
-        """
-        Aspirates a fixed volume.
-
-        :param vol: Volume to aspirate
-        :type vol: float
-
-        :param units: Volume units, defaults to mL, also accepts uL or nL
-        :type units: str
-        """
-
-        vol = self._convert_volume(vol, units, self._pump_base_units.split('/')[0])
-
-        if self._is_flowing or self._is_dispensing:
-            logger.debug("Stopping pump %s current motion before refilling", self.name)
-            self.stop()
-
-        cont = True
-
-        if self.volume + vol > self.max_volume:
-            logger.error(("Attempting to refill {} mL, which will take the total "
-                "loaded volume to more than the maximum volume of the syringe "
-                "({} mL)".format(vol, self.max_volume)))
-            cont = False
-
-        if vol <= 0:
-            logger.error(("Refill volume must be positive."))
-            cont = False
-
-        if cont:
-            vol = self.round(vol)
-
-            logger.info("Pump %s refilling %f %s at %f %s", self.name, vol, units, self.refill_rate, self.units)
-
-            self.send_cmd("DIRWDR")
-            self.send_cmd("CLDWDR")
-            self.send_cmd("RAT{}MM".format(self._refill_rate))
-            self.send_cmd("VOL{}".format(vol))
-            self.send_cmd("RUN")
-
-            self._is_dispensing = True
-            self._flow_dir = -1
-
-    def stop(self):
-        """Stops all pump flow."""
-        logger.info("Pump %s stopping all motions", self.name)
+    def _send_stop_cmd(self):
         self.send_cmd("STP")
 
-        if self._is_dispensing:
-            vol = self._get_delivered_volume()
-
-            if self._flow_dir > 0:
-                self._volume = self._volume - vol
-            elif self._flow_dir < 0:
-                self._volume = self._volume + vol
-
-        self._is_dispensing = False
-        self._is_flowing = False
-        self._flow_dir = 0
-
-    def set_pump_cal(self, diameter, max_volume, max_rate, syringe_id):
+    def _send_pump_cal_cmd(self):
         self.diameter = self.round(diameter)
-        self.max_volume = max_volume
-        self.max_rate = max_rate
-        self.syringe_id = syringe_id
-
         self.send_cmd("DIA{}".format(self.diameter))
         self.send_cmd("VOLML")
 
@@ -1920,7 +1525,6 @@ class NE500Pump(SyringePump):
             val = int(val)
 
         return val
-
 
 class SSINextGenPump(Pump):
     """
@@ -2317,8 +1921,6 @@ class SSINextGenPump(Pump):
     def stop(self, wait=True):
         logger.info("Pump %s stopping all motions", self.name)
 
-        self._is_dispensing = False
-
         if self.is_moving():
             if self._ramping_flow:
                 self._accel_stop.set()
@@ -2342,8 +1944,6 @@ class SSINextGenPump(Pump):
 
     def abort(self):
         self.send_cmd("ST")
-
-        self._is_dispensing = False
 
         if self._ramping_flow:
             self._accel_stop.set()
@@ -2458,7 +2058,6 @@ class SSINextGenPump(Pump):
         vol = self._convert_volume(vol, units, self._pump_base_units.split('/')[0])
 
         self._dispensing_volume = vol
-        self._is_dispensing = True
 
         self.start_flow()
 
@@ -2471,7 +2070,7 @@ class SSINextGenPump(Pump):
 
         update_time = previous_time
 
-        while self._is_flowing and self._is_dispensing:
+        while self._is_flowing:
             current_fr = copy.copy(self._flow_rate)
             current_time = time.time()
             delta_vol = ((current_fr + previous_fr)/2./60.)*(current_time-previous_time)
@@ -2690,6 +2289,7 @@ class SoftPump(Pump):
         self._is_dispensing = True
         self._is_flowing = True
         self._is_aspirating = False
+        self._flow_dir = 1
 
         pass #Should be implimented in each subclass
 
@@ -2708,7 +2308,8 @@ class SoftPump(Pump):
         self._aspirating_volume = vol
         self._is_aspirating = True
         self._is_flowing = True
-        self._is_dispensing = True
+        self._is_dispensing = False
+        self._flow_dir = -1
 
         pass #Should be implimented in each subclass
 
@@ -2898,6 +2499,8 @@ class SoftSyringePump(SyringePump):
             self._dispensing_volume = vol
             self._is_dispensing = True
             self._is_flowing = True
+            self._is_aspirating = False
+            self._flow_dir = 1
 
     def aspirate_all(self):
         if self._is_flowing or self._is_dispensing or self._is_aspirating:
@@ -2941,6 +2544,8 @@ class SoftSyringePump(SyringePump):
             self._aspirating_volume = vol
             self._is_aspirating = True
             self._is_flowing = True
+            self._is_dispensing = False
+            self._flow_dir = -1
 
     def _sim_flow(self):
         previous_time = time.time()
@@ -3044,6 +2649,7 @@ class PumpCommThread(utils.CommManager):
             'connect'           : self._connect_device,
             'get_flow_rate'     : self._get_flow_rate,
             'set_flow_rate'     : self._set_flow_rate,
+            'get_refill_rate'   : self._get_refill_rate,
             'set_refill_rate'   : self._set_refill_rate,
             'set_flow_accel'    : self._set_flow_acceleration,
             'set_units'         : self._set_units,
@@ -3072,6 +2678,7 @@ class PumpCommThread(utils.CommManager):
             'get_force'         : self._get_force,
             'set_force'         : self._set_force,
             'get_settings'      : self._get_settings,
+            'get_flow_dir'      : self._get_flow_dir,
             }
 
         self.known_devices = {
@@ -3085,13 +2692,8 @@ class PumpCommThread(utils.CommManager):
             }
 
     def _get_flow_rate(self, name, **kwargs):
-        """
-        This method gets the volume of a fixed volume pump such as a syringe pump.
 
-        :param str name: The unique identifier for a pump that was used in the
-            :py:func:`_connect_pump` method.
-        """
-        logger.debug("Getting pump %s volume", name)
+        logger.debug("Getting pump %s flow rate", name)
 
         comm_name = kwargs.pop('comm_name', None)
         cmd = kwargs.pop('cmd', None)
@@ -3101,7 +2703,7 @@ class PumpCommThread(utils.CommManager):
 
         self._return_value((name, cmd, val), comm_name)
 
-        logger.debug("Pump %s volume is %f", name, val)
+        logger.debug("Pump %s flow rate is %f", name, val)
 
     def _set_flow_rate(self, name, val, **kwargs):
         """
@@ -3123,6 +2725,20 @@ class PumpCommThread(utils.CommManager):
         self._return_value((name, cmd, True), comm_name)
 
         logger.debug("Pump %s flow rate set", name)
+
+    def _get_refill_rate(self, name, **kwargs):
+
+        logger.debug("Getting pump %s flow rate", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        val = device.refill_rate
+
+        self._return_value((name, cmd, val), comm_name)
+
+        logger.debug("Pump %s flow rate is %f", name, val)
 
     def _set_flow_acceleration(self, name, val, **kwargs):
         logger.info("Setting pump %s flow rate acceleration to %s", name, val)
@@ -3653,6 +3269,18 @@ class PumpCommThread(utils.CommManager):
         self._return_value((name, cmd, settings), comm_name)
         logger.debug("Pump %s settings are %s", name, settings)
 
+    def _get_flow_dir(self, name, **kwargs):
+        logger.debug("Getting pump %s flow direction", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        val = device.get_flow_dir()
+
+        self._return_value((name, cmd, val), comm_name)
+        logger.debug("Pump %s flow direction is %s", name, val)
+
     def _send_pump_cmd(self, name, val, get_response=True, **kwargs):
         """
         This method can be used to send an arbitrary command to the pump.
@@ -3743,6 +3371,7 @@ class PumpPanel(utils.DevicePanel):
         self._current_min_pressure = -1
         self._current_max_pressure = -1
         self._current_pressure_units = ''
+        self._current_flow_dir = 1
 
     def _create_layout(self):
         """Creates the layout for the panel."""
@@ -3778,11 +3407,11 @@ class PumpPanel(utils.DevicePanel):
         self.syringe_vol_gauge_low = wx.StaticText(self, label='0')
         self.syringe_vol_gauge_high = wx.StaticText(self, label='')
         self.pressure_label = wx.StaticText(self, label='Pressure:')
-        self.pressure = wx.StaticText(self, label='', size=self._FromDIP((40, -1)),
+        self.pressure = wx.StaticText(self, label='0', size=self._FromDIP((40, -1)),
             style=wx.ST_NO_AUTORESIZE)
         self.pressure_units_lbl = wx.StaticText(self, label='psi')
         self.flow_readback_label = wx.StaticText(self, label='Flow Rate:')
-        self.flow_readback = wx.StaticText(self, label='', size=self._FromDIP((40, -1)))
+        self.flow_readback = wx.StaticText(self, label='0', size=self._FromDIP((40, -1)))
         self.flow_readback_units = wx.StaticText(self, label='mL/min')
 
         self.vol_gauge = wx.BoxSizer(wx.HORIZONTAL)
@@ -4119,6 +3748,9 @@ class PumpPanel(utils.DevicePanel):
             get_flow_rate_cmd = ['get_flow_rate', [self.name,], {}]
             self._update_status_cmd(get_flow_rate_cmd, 1)
 
+            get_flow_dir_cmd = ['get_flow_dir', [self.name,], {}]
+            self._update_status_cmd(get_flow_dir_cmd, 1)
+
             get_pressure_cmd = ['get_pressure', [self.name,], {}]
             self._update_status_cmd(get_pressure_cmd, 1)
 
@@ -4128,6 +3760,9 @@ class PumpPanel(utils.DevicePanel):
             if self.pump_mode == 'syringe':
                 get_volume_cmd = ['get_volume', [self.name,], {}]
                 self._update_status_cmd(get_volume_cmd, 1)
+
+                get_refill_rate_cmd = ['get_refill_rate', [self.name,], {}]
+                self._update_status_cmd(get_refill_rate_cmd, 1)
 
         logger.info('Initialized pump %s on startup', self.name)
 
@@ -4560,9 +4195,25 @@ class PumpPanel(utils.DevicePanel):
             if not self._current_move_status:
                 val = 0
 
-            if val is not None and val != self._current_flow_rate:
+            if val is not None and round(val, 4) != float(self.flow_readback.GetLabel()):
                 self._current_flow_rate = val
-                wx.CallAfter(self.flow_readback.SetLabel, str(round(val, 4)))
+
+                if self._current_flow_dir > 0:
+                    wx.CallAfter(self.flow_readback.SetLabel, str(round(val, 4)))
+
+        elif cmd == 'get_refill_rate':
+            if not self._current_move_status:
+                val = 0
+
+            if val is not None and round(val, 4) != float(self.flow_readback.GetLabel()):
+                self._current_refill_rate = val
+
+                if self._current_flow_dir < 0:
+                    wx.CallAfter(self.flow_readback.SetLabel, str(round(val, 4)))
+
+        elif cmd == 'get_flow_dir':
+            if val is not None:
+                self._current_flow_dir = val
 
         elif cmd == 'get_pressure':
             if val is not None and val != self._current_pressure:
@@ -4804,29 +4455,29 @@ if __name__ == '__main__':
     #     'refill_rate' : '10'}),
                 # ]
 
-    # # Simulated pumps
-    # setup_devices = [
-    #     {'name': 'Soft', 'args': ['Soft', None], 'kwargs': {} },
-    #     {'name': 'Soft Syringe', 'args': ['Soft Syringe', None],
-    #         'kwargs': {'syringe_id': '3 mL, Medline P.C.', 'flow_rate': 1,
-    #         'refill_rate': 1} },
-    #     ]
-
-    # Simulated coflow pumps
+    # Simulated pumps
     setup_devices = [
-        {'name': 'sheath', 'args': ['Soft', None], 'kwargs': {}},
-        {'name': 'outlet', 'args': ['Soft', None], 'kwargs': {}},
+        {'name': 'Soft', 'args': ['Soft', None], 'kwargs': {} },
+        {'name': 'Soft Syringe', 'args': ['Soft Syringe', None],
+            'kwargs': {'syringe_id': '3 mL, Medline P.C.', 'flow_rate': 1,
+            'refill_rate': 1} },
         ]
 
+    # # Simulated coflow pumps
+    # setup_devices = [
+    #     {'name': 'sheath', 'args': ['Soft', None], 'kwargs': {}},
+    #     {'name': 'outlet', 'args': ['Soft', None], 'kwargs': {}},
+    #     ]
+
     # Local
-    # com_thread = PumpCommThread('PumpComm')
-    # com_thread.start()
+    com_thread = PumpCommThread('PumpComm')
+    com_thread.start()
 
     # # Remote
-    com_thread = None
+    # com_thread = None
 
     settings = {
-        'remote'        : True,
+        'remote'        : False,
         'remote_device' : 'pump',
         'device_init'   : setup_devices,
         'remote_ip'     : '192.168.1.16',
