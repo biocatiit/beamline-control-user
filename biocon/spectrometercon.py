@@ -1952,10 +1952,16 @@ class UVCommThread(utils.CommManager):
 
 class UVPanel(utils.DevicePanel):
 
-    def __init__(self, parent, panel_id, com_thread, device_data, *args,
-        **kwargs):
-        super(UVPanel, self).__init__(parent, panel_id, com_thread,
-            device_data, *args, **kwargs)
+    def __init__(self, parent, panel_id, settings, *args, **kwargs):
+        try:
+            biocon = wx.FindWindowByName('biocon')
+        except Exception:
+            biocon = None
+
+        if biocon is not None:
+            settings['device_data'] = settings['device_init'][0]
+
+        super(UVPanel, self).__init__(parent, panel_id, settings, *args, **kwargs)
 
         self._dark_spectrum = None
         self._reference_spectrum = None
@@ -1971,275 +1977,469 @@ class UVPanel(utils.DevicePanel):
         self._series_count = 0
         self._series_total = 0
 
-        self._live_update_evt = threading.Event()
-        self._live_update_evt.clear()
-        self._live_update_stop = threading.Event()
-        self._live_update_stop.clear()
-        self._live_update_thread = threading.Thread(target=self._live_update_plot)
-        self._live_update_thread.daemon = True
-        self._live_update_thread.start()
-        self._restart_live_update = False
-
+        self._history_length = None
+        self._current_int_time = None
+        self._current_scan_avg = None
+        self._current_smooth = None
+        self._current_xtiming = None
         self._current_abs_wav = None
+        self._current_abs_win = None
+        self._current_wav_range = None
+
+        self._series_exp_time = None
+        self._series_scan_avg = None
+
+        self._ls_shutter = None
+
+        self.uvplot_frame = None
+        self.uv_plot = None
+
+        if not self.remote:
+            self._live_update_evt = threading.Event()
+            self._live_update_evt.clear()
+            self._live_update_stop = threading.Event()
+            self._live_update_stop.clear()
+            self._live_update_thread = threading.Thread(target=self._live_update_plot)
+            self._live_update_thread.daemon = True
+            self._live_update_thread.start()
+            self._restart_live_update = False
+
+        self._init_controls()
 
     def _create_layout(self):
         """Creates the layout for the panel."""
 
-        status_parent = wx.StaticBox(self, label='Status:')
-        self.status = wx.StaticText(status_parent, size=self._FromDIP((150, -1)),
-            style=wx.ST_NO_AUTORESIZE)
-        self.status.SetForegroundColour(wx.RED)
-        fsize = self.GetFont().GetPointSize()
-        font = wx.Font(fsize, wx.DEFAULT, wx.NORMAL, wx.BOLD)
-        self.status.SetFont(font)
+        if not self.remote:
+            status_parent = wx.StaticBox(self, label='Status:')
+            self.status = wx.StaticText(status_parent, size=self._FromDIP((150, -1)),
+                style=wx.ST_NO_AUTORESIZE)
+            self.status.SetForegroundColour(wx.RED)
+            fsize = self.GetFont().GetPointSize()
+            font = wx.Font(fsize, wx.DEFAULT, wx.NORMAL, wx.BOLD)
+            self.status.SetFont(font)
 
-        status_sizer = wx.StaticBoxSizer(status_parent, wx.HORIZONTAL)
-        status_sizer.Add(wx.StaticText(status_parent, label='Status:'),
-            flag=wx.ALL, border=self._FromDIP(5))
-        status_sizer.Add(self.status, flag=wx.TOP|wx.BOTTOM|wx.LEFT,
-            border=self._FromDIP(5))
-        status_sizer.AddStretchSpacer(1)
+            status_sizer = wx.StaticBoxSizer(status_parent, wx.HORIZONTAL)
+            status_sizer.Add(wx.StaticText(status_parent, label='Status:'),
+                flag=wx.ALL, border=self._FromDIP(5))
+            status_sizer.Add(self.status, flag=wx.TOP|wx.BOTTOM|wx.LEFT,
+                border=self._FromDIP(5))
+            status_sizer.AddStretchSpacer(1)
 
-        settings_parent = wx.StaticBox(self, label='Settings')
+            settings_parent = wx.StaticBox(self, label='Settings')
 
-        self.int_time = utils.ValueEntry(self._on_settings_change,
-            settings_parent, validator=utils.CharValidator('float_te'))
-        self.scan_avg = utils.ValueEntry(self._on_settings_change,
-            settings_parent, validator=utils.CharValidator('int_te'))
-        self.smoothing = utils.ValueEntry(self._on_settings_change,
-            settings_parent, validator=utils.CharValidator('int_te'))
-        self.xtiming = utils.ValueEntry(self._on_settings_change,
-            settings_parent, validator=utils.CharValidator('int_te'))
-        self.spectrum_type = wx.Choice(settings_parent, choices=['Absorbance',
-            'Transmission', 'Raw'])
+            self.int_time = utils.ValueEntry(self._on_settings_change,
+                settings_parent, validator=utils.CharValidator('float_te'))
+            self.scan_avg = utils.ValueEntry(self._on_settings_change,
+                settings_parent, validator=utils.CharValidator('int_te'))
+            self.smoothing = utils.ValueEntry(self._on_settings_change,
+                settings_parent, validator=utils.CharValidator('int_te'))
+            self.xtiming = utils.ValueEntry(self._on_settings_change,
+                settings_parent, validator=utils.CharValidator('int_te'))
+            self.spectrum_type = wx.Choice(settings_parent, choices=['Absorbance',
+                'Transmission', 'Raw'])
 
-        self.spectrum_type.SetStringSelection('Absorbance')
+            self.spectrum_type.SetStringSelection('Absorbance')
 
-        self.xtiming_label = wx.StaticText(settings_parent, label='X Timing:')
+            self.xtiming_label = wx.StaticText(settings_parent, label='X Timing:')
 
-        self.settings_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(5),
-            hgap=self._FromDIP(5))
-        self.settings_sizer.AddGrowableCol(1)
+            self.settings_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(5),
+                hgap=self._FromDIP(5))
+            self.settings_sizer.AddGrowableCol(1)
 
-        self.settings_sizer.Add(wx.StaticText(settings_parent, label='Spectrum:'))
-        self.settings_sizer.Add(self.spectrum_type, 1, flag=wx.EXPAND)
-        self.settings_sizer.Add(wx.StaticText(settings_parent, label='Int. time (s):'))
-        self.settings_sizer.Add(self.int_time, 1, flag=wx.EXPAND)
-        self.settings_sizer.Add(wx.StaticText(settings_parent, label='Scans to avg.:'))
-        self.settings_sizer.Add(self.scan_avg, 1, flag=wx.EXPAND)
-        self.settings_sizer.Add(wx.StaticText(settings_parent, label='Smoothing:'))
-        self.settings_sizer.Add(self.smoothing, 1, flag=wx.EXPAND)
-        self.settings_sizer.Add(self.xtiming_label)
-        self.settings_sizer.Add(self.xtiming, 1, flag=wx.EXPAND)
-
-
-        self.dark_correct = wx.CheckBox(settings_parent, label='Dark correction')
-        self.auto_dark = wx.CheckBox(settings_parent, label='Auto update dark')
-        self.auto_dark_period = wx.TextCtrl(settings_parent,
-            validator=utils.CharValidator('float'))
-        self.dark_avgs = wx.TextCtrl(settings_parent,
-            validator=utils.CharValidator('int'))
-        self.ref_avgs = wx.TextCtrl(settings_parent,
-            validator=utils.CharValidator('int'))
-        self.history_time = utils.ValueEntry(self._on_settings_change,
-            settings_parent, validator=utils.CharValidator('float_te'))
-
-        self.dark_correct.SetValue(True)
-        self.auto_dark.SetValue(True)
-        self.auto_dark_period.SetValue('{}'.format(60*60))
-        self.dark_avgs.SetValue('1')
-        self.ref_avgs.SetValue('1')
-
-        other_settings_sizer = wx.GridBagSizer(vgap=self._FromDIP(5),
-            hgap=self._FromDIP(5))
-
-        other_settings_sizer.Add(self.dark_correct, (0,0), span=(1,2), flag=wx.EXPAND)
-        other_settings_sizer.Add(self.auto_dark, (1,0), span=(1,2), flag=wx.EXPAND)
-        other_settings_sizer.Add(wx.StaticText(settings_parent, label='Dark period (s):'),
-            (2,0))
-        other_settings_sizer.Add(self.auto_dark_period, (2,1), flag=wx.EXPAND)
-        other_settings_sizer.Add(wx.StaticText(settings_parent, label='Dark averages:'),
-            (3,0))
-        other_settings_sizer.Add(self.dark_avgs, (3,1), flag=wx.EXPAND)
-        other_settings_sizer.Add(wx.StaticText(settings_parent, label='Ref. averages:'),
-            (4,0))
-        other_settings_sizer.Add(self.ref_avgs, (4,1), flag=wx.EXPAND)
-        other_settings_sizer.Add(wx.StaticText(settings_parent, label='History (s):'),
-            (5,0))
-        other_settings_sizer.Add(self.history_time, (5,1), flag=wx.EXPAND)
-
-        other_settings_sizer.AddGrowableCol(1)
-
-        settings_box_sizer = wx.StaticBoxSizer(settings_parent, wx.VERTICAL)
-        settings_box_sizer.Add(self.settings_sizer, flag=wx.EXPAND|wx.ALL,
-            border=self._FromDIP(5))
-        settings_box_sizer.Add(other_settings_sizer,
-            flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM, border=self._FromDIP(5))
+            self.settings_sizer.Add(wx.StaticText(settings_parent, label='Spectrum:'))
+            self.settings_sizer.Add(self.spectrum_type, 1, flag=wx.EXPAND)
+            self.settings_sizer.Add(wx.StaticText(settings_parent, label='Int. time (s):'))
+            self.settings_sizer.Add(self.int_time, 1, flag=wx.EXPAND)
+            self.settings_sizer.Add(wx.StaticText(settings_parent, label='Scans to avg.:'))
+            self.settings_sizer.Add(self.scan_avg, 1, flag=wx.EXPAND)
+            self.settings_sizer.Add(wx.StaticText(settings_parent, label='Smoothing:'))
+            self.settings_sizer.Add(self.smoothing, 1, flag=wx.EXPAND)
+            self.settings_sizer.Add(self.xtiming_label)
+            self.settings_sizer.Add(self.xtiming, 1, flag=wx.EXPAND)
 
 
-        single_spectrum_parent = wx.StaticBox(self, label='Collect Single Spectrum')
+            self.dark_correct = wx.CheckBox(settings_parent, label='Dark correction')
+            self.auto_dark = wx.CheckBox(settings_parent, label='Auto update dark')
+            self.auto_dark_period = wx.TextCtrl(settings_parent,
+                validator=utils.CharValidator('float'))
+            self.dark_avgs = wx.TextCtrl(settings_parent,
+                validator=utils.CharValidator('int'))
+            self.ref_avgs = wx.TextCtrl(settings_parent,
+                validator=utils.CharValidator('int'))
+            self.history_time = utils.ValueEntry(self._on_settings_change,
+                settings_parent, validator=utils.CharValidator('float_te'))
 
-        self.collect_dark_btn = wx.Button(single_spectrum_parent,
-            label='Collect Dark')
-        self.collect_ref_btn = wx.Button(single_spectrum_parent,
-            label='Collect Reference')
-        self.collect_spectrum_btn = wx.Button(single_spectrum_parent,
-            label='Collect Spectrum')
+            self.dark_correct.SetValue(True)
+            self.auto_dark.SetValue(True)
+            self.auto_dark_period.SetValue('{}'.format(60*60))
+            self.dark_avgs.SetValue('1')
+            self.ref_avgs.SetValue('1')
 
-        self.collect_dark_btn.Bind(wx.EVT_BUTTON, self._on_collect_single)
-        self.collect_ref_btn.Bind(wx.EVT_BUTTON, self._on_collect_single)
-        self.collect_spectrum_btn.Bind(wx.EVT_BUTTON, self._on_collect_single)
+            other_settings_sizer = wx.GridBagSizer(vgap=self._FromDIP(5),
+                hgap=self._FromDIP(5))
 
-        single_spectrum_sizer = wx.GridBagSizer(vgap=self._FromDIP(5),
-            hgap=self._FromDIP(5))
-        single_spectrum_sizer.Add(self.collect_dark_btn, (0, 0))
-        single_spectrum_sizer.Add(self.collect_ref_btn, (0, 1))
-        single_spectrum_sizer.Add(self.collect_spectrum_btn, (1, 0), span=(1,2),
-            flag=wx.ALIGN_CENTER_HORIZONTAL)
+            other_settings_sizer.Add(self.dark_correct, (0,0), span=(1,2), flag=wx.EXPAND)
+            other_settings_sizer.Add(self.auto_dark, (1,0), span=(1,2), flag=wx.EXPAND)
+            other_settings_sizer.Add(wx.StaticText(settings_parent, label='Dark period (s):'),
+                (2,0))
+            other_settings_sizer.Add(self.auto_dark_period, (2,1), flag=wx.EXPAND)
+            other_settings_sizer.Add(wx.StaticText(settings_parent, label='Dark averages:'),
+                (3,0))
+            other_settings_sizer.Add(self.dark_avgs, (3,1), flag=wx.EXPAND)
+            other_settings_sizer.Add(wx.StaticText(settings_parent, label='Ref. averages:'),
+                (4,0))
+            other_settings_sizer.Add(self.ref_avgs, (4,1), flag=wx.EXPAND)
+            other_settings_sizer.Add(wx.StaticText(settings_parent, label='History (s):'),
+                (5,0))
+            other_settings_sizer.Add(self.history_time, (5,1), flag=wx.EXPAND)
 
-        single_spectrum_box_sizer = wx.StaticBoxSizer(single_spectrum_parent,
-            wx.VERTICAL)
-        single_spectrum_box_sizer.Add(single_spectrum_sizer, flag=wx.EXPAND|wx.ALL,
-            border=self._FromDIP(5))
+            other_settings_sizer.AddGrowableCol(1)
 
-        series_parent = wx.StaticBox(self, label='Collect Spectral Series')
-
-        self.series_num = wx.TextCtrl(series_parent,
-            validator=utils.CharValidator('int'))
-        self.series_period = wx.TextCtrl(series_parent,
-            validator=utils.CharValidator('float'))
-        self.series_ref = wx.CheckBox(series_parent, label='Collect ref. at start')
-        self.autosave_series = wx.CheckBox(series_parent, label='Autosave series')
-        self.autosave_choice = wx.Choice(series_parent, choices=['Absorbance',
-            'Transmission', 'Raw', 'A & T', 'A & T & R', 'A & R', 'T & R'])
-        self.autosave_prefix = wx.TextCtrl(series_parent)
-        self.autosave_dir = wx.TextCtrl(series_parent, style=wx.TE_READONLY)
-        file_open = wx.ArtProvider.GetBitmap(wx.ART_FOLDER_OPEN, wx.ART_BUTTON,
-            size=self._FromDIP((16,16)))
-        self.change_dir_btn = wx.BitmapButton(series_parent, bitmap=file_open,
-            size=self._FromDIP((30, -1)))
-        self.collect_series_btn = wx.Button(series_parent,
-            label='Collect Spectral Series')
-        self.abort_series_btn = wx.Button(series_parent, label='Stop Series')
-
-        self.series_num.SetValue('2')
-        self.series_period.SetValue('0')
-        self.series_ref.SetValue(True)
-        self.autosave_series.SetValue(True)
-        self.autosave_choice.SetStringSelection('Absorbance')
-        self.autosave_dir.SetValue('.')
-        self.autosave_prefix.SetValue('series')
-        self.change_dir_btn.Bind(wx.EVT_BUTTON, self._on_change_dir)
-        self.collect_series_btn.Bind(wx.EVT_BUTTON, self._on_collect_series)
-        self.abort_series_btn.Bind(wx.EVT_BUTTON, self._on_abort_series)
-
-        start_stop_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        start_stop_sizer.Add(self.collect_series_btn, flag=wx.RIGHT,
-            border=self._FromDIP(5))
-        start_stop_sizer.Add(self.abort_series_btn)
-
-        series_sizer = wx.GridBagSizer(vgap=self._FromDIP(5),
-            hgap=self._FromDIP(5))
-        series_sizer.Add(wx.StaticText(series_parent, label='# of spectra:'),
-            (0,0))
-        series_sizer.Add(self.series_num, (0,1), span=(1,2), flag=wx.EXPAND)
-        series_sizer.Add(wx.StaticText(series_parent, label='Period (s):'),
-            (1,0))
-        series_sizer.Add(self.series_period, (1,1), span=(1,2), flag=wx.EXPAND)
-        series_sizer.Add(self.series_ref, (2,0), span=(1,3))
-        series_sizer.Add(self.autosave_series, (3,0), span=(1,3))
-        series_sizer.Add(self.autosave_choice, (4,0), span=(1,3))
-        series_sizer.Add(wx.StaticText(series_parent, label='Save prefix:'),
-            (5,0))
-        series_sizer.Add(self.autosave_prefix, (5,1), span=(1,2), flag=wx.EXPAND)
-        series_sizer.Add(wx.StaticText(series_parent, label='Save dir.:'),
-            (6,0))
-        series_sizer.Add(self.autosave_dir, (6,1), flag=wx.EXPAND)
-        series_sizer.Add(self.change_dir_btn, (6,2))
-        series_sizer.Add(start_stop_sizer, (7,0), span=(1,3),
-            flag=wx.ALIGN_CENTER_HORIZONTAL)
-
-        series_box_sizer = wx.StaticBoxSizer(series_parent,
-            wx.VERTICAL)
-        series_box_sizer.Add(series_sizer, flag=wx.EXPAND|wx.ALL,
-            border=self._FromDIP(5))
-
-        control_sizer = wx.BoxSizer(wx.VERTICAL)
-        control_sizer.Add(status_sizer, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
-            border=self._FromDIP(5))
-        control_sizer.Add(settings_box_sizer, flag=wx.EXPAND|wx.ALL,
-            border=self._FromDIP(5))
-        control_sizer.Add(single_spectrum_box_sizer,
-            flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM, border=self._FromDIP(5))
-        control_sizer.Add(series_box_sizer, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM,
-            border=self._FromDIP(5))
-        control_sizer.AddStretchSpacer(1)
+            settings_box_sizer = wx.StaticBoxSizer(settings_parent, wx.VERTICAL)
+            settings_box_sizer.Add(self.settings_sizer, flag=wx.EXPAND|wx.ALL,
+                border=self._FromDIP(5))
+            settings_box_sizer.Add(other_settings_sizer,
+                flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM, border=self._FromDIP(5))
 
 
-        save_parent = wx.StaticBox(self, label='Save')
+            single_spectrum_parent = wx.StaticBox(self, label='Collect Single Spectrum')
 
-        self.save_dark = wx.Button(save_parent, label='Save Dark')
-        self.save_dark.Bind(wx.EVT_BUTTON, self._on_save)
-        self.save_ref = wx.Button(save_parent, label='Save Reference')
-        self.save_ref.Bind(wx.EVT_BUTTON, self._on_save)
-        self.save_current = wx.Button(save_parent, label='Save Latest Spectrum')
-        self.save_current.Bind(wx.EVT_BUTTON, self._on_save)
+            self.collect_dark_btn = wx.Button(single_spectrum_parent,
+                label='Collect Dark')
+            self.collect_ref_btn = wx.Button(single_spectrum_parent,
+                label='Collect Reference')
+            self.collect_spectrum_btn = wx.Button(single_spectrum_parent,
+                label='Collect Spectrum')
 
-        save_btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        save_btn_sizer.Add(self.save_current, border=self._FromDIP(5),
-            flag=wx.ALL|wx.ALIGN_CENTER_VERTICAL)
-        save_btn_sizer.Add(self.save_ref, border=self._FromDIP(5),
-            flag=wx.RIGHT|wx.TOP|wx.BOTTOM|wx.ALIGN_CENTER_VERTICAL)
-        save_btn_sizer.Add(self.save_dark, border=self._FromDIP(5),
-            flag=wx.RIGHT|wx.TOP|wx.BOTTOM|wx.ALIGN_CENTER_VERTICAL)
+            self.collect_dark_btn.Bind(wx.EVT_BUTTON, self._on_collect_single)
+            self.collect_ref_btn.Bind(wx.EVT_BUTTON, self._on_collect_single)
+            self.collect_spectrum_btn.Bind(wx.EVT_BUTTON, self._on_collect_single)
 
-        save_sizer = wx.StaticBoxSizer(save_parent, wx.HORIZONTAL)
-        save_sizer.Add(save_btn_sizer, flag=wx.EXPAND)
-        save_sizer.AddStretchSpacer(1)
+            single_spectrum_sizer = wx.GridBagSizer(vgap=self._FromDIP(5),
+                hgap=self._FromDIP(5))
+            single_spectrum_sizer.Add(self.collect_dark_btn, (0, 0))
+            single_spectrum_sizer.Add(self.collect_ref_btn, (0, 1))
+            single_spectrum_sizer.Add(self.collect_spectrum_btn, (1, 0), span=(1,2),
+                flag=wx.ALIGN_CENTER_HORIZONTAL)
+
+            single_spectrum_box_sizer = wx.StaticBoxSizer(single_spectrum_parent,
+                wx.VERTICAL)
+            single_spectrum_box_sizer.Add(single_spectrum_sizer, flag=wx.EXPAND|wx.ALL,
+                border=self._FromDIP(5))
+
+            series_parent = wx.StaticBox(self, label='Collect Spectral Series')
+
+            self.series_num = wx.TextCtrl(series_parent,
+                validator=utils.CharValidator('int'))
+            self.series_period = wx.TextCtrl(series_parent,
+                validator=utils.CharValidator('float'))
+            self.series_ref = wx.CheckBox(series_parent, label='Collect ref. at start')
+            self.autosave_series = wx.CheckBox(series_parent, label='Autosave series')
+            self.autosave_choice = wx.Choice(series_parent, choices=['Absorbance',
+                'Transmission', 'Raw', 'A & T', 'A & T & R', 'A & R', 'T & R'])
+            self.autosave_prefix = wx.TextCtrl(series_parent)
+            self.autosave_dir = wx.TextCtrl(series_parent, style=wx.TE_READONLY)
+            file_open = wx.ArtProvider.GetBitmap(wx.ART_FOLDER_OPEN, wx.ART_BUTTON,
+                size=self._FromDIP((16,16)))
+            self.change_dir_btn = wx.BitmapButton(series_parent, bitmap=file_open,
+                size=self._FromDIP((30, -1)))
+            self.collect_series_btn = wx.Button(series_parent,
+                label='Collect Spectral Series')
+            self.abort_series_btn = wx.Button(series_parent, label='Stop Series')
+
+            self.series_num.SetValue('2')
+            self.series_period.SetValue('0')
+            self.series_ref.SetValue(True)
+            self.autosave_series.SetValue(True)
+            self.autosave_choice.SetStringSelection('Absorbance')
+            self.autosave_dir.SetValue('.')
+            self.autosave_prefix.SetValue('series')
+            self.change_dir_btn.Bind(wx.EVT_BUTTON, self._on_change_dir)
+            self.collect_series_btn.Bind(wx.EVT_BUTTON, self._on_collect_series)
+            self.abort_series_btn.Bind(wx.EVT_BUTTON, self._on_abort_series)
+
+            start_stop_sizer = wx.BoxSizer(wx.HORIZONTAL)
+            start_stop_sizer.Add(self.collect_series_btn, flag=wx.RIGHT,
+                border=self._FromDIP(5))
+            start_stop_sizer.Add(self.abort_series_btn)
+
+            series_sizer = wx.GridBagSizer(vgap=self._FromDIP(5),
+                hgap=self._FromDIP(5))
+            series_sizer.Add(wx.StaticText(series_parent, label='# of spectra:'),
+                (0,0))
+            series_sizer.Add(self.series_num, (0,1), span=(1,2), flag=wx.EXPAND)
+            series_sizer.Add(wx.StaticText(series_parent, label='Period (s):'),
+                (1,0))
+            series_sizer.Add(self.series_period, (1,1), span=(1,2), flag=wx.EXPAND)
+            series_sizer.Add(self.series_ref, (2,0), span=(1,3))
+            series_sizer.Add(self.autosave_series, (3,0), span=(1,3))
+            series_sizer.Add(self.autosave_choice, (4,0), span=(1,3))
+            series_sizer.Add(wx.StaticText(series_parent, label='Save prefix:'),
+                (5,0))
+            series_sizer.Add(self.autosave_prefix, (5,1), span=(1,2), flag=wx.EXPAND)
+            series_sizer.Add(wx.StaticText(series_parent, label='Save dir.:'),
+                (6,0))
+            series_sizer.Add(self.autosave_dir, (6,1), flag=wx.EXPAND)
+            series_sizer.Add(self.change_dir_btn, (6,2))
+            series_sizer.Add(start_stop_sizer, (7,0), span=(1,3),
+                flag=wx.ALIGN_CENTER_HORIZONTAL)
+
+            series_box_sizer = wx.StaticBoxSizer(series_parent,
+                wx.VERTICAL)
+            series_box_sizer.Add(series_sizer, flag=wx.EXPAND|wx.ALL,
+                border=self._FromDIP(5))
+
+            control_sizer = wx.BoxSizer(wx.VERTICAL)
+            control_sizer.Add(status_sizer, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
+                border=self._FromDIP(5))
+            control_sizer.Add(settings_box_sizer, flag=wx.EXPAND|wx.ALL,
+                border=self._FromDIP(5))
+            control_sizer.Add(single_spectrum_box_sizer,
+                flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM, border=self._FromDIP(5))
+            control_sizer.Add(series_box_sizer, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM,
+                border=self._FromDIP(5))
+            control_sizer.AddStretchSpacer(1)
 
 
-        plot_parent = wx.StaticBox(self, label='Plot')
+            save_parent = wx.StaticBox(self, label='Save')
 
-        self.auto_update = wx.CheckBox(plot_parent, label='Autoupdate')
-        self.auto_update.SetValue(False)
-        self.auto_update.Bind(wx.EVT_CHECKBOX, self._on_autoupdate)
+            self.save_dark = wx.Button(save_parent, label='Save Dark')
+            self.save_dark.Bind(wx.EVT_BUTTON, self._on_save)
+            self.save_ref = wx.Button(save_parent, label='Save Reference')
+            self.save_ref.Bind(wx.EVT_BUTTON, self._on_save)
+            self.save_current = wx.Button(save_parent, label='Save Latest Spectrum')
+            self.save_current.Bind(wx.EVT_BUTTON, self._on_save)
 
-        self.update_period = utils.ValueEntry(self._on_plot_update_change,
-            plot_parent, validator=utils.CharValidator('float_te'),
-            size=self._FromDIP((50,-1)))
-        self.update_period.ChangeValue('0.5')
-        self._on_plot_update_change(self.update_period, '0.5')
+            save_btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
+            save_btn_sizer.Add(self.save_current, border=self._FromDIP(5),
+                flag=wx.ALL|wx.ALIGN_CENTER_VERTICAL)
+            save_btn_sizer.Add(self.save_ref, border=self._FromDIP(5),
+                flag=wx.RIGHT|wx.TOP|wx.BOTTOM|wx.ALIGN_CENTER_VERTICAL)
+            save_btn_sizer.Add(self.save_dark, border=self._FromDIP(5),
+                flag=wx.RIGHT|wx.TOP|wx.BOTTOM|wx.ALIGN_CENTER_VERTICAL)
 
-        plot_settings_sizer = wx.FlexGridSizer(cols=4, vgap=self._FromDIP(5),
-            hgap=self._FromDIP(5))
-        plot_settings_sizer.Add(self.auto_update, flag=wx.ALIGN_CENTER_VERTICAL)
-        plot_settings_sizer.Add(wx.StaticText(plot_parent, label='Update period (s):'),
-            flag=wx.ALIGN_CENTER_VERTICAL)
-        plot_settings_sizer.Add(self.update_period, flag=wx.ALIGN_CENTER_VERTICAL)
+            save_sizer = wx.StaticBoxSizer(save_parent, wx.HORIZONTAL)
+            save_sizer.Add(save_btn_sizer, flag=wx.EXPAND)
+            save_sizer.AddStretchSpacer(1)
 
-        self.uv_plot = UVPlot(plot_parent)
 
-        plot_sizer = wx.StaticBoxSizer(plot_parent, wx.VERTICAL)
-        plot_sizer.Add(plot_settings_sizer, border=self._FromDIP(5),
-            flag=wx.EXPAND|wx.BOTTOM)
-        plot_sizer.Add(self.uv_plot, proportion=1, flag=wx.EXPAND)
+            plot_parent = wx.StaticBox(self, label='Plot')
 
-        right_sizer = wx.BoxSizer(wx.VERTICAL)
-        right_sizer.Add(save_sizer, border=self._FromDIP(5), flag=wx.EXPAND|wx.ALL)
-        right_sizer.Add(plot_sizer, proportion=1, border=self._FromDIP(5),
-            flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM)
+            self.auto_update = wx.CheckBox(plot_parent, label='Autoupdate')
+            self.auto_update.SetValue(False)
+            self.auto_update.Bind(wx.EVT_CHECKBOX, self._on_autoupdate)
 
-        top_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        top_sizer.Add(control_sizer, flag=wx.EXPAND)
-        top_sizer.Add(right_sizer, proportion=1, flag=wx.EXPAND)
+            self.update_period = utils.ValueEntry(self._on_plot_update_change,
+                plot_parent, validator=utils.CharValidator('float_te'),
+                size=self._FromDIP((50,-1)))
+            self.update_period.ChangeValue('0.5')
+            self._on_plot_update_change(self.update_period, '0.5')
+
+            plot_settings_sizer = wx.FlexGridSizer(cols=4, vgap=self._FromDIP(5),
+                hgap=self._FromDIP(5))
+            plot_settings_sizer.Add(self.auto_update, flag=wx.ALIGN_CENTER_VERTICAL)
+            plot_settings_sizer.Add(wx.StaticText(plot_parent, label='Update period (s):'),
+                flag=wx.ALIGN_CENTER_VERTICAL)
+            plot_settings_sizer.Add(self.update_period, flag=wx.ALIGN_CENTER_VERTICAL)
+
+            self.uv_plot = UVPlot(plot_parent)
+
+            plot_sizer = wx.StaticBoxSizer(plot_parent, wx.VERTICAL)
+            plot_sizer.Add(plot_settings_sizer, border=self._FromDIP(5),
+                flag=wx.EXPAND|wx.BOTTOM)
+            plot_sizer.Add(self.uv_plot, proportion=1, flag=wx.EXPAND)
+
+            right_sizer = wx.BoxSizer(wx.VERTICAL)
+            right_sizer.Add(save_sizer, border=self._FromDIP(5), flag=wx.EXPAND|wx.ALL)
+            right_sizer.Add(plot_sizer, proportion=1, border=self._FromDIP(5),
+                flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM)
+
+            top_sizer = wx.BoxSizer(wx.HORIZONTAL)
+            top_sizer.Add(control_sizer, flag=wx.EXPAND)
+            top_sizer.Add(right_sizer, proportion=1, flag=wx.EXPAND)
+
+        else:
+            status_parent = wx.StaticBox(self, label='Status:')
+            self.status = wx.StaticText(status_parent, size=self._FromDIP((225, -1)),
+                style=wx.ST_NO_AUTORESIZE)
+            self.status.SetForegroundColour(wx.RED)
+            fsize = self.GetFont().GetPointSize()
+            font = wx.Font(fsize, wx.DEFAULT, wx.NORMAL, wx.BOLD)
+            self.status.SetFont(font)
+
+            self.show_uv_plot = wx.Button(status_parent, label='Show Plot')
+            self.show_uv_plot.Bind(wx.EVT_BUTTON, self._on_show_uv_plot)
+
+            status_sizer = wx.StaticBoxSizer(status_parent, wx.HORIZONTAL)
+            status_sizer.Add(wx.StaticText(status_parent, label='Status:'),
+                flag=wx.ALL|wx.ALIGN_CENTER_VERTICAL, border=self._FromDIP(5))
+            status_sizer.Add(self.status, border=self._FromDIP(5),
+                flag=wx.TOP|wx.BOTTOM|wx.LEFT|wx.ALIGN_CENTER_VERTICAL)
+            status_sizer.Add(self.show_uv_plot, border=self._FromDIP(5),
+                flag=wx.TOP|wx.BOTTOM|wx.LEFT|wx.ALIGN_CENTER_VERTICAL)
+            status_sizer.AddStretchSpacer(1)
+
+            settings_parent = wx.StaticBox(self, label='Settings')
+
+            self.int_time =wx.TextCtrl(settings_parent,
+                validator=utils.CharValidator('float_te'))
+            self.collect_uv = wx.CheckBox(settings_parent, label='Collect UV')
+            self.collect_uv.SetValue(True)
+
+            self.settings_sizer = wx.GridBagSizer(vgap=self._FromDIP(5),
+                hgap=self._FromDIP(5))
+
+            self.settings_sizer.Add(wx.StaticText(settings_parent,
+                label='Max int. time (s):'), (0,0), flag=wx.ALIGN_CENTER_VERTICAL)
+            self.settings_sizer.Add(self.int_time, (0,1),
+                flag=wx.EXPAND|wx.ALIGN_CENTER_VERTICAL)
+            self.settings_sizer.Add(self.collect_uv, (1,0), span=(1,2),
+                flag=wx.ALIGN_CENTER_VERTICAL)
+
+
+            self.settings_sizer.AddGrowableCol(1)
+
+            settings_box_sizer = wx.StaticBoxSizer(settings_parent, wx.VERTICAL)
+            settings_box_sizer.Add(self.settings_sizer, flag=wx.EXPAND|wx.ALL,
+                border=self._FromDIP(5))
+
+
+            adv_pane = wx.CollapsiblePane(self, label="Advanced",
+                style=wx.CP_NO_TLW_RESIZE)
+            adv_pane.Bind(wx.EVT_COLLAPSIBLEPANE_CHANGED, self.on_collapse)
+            adv_win = adv_pane.GetPane()
+
+
+            adv_settings_parent = wx.StaticBox(adv_win, label='Settings')
+
+            self.auto_dark = wx.CheckBox(adv_settings_parent, label='Auto update dark')
+            self.auto_dark_period = wx.TextCtrl(adv_settings_parent,
+                validator=utils.CharValidator('float'))
+            self.dark_avgs = wx.TextCtrl(adv_settings_parent,
+                validator=utils.CharValidator('int'))
+            self.ref_avgs = wx.TextCtrl(adv_settings_parent,
+                validator=utils.CharValidator('int'))
+            self.history_time = utils.ValueEntry(self._on_settings_change,
+                adv_settings_parent, validator=utils.CharValidator('float_te'))
+
+            adv_settings_sizer = wx.GridBagSizer(vgap=self._FromDIP(5),
+                hgap=self._FromDIP(5))
+
+            adv_settings_sizer.Add(self.auto_dark, (0,0), span=(1,2),
+                flag=wx.EXPAND|wx.ALIGN_CENTER_VERTICAL)
+            adv_settings_sizer.Add(wx.StaticText(adv_settings_parent,
+                label='Dark period (s):'), (1,0), flag=wx.ALIGN_CENTER_VERTICAL)
+            adv_settings_sizer.Add(self.auto_dark_period, (1,1),
+                flag=wx.EXPAND|wx.ALIGN_CENTER_VERTICAL)
+            adv_settings_sizer.Add(wx.StaticText(adv_settings_parent,
+                label='Dark averages:'), (2,0), flag=wx.ALIGN_CENTER_VERTICAL)
+            adv_settings_sizer.Add(self.dark_avgs, (2,1),
+                flag=wx.EXPAND|wx.ALIGN_CENTER_VERTICAL)
+            adv_settings_sizer.Add(wx.StaticText(adv_settings_parent,
+                label='Ref. averages:'), (3,0), flag=wx.ALIGN_CENTER_VERTICAL)
+            adv_settings_sizer.Add(self.ref_avgs, (3,1),
+                flag=wx.EXPAND|wx.ALIGN_CENTER_VERTICAL)
+            adv_settings_sizer.Add(wx.StaticText(adv_settings_parent,
+                label='History (s):'), (4,0), flag=wx.ALIGN_CENTER_VERTICAL)
+            adv_settings_sizer.Add(self.history_time, (4,1),
+                flag=wx.EXPAND|wx.ALIGN_CENTER_VERTICAL)
+
+            adv_settings_sizer.AddGrowableCol(1)
+
+            adv_settings_box_sizer = wx.StaticBoxSizer(adv_settings_parent,
+                wx.VERTICAL)
+            adv_settings_box_sizer.Add(adv_settings_sizer, flag=wx.EXPAND|wx.ALL,
+                border=self._FromDIP(5))
+
+
+            single_spectrum_parent = wx.StaticBox(adv_win,
+                label='Collect Single Spectrum')
+
+            self.collect_dark_btn = wx.Button(single_spectrum_parent,
+                label='Collect Dark')
+            self.collect_ref_btn = wx.Button(single_spectrum_parent,
+                label='Collect Reference')
+
+            self.collect_dark_btn.Bind(wx.EVT_BUTTON, self._on_collect_single)
+            self.collect_ref_btn.Bind(wx.EVT_BUTTON, self._on_collect_single)
+
+            single_spectrum_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(5),
+                hgap=self._FromDIP(5))
+            single_spectrum_sizer.Add(self.collect_dark_btn,
+                flag=wx.ALIGN_CENTER_VERTICAL)
+            single_spectrum_sizer.Add(self.collect_ref_btn,
+                flag=wx.ALIGN_CENTER_VERTICAL)
+
+            single_spectrum_box_sizer = wx.StaticBoxSizer(single_spectrum_parent,
+                wx.VERTICAL)
+            single_spectrum_box_sizer.Add(single_spectrum_sizer, flag=wx.EXPAND|wx.ALL,
+                border=self._FromDIP(5))
+
+
+            ls_parent = wx.StaticBox(adv_win, label='Light Source Control')
+
+            self.ls_status = wx.StaticText(ls_parent, size=(150,-1),
+                style=wx.ST_NO_AUTORESIZE)
+            self.ls_open = wx.Button(ls_parent, label='Open Shutter')
+            self.ls_close = wx.Button(ls_parent, label='Close Shutter')
+
+            self.ls_open.Bind(wx.EVT_BUTTON, self._on_ls_shutter)
+            self.ls_close.Bind(wx.EVT_BUTTON, self._on_ls_shutter)
+
+            ls_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(5),
+                hgap=self._FromDIP(5))
+            ls_sizer.Add(wx.StaticText(ls_parent, label='Status:'))
+            ls_sizer.Add(self.ls_status, flag=wx.EXPAND|wx.ALIGN_CENTER_VERTICAL)
+            ls_sizer.Add(self.ls_open, flag=wx.ALIGN_CENTER_VERTICAL)
+            ls_sizer.Add(self.ls_close, flag=wx.ALIGN_CENTER_VERTICAL)
+
+            ls_box_sizer = wx.StaticBoxSizer(ls_parent,
+                wx.VERTICAL)
+            ls_box_sizer.Add(ls_sizer, flag=wx.EXPAND|wx.ALL,
+                border=self._FromDIP(5))
+
+
+            adv_sizer = wx.BoxSizer(wx.VERTICAL)
+            adv_sizer.Add(adv_settings_box_sizer, 1, flag=wx.EXPAND|wx.ALL,
+                border=self._FromDIP(5))
+            adv_sizer.Add(single_spectrum_box_sizer, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM,
+                border=self._FromDIP(5))
+            adv_sizer.Add(ls_box_sizer, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM,
+                border=self._FromDIP(5))
+
+            adv_win.SetSizer(adv_sizer)
+
+
+            top_sizer = wx.BoxSizer(wx.VERTICAL)
+            top_sizer.Add(status_sizer, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
+                border=self._FromDIP(5))
+            top_sizer.Add(settings_box_sizer, flag=wx.EXPAND|wx.ALL,
+                border=self._FromDIP(5))
+            top_sizer.Add(adv_pane, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM,
+                border=self._FromDIP(5))
+
 
         self.SetSizer(top_sizer)
 
-    def _init_device(self, device_data):
+    def on_collapse(self, event):
+        self.Layout()
+        self.Fit()
+
+        self.parent.Layout()
+        self.parent.Fit()
+
+        try:
+            wx.FindWindowByName('biocon').Layout()
+            wx.FindWindowByName('biocon').Fit()
+        except Exception:
+            pass
+
+    def _init_device(self, settings):
         """
         Initializes the device parameters if any were provided. If enough are
         provided the device is automatically connected.
         """
+        device_data = settings['device_data']
         args = device_data['args']
         kwargs = device_data['kwargs']
 
@@ -2249,28 +2449,29 @@ class UVPanel(utils.DevicePanel):
 
         self._send_cmd(connect_cmd, True)
 
-        # Need some kind of delay or I get a USB error message from the stellarnet driver
+        # Need some kind of delay or I get a USB error message from the stellarnet driver?
+
+        if self.remote:
+            cmd = ['set_hist_time', [self.name, float(self._history_length)], {}]
+            self._send_cmd(cmd)
+
         is_busy = self._get_busy()
 
         self._get_full_history()
-
-        if not is_busy:
-           self._init_dark_and_ref()
 
         cmd = ['get_spec_settings', [self.name,], {}]
         ret = self._send_cmd(cmd, True)
         self._set_status('get_spec_settings', ret)
 
         if not is_busy:
-            if self._current_abs_wav is None or len(self._current_abs_wav) == 0:
-                cmd = ['add_abs_wav', [self.name, 280], {}]
-                self._send_cmd(cmd)
-                # cmd = ['add_abs_wav', [self.name, 260], {}]
-                # self._send_cmd(cmd)
+            self._set_wavelength_range()
+
+        if not is_busy:
+           self._init_dark_and_ref()
 
         self._set_status_commands()
 
-        if args[1] != 'StellarNet':
+        if args[1] != 'StellarNet' and not self.remote:
             self.settings_sizer.Hide(self.xtiming_label)
             self.setitngs_sizer.Hide(self.xtiming)
             self.parent.Layout()
@@ -2295,6 +2496,17 @@ class UVPanel(utils.DevicePanel):
             self._collect_spectrum('ref')
         else:
             self._reference_spectrum = ref
+
+    def _init_controls(self):
+        if self.remote:
+            self.auto_dark.SetValue(self.settings['auto_dark'])
+            self.auto_dark_period.SetValue('{}'.format(self.settings['auto_dark_t']))
+            self.dark_avgs.SetValue('{}'.format(self.settings['dark_avgs']))
+            self.ref_avgs.SetValue('{}'.format(self.settings['dark_avgs']))
+            self.int_time.SetValue('{}'.format(self.settings['max_int_t']))
+
+            self._history_length = self.settings['history_t']
+            self.history_time.SafeChangeValue('{}'.format(self.settings['history_t']))
 
     def _on_settings_change(self, obj, val):
         if obj == self.int_time:
@@ -2345,11 +2557,44 @@ class UVPanel(utils.DevicePanel):
             else:
                 time.sleep(0.5)
 
+    def _set_wavelength_range(self):
+        if self.remote:
+            update = False
+            if self._current_wav_range is not None:
+                if ((self._current_wav_range[0] is None
+                    and self.settings['wavelength_range'][0] is not None) or
+                    (self._current_wav_range[0] is not None
+                    and self.settings['wavelength_range'][0] is None) or
+                    (self._current_wav_range[0] != self.settings['wavelength_range'][0])
+                    or (self._current_wav_range[1] is None
+                    and self.settings['wavelength_range'][1] is not None) or
+                    (self._current_wav_range[1] is not None
+                    and self.settings['wavelength_range'][1] is None) or
+                    (self._current_wav_range[1] != self.settings['wavelength_range'][1])):
+                    update = True
+
+            else:
+                update = True
+
+            if update:
+                cmd = ['set_wl_range', [self.name, self.settings['wavelength_range'][0],
+                    self.settings['wavelength_range'][1]], {}]
+                self._send_cmd(cmd)
+                self._current_wav_range = self.settings['wavelength_range']
+
+        else:
+            if self._current_abs_wav is None or len(self._current_abs_wav) == 0:
+                cmd = ['add_abs_wav', [self.name, 280], {}]
+                self._send_cmd(cmd)
+                # cmd = ['add_abs_wav', [self.name, 260], {}]
+                # self._send_cmd(cmd)
+
     def _on_collect_single(self, evt):
         obj = evt.GetEventObject()
 
-        self.auto_update.SetValue(False)
-        self._live_update_evt.clear()
+        if not self.remote:
+            self.auto_update.SetValue(False)
+            self._live_update_evt.clear()
 
         if obj == self.collect_dark_btn:
             self._collect_spectrum('dark')
@@ -2358,11 +2603,42 @@ class UVPanel(utils.DevicePanel):
         elif obj == self.collect_spectrum_btn:
             self._collect_spectrum()
 
+    def _on_ls_shutter(self, evt):
+        obj = evt.GetEventObject()
+
+        if obj == self.ls_open:
+            shutter = True
+        elif obj == self.ls_close:
+            shutter = False
+
+        self._open_ls_shutter(shutter)
+
+    def _open_ls_shutter(self, shutter_open):
+        ls_cmd = ['set_ls_shutter', [self.name, shutter_open], {}]
+        self._send_cmd(ls_cmd)
+        time.sleep(0.1)
+        ls_status_cmd = ['get_ls_shutter', [self.name,], {}]
+        resp = self._send_cmd(ls_status_cmd, True)
+
+        self._ls_shutter = resp
+
+        if resp:
+            ls_status = 'Open'
+        else:
+            ls_status = 'Closed'
+
+        self.ls_status.SetLabel(ls_status)
+
     def _collect_spectrum(self, stype='normal'):
         is_busy = self._get_busy()
 
         if not is_busy:
-            dark_correct = self.dark_correct.GetValue()
+            if self.remote:
+                self._set_wavelength_range()
+                dark_correct = self.settings['dark_correct']
+            else:
+                dark_correct = self.dark_correct.GetValue()
+
             auto_dark = self.auto_dark.GetValue()
             dark_time = float(self.auto_dark_period.GetValue())
 
@@ -2413,19 +2689,46 @@ class UVPanel(utils.DevicePanel):
 
     def _on_collect_series(self, evt):
         self._live_update_evt.clear()
-        self._collect_series()
 
-    def _collect_series(self):
+        num_spectra = int(self.series_num.GetValue())
+        period = float(self.series_period.GetValue())
+
+
+        self._collect_series(num_spectra, period, None, None, None)
+
+    def _collect_series(self, num_spectra, int_time, scan_avgs, exp_period,
+        exp_time):
         is_busy = self._get_busy()
 
         if not is_busy:
-            self._set_autosave_parameters()
+            if self.remote:
+                self._set_wavelength_range()
+                self._set_exposure_settings(int_time, scan_avgs)
+                self._set_abs_params()
 
-            dark_correct = self.dark_correct.GetValue()
+                spec_type = self.settings['spectrum_type']
+                dark_correct = self.settings['dark_correct']
+                take_ref = self.settings['series_ref_at_start']
+
+                uv_time = max(int_time*self.settings['int_t_scale'], 0.05)*scan_avgs
+
+                delta_t_min = (exp_time-uv_time)*1.05
+
+                if delta_t_min < 0.01:
+                    delta_t_min = 0
+
+            else:
+                self._set_autosave_parameters(None, None)
+
+                spec_type = self.spectrum_type.GetStringSelection()
+                dark_correct = self.dark_correct.GetValue()
+                take_ref = self.series_ref.GetValue()
+
+                delta_t_min = int_time
+
             auto_dark = self.auto_dark.GetValue()
             dark_time = float(self.auto_dark_period.GetValue())
-
-            spec_type = self.spectrum_type.GetStringSelection()
+            ref_avgs = int(self.ref_avgs.GetValue())
 
             if spec_type == 'Absorbance':
                 spec_type = 'abs'
@@ -2434,14 +2737,9 @@ class UVPanel(utils.DevicePanel):
             else:
                 spec_type = 'raw'
 
-            num_spectra = int(self.series_num.GetValue())
-            period = float(self.series_period.GetValue())
-            take_ref = self.series_ref.GetValue()
-            ref_avgs = int(self.ref_avgs.GetValue())
-
             kwargs = {
                 'spec_type'     : spec_type,
-                'delta_t_min'   : period,
+                'delta_t_min'   : delta_t_min,
                 'dark_correct'  : dark_correct,
                 'int_trigger'   : True,
                 'auto_dark'     : auto_dark,
@@ -2457,6 +2755,8 @@ class UVPanel(utils.DevicePanel):
         else:
             wx.CallAfter(self._show_busy_msg)
 
+        return not is_busy
+
     def _on_abort_series(self, evt):
         self._abort_series()
 
@@ -2469,831 +2769,6 @@ class UVPanel(utils.DevicePanel):
         is_busy = self._send_cmd(busy_cmd, True)
 
         return is_busy
-
-    def _set_autosave_parameters(self):
-        autosave_on = self.autosave_series.GetValue()
-
-        cmd = ['set_autosave_on', [self.name, autosave_on], {}]
-
-        self._send_cmd(cmd)
-
-        if autosave_on:
-            autosave_choice = self.autosave_choice.GetStringSelection()
-
-            if autosave_choice == 'Absorbance':
-                save_raw = False
-                save_trans = False
-                save_abs = True
-
-            elif autosave_choice == 'Transmission':
-                save_raw = False
-                save_trans = True
-                save_abs = False
-
-            elif autosave_choice == 'Raw':
-                save_raw = True
-                save_trans = False
-                save_abs = False
-
-            elif autosave_choice == 'A & T':
-                save_raw = False
-                save_trans = True
-                save_abs = True
-
-            elif autosave_choice == 'A & T & R':
-                save_raw = True
-                save_trans = True
-                save_abs = True
-
-            elif autosave_choice == 'A & R':
-                save_raw = True
-                save_trans = False
-                save_abs = True
-
-            elif autosave_choice == 'R & T':
-                save_raw = True
-                save_trans = True
-                save_abs = False
-
-            prefix = self.autosave_prefix.GetValue()
-            data_dir = self.autosave_dir.GetValue()
-            data_dir = os.path.abspath(os.path.expanduser(data_dir))
-
-            # data_dir = data_dir.replace(self.settings['remote_dir_prefix']['local'],
-            #     self.settings['remote_dir_prefix']['remote'])
-
-            kwargs = {
-                'save_raw'      : save_raw,
-                'save_trans'    : save_trans,
-                'save_abs'      : save_abs,
-            }
-
-            logger.info(kwargs)
-
-            cmd = ['set_autosave_param', [self.name, data_dir, prefix], kwargs]
-
-            self._send_cmd(cmd)
-
-    def _on_change_dir(self, evt):
-        with wx.DirDialog(self, "Select Directory", self.autosave_dir.GetValue()) as fd:
-            if fd.ShowModal() == wx.ID_CANCEL:
-                return
-
-            pathname = fd.GetPath()
-
-            self.autosave_dir.SetValue(pathname)
-
-    def _show_busy_msg(self):
-        wx.MessageBox('Cannot collect spectrum because device is busy.',
-            'Device is busy')
-
-    def _set_status(self, cmd, val):
-        if cmd == 'set_int_time':
-            if str(val) != self.int_time.GetValue():
-                self.int_time.SafeChangeValue(str(val))
-
-        elif cmd == 'set_scan_avg':
-            if str(val) != self.scan_avg.GetValue():
-                self.scan_avg.SafeChangeValue(str(val))
-
-        elif cmd == 'set_smoothing':
-            if str(val) != self.smoothing.GetValue():
-                self.smoothing.SafeChangeValue(str(val))
-
-        elif cmd == 'set_xtiming':
-            if str(val) != self.xtiming.GetValue():
-                self.xtiming.SafeChangeValue(str(val))
-
-        elif cmd == 'get_hist_time':
-            if val != self._history_length:
-                self.history_time.SafeChangeValue(str(val))
-                self._history_length = val
-
-        elif cmd == 'get_spec_settings':
-            int_time = val['int_time']
-            scan_avg = val['scan_avg']
-            smooth = val['smooth']
-            xtiming = val['xtiming']
-            dark = val['dark']
-            ref = val['ref']
-            abs_wavs = val['abs_wavs']
-            abs_win = val['abs_win']
-            hist_t = val['hist_t']
-
-            if str(int_time) != self.int_time.GetValue():
-                self.int_time.SafeChangeValue(str(int_time))
-            if str(scan_avg) != self.scan_avg.GetValue():
-                self.scan_avg.SafeChangeValue(str(scan_avg))
-            if str(smooth) != self.smoothing.GetValue():
-                self.smoothing.SafeChangeValue(str(smooth))
-            if str(xtiming) != self.xtiming.GetValue():
-                self.xtiming.SafeChangeValue(str(xtiming))
-            if hist_t != self._history_length:
-                self.history_time.SafeChangeValue(str(hist_t))
-
-            self._history_length = hist_t
-
-            self._dark_spectrum = dark
-            self._reference_spectrum = ref
-            self._current_abs_wav = abs_wavs
-
-        elif cmd == 'collect_spec':
-            self._add_new_spectrum(val)
-
-        elif cmd == 'collect_ref':
-            self._reference_spectrum = val
-            self._add_new_spectrum(val)
-
-        elif cmd == 'collect_dark':
-            self._dark_spectrum = val
-
-        elif cmd == 'collect_series':
-            self._add_new_spectrum(val)
-            self._series_count += 1
-
-            logger.debug('Got series spectrum %s of %s', self._series_count,
-                self._series_total)
-
-        elif cmd == 'get_busy':
-            if val:
-                if self._series_running:
-                    msg = ('Collecting {} of {}'.format(self._series_count,
-                        self._series_total))
-                else:
-                    msg = 'Collecting'
-                self.status.SetLabel(msg)
-            else:
-                msg = 'Ready'
-
-            if msg != self.status.GetLabel():
-                self.status.SetLabel(msg)
-
-        elif cmd == 'collect_series_start':
-            self._series_running = True
-            self._series_count = 0
-            self._series_total = val
-            wx.CallAfter(self.uv_plot.set_time_zero)
-
-        elif cmd == 'collect_series_end':
-            self._series_running = True
-            self._series_count = 0
-
-            if self._restart_live_update:
-                self._live_update_evt.set()
-
-    def _add_new_spectrum(self, val):
-        self._current_spectrum = val
-
-        if val.spectrum is not None:
-            self._add_spectrum_to_history(val)
-
-        if val.trans_spectrum is not None:
-            self._add_spectrum_to_history(val, 'trans')
-
-        if val.abs_spectrum is not None:
-            self._add_spectrum_to_history(val, 'abs')
-
-        self.uv_plot.update_plot_data(val, self._absorbance_history,
-            self._current_abs_wav)
-
-
-    def _set_status_commands(self):
-        settings_cmd = ['get_spec_settings', [self.name], {}]
-
-        self.com_thread.add_status_cmd(settings_cmd, 60)
-
-        busy_cmd = ['get_busy', [self.name,], {}]
-
-        self.com_thread.add_status_cmd(busy_cmd, 1)
-
-    def _add_spectrum_to_history(self, spectrum, spec_type='raw'):
-        logger.debug('Adding %s spectrum to history', spec_type)
-
-        if spec_type == 'abs':
-            history = self._absorbance_history
-        elif spec_type == 'trans':
-            history = self._transmission_history
-        else:
-            history = self._history
-
-        if history is not None:
-            history['spectra'].append(spectrum)
-            history['timestamps'].append((spectrum.get_timestamp().astimezone() -
-                datetime.datetime(1970,1,1,
-                tzinfo=datetime.timezone.utc)).total_seconds())
-
-            history = self._prune_history(history)
-
-            if spec_type == 'abs':
-                self._absorbance_history = history
-            elif spec_type == 'trans':
-                self._transmission_history = history
-            else:
-                self._history = history
-
-    def _prune_history(self, history):
-        logger.debug('Pruning history')
-
-        if len(history['timestamps']) > 0:
-            now = (datetime.datetime.now(datetime.timezone.utc) - datetime.datetime(1970,1,1,
-                tzinfo=datetime.timezone.utc)).total_seconds()
-
-            if len(history['timestamps']) == 1:
-                if now - history['timestamps'][0] > self._history_length:
-                    index = 1
-                else:
-                    index = 0
-
-            else:
-                index = 0
-
-                while (index < len(history['timestamps'])-1
-                    and now - history['timestamps'][index] > self._history_length):
-                    index += 1
-
-            if index == len(history['timestamps']):
-                history['spectra'] = []
-                history['timestamps'] = []
-
-            elif index != 0:
-                history['spectra'] = history['spectra'][index:]
-                history['timestamps'] = history['timestamps'][index:]
-
-        return history
-
-    def _get_full_history(self):
-        abs_cmd = ['get_full_hist_ts', [self.name,], {}]
-        trans_cmd = ['get_full_hist_ts', [self.name,], {'spec_type': 'trans'}]
-        raw_cmd = ['get_full_hist_ts', [self.name,], {'spec_type': 'raw'}]
-
-        self._absorbance_history = self._send_cmd(abs_cmd, True)
-        self._transmission_history = self._send_cmd(trans_cmd, True)
-        self._history = self._send_cmd(raw_cmd, True)
-
-    def _on_save(self, evt):
-        obj = evt.GetEventObject()
-
-        if obj == self.save_current:
-            print('saving current spectrum')
-            spectrum = self._current_spectrum
-        elif obj == self.save_ref:
-            print('saving reference spectrum')
-            spectrum = self._reference_spectrum
-        elif obj == self.save_dark:
-            print('saving dark spectrum')
-            spectrum = self._dark_spectrum
-
-        if spectrum is not None:
-            self._save_spectrum(spectrum)
-        else:
-            msg = "The selected spectrum cannot be saved because it doesn't exist."
-            wx.CallAfter(wx.MessageBox, msg, 'No Spectrum to save')
-
-    def _save_spectrum(self, spectrum):
-        msg = "Please select save directory and enter save file name"
-        dialog = wx.FileDialog(self, message=msg,
-            style=wx.FD_SAVE|wx.FD_OVERWRITE_PROMPT, defaultFile='spectrum.csv')
-
-        if dialog.ShowModal() == wx.ID_OK:
-            path = dialog.GetPath()
-            dialog.Destroy()
-        else:
-            dialog.Destroy()
-            return
-
-        path=os.path.splitext(path)[0]
-        savedir, name = os.path.split(path)
-
-        # spectrum.save_spectrum(name, savedir)
-
-        if spectrum.spectrum is not None:
-            spectrum.save_spectrum(name+'_raw.csv', savedir, 'raw')
-
-        if spectrum.trans_spectrum is not None:
-            spectrum.save_spectrum(name+'_trans.csv', savedir, 'trans')
-
-        if spectrum.abs_spectrum is not None:
-            spectrum.save_spectrum(name+'.csv', savedir, 'abs')
-
-    def _on_close(self):
-        """Device specific stuff goes here"""
-        self._live_update_stop.set()
-        self._live_update_thread.join()
-
-
-class InlineUVPanel(utils.DevicePanel):
-
-    def __init__(self, settings, parent, *args,
-        **kwargs):
-        super(InlineUVPanel, self).__init__(parent, wx.ID_ANY, None,
-            settings, *args, **kwargs)
-
-        # Pass in settings where the parent expects device data
-        self.settings = settings
-
-        self._dark_spectrum = None
-        self._reference_spectrum = None
-        self._current_spectrum = None
-
-        self._history_length = 60*60*24
-
-        self._history = {'spectra' : [], 'timestamps' : []}
-        self._transmission_history = {'spectra' : [], 'timestamps' : []}
-        self._absorbance_history = {'spectra' : [], 'timestamps' : []}
-
-        self._series_running = False
-        self._series_count = 0
-        self._series_total = 0
-
-        self._history_length = None
-        self._current_int_time = None
-        self._current_scan_avg = None
-        self._current_smooth = None
-        self._current_xtiming = None
-        self._current_abs_wav = None
-        self._current_abs_win = None
-        self._current_wav_range = None
-
-        self._series_exp_time = None
-        self._series_scan_avg = None
-
-        self._ls_shutter = None
-
-        self.uvplot_frame = None
-        self.uv_plot = None
-
-        self._init_controls()
-        wx.CallLater(500, self._init_device_part2)
-
-    def _create_layout(self):
-        """Creates the layout for the panel."""
-
-        status_parent = wx.StaticBox(self, label='Status:')
-        self.status = wx.StaticText(status_parent, size=(225, -1),
-            style=wx.ST_NO_AUTORESIZE)
-        self.status.SetForegroundColour(wx.RED)
-        fsize = self.GetFont().GetPointSize()
-        font = wx.Font(fsize, wx.DEFAULT, wx.NORMAL, wx.BOLD)
-        self.status.SetFont(font)
-
-        self.show_uv_plot = wx.Button(status_parent, label='Show Plot')
-        self.show_uv_plot.Bind(wx.EVT_BUTTON, self._on_show_uv_plot)
-
-        status_sizer = wx.StaticBoxSizer(status_parent, wx.HORIZONTAL)
-        status_sizer.Add(wx.StaticText(status_parent, label='Status:'),
-            flag=wx.ALL|wx.ALIGN_CENTER_VERTICAL, border=self._FromDIP(5))
-        status_sizer.Add(self.status, border=self._FromDIP(5),
-            flag=wx.TOP|wx.BOTTOM|wx.LEFT|wx.ALIGN_CENTER_VERTICAL)
-        status_sizer.Add(self.show_uv_plot, border=self._FromDIP(5),
-            flag=wx.TOP|wx.BOTTOM|wx.LEFT|wx.ALIGN_CENTER_VERTICAL)
-        status_sizer.AddStretchSpacer(1)
-
-        settings_parent = wx.StaticBox(self, label='Settings')
-
-        self.int_time =wx.TextCtrl(settings_parent,
-            validator=utils.CharValidator('float_te'))
-        self.collect_uv = wx.CheckBox(settings_parent, label='Collect UV')
-        self.collect_uv.SetValue(True)
-
-        self.settings_sizer = wx.GridBagSizer(vgap=self._FromDIP(5),
-            hgap=self._FromDIP(5))
-
-        self.settings_sizer.Add(wx.StaticText(settings_parent,
-            label='Max int. time (s):'), (0,0), flag=wx.ALIGN_CENTER_VERTICAL)
-        self.settings_sizer.Add(self.int_time, (0,1),
-            flag=wx.EXPAND|wx.ALIGN_CENTER_VERTICAL)
-        self.settings_sizer.Add(self.collect_uv, (1,0), span=(1,2),
-            flag=wx.ALIGN_CENTER_VERTICAL)
-
-
-        self.settings_sizer.AddGrowableCol(1)
-
-        settings_box_sizer = wx.StaticBoxSizer(settings_parent, wx.VERTICAL)
-        settings_box_sizer.Add(self.settings_sizer, flag=wx.EXPAND|wx.ALL,
-            border=self._FromDIP(5))
-
-
-        adv_pane = wx.CollapsiblePane(self, label="Advanced",
-            style=wx.CP_NO_TLW_RESIZE)
-        adv_pane.Bind(wx.EVT_COLLAPSIBLEPANE_CHANGED, self.on_collapse)
-        adv_win = adv_pane.GetPane()
-
-
-        adv_settings_parent = wx.StaticBox(adv_win, label='Settings')
-
-        self.auto_dark = wx.CheckBox(adv_settings_parent, label='Auto update dark')
-        self.auto_dark_period = wx.TextCtrl(adv_settings_parent,
-            validator=utils.CharValidator('float'))
-        self.dark_avgs = wx.TextCtrl(adv_settings_parent,
-            validator=utils.CharValidator('int'))
-        self.ref_avgs = wx.TextCtrl(adv_settings_parent,
-            validator=utils.CharValidator('int'))
-        self.history_time = utils.ValueEntry(self._on_settings_change,
-            adv_settings_parent, validator=utils.CharValidator('float_te'))
-
-        adv_settings_sizer = wx.GridBagSizer(vgap=self._FromDIP(5),
-            hgap=self._FromDIP(5))
-
-        adv_settings_sizer.Add(self.auto_dark, (0,0), span=(1,2),
-            flag=wx.EXPAND|wx.ALIGN_CENTER_VERTICAL)
-        adv_settings_sizer.Add(wx.StaticText(adv_settings_parent,
-            label='Dark period (s):'), (1,0), flag=wx.ALIGN_CENTER_VERTICAL)
-        adv_settings_sizer.Add(self.auto_dark_period, (1,1),
-            flag=wx.EXPAND|wx.ALIGN_CENTER_VERTICAL)
-        adv_settings_sizer.Add(wx.StaticText(adv_settings_parent,
-            label='Dark averages:'), (2,0), flag=wx.ALIGN_CENTER_VERTICAL)
-        adv_settings_sizer.Add(self.dark_avgs, (2,1),
-            flag=wx.EXPAND|wx.ALIGN_CENTER_VERTICAL)
-        adv_settings_sizer.Add(wx.StaticText(adv_settings_parent,
-            label='Ref. averages:'), (3,0), flag=wx.ALIGN_CENTER_VERTICAL)
-        adv_settings_sizer.Add(self.ref_avgs, (3,1),
-            flag=wx.EXPAND|wx.ALIGN_CENTER_VERTICAL)
-        adv_settings_sizer.Add(wx.StaticText(adv_settings_parent,
-            label='History (s):'), (4,0), flag=wx.ALIGN_CENTER_VERTICAL)
-        adv_settings_sizer.Add(self.history_time, (4,1),
-            flag=wx.EXPAND|wx.ALIGN_CENTER_VERTICAL)
-
-        adv_settings_sizer.AddGrowableCol(1)
-
-        adv_settings_box_sizer = wx.StaticBoxSizer(adv_settings_parent,
-            wx.VERTICAL)
-        adv_settings_box_sizer.Add(adv_settings_sizer, flag=wx.EXPAND|wx.ALL,
-            border=self._FromDIP(5))
-
-
-        single_spectrum_parent = wx.StaticBox(adv_win,
-            label='Collect Single Spectrum')
-
-        self.collect_dark_btn = wx.Button(single_spectrum_parent,
-            label='Collect Dark')
-        self.collect_ref_btn = wx.Button(single_spectrum_parent,
-            label='Collect Reference')
-
-        self.collect_dark_btn.Bind(wx.EVT_BUTTON, self._on_collect_single)
-        self.collect_ref_btn.Bind(wx.EVT_BUTTON, self._on_collect_single)
-
-        single_spectrum_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(5),
-            hgap=self._FromDIP(5))
-        single_spectrum_sizer.Add(self.collect_dark_btn,
-            flag=wx.ALIGN_CENTER_VERTICAL)
-        single_spectrum_sizer.Add(self.collect_ref_btn,
-            flag=wx.ALIGN_CENTER_VERTICAL)
-
-        single_spectrum_box_sizer = wx.StaticBoxSizer(single_spectrum_parent,
-            wx.VERTICAL)
-        single_spectrum_box_sizer.Add(single_spectrum_sizer, flag=wx.EXPAND|wx.ALL,
-            border=self._FromDIP(5))
-
-
-        ls_parent = wx.StaticBox(adv_win, label='Light Source Control')
-
-        self.ls_status = wx.StaticText(ls_parent, size=(150,-1),
-            style=wx.ST_NO_AUTORESIZE)
-        self.ls_open = wx.Button(ls_parent, label='Open Shutter')
-        self.ls_close = wx.Button(ls_parent, label='Close Shutter')
-
-        self.ls_open.Bind(wx.EVT_BUTTON, self._on_ls_shutter)
-        self.ls_close.Bind(wx.EVT_BUTTON, self._on_ls_shutter)
-
-        ls_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(5),
-            hgap=self._FromDIP(5))
-        ls_sizer.Add(wx.StaticText(ls_parent, label='Status:'))
-        ls_sizer.Add(self.ls_status, flag=wx.EXPAND|wx.ALIGN_CENTER_VERTICAL)
-        ls_sizer.Add(self.ls_open, flag=wx.ALIGN_CENTER_VERTICAL)
-        ls_sizer.Add(self.ls_close, flag=wx.ALIGN_CENTER_VERTICAL)
-
-        ls_box_sizer = wx.StaticBoxSizer(ls_parent,
-            wx.VERTICAL)
-        ls_box_sizer.Add(ls_sizer, flag=wx.EXPAND|wx.ALL,
-            border=self._FromDIP(5))
-
-
-        adv_sizer = wx.BoxSizer(wx.VERTICAL)
-        adv_sizer.Add(adv_settings_box_sizer, 1, flag=wx.EXPAND|wx.ALL,
-            border=self._FromDIP(5))
-        adv_sizer.Add(single_spectrum_box_sizer, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM,
-            border=self._FromDIP(5))
-        adv_sizer.Add(ls_box_sizer, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM,
-            border=self._FromDIP(5))
-
-        adv_win.SetSizer(adv_sizer)
-
-
-        top_sizer = wx.BoxSizer(wx.VERTICAL)
-        top_sizer.Add(status_sizer, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
-            border=self._FromDIP(5))
-        top_sizer.Add(settings_box_sizer, flag=wx.EXPAND|wx.ALL,
-            border=self._FromDIP(5))
-        top_sizer.Add(adv_pane, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM,
-            border=self._FromDIP(5))
-
-        self.SetSizer(top_sizer)
-
-    def on_collapse(self, event):
-        self.Layout()
-        self.Fit()
-
-        self.parent.Layout()
-        self.parent.Fit()
-
-        try:
-            wx.FindWindowByName('biocon').Layout()
-            wx.FindWindowByName('biocon').Fit()
-        except Exception:
-            pass
-
-    def _send_cmd(self, cmd, wait_for_response=False, is_status=False,
-        status_period=1, add_status=True):
-        """
-        Sends commands to the pump using the ``cmd_q`` that was given
-        to :py:class:`UVCommThread`.
-
-        :param str cmd: The command to send, matching the command in the
-            :py:class:`UVCommThread` ``_commands`` dictionary.
-        """
-        logger.debug('Sending device %s command %s', self.name, cmd)
-
-        if is_status:
-            device = 'uv_status'
-            cmd = [cmd, status_period, add_status]
-        else:
-            device = 'uv'
-
-        zmq_cmd = {'device': device, 'command': cmd, 'response': wait_for_response}
-
-        if wait_for_response:
-            with self._clear_return:
-                self.cmd_q.append(zmq_cmd)
-                result = self._wait_for_response()
-
-                if result is not None:
-                    logger.debug(result)
-                    if result[0] == cmd[1][0] and result[1] == cmd[0]:
-                        ret_val = result[2]
-                    else:
-                        ret_val = None
-                else:
-                    ret_val = None
-
-        else:
-            self.cmd_q.append(zmq_cmd)
-            ret_val = None
-
-        return ret_val
-
-    def _wait_for_response(self):
-        start_count = len(self.return_q)
-        while len(self.return_q) == start_count:
-            time.sleep(0.01)
-            if self.timeout_event.is_set():
-                break
-
-        if not self.timeout_event.is_set():
-            answer = self.return_q.pop()
-        else:
-            answer = None
-
-        logger.debug('Spec command response: %s', answer)
-
-        return answer
-
-    def _init_connections(self, settings):
-        self.abort_event = threading.Event()
-        self.event = threading.Event()
-        self.timeout_event = threading.Event()
-
-        ip = settings['remote_ip']
-        port = settings['remote_port']
-
-        self.uv_com_thread = client.ControlClient(ip, port, self.cmd_q,
-            self.return_q, self.abort_event, self.timeout_event,
-            name='UVControlClient', status_queue=self.status_q)
-
-        self.uv_com_thread.start()
-
-    def _init_device(self, settings):
-        """
-        Initializes the device parameters if any were provided. If enough are
-        provided the device is automatically connected.
-        """
-
-        self._init_connections(settings)
-
-        device_data = settings['device_init']
-
-        args = device_data['args']
-        kwargs = device_data['kwargs']
-
-        args.insert(0, self.name)
-
-        connect_cmd = ['connect', args, kwargs]
-
-        self._send_cmd(connect_cmd, True)
-
-
-    def _init_dark_and_ref(self):
-        dark_cmd = ['get_dark', [self.name,], {}]
-
-        dark = self._send_cmd(dark_cmd, True)
-
-        if dark is None:
-            self._collect_spectrum('dark')
-
-        else:
-            self._dark_spectrum = dark
-
-        ref_cmd = ['get_ref', [self.name,], {}]
-
-        ref = self._send_cmd(ref_cmd, True)
-
-        if ref is None:
-            self._collect_spectrum('ref')
-        else:
-            self._reference_spectrum = ref
-
-    def _init_controls(self):
-        self.auto_dark.SetValue(self.settings['auto_dark'])
-        self.auto_dark_period.SetValue('{}'.format(self.settings['auto_dark_t']))
-        self.dark_avgs.SetValue('{}'.format(self.settings['dark_avgs']))
-        self.ref_avgs.SetValue('{}'.format(self.settings['dark_avgs']))
-        self.int_time.SetValue('{}'.format(self.settings['max_int_t']))
-
-        self._history_length = self.settings['history_t']
-        self.history_time.SafeChangeValue('{}'.format(self.settings['history_t']))
-
-    def _init_device_part2(self):
-        # Need some kind of delay or I get a USB error message from the stellarnet driver
-        cmd = ['set_hist_time', [self.name, float(self._history_length)], {}]
-        self._send_cmd(cmd)
-
-        is_busy = self._get_busy()
-
-        self._get_full_history()
-
-        cmd = ['get_spec_settings', [self.name,], {}]
-        ret = self._send_cmd(cmd, True)
-        self._set_status('get_spec_settings', ret)
-
-        if not is_busy:
-            self._set_wavelength_range()
-
-        if not is_busy:
-            self._init_dark_and_ref()
-
-        self._set_status_commands()
-
-
-    def _on_settings_change(self, obj, val):
-        if obj == self.int_time:
-            cmd = ['set_int_time', [self.name, float(val)], {}]
-
-        elif obj == self.history_time:
-            cmd = ['set_hist_time', [self.name, float(val)], {}]
-
-        else:
-            cmd = None
-
-        if cmd is not None:
-            self._send_cmd(cmd)
-
-    def _on_collect_single(self, evt):
-        obj = evt.GetEventObject()
-
-        if obj == self.collect_dark_btn:
-            self._collect_spectrum('dark')
-        elif obj == self.collect_ref_btn:
-            self._collect_spectrum('ref')
-
-    def _on_ls_shutter(self, evt):
-        obj = evt.GetEventObject()
-
-        if obj == self.ls_open:
-            shutter = True
-        elif obj == self.ls_close:
-            shutter = False
-
-        self._open_ls_shutter(shutter)
-
-    def _open_ls_shutter(self, shutter_open):
-        ls_cmd = ['set_ls_shutter', [self.name, shutter_open], {}]
-        self._send_cmd(ls_cmd)
-        time.sleep(0.1)
-        ls_status_cmd = ['get_ls_shutter', [self.name,], {}]
-        resp = self._send_cmd(ls_status_cmd, True)
-
-        self._ls_shutter = resp
-
-        if resp:
-            ls_status = 'Open'
-        else:
-            ls_status = 'Closed'
-
-        self.ls_status.SetLabel(ls_status)
-
-    def _collect_spectrum(self, stype='normal'):
-        is_busy = self._get_busy()
-
-        if not is_busy:
-            self._set_wavelength_range()
-            dark_correct = self.settings['dark_correct']
-            auto_dark = self.auto_dark.GetValue()
-            dark_time = float(self.auto_dark_period.GetValue())
-
-            if stype == 'normal':
-                spec_type = self.spectrum_type.GetStringSelection()
-
-                if spec_type == 'Absorbance':
-                    spec_type = 'abs'
-                elif spec_type == 'Transmission':
-                    spec_type == 'trans'
-                else:
-                    spec_type = 'raw'
-
-                kwargs = {
-                    'spec_type'     : spec_type,
-                    'dark_correct'  : dark_correct,
-                    'auto_dark'     : auto_dark,
-                    'dark_time'     : dark_time,
-                }
-
-                cmd = ['collect_spec', [self.name,], kwargs]
-
-            elif stype == 'ref':
-                avgs = int(self.ref_avgs.GetValue())
-
-                kwargs = {
-                    'averages'      : avgs,
-                    'dark_correct'  : dark_correct,
-                    'auto_dark'     : auto_dark,
-                    'dark_time'     : dark_time,
-                }
-
-                cmd = ['collect_ref', [self.name], kwargs]
-
-            elif stype == 'dark':
-                avgs = int(self.dark_avgs.GetValue())
-
-                cmd = ['collect_dark', [self.name,], {'averages': avgs}]
-
-            else:
-                cmd = None
-
-            if cmd is not None:
-                self._send_cmd(cmd)
-
-        else:
-            wx.CallAfter(self._show_busy_msg)
-
-    def _collect_series(self, num_spectra, int_time, scan_avgs, exp_period, exp_time):
-        is_busy = self._get_busy()
-
-        if not is_busy:
-            self._set_wavelength_range()
-            self._set_exposure_settings(int_time, scan_avgs)
-            self._set_abs_params()
-
-            dark_correct = self.settings['dark_correct']
-            auto_dark = self.auto_dark.GetValue()
-            dark_time = float(self.auto_dark_period.GetValue())
-
-            spec_type = self.settings['spectrum_type']
-
-            if spec_type == 'Absorbance':
-                spec_type = 'abs'
-            elif spec_type == 'Transmission':
-                spec_type == 'trans'
-            else:
-                spec_type = 'raw'
-
-            take_ref = self.settings['series_ref_at_start']
-            ref_avgs = int(self.ref_avgs.GetValue())
-
-            uv_time = max(int_time*self.settings['int_t_scale'], 0.05)*scan_avgs
-
-            delta_t_min = (exp_time-uv_time)*1.05
-
-            if delta_t_min < 0.01:
-                delta_t_min = 0
-
-            kwargs = {
-                'spec_type'     : spec_type,
-                'delta_t_min'   : delta_t_min,
-                'dark_correct'  : dark_correct,
-                'int_trigger'   : False,
-                'auto_dark'     : auto_dark,
-                'dark_time'     : dark_time,
-                'take_ref'      : take_ref,
-                'ref_avgs'      : ref_avgs,
-            }
-
-            cmd = ['collect_series', [self.name, num_spectra], kwargs]
-
-            self._send_cmd(cmd, True)
-
-        else:
-            wx.CallAfter(self._show_busy_msg)
-
-        return not is_busy
 
     def _set_exposure_settings(self, exp_time, scan_avgs):
         update_dark = False
@@ -3348,107 +2823,113 @@ class InlineUVPanel(utils.DevicePanel):
             cmd = ['set_abs_window', [self.name, self.settings['abs_window']], {}]
             self._send_cmd(cmd)
 
-    def _set_wavelength_range(self):
-        update = False
-        if self._current_wav_range is not None:
-            if ((self._current_wav_range[0] is None
-                and self.settings['wavelength_range'][0] is not None) or
-                (self._current_wav_range[0] is not None
-                and self.settings['wavelength_range'][0] is None) or
-                (self._current_wav_range[0] != self.settings['wavelength_range'][0])
-                or (self._current_wav_range[1] is None
-                and self.settings['wavelength_range'][1] is not None) or
-                (self._current_wav_range[1] is not None
-                and self.settings['wavelength_range'][1] is None) or
-                (self._current_wav_range[1] != self.settings['wavelength_range'][1])):
-                update = True
-
-        else:
-            update = True
-
-        if update:
-            cmd = ['set_wl_range', [self.name, self.settings['wavelength_range'][0],
-                self.settings['wavelength_range'][1]], {}]
-            self._send_cmd(cmd)
-            self._current_wav_range = self.settings['wavelength_range']
-
-    def _get_busy(self):
-        busy_cmd = ['get_busy', [self.name,], {}]
-        is_busy = self._send_cmd(busy_cmd, True)
-
-        return is_busy
-
     def _set_autosave_parameters(self, prefix, data_dir):
 
-        cmd = ['set_autosave_on', [self.name, True], {}]
+        if not self.remote:
+            autosave_on = self.autosave_series.GetValue()
+            autosave_choice = self.autosave_choice.GetStringSelection()
+        else:
+            autosave_on = True
+            autosave_choice = self.settings['save_type']
+
+        cmd = ['set_autosave_on', [self.name, autosave_on], {}]
 
         self._send_cmd(cmd)
 
-        autosave_choice = self.settings['save_type']
+        if autosave_on:
+            if autosave_choice == 'Absorbance':
+                save_raw = False
+                save_trans = False
+                save_abs = True
 
-        if autosave_choice == 'Absorbance':
-            save_raw = False
-            save_trans = False
-            save_abs = True
+            elif autosave_choice == 'Transmission':
+                save_raw = False
+                save_trans = True
+                save_abs = False
 
-        elif autosave_choice == 'Transmission':
-            save_raw = False
-            save_trans = True
-            save_abs = False
+            elif autosave_choice == 'Raw':
+                save_raw = True
+                save_trans = False
+                save_abs = False
 
-        elif autosave_choice == 'Raw':
-            save_raw = True
-            save_trans = False
-            save_abs = False
+            elif autosave_choice == 'A & T':
+                save_raw = False
+                save_trans = True
+                save_abs = True
 
-        elif autosave_choice == 'A & T':
-            save_raw = False
-            save_trans = True
-            save_abs = True
+            elif autosave_choice == 'A & T & R':
+                save_raw = True
+                save_trans = True
+                save_abs = True
 
-        elif autosave_choice == 'A & T & R':
-            save_raw = True
-            save_trans = True
-            save_abs = True
+            elif autosave_choice == 'A & R':
+                save_raw = True
+                save_trans = False
+                save_abs = True
 
-        elif autosave_choice == 'A & R':
-            save_raw = True
-            save_trans = False
-            save_abs = True
+            elif autosave_choice == 'R & T':
+                save_raw = True
+                save_trans = True
+                save_abs = False
 
-        elif autosave_choice == 'R & T':
-            save_raw = True
-            save_trans = True
-            save_abs = False
+            if not self.remote:
+                prefix = self.autosave_prefix.GetValue()
+                data_dir = self.autosave_dir.GetValue()
+                data_dir = os.path.abspath(os.path.expanduser(data_dir))
 
-        data_dir = os.path.abspath(os.path.expanduser(data_dir))
-        data_dir = os.path.join(data_dir, self.settings['save_subdir'])
+                # data_dir = data_dir.replace(self.settings['remote_dir_prefix']['local'],
+                #     self.settings['remote_dir_prefix']['remote'])
 
-        if not os.path.exists(data_dir):
-            os.mkdir(data_dir)
+            else:
+                data_dir = os.path.abspath(os.path.expanduser(data_dir))
+                data_dir = os.path.join(data_dir, self.settings['save_subdir'])
 
-        data_dir = data_dir.replace(self.settings['remote_dir_prefix']['local'],
-                self.settings['remote_dir_prefix']['remote'])
+                if not os.path.exists(data_dir):
+                    os.mkdir(data_dir)
 
-        kwargs = {
-            'save_raw'      : save_raw,
-            'save_trans'    : save_trans,
-            'save_abs'      : save_abs,
-        }
+                data_dir = data_dir.replace(self.settings['remote_dir_prefix']['local'],
+                        self.settings['remote_dir_prefix']['remote'])
 
-        cmd = ['set_autosave_param', [self.name, data_dir, prefix], kwargs]
+            kwargs = {
+                'save_raw'      : save_raw,
+                'save_trans'    : save_trans,
+                'save_abs'      : save_abs,
+            }
 
-        self._send_cmd(cmd)
+            cmd = ['set_autosave_param', [self.name, data_dir, prefix], kwargs]
+
+            self._send_cmd(cmd)
+
+    def _on_change_dir(self, evt):
+        with wx.DirDialog(self, "Select Directory", self.autosave_dir.GetValue()) as fd:
+            if fd.ShowModal() == wx.ID_CANCEL:
+                return
+
+            pathname = fd.GetPath()
+
+            self.autosave_dir.SetValue(pathname)
 
     def _show_busy_msg(self):
         wx.MessageBox('Cannot collect spectrum because device is busy.',
             'Device is busy')
 
     def _set_status(self, cmd, val):
-        logger.debug('Setting status %s %s', cmd, val)
         if cmd == 'set_int_time':
             if str(val) != self.int_time.GetValue():
-                self.int_time.ChangeValue(str(val))
+                self.int_time.SafeChangeValue(str(val))
+                self._current_int_time = int_time
+
+        elif cmd == 'set_scan_avg' and not self.remote:
+            if str(val) != self.scan_avg.GetValue():
+                self.scan_avg.SafeChangeValue(str(val))
+
+        elif cmd == 'set_smoothing' and not self.remote:
+            if str(val) != self.smoothing.GetValue():
+                self.smoothing.SafeChangeValue(str(val))
+
+        elif cmd == 'set_xtiming' and not self.remote:
+            if str(val) != self.xtiming.GetValue():
+                self.xtiming.SafeChangeValue(str(val))
 
         elif cmd == 'get_hist_time':
             if val != self._history_length:
@@ -3468,6 +2949,14 @@ class InlineUVPanel(utils.DevicePanel):
             ls_shutter = val['ls_shutter']
             wl_range = val['wl_range']
 
+            if str(int_time) != self.int_time.GetValue() and not self.remote:
+                self.int_time.SafeChangeValue(str(int_time))
+            if str(scan_avg) != self.scan_avg.GetValue() and not self.remote:
+                self.scan_avg.SafeChangeValue(str(scan_avg))
+            if str(smooth) != self.smoothing.GetValue() and not self.remote:
+                self.smoothing.SafeChangeValue(str(smooth))
+            if str(xtiming) != self.xtiming.GetValue() and not self.remote:
+                self.xtiming.SafeChangeValue(str(xtiming))
             if hist_t != self._history_length:
                 self.history_time.SafeChangeValue(str(hist_t))
 
@@ -3483,7 +2972,7 @@ class InlineUVPanel(utils.DevicePanel):
             self._dark_spectrum = dark
             self._reference_spectrum = ref
 
-            if ls_shutter != self._ls_shutter:
+            if ls_shutter != self._ls_shutter and self.remote:
                 self._ls_shutter = ls_shutter
 
                 if self._ls_shutter:
@@ -3536,6 +3025,9 @@ class InlineUVPanel(utils.DevicePanel):
             self._series_running = True
             self._series_count = 0
 
+            if not self.remote and self._restart_live_update:
+                self._live_update_evt.set()
+
     def _add_new_spectrum(self, val):
         self._current_spectrum = val
 
@@ -3555,13 +3047,11 @@ class InlineUVPanel(utils.DevicePanel):
     def _set_status_commands(self):
         settings_cmd = ['get_spec_settings', [self.name], {}]
 
-        self._send_cmd(settings_cmd, is_status=True,
-            status_period=60, add_status=True)
+        self._update_status_cmd(settings_cmd, 60)
 
         busy_cmd = ['get_busy', [self.name,], {}]
 
-        self._send_cmd(busy_cmd, is_status=True,
-            status_period=1, add_status=True)
+        self._update_status_cmd(busy_cmd, 1)
 
     def _add_spectrum_to_history(self, spectrum, spec_type='raw'):
         logger.debug('Adding %s spectrum to history', spec_type)
@@ -3577,7 +3067,7 @@ class InlineUVPanel(utils.DevicePanel):
             history['spectra'].append(spectrum)
             history['timestamps'].append((spectrum.get_timestamp().astimezone() -
                 datetime.datetime(1970,1,1,
-                    tzinfo=datetime.timezone.utc)).total_seconds())
+                tzinfo=datetime.timezone.utc)).total_seconds())
 
             history = self._prune_history(history)
 
@@ -3593,7 +3083,7 @@ class InlineUVPanel(utils.DevicePanel):
 
         if len(history['timestamps']) > 0:
             now = (datetime.datetime.now(datetime.timezone.utc) - datetime.datetime(1970,1,1,
-                    tzinfo=datetime.timezone.utc)).total_seconds()
+                tzinfo=datetime.timezone.utc)).total_seconds()
 
             if len(history['timestamps']) == 1:
                 if now - history['timestamps'][0] > self._history_length:
@@ -3708,17 +3198,58 @@ class InlineUVPanel(utils.DevicePanel):
         self.uvplot_frame = None
         self.uv_plot = None
 
+    def _on_save(self, evt):
+        obj = evt.GetEventObject()
+
+        if obj == self.save_current:
+            print('saving current spectrum')
+            spectrum = self._current_spectrum
+        elif obj == self.save_ref:
+            print('saving reference spectrum')
+            spectrum = self._reference_spectrum
+        elif obj == self.save_dark:
+            print('saving dark spectrum')
+            spectrum = self._dark_spectrum
+
+        if spectrum is not None:
+            self._save_spectrum(spectrum)
+        else:
+            msg = "The selected spectrum cannot be saved because it doesn't exist."
+            wx.CallAfter(wx.MessageBox, msg, 'No Spectrum to save')
+
+    def _save_spectrum(self, spectrum):
+        msg = "Please select save directory and enter save file name"
+        dialog = wx.FileDialog(self, message=msg,
+            style=wx.FD_SAVE|wx.FD_OVERWRITE_PROMPT, defaultFile='spectrum.csv')
+
+        if dialog.ShowModal() == wx.ID_OK:
+            path = dialog.GetPath()
+            dialog.Destroy()
+        else:
+            dialog.Destroy()
+            return
+
+        path=os.path.splitext(path)[0]
+        savedir, name = os.path.split(path)
+
+        # spectrum.save_spectrum(name, savedir)
+
+        if spectrum.spectrum is not None:
+            spectrum.save_spectrum(name+'_raw.csv', savedir, 'raw')
+
+        if spectrum.trans_spectrum is not None:
+            spectrum.save_spectrum(name+'_trans.csv', savedir, 'trans')
+
+        if spectrum.abs_spectrum is not None:
+            spectrum.save_spectrum(name+'.csv', savedir, 'abs')
+
     def _on_close(self):
         """Device specific stuff goes here"""
-        pass
 
-    def on_exit(self):
-        self.uv_com_thread.stop()
+        if not self.remote:
+            self._live_update_stop.set()
+            self._live_update_thread.join()
 
-        if not self.timeout_event.is_set():
-            self.uv_com_thread.join(5)
-
-        self.close()
 
 class UVPlot(wx.Panel):
 
@@ -4193,45 +3724,27 @@ class UVPlotFrame(wx.Frame):
 
 class UVFrame(utils.DeviceFrame):
 
-    def __init__(self, name, setup_devices, com_thread, *args, **kwargs):
+    def __init__(self, name, settings, *args, **kwargs):
         """
         Initializes the device frame. Takes frame name, utils.CommManager thread
         (or subclass), the device_panel class, and args and kwargs for the wx.Frame class.
         """
-        super(UVFrame, self).__init__(name, com_thread, UVPanel, *args, **kwargs)
+        super(UVFrame, self).__init__(name, settings, *args, **kwargs)
 
         # Enable these to init devices on startup
-        self.setup_devices = setup_devices
+        self.setup_devices = self.settings.pop('device_init', None)
 
         self._init_devices()
 
     def _create_layout(self):
         """Creates the layout"""
 
-        #Overwrite this
         self.sizer = wx.BoxSizer(wx.HORIZONTAL)
 
         top_sizer = wx.BoxSizer(wx.VERTICAL)
         top_sizer.Add(self.sizer, 1, flag=wx.EXPAND)
 
         return top_sizer
-
-class InlineUVFrame(wx.Frame):
-
-    def __init__(self, settings, *args, **kwargs):
-
-        super(InlineUVFrame, self).__init__(*args, **kwargs)
-
-        uv_panel = InlineUVPanel(settings, self)
-
-        sizer = wx.BoxSizer(wx.HORIZONTAL)
-        sizer.Add(uv_panel, 1, flag=wx.EXPAND)
-
-        self.SetSizer(sizer)
-
-        self.Fit()
-        self.Raise()
-
 
 if __name__ == '__main__':
     logger = logging.getLogger()
@@ -4248,9 +3761,6 @@ if __name__ == '__main__':
     # spec.collect_dark()
     # spec.collect_reference_spectrum()
     # spec.disconnect()
-
-    com_thread = UVCommThread('UvComm')
-    com_thread.start()
 
     # cmd_q = deque()
     # ret_q = deque()
@@ -4498,12 +4008,18 @@ if __name__ == '__main__':
     # get_int_status_cmd = ['get_int_time', ['Test2',], {}]
     # com_thread.add_status_cmd(get_int_status_cmd, 10)
 
+    # Local
+    com_thread = UVCommThread('UvComm')
+    com_thread.start()
+
+    # Remote
+    # com_thread = None
 
     spectrometer_settings = {
         'name'                  :  'CoflowUV',
-        'device_init'           : {'name': 'CoflowUV', 'args': ['StellarNet'],
-            'kwargs': {'shutter_pv_name': '18ID:LJT4:2:DO11',
-            'trigger_pv_name' : '18ID:LJT4:2:DO12'}},
+        'device_init'           : [{'name': 'CoflowUV', 'args': ['StellarNet'],
+                                    'kwargs': {'shutter_pv_name': '18ID:LJT4:2:DO11',
+                                    'trigger_pv_name' : '18ID:LJT4:2:DO12'}}],
         'max_int_t'             : 0.025, # in s
         'scan_avg'              : 1,
         'smoothing'             : 0,
@@ -4524,26 +4040,22 @@ if __name__ == '__main__':
         'wavelength_range'      : [200, 838.39],
         'remote_ip'             : '164.54.204.53',
         'remote_port'           : '5559',
+        'remote'                : False,
+        'remote_device'         : 'uv',
+        'com_thread'            : com_thread,
         'remote_dir_prefix'     : {'local' : '/nas_data', 'remote' : 'Y:\\'}
     }
 
-
-
-    setup_devices = [
-        {'name': 'StellarNet', 'args': ['StellarNet',], 'kwargs': {}},
-        ]
-
     app = wx.App()
     logger.debug('Setting up wx app')
-    # frame = UVFrame('UVFrame', setup_devices, com_thread, parent=None,
-    #     title='UV Spectrometer Control')
-    frame = InlineUVFrame(spectrometer_settings, parent=None, name='UVFrame',
+    frame = UVFrame('UVFrame', setup_devices, com_thread, parent=None,
         title='UV Spectrometer Control')
     frame.Show()
     app.MainLoop()
 
-    com_thread.stop()
-    com_thread.join()
+    if com_thread is not None:
+        com_thread.stop()
+        com_thread.join()
 
     """
     To do:

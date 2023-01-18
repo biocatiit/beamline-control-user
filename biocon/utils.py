@@ -1140,17 +1140,6 @@ class DeviceFrame(wx.Frame):
 
         return
 
-    def _get_ports(self):
-        """
-        Gets a list of active comports.
-
-        .. note:: This doesn't update after the program is opened.
-        """
-        port_info = list_ports.comports()
-        self.ports = [port.device for port in port_info]
-
-        logger.debug('Found the following comports for the DeviceFrame: %s', ' '.join(self.ports))
-
     def _on_exit(self, evt):
         """
         Removes communication to the device. You still need to close the device
