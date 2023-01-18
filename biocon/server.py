@@ -371,22 +371,22 @@ if __name__ == '__main__':
     if exp_type == 'coflow':
         # Coflow
 
-        # ip = '164.54.204.53'
+        ip = '164.54.204.53'
         # ip = '164.54.204.24'
-        ip = '192.168.1.16'
 
-        # setup_pumps = [('sheath', 'VICI M50', 'COM3', ['627.72', '9.814'], {}, {}),
-        #     ('outlet', 'VICI M50', 'COM4', ['628.68', '9.962'], {}, {})
-        #     ]
+        setup_pumps = [
+            {'name': 'sheath', 'args': ['VICI M50', 'COM3'],
+                'kwargs': {'flow_cal': '627.72', 'backlash_cal': '9.814'},
+                'ctrl_args': {'flow_rate': 1}},
+            {'name': 'outlet', 'args': ['VICI M50', 'COM4'],
+                'kwargs': {'flow_cal': '628.68', 'backlash_cal': '9.962'},
+                'ctrl_args': {'flow_rate': 1}},
+            ]
 
-        # pump_local_comm_locks = {'sheath'    : pump_comm_locks[setup_pumps[0][2]],
-        #     'outlet'    : pump_comm_locks[setup_pumps[1][2]]
-        #     }
-
-        # setup_valves = [
-        #     {'name': 'Coflow Sheath', 'args': ['Cheminert', 'COM7'],
-        #         'kwargs': {'positions' : 10}},
-        #     ]
+        setup_valves = [
+            {'name': 'Coflow Sheath', 'args': ['Cheminert', 'COM7'],
+                'kwargs': {'positions' : 10}},
+            ]
 
         setup_uv = [
             {'name': 'CoflowUV', 'args': ['StellarNet'], 'kwargs':
@@ -394,190 +394,186 @@ if __name__ == '__main__':
             'trigger_pv_name' : '18ID:LJT4:2:DO12'}},
             ]
 
-        # setup_fms = [
-        #     {'name': 'sheath', 'args' : ['BFS', 'COM5'], 'kwargs': {}}
-        #     {'name': 'outlet', 'args' : ['BFS', 'COM6'], 'kwargs': {}}
+        setup_fms = [
+            {'name': 'sheath', 'args' : ['BFS', 'COM5'], 'kwargs': {}}
+            {'name': 'outlet', 'args' : ['BFS', 'COM6'], 'kwargs': {}}
+            ]
+
+        # # Simulated devices for testing
+
+        # setup_pumps = [
+        #     {'name': 'sheath', 'args': ['Soft', None], 'kwargs': {}},
+        #     {'name': 'outlet', 'args': ['Soft', None], 'kwargs': {}},
         #     ]
 
-        setup_pumps = [
-            {'name': 'sheath', 'args': ['Soft', None], 'kwargs': {}},
-            {'name': 'outlet', 'args': ['Soft', None], 'kwargs': {}},
-            ]
+        # setup_valves = [
+        #     {'name': 'Coflow Sheath', 'args': ['Soft', None], 'kwargs':
+        #         {'positions': 10}},
+        #     ]
 
-        setup_valves = [
-            {'name': 'Coflow Sheath', 'args': ['Soft', None], 'kwargs':
-                {'positions': 10}},
-            ]
-
-        setup_fms = [
-            {'name': 'sheath', 'args': ['Soft', None], 'kwargs': {}},
-            {'name': 'outlet', 'args': ['Soft', None], 'kwargs': {}},
-            ]
+        # setup_fms = [
+        #     {'name': 'sheath', 'args': ['Soft', None], 'kwargs': {}},
+        #     {'name': 'outlet', 'args': ['Soft', None], 'kwargs': {}},
+        #     ]
 
     elif exp_type.startswith('trsaxs'):
         # TR SAXS
 
-        # ip = '164.54.204.8'
-        ip = '192.168.1.16'
+        ip = '164.54.204.8'
+        # ip = '164.54.204.24'
 
         if exp_type == 'trsaxs_chaotic':
             # Chaotic flow
 
-            # setup_pumps = [
-            #     # ('Sample', 'PHD 4400', 'COM4', ['10 mL, Medline P.C.', '1'], {},
-            #     #     {'flow_rate' : '10', 'refill_rate' : '10'}),
-            #     # ('Buffer 1', 'PHD 4400', 'COM4', ['20 mL, Medline P.C.', '2'], {},
-            #     #     {'flow_rate' : '10', 'refill_rate' : '10'}),
-            #     # ('Buffer 2', 'PHD 4400', 'COM4', ['20 mL, Medline P.C.', '3'], {},
-            #     #     {'flow_rate' : '10', 'refill_rate' : '10'}),
-            #     ('Buffer 1', 'SSI Next Gen', 'COM17', [], {'flow_rate_scale': 1.0478,
-            #         'flow_rate_offset': -72.82/1000,'scale_type': 'up'}, {}),
-            #     ('Sample', 'SSI Next Gen', 'COM15', [], {'flow_rate_scale': 1.0204,
-            #         'flow_rate_offset': 15.346/1000, 'scale_type': 'up'}, {}),
-            #     ('Buffer 2', 'SSI Next Gen', 'COM18', [], {'flow_rate_scale': 1.0179,
-            #         'flow_rate_offset': -20.842/1000, 'scale_type': 'up'}, {}),
-            #     ]
+            setup_pumps = [
+                {'name': 'Buffer 1', 'args': ['SSI Next Gen', 'COM17'],
+                    'kwargs': {'flow_rate_scale': 1.0478,
+                    'flow_rate_offset': -72.82/1000,'scale_type': 'up'},
+                    'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
+                    'max_pressure': 1800}},
+                {'name': 'Sample', 'args': ['SSI Next Gen', 'COM15'],
+                    'kwargs': {'flow_rate_scale': 1.0204,
+                    'flow_rate_offset': 15.346/1000,'scale_type': 'up'},
+                    'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
+                    'max_pressure': 1500}},
+                {'name': 'Buffer 2', 'args': ['SSI Next Gen', 'COM18'],
+                    'kwargs': {'flow_rate_scale': 1.0179,
+                    'flow_rate_offset': -20.842/10000,'scale_type': 'up'},
+                    'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
+                    'max_pressure': 1800}},
+                ]
 
-            # pump_local_comm_locks = {
-            #     'Buffer 1'    : pump_comm_locks[setup_pumps[0][2]],
-            #     'Sample'    : pump_comm_locks[setup_pumps[1][2]],
-            #     'Buffer 2'    : pump_comm_locks[setup_pumps[2][2]]
-            #     }
+            pump_local_comm_locks = {
+                'Buffer 1'    : pump_comm_locks[setup_pumps[0][2]],
+                'Sample'    : pump_comm_locks[setup_pumps[1][2]],
+                'Buffer 2'    : pump_comm_locks[setup_pumps[2][2]]
+                }
 
-            # setup_valves = [
-            #     {'name': 'Injection', 'args': ['Rheodyne', 'COM6'],
-            #         'kwargs': {'positions' : 2}},
-            #     # {'name': 'Sample', 'args': ['Rheodyne', 'COM9'],
-            #     #     'args': {'positions' : 6}},
-            #     # {'name': 'Buffer 1', 'args': ['Rheodyne', 'COM8']
-            #     #     'kwargs': {'positions' : 6}},
-            #     # {'name': 'Buffer 2', 'args': ['Rheodyne', 'COM7'],
-            #     #     'kwargs': {'positions' : 6}},
-            #     ]
-
-            # setup_fms = [
-            #     {'name': 'outlet', 'args' : ['BFS', 'COM5'], 'kwargs': {}}
-            #     ]
-
-
-            # Simulated device, for testing purposes
+            setup_valves = [
+                {'name': 'Injection', 'args': ['Rheodyne', 'COM6'],
+                    'kwargs': {'positions' : 2}},
+                ]
 
             setup_fms = [
-                {'name': 'outlet', 'args' : ['Soft', None], 'kwargs': {}},
+                {'name': 'outlet', 'args' : ['BFS', 'COM5'], 'kwargs': {}}
                 ]
+
+
+            # # Simulated device, for testing purposes
+
+            # setup_fms = [
+            #     {'name': 'outlet', 'args' : ['Soft', None], 'kwargs': {}},
+            #     ]
+
+            # # # Syringe pumps
+            # # setup_pumps = [
+            # #     {'name': 'Buffer 1', 'args': ['Soft Syringe', None],
+            # #         'kwargs': {'syringe_id': '20 mL, Medline P.C.', 'flow_rate': 1,
+            # #             'refill_rate': 10}},
+            # #     {'name': 'Sample', 'args': ['Soft Syringe', None],
+            # #         'kwargs': {'syringe_id': '10 mL, Medline P.C.', 'flow_rate': 1,
+            # #             'refill_rate': 10}},
+            # #     {'name': 'Buffer 2', 'args': ['Soft Syringe', None],
+            # #         'kwargs': {'syringe_id': '20 mL, Medline P.C.', 'flow_rate': 1,
+            # #             'refill_rate': 10}},
+            # #     ]
+
+
+            # # setup_valves = [
+            # #     {'name': 'Injection', 'args': ['Soft', None],
+            # #         'kwargs': {'positions': 2}},
+            # #     {'name': 'Buffer 1', 'args': ['Soft', None],
+            # #         'kwargs': {'positions': 6}},
+            # #     {'name': 'Sample', 'args': ['Soft', None],
+            # #         'kwargs': {'positions': 6}},
+            # #     {'name': 'Buffer 2', 'args': ['Soft', None],
+            # #         'kwargs': {'positions': 6}},
+            # #     ]
+
+            # # Continuous flow pumps
+            # setup_pumps = [
+            #     {'name': 'Buffer 1', 'args': ['Soft', None], 'kwargs': {}},
+            #     {'name': 'Sample', 'args': ['Soft', None], 'kwargs': {}},
+            #     {'name': 'Buffer 2', 'args': ['Soft', None], 'kwargs': {}},
+            #     ]
+
+            # setup_valves = [
+            #     {'name': 'Injection', 'args': ['Soft', None],
+            #         'kwargs': {'positions': 2}},
+            #     ]
+
+
+        elif exp_type == 'trsaxs_laminar':
+            # Laminar flow
+            setup_pumps = [
+                {'name': 'Buffer', 'args': ['Pico Plus', 'COM19'],
+                    'kwargs': {'syringe_id': '10 mL, Medline P.C.',
+                    'pump_address': '00'}, 'ctrl_args': {'flow_rate' : '0.068',
+                    'refill_rate' : '5'}},
+                {'name': 'Sheath', 'args': ['Pico Plus', 'COM18'],
+                    'kwargs': {'syringe_id': '3 mL, Medline P.C.',
+                    'pump_address': '00'}, 'ctrl_args': {'flow_rate' : '0.002',
+                    'refill_rate' : '1.5'}},
+                {'name': 'Sample', 'args': ['Pico Plus', 'COM20'],
+                    'kwargs': {'syringe_id': '3 mL, Medline P.C.',
+                    'pump_address': '00'}, 'ctrl_args': {'flow_rate' : '0.009',
+                    'refill_rate' : '1.5'}},
+                ]
+
+            setup_valves = [
+                {'name': 'Injection', 'args': ['Rheodyne', 'COM6'],
+                    'kwargs': {'positions' : 2}},
+                {'name': 'Buffer 1', 'args': ['Rheodyne', 'COM12'],
+                    'kwargs': {'positions' : 6}},
+                {'name': 'Buffer 2', 'args': ['Rheodyne', 'COM14'],
+                    'kwargs': {'positions' : 6}},
+                {'name': 'Sheath 1', 'args': ['Rheodyne', 'COM9'],
+                    'kwargs': {'positions' : 6}},
+                {'name': 'Sheath 2', 'args': ['Rheodyne', 'COM8'],
+                    'kwargs': {'positions' : 6}},
+                {'name': 'Sample', 'args': ['Rheodyne', 'COM7'],
+                    'kwargs': {'positions' : 6}},
+                ]
+
+            setup_fms = [
+                {'name': 'outlet', 'args' : ['BFS', 'COM13'], 'kwargs': {}}
+                ]
+
+
+            # # Simulated device, for testing purposes
+
+            # setup_fms = [
+            #     {'name': 'outlet', 'args' : ['Soft', None], 'kwargs': {}},
+            #     ]
 
             # # Syringe pumps
             # setup_pumps = [
-            #     {'name': 'Buffer 1', 'args': ['Soft Syringe', None],
-            #         'kwargs': {'syringe_id': '20 mL, Medline P.C.', 'flow_rate': 1,
-            #             'refill_rate': 10}},
+            #     {'name': 'Buffer', 'args': ['Soft Syringe', None],
+            #         'kwargs': {'syringe_id': '3 mL, Medline P.C.'},
+            #         'ctrl_args': {'flow_rate': 1, 'refill_rate': 3}},
             #     {'name': 'Sample', 'args': ['Soft Syringe', None],
-            #         'kwargs': {'syringe_id': '10 mL, Medline P.C.', 'flow_rate': 1,
-            #             'refill_rate': 10}},
-            #     {'name': 'Buffer 2', 'args': ['Soft Syringe', None],
-            #         'kwargs': {'syringe_id': '20 mL, Medline P.C.', 'flow_rate': 1,
-            #             'refill_rate': 10}},
+            #         'kwargs': {'syringe_id': '3 mL, Medline P.C.'},
+            #         'ctrl_args': {'flow_rate': 1, 'refill_rate': 3}},
+            #     {'name': 'Sheath', 'args': ['Soft Syringe', None],
+            #         'kwargs': {'syringe_id': '3 mL, Medline P.C.'},
+            #         'ctrl_args': {'flow_rate': 1, 'refill_rate': 3}},
             #     ]
 
-
+            # # Valves
             # setup_valves = [
             #     {'name': 'Injection', 'args': ['Soft', None],
             #         'kwargs': {'positions': 2}},
             #     {'name': 'Buffer 1', 'args': ['Soft', None],
             #         'kwargs': {'positions': 6}},
-            #     {'name': 'Sample', 'args': ['Soft', None],
-            #         'kwargs': {'positions': 6}},
             #     {'name': 'Buffer 2', 'args': ['Soft', None],
             #         'kwargs': {'positions': 6}},
+            #     {'name': 'Sample', 'args': ['Soft', None],
+            #         'kwargs': {'positions': 6}},
+            #     {'name': 'Sheath 1', 'args': ['Soft', None],
+            #         'kwargs': {'positions': 6}},
+            #     {'name': 'Sheath 2', 'args': ['Soft', None],
+            #         'kwargs': {'positions': 6}},
             #     ]
-
-            # Continuous flow pumps
-            setup_pumps = [
-                {'name': 'Buffer 1', 'args': ['Soft', None], 'kwargs': {}},
-                {'name': 'Sample', 'args': ['Soft', None], 'kwargs': {}},
-                {'name': 'Buffer 2', 'args': ['Soft', None], 'kwargs': {}},
-                ]
-
-            setup_valves = [
-                {'name': 'Injection', 'args': ['Soft', None],
-                    'kwargs': {'positions': 2}},
-                ]
-
-
-        elif exp_type == 'trsaxs_laminar':
-            # Laminar flow
-            # setup_pumps = [
-            #     ('Buffer 1', 'PHD 4400', 'COM4', ['10 mL, Medline P.C.', '1'], {},
-            #         {'flow_rate' : '0.068', 'refill_rate' : '5'}),
-            #     ('Buffer 2', 'PHD 4400', 'COM4', ['10 mL, Medline P.C.', '2'], {},
-            #         {'flow_rate' : '0.068', 'refill_rate' : '5'}),
-            #     ('Sheath', 'NE 500', 'COM10', ['3 mL, Medline P.C.', '01'],
-            #         {'dual_syringe': 'False'}, {'flow_rate' : '0.002', 'refill_rate' : '1.5'}),
-            #     ('Sample', 'PHD 4400', 'COM4', ['3 mL, Medline P.C.', '3'], {},
-            #         {'flow_rate' : '0.009', 'refill_rate' : '1.5'}),
-            #     ]
-
-            # pump_local_comm_locks = {
-            #     'Buffer 1'    : pump_comm_locks[setup_pumps[0][2]],
-            #     'Buffer 2'    : pump_comm_locks[setup_pumps[1][2]],
-            #     'Sheath'    : pump_comm_locks[setup_pumps[2][2]],
-            #     'Sample'    : pump_comm_locks[setup_pumps[3][2]]
-            #     }
-
-            # setup_valves = [
-            #     {'name': 'Injection', 'args': ['Rheodyne', 'COM6'],
-            #         'kwargs': {'positions' : 2}},
-            #     {'name': 'Buffer 1', 'args': ['Rheodyne', 'COM12'],
-            #         'kwargs': {'positions' : 6}},
-            #     {'name': 'Buffer 2', 'args': ['Rheodyne', 'COM14'],
-            #         'kwargs': {'positions' : 6}},
-            #     {'name': 'Sheath 1', 'args': ['Rheodyne', 'COM9'],
-            #         'kwargs': {'positions' : 6}},
-            #     {'name': 'Sheath 2', 'args': ['Rheodyne', 'COM8'],
-            #         'kwargs': {'positions' : 6}},
-            #     {'name': 'Sample', 'args': ['Rheodyne', 'COM7'],
-            #         'kwargs': {'positions' : 6}},
-            #     ]
-
-            # setup_fms = [
-            #     {'name': 'outlet', 'args' : ['BFS', 'COM13'], 'kwargs': {}}
-            #     ]
-
-
-            # Simulated device, for testing purposes
-
-            setup_fms = [
-                {'name': 'outlet', 'args' : ['Soft', None], 'kwargs': {}},
-                ]
-
-            # Syringe pumps
-            setup_pumps = [
-                {'name': 'Buffer', 'args': ['Soft Syringe', None],
-                    'kwargs': {'syringe_id': '3 mL, Medline P.C.', 'flow_rate': 1,
-                        'refill_rate': 3}},
-                {'name': 'Sample', 'args': ['Soft Syringe', None],
-                    'kwargs': {'syringe_id': '3 mL, Medline P.C.', 'flow_rate': 1,
-                        'refill_rate': 3}},
-                {'name': 'Sheath', 'args': ['Soft Syringe', None],
-                    'kwargs': {'syringe_id': '3 mL, Medline P.C.', 'flow_rate': 1,
-                        'refill_rate': 3}},
-                ]
-
-
-            setup_valves = [
-                {'name': 'Injection', 'args': ['Soft', None],
-                    'kwargs': {'positions': 2}},
-                {'name': 'Buffer 1', 'args': ['Soft', None],
-                    'kwargs': {'positions': 6}},
-                {'name': 'Buffer 2', 'args': ['Soft', None],
-                    'kwargs': {'positions': 6}},
-                {'name': 'Sample', 'args': ['Soft', None],
-                    'kwargs': {'positions': 6}},
-                {'name': 'Sheath 1', 'args': ['Soft', None],
-                    'kwargs': {'positions': 6}},
-                {'name': 'Sheath 2', 'args': ['Soft', None],
-                    'kwargs': {'positions': 6}},
-                ]
 
 
 

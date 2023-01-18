@@ -1056,6 +1056,7 @@ class M50Pump(Pump):
         else:
             status = False
             self._is_dispensing = False
+            self._flow_dir = 0
 
         self._is_flowing = status
 
@@ -1859,6 +1860,7 @@ class SSINextGenPump(Pump):
 
             if vals[6] == '0':
                 self._is_flowing = False
+                self._flow_dir = 0
             else:
                 self._is_flowing = True
 
@@ -1885,6 +1887,7 @@ class SSINextGenPump(Pump):
                         break
                         logger.error('TImed out waiting for pump %s to start', self.name)
 
+            self._flow_dir = 1
             ramp_thread = threading.Thread(target=self._ramp_flow, args=(self.flow_rate,
                 target_flow_rate))
             ramp_thread.start()
@@ -1902,6 +1905,8 @@ class SSINextGenPump(Pump):
                         break
                         logger.error('TImed out waiting for pump %s to start', self.name)
 
+                    self._flow_dir = 1
+
     def start_immediate(self, wait=True):
         # Starts with no ramp! Really should only be used for testing!
         logger.info("Pump %s starting continuous flow at %f %s", self.name,
@@ -1918,6 +1923,8 @@ class SSINextGenPump(Pump):
                     break
                     logger.error('Timed out waiting for pump %s to start', self.name)
 
+                self._flow_dir = 1
+
     def stop(self, wait=True):
         logger.info("Pump %s stopping all motions", self.name)
 
@@ -1929,6 +1936,7 @@ class SSINextGenPump(Pump):
 
             self._stop_flow_after_ramp = True
             self.flow_rate = 0
+            self._flow_dir = 0
 
         else:
             self.send_cmd("ST")
@@ -1940,7 +1948,10 @@ class SSINextGenPump(Pump):
 
                     if time.time() - start > self.timeout:
                         break
-                        logger.error('TImed out waiting for pump %s to start', self.name)
+                        logger.error('TImed out waiting for pump %s to stop', self.name)
+
+                    self.flow_rate = 0
+                    self._flow_dir = 0
 
     def abort(self):
         self.send_cmd("ST")
@@ -1949,6 +1960,10 @@ class SSINextGenPump(Pump):
             self._accel_stop.set()
         while self._ramping_flow:
             time.sleep(0.01)
+
+        self._stop_flow_after_ramp = True
+        self.flow_rate = 0
+        self._flow_dir = 0
 
         self.get_status()
 
@@ -2128,6 +2143,7 @@ class SSINextGenPump(Pump):
 
             if vals[6] == '0':
                 self._is_flowing = False
+                self._flow_dir = 0
             else:
                 self._is_flowing = True
 
@@ -2272,6 +2288,7 @@ class SoftPump(Pump):
         ``Pump.flow_rate`` variable.
         """
         self._is_flowing = True
+        self._flow_dir = 1
 
     def dispense(self, vol, units='uL'):
         """
@@ -2344,6 +2361,7 @@ class SoftPump(Pump):
         self._is_flowing = False
         self._is_dispensing = False
         self._is_aspirating = False
+        self._flow_dir = 0
 
     def disconnect(self):
         """Close any communication connections"""
@@ -3108,6 +3126,16 @@ class PumpCommThread(utils.CommManager):
         except Exception:
             faults = {'Fault' : False}
 
+        try:
+            syringe_id = device.syringe_id
+        except Exception:
+            syringe_id = None
+
+        try:
+            flow_dir = device.get_flow_dir()
+        except Exception:
+            flow_dir = None
+
         status = {
             'is_moving'     : is_moving,
             'volume'        : volume,
@@ -3116,6 +3144,8 @@ class PumpCommThread(utils.CommManager):
             'pressure'      : pressure,
             'is_dispensing' : is_dispensing,
             'faults'        : faults,
+            'syringe_id'    : syringe_id,
+            'flow_dir'      : flow_dir,
             }
 
         return status
@@ -3256,6 +3286,11 @@ class PumpCommThread(utils.CommManager):
         except Exception:
             faults = None
 
+        try:
+            syringe_id = device.syringe_id
+        except Exception:
+            syringe_id = None
+
         units = device.units
 
         settings = {
@@ -3264,6 +3299,7 @@ class PumpCommThread(utils.CommManager):
             'pressure_units': pres_units,
             'units'         : units,
             'faults'        : faults,
+            'syringe_id'    : syringe_id,
         }
 
         self._return_value((name, cmd, settings), comm_name)
@@ -3378,18 +3414,18 @@ class PumpPanel(utils.DevicePanel):
 
         device_data = self.settings['device_data']
 
-        if 'flow_rate' in device_data['kwargs']:
-            flow_rate = str(device_data['kwargs']['flow_rate'])
+        if 'flow_rate' in device_data['ctrl_args']:
+            flow_rate = str(device_data['ctrl_args']['flow_rate'])
         else:
             flow_rate = '0.1'
 
-        if 'refill_rate' in device_data['kwargs']:
-            refill_rate = str(device_data['kwargs']['refill_rate'])
+        if 'refill_rate' in device_data['ctrl_args']:
+            refill_rate = str(device_data['ctrl_args']['refill_rate'])
         else:
             refill_rate = '0.1'
 
-        if 'flow_accel' in device_data['kwargs']:
-            flow_accel = str(device_data['kwargs']['flow_accel'])
+        if 'flow_accel' in device_data['ctrl_args']:
+            flow_accel = str(device_data['ctrl_args']['flow_accel'])
         else:
             flow_accel = '0.1'
 
@@ -3411,7 +3447,8 @@ class PumpPanel(utils.DevicePanel):
             style=wx.ST_NO_AUTORESIZE)
         self.pressure_units_lbl = wx.StaticText(self, label='psi')
         self.flow_readback_label = wx.StaticText(self, label='Flow Rate:')
-        self.flow_readback = wx.StaticText(self, label='0', size=self._FromDIP((40, -1)))
+        self.flow_readback = wx.StaticText(self, label='0', size=self._FromDIP((40, -1)),
+            style=wx.ST_NO_AUTORESIZE)
         self.flow_readback_units = wx.StaticText(self, label='mL/min')
 
         self.vol_gauge = wx.BoxSizer(wx.HORIZONTAL)
@@ -3706,13 +3743,9 @@ class PumpPanel(utils.DevicePanel):
         device_data = settings['device_data']
         args = device_data['args']
         kwargs = device_data['kwargs']
+        ctrl_args = device_data['ctrl_args']
 
         args.insert(0, self.name)
-
-        #Remove GUI settings
-        kwargs.pop('flow_rate', None)
-        kwargs.pop('refill_rate', None)
-        kwargs.pop('flow_rate_accel', None)
 
         if (self.pump_type == 'PHD 4400' or self.pump_type == 'NE 500'
             or self.pump_type == 'Pico Plus' or self.pump_type =='Soft Syringe'):
@@ -3971,8 +4004,7 @@ class PumpPanel(utils.DevicePanel):
 
 
     def _on_syringe_type(self, evt):
-        syringe_type = evt.GetEventObject()
-        new_syringe = syringe_type.GetStringSelection()
+        new_syringe = self.syringe_type.GetStringSelection()
 
         kwargs = copy.deepcopy(self.known_syringes[new_syringe])
         kwargs['syringe_id'] = new_syringe
@@ -4227,6 +4259,7 @@ class PumpPanel(utils.DevicePanel):
                 pressure_units = val['pressure_units']
                 units = val['units']
                 faults = val['faults']
+                syringe_id = val['syringe_id']
 
                 if min_pressure is not None:
                     if min_pressure != self._current_min_pressure:
@@ -4256,6 +4289,11 @@ class PumpPanel(utils.DevicePanel):
 
                 if faults is not None:
                     self._check_faults(faults)
+
+                if syringe_id is not None:
+                    if syringe_id != self.syringe_type.GetStringSelection():
+                        self.syringe_type.SetStringSelection(syringe_id)
+                        self._update_syringe_gui_values(syringe_id)
 
     def _check_faults(self, faults):
         fault_list = []
@@ -4364,104 +4402,98 @@ if __name__ == '__main__':
     # pmp_cmd_q.append(stop_cmd)
     # my_pumpcon.stop()
 
-    # setup_pumps = [('Sheath', 'VICI M50', 'COM3', ['629.48', '13.442'], {}, {}),
-    #             ('Outlet', 'VICI M50', 'COM4', ['629.16', '12.354'], {}, {})
-    #             ]
-
+    # # Coflow pumps
     # setup_pumps = [
-    #         # ('Sample', 'PHD 4400', '/dev/ttyUSB6', ['30 mL, EXEL', '2'], {},
-    #         # {'flow_rate' : '30', 'refill_rate' : '30'}),
-    #         ('Buffer', 'PHD 4400', '/dev/ttyUSB6', ['30 mL, EXEL', '1'], {},
-    #         {'flow_rate' : '30', 'refill_rate' : '30'}),
-    #         # ('3', 'PHD 4400', 'COM4', ['30 mL, EXEL', '3'], {},
-    #         # {'flow_rate' : '30', 'refill_rate' : '30'}),
-    #             ]
-
-    # setup_pumps = [
-    #     ('Sample', 'PHD 4400', 'COM4', ['10 mL, Medline P.C.', '1'], {},
-    #         {'flow_rate' : '10', 'refill_rate' : '10'}),
-    #     ('Buffer 1', 'PHD 4400', 'COM4', ['20 mL, Medline P.C.', '2'], {},
-    #         {'flow_rate' : '10', 'refill_rate' : '10'}),
-    #     ('Buffer 2', 'PHD 4400', 'COM4', ['20 mL, Medline P.C.', '3'], {},
-    #         {'flow_rate' : '10', 'refill_rate' : '10'}),
+    #     {'name': 'sheath', 'args': ['VICI M50', 'COM3'],
+    #         'kwargs': {'flow_cal': '627.72', 'backlash_cal': '9.814'},
+    #         'ctrl_args': {'flow_rate': 1}},
+    #     {'name': 'outlet', 'args': ['VICI M50', 'COM4'],
+    #         'kwargs': {'flow_cal': '628.68', 'backlash_cal': '9.962'},
+    #         'ctrl_args': {'flow_rate': 1}},
     #     ]
 
+    # # TR-SAXS PHD 4400 pumps
     # setup_pumps = [
-    #     ('Buffer', 'NE 500', 'COM11', ['20 mL, Medline P.C.', '00'],
-    #         {'dual_syringe': 'False'}, {'flow_rate' : '0.1', 'refill_rate' : '10'}),
-    #     ('Sheath', 'NE 500', 'COM10', ['20 mL, Medline P.C.', '01'],
-    #         {'dual_syringe': 'False'}, {'flow_rate' : '0.1', 'refill_rate' : '10'}),
-    #     ('Sample', 'NE 500', 'COM3', ['20 mL, Medline P.C.', '02'], {},
-    #         {'flow_rate' : '0.1', 'refill_rate' : '10'}),
+    #     {'name': 'Sample', 'args': ['PHD 4400', 'COM4'],
+    #         'kwargs': {'syringe_id': '10 mL, Medline P.C.', 'pump_address': '1'},
+    #         'ctrl_args': {'flow_rate' : '10', 'refill_rate' : '10'}},
+    #     {'name': 'Buffer 1', 'args': ['PHD 4400', 'COM4'],
+    #         'kwargs': {'syringe_id': '20 mL, Medline P.C.', 'pump_address': '2'},
+    #         'ctrl_args': {'flow_rate' : '10', 'refill_rate' : '10'}},
+    #     {'name': 'Buffer 2', 'args': ['PHD 4400', 'COM4'],
+    #         'kwargs': {'syringe_id': '20 mL, Medline P.C.', 'pump_address': '3'},
+    #         'ctrl_args': {'flow_rate' : '10', 'refill_rate' : '10'}},
     #     ]
 
+    # # TR-SAXS NE 500 pumps
     # setup_pumps = [
-    #     ('Buffer 1', 'PHD 4400', 'COM4', ['20 mL, Medline P.C.', '1'], {},
-    #         {'flow_rate' : '10', 'refill_rate' : '10'}),
-    #     ('Buffer 2', 'PHD 4400', 'COM4', ['20 mL, Medline P.C.', '2'], {},
-    #         {'flow_rate' : '10', 'refill_rate' : '10'}),
-    #     ('Sheath', 'NE 500', 'COM10', ['20 mL, Medline P.C.', '01'],
-    #         {'dual_syringe': 'False'}, {'flow_rate' : '0.1', 'refill_rate' : '10'}),
-    #     ('Sample', 'PHD 4400', 'COM4', ['20 mL, Medline P.C.', '3'], {},
-    #         {'flow_rate' : '10', 'refill_rate' : '10'}),
+    #     {'name': 'Buffer', 'args': ['NE 500', 'COM11'],
+    #         'kwargs': {'syringe_id': '20 mL, Medline P.C.', 'pump_address': '00'},
+    #         'ctrl_args': {'flow_rate' : '0.1', 'refill_rate' : '10'}},
+    #     {'name': 'Sheath', 'args': ['NE 500', 'COM10'],
+    #         'kwargs': {'syringe_id': '20 mL, Medline P.C.', 'pump_address': '00'},
+    #         'ctrl_args': {'flow_rate' : '0.1', 'refill_rate' : '10'}},
+    #     {'name': 'Sample', 'args': ['NE 500', 'COM3'],
+    #         'kwargs': {'syringe_id': '20 mL, Medline P.C.', 'pump_address': '00'},
+    #         'ctrl_args': {'flow_rate' : '0.1', 'refill_rate' : '10'}},
     #     ]
 
+    # # Teledyne SSI Reaxus pumps with scaling
     # setup_pumps = [
-    #     ('Sample', 'NE 500', '/dev/cu.usbserial-AK06V22M', ['30 mL, EXEL', '02', False], {},
-    #         {'flow_rate' : '30', 'refill_rate' : '30'}),
-    #     ('Sheath', 'NE 500', '/dev/cu.usbserial-A6022U62', ['30 mL, EXEL', '01', True], {},
-    #         {'flow_rate' : '30', 'refill_rate' : '30'}),
-    #     ('Buffer', 'NE 500', '/dev/cu.usbserial-A6022U22', ['30 mL, EXEL', '00', True], {},
-    #         {'flow_rate' : '30', 'refill_rate' : '30'}),
+    #     {'name': 'Buffer 1', 'args': ['SSI Next Gen', 'COM17'],
+    #         'kwargs': {'flow_rate_scale': 1.0478,
+    #         'flow_rate_offset': -72.82/1000,'scale_type': 'up'},
+    #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
+    #     {'name': 'Sample', 'args': ['SSI Next Gen', 'COM15'],
+    #         'kwargs': {'flow_rate_scale': 1.0204,
+    #         'flow_rate_offset': 15.346/1000,'scale_type': 'up'},
+    #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
+    #     {'name': 'Buffer 2', 'args': ['SSI Next Gen', 'COM18'],
+    #         'kwargs': {'flow_rate_scale': 1.0179,
+    #         'flow_rate_offset': -20.842/10000,'scale_type': 'up'},
+    #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
     #     ]
 
+    # Teledyne SSI Reaxus pumps without scaling
     # setup_pumps = [
-    #     ('Pump 4', 'SSI Next Gen', 'COM8', [],
-    #         {'flow_rate_scale': 1.0478, 'flow_rate_offset': -72.82/1000,
-    #          'scale_type': 'up'}, {}),
-    #     ('Pump 3', 'SSI Next Gen', 'COM15', [],
-    #          {'flow_rate_scale': 1.0204, 'flow_rate_offset': 15.346/1000,
-    #          'scale_type': 'up'}, {}),
-    #     ('Pump 2', 'SSI Next Gen', 'COM4', [],
-    #         {'flow_rate_scale': 1.0179, 'flow_rate_offset': -20.842/1000,
-    #         'scale_type': 'up'}, {}),
-    #             ]
-
-    # setup_pumps = [
-    #     ('Pump 4', 'SSI Next Gen', 'COM9', [],
-    #         {'flow_rate_scale': 1, 'flow_rate_offset': 0,
-    #          'scale_type': 'up'}, {}),
-    #     ('Pump 3', 'SSI Next Gen', 'COM7', [],
-    #          {'flow_rate_scale': 1, 'flow_rate_offset': 0,
-    #          'scale_type': 'up'}, {}),
-    #     ('Pump 2', 'SSI Next Gen', 'COM15', [],
-    #         {'flow_rate_scale': 1, 'flow_rate_offset': 0,
-    #         'scale_type': 'up'}, {}),
-    #             ]
-
-    # setup_pumps = [
-    #     ('Pump 1', 'Pico Plus', 'COM19', ['6 mL, Medline P.C.', '00', False], {},
-    #         {'flow_rate' : '5', 'refill_rate' : '5'}),
-    #     ('Pump 2', 'Pico Plus', 'COM18', ['6 mL, Medline P.C.', '00', False], {},
-    #         {'flow_rate' : '5', 'refill_rate' : '5'}),
-    #     ('Pump 3', 'Pico Plus', 'COM20', ['6 mL, Medline P.C.', '00', False], {},
-    #         {'flow_rate' : '5', 'refill_rate' : '5'}),
+    #     {'name': 'Buffer 1', 'args': ['SSI Next Gen', 'COM17'],
+    #         'kwargs': {'flow_rate_scale': 1,
+    #         'flow_rate_offset': 0,'scale_type': 'up'},
+    #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
+    #     {'name': 'Sample', 'args': ['SSI Next Gen', 'COM15'],
+    #         'kwargs': {'flow_rate_scale': 1,
+    #         'flow_rate_offset': 0,'scale_type': 'up'},
+    #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
+    #     {'name': 'Buffer 2', 'args': ['SSI Next Gen', 'COM18'],
+    #         'kwargs': {'flow_rate_scale': 1,
+    #         'flow_rate_offset': 0,'scale_type': 'up'},
+    #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
     #     ]
 
+    # # TR-SAXS Pico Plus pumps
+    # setup_pumps = [
+    #     {'name': 'Buffer', 'args': ['Pico Plus', 'COM19'],
+    #         'kwargs': {'syringe_id': '10 mL, Medline P.C.',
+    #         'pump_address': '00'}, 'ctrl_args': {'flow_rate' : '0.068',
+    #         'refill_rate' : '5'}},
+    #     {'name': 'Sheath', 'args': ['Pico Plus', 'COM18'],
+    #         'kwargs': {'syringe_id': '3 mL, Medline P.C.',
+    #         'pump_address': '00'}, 'ctrl_args': {'flow_rate' : '0.002',
+    #         'refill_rate' : '1.5'}},
+    #     {'name': 'Sample', 'args': ['Pico Plus', 'COM20'],
+    #         'kwargs': {'syringe_id': '3 mL, Medline P.C.',
+    #         'pump_address': '00'}, 'ctrl_args': {'flow_rate' : '0.009',
+    #         'refill_rate' : '1.5'}},
+    #     ]
 
-    # #Simualted syringe pump
-    # setup_pumps = [('Sheath', 'Soft Syringe', '',
-    #     ['10 mL, Medline P.C.',], {}, {'flow_rate' : '10',
-    #     'refill_rate' : '10'}),
-                # ]
-
-    # Simulated pumps
-    setup_devices = [
-        {'name': 'Soft', 'args': ['Soft', None], 'kwargs': {} },
-        {'name': 'Soft Syringe', 'args': ['Soft Syringe', None],
-            'kwargs': {'syringe_id': '3 mL, Medline P.C.', 'flow_rate': 1,
-            'refill_rate': 1} },
-        ]
+    # # Simulated pumps
+    # setup_devices = [
+    #     # {'name': 'Soft', 'args': ['Soft', None], 'kwargs': {},
+    #     #     'ctrl_args': {'flow_rate': 1, 'refill_rate': 1}},
+    #     {'name': 'Sample', 'args': ['Soft Syringe', None],
+    #         'kwargs': {'syringe_id': '3 mL, Medline P.C.',},
+    #         'ctrl_args': {'flow_rate': 1, 'refill_rate': 1}},
+    #     ]
 
     # # Simulated coflow pumps
     # setup_devices = [
@@ -4480,7 +4512,7 @@ if __name__ == '__main__':
         'remote'        : False,
         'remote_device' : 'pump',
         'device_init'   : setup_devices,
-        'remote_ip'     : '192.168.1.16',
+        'remote_ip'     : '164.54.204.24',
         'remote_port'   : '5556',
         'com_thread'    : com_thread
         }

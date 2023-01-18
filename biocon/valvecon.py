@@ -743,14 +743,6 @@ if __name__ == '__main__':
     h1.setFormatter(formatter)
     logger.addHandler(h1)
 
-    # Local
-    com_thread = ValveCommThread('ValveComm')
-    com_thread.start()
-
-    # # Remote
-    # com_thread = None
-
-
     # my_rv67 = RheodyneValve('/dev/cu.usbserial-AC01UZ8O', '6p7_1', 6)
     # my_rv67.get_position()
     # my_rv67.set_position(4)
@@ -779,33 +771,57 @@ if __name__ == '__main__':
 
 
     # Device settings
-    # setup_valves = [('Injection', 'Rheodyne', 'COM6', [], {'positions' : 2}),
-    #         #     ('Sample', 'Rheodyne', 'COM7', [], {'positions' : 6}),
-    #         #     ('Buffer 1', 'Rheodyne', 'COM8', [], {'positions' : 6}),
-    #         #     ('Buffer 2', 'Rheodyne', 'COM9', [], {'positions' : 6}),
-    #         #             ]
+    # TR-SAXS syringe pump chaotic flow
+    # setup_valves = [
+    #     {'name': 'Injection', 'args': ['Rheodyne', 'COM6'],
+    #         'kwargs': {'positions' : 2}},
+    #     ('Sample', 'Rheodyne', 'COM7', [], {'positions' : 6}),
+    #     {'name': 'Buffer 1', 'args': ['Rheodyne', 'COM12'],
+    #         'kwargs': {'positions' : 6}},
+    #     {'name': 'Buffer 2', 'args': ['Rheodyne', 'COM14'],
+    #         'kwargs': {'positions' : 6}},
+    #     ]
 
-    #         # setup_valves = [('Injection', 'Soft', '', [], {'positions' : 2}),
-    #         #     ('Sample', 'Soft', '', [], {'positions' : 6}),
-    #         #     ('Buffer 1', 'Soft', '', [], {'positions' : 6}),
-    #         #     ('Buffer 2', 'Soft', '', [], {'positions' : 6}),
-    #         #     ]
+    # # TR-SAXS continuous pump chaotic flow
+    # setup_valves = [
+    #     {'name': 'Injection', 'args': ['Rheodyne', 'COM6'],
+    #         'kwargs': {'positions' : 2}},
+    #     ]
 
-    #         setup_valves = [('Buffer', 'Cheminert', 'COM3', [], {'positions': 10})]
-
-    #         # setup_valves = [
-    #         #     ('Injection', 'Rheodyne', 'COM6', [], {'positions' : 2}),
-    #         #     ('Buffer 1', 'Rheodyne', 'COM12', [], {'positions' : 6}),
-    #         #     ('Buffer 2', 'Rheodyne', 'COM14', [], {'positions' : 6}),
-    #         #     ('Sheath 1', 'Rheodyne', 'COM9', [], {'positions' : 6}),
-    #         #     ('Sheath 2', 'Rheodyne', 'COM8', [], {'positions' : 6}),
-    #         #     ('Sample', 'Rheodyne', 'COM7', [], {'positions' : 6}),
-    #         #     ]
-
-
-    setup_devices = [
-        {'name': 'Coflow Sheath', 'args': ['Soft', None], 'kwargs': {'positions': 10}}
+    # Buffer valve
+    setup_valves = [
+        {'name': 'Buffer', 'args': ['Cheminert', 'COM3']
+            'kwargs': {'positions': 10}},
         ]
+
+    # # # TR-SAXS laminar flow
+    # setup_valves = [
+    #     {'name': 'Injection', 'args': ['Rheodyne', 'COM6'],
+    #         'kwargs': {'positions' : 2}},
+    #     {'name': 'Buffer 1', 'args': ['Rheodyne', 'COM12'],
+    #         'kwargs': {'positions' : 6}},
+    #     {'name': 'Buffer 2', 'args': ['Rheodyne', 'COM14'],
+    #         'kwargs': {'positions' : 6}},
+    #     {'name': 'Sheath 1', 'args': ['Rheodyne', 'COM9'],
+    #         'kwargs': {'positions' : 6}},
+    #     {'name': 'Sheath 2', 'args': ['Rheodyne', 'COM8'],
+    #         'kwargs': {'positions' : 6}},
+    #     {'name': 'Sample', 'args': ['Rheodyne', 'COM7'],
+    #         'kwargs': {'positions' : 6}},
+    #     ]
+
+
+    # Simulated
+    # setup_devices = [
+    #     {'name': 'Coflow Sheath', 'args': ['Soft', None], 'kwargs': {'positions': 10}}
+    #     ]
+
+    # Local
+    com_thread = ValveCommThread('ValveComm')
+    com_thread.start()
+
+    # # Remote
+    # com_thread = None
 
     settings = {
         'remote'        : False,

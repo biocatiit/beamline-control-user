@@ -924,6 +924,7 @@ if __name__ == '__main__':
     # time.sleep(5)
     # my_fmcon.stop()
 
+    # Coflow flow meters
     # setup_devices = [
     #     {'name': '3', 'args' : ['BFS', 'COM5'], 'kwargs': {}},
     #     {'name': '4', 'args' : ['BFS', 'COM6'], 'kwargs': {}},
