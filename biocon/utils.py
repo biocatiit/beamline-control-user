@@ -960,9 +960,19 @@ def send_cmd(cmd, cmd_q, return_q, timeout_event, return_lock, remote,
     else:
         full_cmd = cmd
 
-    with return_lock:
-        cmd_q.append(full_cmd)
-        result = wait_for_response(return_q, timeout_event, remote)
+    if not remote:
+        with return_lock:
+            cmd_q.append(full_cmd)
+            result = wait_for_response(return_q, timeout_event, remote)
+
+    else:
+        if get_response:
+            with return_lock:
+                cmd_q.append(full_cmd)
+                result = wait_for_response(return_q, timeout_event, remote)
+
+        else:
+            cmd_q.append(full_cmd)
 
     if get_response:
         if result is not None and result[0] == cmd[1][0] and result[1] == cmd[0]:
