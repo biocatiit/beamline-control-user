@@ -527,11 +527,11 @@ if __name__ == '__main__':
                     'kwargs': {'positions' : 6}},
                 {'name': 'Buffer 2', 'args': ['Rheodyne', 'COM14'],
                     'kwargs': {'positions' : 6}},
-                {'name': 'Sheath 1', 'args': ['Rheodyne', 'COM9'],
+                {'name': 'Sheath 1', 'args': ['Rheodyne', 'COM21'],
                     'kwargs': {'positions' : 6}},
                 {'name': 'Sheath 2', 'args': ['Rheodyne', 'COM8'],
                     'kwargs': {'positions' : 6}},
-                {'name': 'Sample', 'args': ['Rheodyne', 'COM7'],
+                {'name': 'Sample', 'args': ['Rheodyne', 'COM17'],
                     'kwargs': {'positions' : 6}},
                 ]
 

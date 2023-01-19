@@ -3352,23 +3352,26 @@ class PumpCommThread(utils.CommManager):
 
 
 # List of syringe calibrations
-known_syringes = {'30 mL, EXEL': {'diameter': 23.5, 'max_volume': 30,
-            'max_rate': 70},
-            '3 mL, Medline P.C.': {'diameter': 9.1, 'max_volume': 3.0,
-            'max_rate': 11},
-            '6 mL, Medline P.C.': {'diameter': 12.8, 'max_volume': 6,
-            'max_rate': 23},
-            '10 mL, Medline P.C.': {'diameter': 16.31, 'max_volume': 10,
-            'max_rate': 31},
-            '20 mL, Medline P.C.': {'diameter': 19.84, 'max_volume': 20,
-            'max_rate': 55},
-            '0.25 mL, Hamilton Glass': {'diameter': 2.30, 'max_volume': 0.25,
-            'max_rate': 11},
-            '0.5 mL, Hamilton Glass': {'diameter': 3.26, 'max_volume': 0.5,
-            'max_rate': 11},
-            '1.0 mL, Hamilton Glass': {'diameter': 4.61, 'max_volume': 1.0,
-            'max_rate': 11},
-            }
+known_syringes = {
+    '30 mL, EXEL'           : {'diameter': 23.5, 'max_volume': 30,
+                                'max_rate': 70},
+    '1 mL, Medline P.C.'    : {'diameter': 4.69, 'max_volume': 1.0,
+                                'max_rate': 5},
+    '3 mL, Medline P.C.'    : {'diameter': 9.1, 'max_volume': 3.0,
+                                'max_rate': 11},
+    '6 mL, Medline P.C.'    : {'diameter': 12.8, 'max_volume': 6,
+                                'max_rate': 23},
+    '10 mL, Medline P.C.'   : {'diameter': 16.31, 'max_volume': 10,
+                                'max_rate': 31},
+    '20 mL, Medline P.C.'   : {'diameter': 19.84, 'max_volume': 20,
+                                'max_rate': 55},
+    '0.25 mL, Hamilton Glass': {'diameter': 2.30, 'max_volume': 0.25,
+                                'max_rate': 11},
+    '0.5 mL, Hamilton Glass': {'diameter': 3.26, 'max_volume': 0.5,
+                                'max_rate': 11},
+    '1.0 mL, Hamilton Glass': {'diameter': 4.61, 'max_volume': 1.0,
+                                'max_rate': 11},
+    }
 
 
 class PumpPanel(utils.DevicePanel):
