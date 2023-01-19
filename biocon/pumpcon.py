@@ -716,7 +716,7 @@ class SyringePump(Pump):
 
         self._volume = volume
 
-        self._set_flow_rate(rate)
+        self._set_flow_rate()
 
     @property
     def refill_rate(self):
@@ -912,6 +912,10 @@ class SyringePump(Pump):
     def _send_pump_cal_cmd(self):
         # Pump specific, sends pump calibration commands
         pass
+
+    def round(self, val):
+        # Overwrite if number of sig figs the pump commands accept is limited
+        return val
 
 class M50Pump(Pump):
     """
@@ -1140,6 +1144,7 @@ class PHD4400Pump(SyringePump):
         :param name: A unique identifier for the pump
         :type name: str
         """
+        self._pump_address = pump_address
 
         SyringePump.__init__(self, name, device, diameter, max_volume, max_rate,
             syringe_id, dual_syringe,comm_lock=comm_lock)
@@ -1150,10 +1155,7 @@ class PHD4400Pump(SyringePump):
         self._units = 'mL/min'
         self._pump_base_units = 'mL/min'
 
-        self._pump_address = pump_address
-
         self.send_cmd('MOD VOL')
-
 
     def connect(self):
         if not self.connected:
@@ -1261,6 +1263,7 @@ class PicoPlusPump(SyringePump):
         :param name: A unique identifier for the pump
         :type name: str
         """
+        self._pump_address = int(pump_address)
 
         SyringePump.__init__(self, name, device, diameter, max_volume, max_rate,
             syringe_id, dual_syringe, comm_lock=comm_lock)
@@ -1270,8 +1273,6 @@ class PicoPlusPump(SyringePump):
 
         self._units = 'mL/min'
         self._pump_base_units = 'mL/min'
-
-        self._pump_address = int(pump_address)
 
         self._get_rates()
 
@@ -1318,6 +1319,8 @@ class PicoPlusPump(SyringePump):
             self._flow_dir = -1
         else:
             moving = False
+
+        return moving
 
     def _set_flow_rate(self):
         self.send_cmd("irate {} ml/min".format(self._flow_rate))
@@ -1396,6 +1399,16 @@ class PicoPlusPump(SyringePump):
         else:
             logger.error(("Force must be between 1 and 100"))
 
+    def round(self, val):
+        oom = int('{:e}'.format(val).split('e')[1])
+
+        if oom < 0:
+            oom = 0
+
+        num_dig = 6-(oom + 2)
+
+        return round(val, num_dig)
+
 class NE500Pump(SyringePump):
     """
     New Era Syringe Pump NE500 (OEM) control.
@@ -1410,6 +1423,7 @@ class NE500Pump(SyringePump):
         :param name: A unique identifier for the pump
         :type name: str
         """
+        self._pump_address = pump_address
 
         SyringePump.__init__(self, name, device, comm_lock=comm_lock)
 
@@ -1418,8 +1432,6 @@ class NE500Pump(SyringePump):
 
         self._units = 'mL/min'
         self._pump_base_units = 'mL/min'
-
-        self._pump_address = pump_address
 
     def connect(self):
         if not self.connected:
@@ -1467,6 +1479,8 @@ class NE500Pump(SyringePump):
             moving = True
         else:
             moving = False
+
+        return moving
 
     def _set_flow_rate(self):
         self._flow_rate = self.round(self._flow_rate)
@@ -4451,37 +4465,37 @@ if __name__ == '__main__':
     #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
     #     ]
 
-    # Teledyne SSI Reaxus pumps without scaling
-    setup_devices = [
-        {'name': 'Pump 4', 'args': ['SSI Next Gen', 'COM15'],
-            'kwargs': {'flow_rate_scale': 1,
-            'flow_rate_offset': 0,'scale_type': 'up'},
-            'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-        # {'name': 'Pump 3', 'args': ['SSI Next Gen', 'COM17'],
-        #     'kwargs': {'flow_rate_scale': 1,
-        #     'flow_rate_offset': 0,'scale_type': 'up'},
-        #     'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-        # {'name': 'Pump 2', 'args': ['SSI Next Gen', 'COM18'],
-        #     'kwargs': {'flow_rate_scale': 1,
-        #     'flow_rate_offset': 0,'scale_type': 'up'},
-        #     'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-        ]
-
-    # # TR-SAXS Pico Plus pumps
+    # # Teledyne SSI Reaxus pumps without scaling
     # setup_devices = [
-    #     {'name': 'Buffer', 'args': ['Pico Plus', 'COM19'],
-    #         'kwargs': {'syringe_id': '10 mL, Medline P.C.',
-    #         'pump_address': '00'}, 'ctrl_args': {'flow_rate' : '0.068',
-    #         'refill_rate' : '5'}},
-    #     {'name': 'Sheath', 'args': ['Pico Plus', 'COM18'],
-    #         'kwargs': {'syringe_id': '3 mL, Medline P.C.',
-    #         'pump_address': '00'}, 'ctrl_args': {'flow_rate' : '0.002',
-    #         'refill_rate' : '1.5'}},
-    #     {'name': 'Sample', 'args': ['Pico Plus', 'COM20'],
-    #         'kwargs': {'syringe_id': '3 mL, Medline P.C.',
-    #         'pump_address': '00'}, 'ctrl_args': {'flow_rate' : '0.009',
-    #         'refill_rate' : '1.5'}},
+    #     {'name': 'Pump 4', 'args': ['SSI Next Gen', 'COM15'],
+    #         'kwargs': {'flow_rate_scale': 1,
+    #         'flow_rate_offset': 0,'scale_type': 'up'},
+    #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
+    #     {'name': 'Pump 3', 'args': ['SSI Next Gen', 'COM17'],
+    #         'kwargs': {'flow_rate_scale': 1,
+    #         'flow_rate_offset': 0,'scale_type': 'up'},
+    #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
+    #     {'name': 'Pump 2', 'args': ['SSI Next Gen', 'COM18'],
+    #         'kwargs': {'flow_rate_scale': 1,
+    #         'flow_rate_offset': 0,'scale_type': 'up'},
+    #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
     #     ]
+
+    # TR-SAXS Pico Plus pumps
+    setup_devices = [
+        {'name': 'Buffer', 'args': ['Pico Plus', 'COM19'],
+            'kwargs': {'syringe_id': '3 mL, Medline P.C.',
+            'pump_address': '00', 'dual_syringe': 'False'},
+            'ctrl_args': {'flow_rate' : '1', 'refill_rate' : '1'}},
+        # {'name': 'Sheath', 'args': ['Pico Plus', 'COM18'],
+        #     'kwargs': {'syringe_id': '3 mL, Medline P.C.',
+        #     'pump_address': '00'}, 'ctrl_args': {'flow_rate' : '0.002',
+        #     'refill_rate' : '1.5'}},
+        # {'name': 'Sample', 'args': ['Pico Plus', 'COM20'],
+        #     'kwargs': {'syringe_id': '3 mL, Medline P.C.',
+        #     'pump_address': '00'}, 'ctrl_args': {'flow_rate' : '0.009',
+        #     'refill_rate' : '1.5'}},
+        ]
 
     # # Simulated pumps
     # setup_devices = [
