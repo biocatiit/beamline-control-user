@@ -253,7 +253,7 @@ class RheodyneValve(Valve):
     def connect(self):
         if not self.connected:
             with self.comm_lock:
-                self.valve_comm = SerialComm(device, 19200)
+                self.valve_comm = SerialComm(self.device, 19200)
 
             self.send_command('M', False) #Homes valve
 
@@ -363,7 +363,7 @@ class CheminertValve(Valve):
     def connect(self):
         if not self.connected:
             with self.comm_lock:
-                self.valve_comm = SerialComm(device, 9600)
+                self.valve_comm = SerialComm(self.device, 9600)
 
             self.connected = True
 
@@ -724,14 +724,6 @@ class ValveFrame(utils.DeviceFrame):
 
         self._init_devices()
 
-    def _create_layout(self):
-        """Creates the layout"""
-        self.sizer = wx.BoxSizer(wx.HORIZONTAL)
-
-        top_sizer = wx.BoxSizer(wx.VERTICAL)
-        top_sizer.Add(self.sizer, 1, flag=wx.EXPAND)
-
-        return top_sizer
 
 if __name__ == '__main__':
     logger = logging.getLogger()
@@ -772,7 +764,7 @@ if __name__ == '__main__':
 
     # Device settings
     # TR-SAXS syringe pump chaotic flow
-    # setup_valves = [
+    # setup_devices = [
     #     {'name': 'Injection', 'args': ['Rheodyne', 'COM6'],
     #         'kwargs': {'positions' : 2}},
     #     ('Sample', 'Rheodyne', 'COM7', [], {'positions' : 6}),
@@ -783,19 +775,19 @@ if __name__ == '__main__':
     #     ]
 
     # # TR-SAXS continuous pump chaotic flow
-    # setup_valves = [
+    # setup_devices = [
     #     {'name': 'Injection', 'args': ['Rheodyne', 'COM6'],
     #         'kwargs': {'positions' : 2}},
     #     ]
 
-    # Buffer valve
-    setup_valves = [
-        {'name': 'Buffer', 'args': ['Cheminert', 'COM3']
+    # Coflow buffer valve
+    setup_devices = [
+        {'name': 'Buffer', 'args': ['Cheminert', 'COM7'],
             'kwargs': {'positions': 10}},
         ]
 
     # # # TR-SAXS laminar flow
-    # setup_valves = [
+    # setup_devices = [
     #     {'name': 'Injection', 'args': ['Rheodyne', 'COM6'],
     #         'kwargs': {'positions' : 2}},
     #     {'name': 'Buffer 1', 'args': ['Rheodyne', 'COM12'],

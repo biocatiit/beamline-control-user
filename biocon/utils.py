@@ -960,18 +960,16 @@ def send_cmd(cmd, cmd_q, return_q, timeout_event, return_lock, remote,
     else:
         full_cmd = cmd
 
-    if get_response:
-        with return_lock:
-            cmd_q.append(full_cmd)
-            result = wait_for_response(return_q, timeout_event, remote)
-
-            if result is not None and result[0] == cmd[1][0] and result[1] == cmd[0]:
-                ret_val = result[2]
-            else:
-                ret_val = None
-
-    else:
+    with return_lock:
         cmd_q.append(full_cmd)
+        result = wait_for_response(return_q, timeout_event, remote)
+
+    if get_response:
+        if result is not None and result[0] == cmd[1][0] and result[1] == cmd[0]:
+            ret_val = result[2]
+        else:
+            ret_val = None
+    else:
         ret_val = None
 
     return ret_val
@@ -1018,9 +1016,7 @@ class DeviceFrame(wx.Frame):
 
         self.devices =[]
 
-        top_sizer = self._create_layout()
-
-        self.SetSizer(top_sizer)
+        self._create_layout()
 
         self.Fit()
         self.Raise()
@@ -1041,33 +1037,19 @@ class DeviceFrame(wx.Frame):
         """Creates the layout"""
 
         #Overwrite this
-        new_device_panel = self.device_panel(self, wx.ID_ANY, self.cmd_q,
-            self.return_q, self.status_q, device)
-
         self.sizer = wx.BoxSizer(wx.HORIZONTAL)
-        self.sizer.Add(panel, flag=wx.RESERVE_SPACE_EVEN_IF_HIDDEN)
 
-        self.sizer.Hide(panel, recursive=True)
+        device_sizer = wx.BoxSizer(wx.VERTICAL)
+        device_sizer.Add(self.sizer, 1, flag=wx.EXPAND)
 
-        button_panel = wx.Panel(self)
+        self.device_parent = wx.Panel(self)
 
-        add_device = wx.Button(button_panel, label='Add device')
-        add_device.Bind(wx.EVT_BUTTON, self._on_add_device)
-
-        button_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        button_sizer.Add(add_device)
-
-        button_panel_sizer = wx.BoxSizer(wx.VERTICAL)
-        button_panel_sizer.Add(wx.StaticLine(button_panel), flag=wx.EXPAND|wx.TOP|wx.BOTTOM, border=2)
-        button_panel_sizer.Add(button_sizer, flag=wx.ALIGN_RIGHT|wx.BOTTOM|wx.RIGHT, border=2)
-
-        button_panel.SetSizer(button_panel_sizer)
+        self.device_parent.SetSizer(device_sizer)
 
         top_sizer = wx.BoxSizer(wx.VERTICAL)
-        top_sizer.Add(self.sizer, flag=wx.EXPAND)
-        top_sizer.Add(button_panel, flag=wx.EXPAND)
+        top_sizer.Add(self.device_parent, 1, flag=wx.EXPAND)
 
-        return top_sizer
+        self.SetSizer(top_sizer)
 
     def _init_devices(self):
         """
@@ -1101,9 +1083,11 @@ class DeviceFrame(wx.Frame):
                         dev_settings[key] = val
 
                 dev_settings['device_data'] = device
-                new_device = self.device_panel(self, wx.ID_ANY, dev_settings)
+                new_device = self.device_panel(self.device_parent, wx.ID_ANY,
+                    dev_settings)
 
-                self.sizer.Add(new_device, 1, flag=wx.EXPAND)
+                self.sizer.Add(new_device, 1, flag=wx.EXPAND|wx.ALL,
+                    border=self._FromDIP(3))
                 self.devices.append(new_device)
 
         self.Layout()

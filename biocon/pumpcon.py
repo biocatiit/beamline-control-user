@@ -965,28 +965,31 @@ class M50Pump(Pump):
         self.send_cmd('S1 17,0,0') #Sets output 1 to be active high (sinking) when motor is moving
         # # self.send_cmd('S') #Saves current settings in non-volatile memory
 
-        self._units = 'uL/min'
+        self._units = 'mL/min'
         self._pump_base_units = 'uL/s'
 
-        self._flow_cal = flow_cal
-        self._backlash_cal = backlash_cal
+        self._flow_cal = float(flow_cal)
+        self._backlash_cal = float(backlash_cal)
         self._gear_ratio = 9.88 #Gear ratio provided by manufacturer, for M50 pumps
 
-        self.cal = 200*256*self._gear_ratio/self._flow_cal #Calibration value in (micro)steps/useful
+        self.cal = 200*256*self._gear_ratio/self._flow_cal #Calibration value in (micro)steps/uL
             #full steps/rev * microsteps/full step * gear ratio / uL/revolution = microsteps/uL
 
-        self._flow_rate = self.send_cmd('V', True) # Gets current flow rate
+        ret = self.send_cmd('PR V', True) # Gets current flow rate, doesn't really work
+        ret = ret.split('\r\n')[-2][-1]
+        self._flow_rate = float(ret)
+        self.is_moving()
 
     def connect(self):
         if not self.connected:
             with self.comm_lock:
-                self.pump_comm = MForceSerialComm(device)
+                self.pump_comm = MForceSerialComm(self.device)
 
             self.connected = True
 
     @property
     def flow_rate(self):
-        rate = self._flow_rate/self.cal
+        rate = float(self._flow_rate)/self.cal
 
         rate = self._convert_flow_rate(rate, self._pump_base_units, self.units)
 
@@ -1155,7 +1158,7 @@ class PHD4400Pump(SyringePump):
     def connect(self):
         if not self.connected:
             with self.comm_lock:
-                self.pump_comm = PHD4400SerialComm(device,
+                self.pump_comm = PHD4400SerialComm(self.device,
                     stopbits=serial.STOPBITS_TWO, baudrate=19200)
 
             self.connected = True
@@ -1278,7 +1281,7 @@ class PicoPlusPump(SyringePump):
     def connect(self):
         if not self.connected:
             with self.comm_lock:
-                self.pump_comm = PicoPlusSerialComm(device, baudrate=115200)
+                self.pump_comm = PicoPlusSerialComm(self.device, baudrate=115200)
 
             self.send_cmd('nvram none')
 
@@ -1421,7 +1424,7 @@ class NE500Pump(SyringePump):
     def connect(self):
         if not self.connected:
             with self.comm_lock:
-                self.pump_comm = SerialComm(device, baudrate=19200)
+                self.pump_comm = SerialComm(self.device, baudrate=19200)
 
             self.connected = True
 
@@ -1642,7 +1645,7 @@ class SSINextGenPump(Pump):
     def connect(self):
         if not self.connected:
             with self.comm_lock:
-                self.pump_comm = SerialComm(device)
+                self.pump_comm = SerialComm(self.device)
 
             self.connected = True
 
@@ -3935,6 +3938,7 @@ class PumpPanel(utils.DevicePanel):
             if self.run_button.GetLabel() == 'Start':
                 fr_set = self._set_flowrate()
                 if not fr_set:
+                    logger.info('Failed to set pump %s flow rate', self.name)
                     return
 
                 mode = self.mode_ctrl.GetStringSelection()
@@ -4334,15 +4338,6 @@ class PumpFrame(utils.DeviceFrame):
         self.setup_devices = self.settings.pop('device_init', None)
         self._init_devices()
 
-    def _create_layout(self):
-        """Creates the layout"""
-        self.sizer = wx.BoxSizer(wx.HORIZONTAL)
-
-        top_sizer = wx.BoxSizer(wx.VERTICAL)
-        top_sizer.Add(self.sizer, 1, flag=wx.EXPAND)
-
-        return top_sizer
-
 if __name__ == '__main__':
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
@@ -4402,18 +4397,18 @@ if __name__ == '__main__':
     # pmp_cmd_q.append(stop_cmd)
     # my_pumpcon.stop()
 
-    # # Coflow pumps
-    # setup_pumps = [
-    #     {'name': 'sheath', 'args': ['VICI M50', 'COM3'],
-    #         'kwargs': {'flow_cal': '627.72', 'backlash_cal': '9.814'},
-    #         'ctrl_args': {'flow_rate': 1}},
-    #     {'name': 'outlet', 'args': ['VICI M50', 'COM4'],
-    #         'kwargs': {'flow_cal': '628.68', 'backlash_cal': '9.962'},
-    #         'ctrl_args': {'flow_rate': 1}},
-    #     ]
+    # Coflow pumps
+    setup_devices = [
+        {'name': 'sheath', 'args': ['VICI M50', 'COM3'],
+            'kwargs': {'flow_cal': '627.72', 'backlash_cal': '9.814'},
+            'ctrl_args': {'flow_rate': 1}},
+        {'name': 'outlet', 'args': ['VICI M50', 'COM4'],
+            'kwargs': {'flow_cal': '628.68', 'backlash_cal': '9.962'},
+            'ctrl_args': {'flow_rate': 1}},
+        ]
 
     # # TR-SAXS PHD 4400 pumps
-    # setup_pumps = [
+    # setup_devices = [
     #     {'name': 'Sample', 'args': ['PHD 4400', 'COM4'],
     #         'kwargs': {'syringe_id': '10 mL, Medline P.C.', 'pump_address': '1'},
     #         'ctrl_args': {'flow_rate' : '10', 'refill_rate' : '10'}},
@@ -4426,7 +4421,7 @@ if __name__ == '__main__':
     #     ]
 
     # # TR-SAXS NE 500 pumps
-    # setup_pumps = [
+    # setup_devices = [
     #     {'name': 'Buffer', 'args': ['NE 500', 'COM11'],
     #         'kwargs': {'syringe_id': '20 mL, Medline P.C.', 'pump_address': '00'},
     #         'ctrl_args': {'flow_rate' : '0.1', 'refill_rate' : '10'}},
@@ -4439,7 +4434,7 @@ if __name__ == '__main__':
     #     ]
 
     # # Teledyne SSI Reaxus pumps with scaling
-    # setup_pumps = [
+    # setup_devices = [
     #     {'name': 'Buffer 1', 'args': ['SSI Next Gen', 'COM17'],
     #         'kwargs': {'flow_rate_scale': 1.0478,
     #         'flow_rate_offset': -72.82/1000,'scale_type': 'up'},
@@ -4455,7 +4450,7 @@ if __name__ == '__main__':
     #     ]
 
     # Teledyne SSI Reaxus pumps without scaling
-    # setup_pumps = [
+    # setup_devices = [
     #     {'name': 'Buffer 1', 'args': ['SSI Next Gen', 'COM17'],
     #         'kwargs': {'flow_rate_scale': 1,
     #         'flow_rate_offset': 0,'scale_type': 'up'},
@@ -4471,7 +4466,7 @@ if __name__ == '__main__':
     #     ]
 
     # # TR-SAXS Pico Plus pumps
-    # setup_pumps = [
+    # setup_devices = [
     #     {'name': 'Buffer', 'args': ['Pico Plus', 'COM19'],
     #         'kwargs': {'syringe_id': '10 mL, Medline P.C.',
     #         'pump_address': '00'}, 'ctrl_args': {'flow_rate' : '0.068',
