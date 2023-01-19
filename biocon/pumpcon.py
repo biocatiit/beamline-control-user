@@ -1547,6 +1547,11 @@ class SSINextGenPump(Pump):
         :param name: A unique identifier for the pump
         :type name: str
         """
+
+        self._accel_stop = threading.Event()
+        self._accel_change = threading.Event()
+        self._flow_rate_lock = threading.Lock()
+
         Pump.__init__(self, name, device, flow_rate_scale=flow_rate_scale,
             flow_rate_offset=flow_rate_offset, scale_type=scale_type,
             comm_lock=comm_lock)
@@ -1565,6 +1570,7 @@ class SSINextGenPump(Pump):
         self._pressure_units = 'psi'
         self._pump_pressure_units = 'psi'
         self._flow_rate_val = 0 #Current set flow rate
+        self._pump_max_pressure = -1 #Hardware pressure limit
         self._max_pressure = 10000 #Upper pressure limit
         self._min_pressure = 0 #Lower pressure limit
         self._is_flowing = False
@@ -1577,9 +1583,6 @@ class SSINextGenPump(Pump):
         self.fault = False
         self._flow_rate_decimals = 3
         self._flow_rate_acceleration = 0.1 #Set to 0 for instant (as fast as the pump can) flow rate change
-        self._accel_stop = threading.Event()
-        self._accel_change = threading.Event()
-        self._flow_rate_lock = threading.Lock()
         self._ramping_flow = False
         self._stop_flow_after_ramp = False
 
@@ -1593,48 +1596,32 @@ class SSINextGenPump(Pump):
         else:
             self._pump_max_flow_rate = -1
 
-        ret = self.send_cmd('MP') #Max pressure for the pump
-        if ret.startswith('OK') and ret.endswith('/'):
-            self._pump_max_pressure = float(ret.split(':')[-1].strip('/'))
-        else:
-            self._pump_max_pressure = -1
-
         ret = self.send_cmd('PU') #Pressure unit for the pump
         if ret.startswith('OK') and ret.endswith('/'):
             self._pump_pressure_units = ret.split(',')[-1].strip('/')
 
-        if self._pump_pressure_units.lower() == 'mpa':
-            if self._pump_max_pressure != -1:
-                self._pump_max_pressure *= 145.038
+        ret = self.send_cmd('MP') #Max pressure for the pump
+        if ret.startswith('OK') and ret.endswith('/'):
+            val = float(ret.split(':')[-1].strip('/'))
 
-        elif self._pump_pressure_units == 'bar':
-            if self._pump_max_pressure != -1:
-                self._pump_max_pressure *= 14.5038
+            self._pump_max_pressure = self._convert_pressure(val,
+                self._pump_pressure_units, self._pressure_units)
 
-        if self._pump_max_pressure != -1:
             self._max_pressure = self._pump_max_pressure
 
         ret = self.send_cmd('LP')
         if ret.startswith('OK') and ret.endswith('/'):
             val = float(ret.split(':')[-1].strip('/'))
 
-            if self._pump_pressure_units == 'mpa':
-                val *= 145.038
-            elif self._pump_pressure_units =='bar':
-                val *= 14.5038
-
-            self._min_pressure = val
+            self._min_pressure = self._convert_pressure(val,
+                self._pump_pressure_units, self._pressure_units)
 
         ret = self.send_cmd('UP')
         if ret.startswith('OK') and ret.endswith('/'):
             val = float(ret.split(':')[-1].strip('/'))
 
-            if self._pump_pressure_units == 'mpa':
-                val *= 145.038
-            elif self._pump_pressure_units =='bar':
-                val *= 14.5038
-
-            self._max_pressure = val
+            self._max_pressure = self._convert_pressure(val,
+                self._pump_pressure_units, self._pressure_units)
 
 
         ret = self.send_cmd('LM1') #Detected leak does not cause fault
@@ -1809,7 +1796,11 @@ class SSINextGenPump(Pump):
 
         self._max_pressure = pressure
 
-        pressure = pressure*100 #There's weirdness in how you send the pressure command
+        #There's weirdness in how you send the pressure command based on units
+        if self._pump_pressure_units.lower() == 'bar':
+            pressure = pressure*10
+        elif self._pump_pressure_units.lower() == 'mpa':
+            pressure = pressure*100
 
         self.send_cmd('UP{:0>5}'.format(int(round(pressure+0.00000001))))
 
@@ -1831,7 +1822,11 @@ class SSINextGenPump(Pump):
 
         self._min_pressure = max(0, pressure)
 
-        pressure = pressure*100 #There's weirdness in how you send the pressure command
+        #There's weirdness in how you send the pressure command based on units
+        if self._pump_pressure_units.lower() == 'bar':
+            pressure = pressure*10
+        elif self._pump_pressure_units.lower() == 'mpa':
+            pressure = pressure*100
 
         self.send_cmd('LP{:0>5}'.format(int(round(pressure+0.00000001))))
 
@@ -1951,7 +1946,7 @@ class SSINextGenPump(Pump):
 
                     if time.time() - start > self.timeout:
                         break
-                        logger.error('TImed out waiting for pump %s to stop', self.name)
+                        logger.error('Timed out waiting for pump %s to stop', self.name)
 
                     self.flow_rate = 0
                     self._flow_dir = 0
@@ -2107,8 +2102,10 @@ class SSINextGenPump(Pump):
                 logger.info('Pump %s remaining dispense volume is %s mL',
                     self.name, self._dispensing_volume)
                 update_time = current_time
+
             if self._dispensing_volume - stop_vol <= 0:
                 self.stop()
+                break
 
             time.sleep(0.1)
 
@@ -2142,7 +2139,7 @@ class SSINextGenPump(Pump):
 
             self._min_pressure = float(vals[3])
 
-            self._pump_pressure_unit = vals[4]
+            self._pump_pressure_units = vals[4]
 
             if vals[6] == '0':
                 self._is_flowing = False
@@ -2694,6 +2691,8 @@ class PumpCommThread(utils.CommManager):
             'get_min_pressure'  : self._get_min_pressure,
             'set_min_pressure'  : self._set_min_pressure,
             'get_pressure'      : self._get_pressure,
+            'get_pressure_units': self._get_pressure_units,
+            'set_pressure_units': self._set_pressure_units,
             'get_faults'        : self._get_faults,
             'clear_faults'      : self._clear_faults,
             'get_force'         : self._get_force,
@@ -4400,15 +4399,15 @@ if __name__ == '__main__':
     # pmp_cmd_q.append(stop_cmd)
     # my_pumpcon.stop()
 
-    # Coflow pumps
-    setup_devices = [
-        {'name': 'sheath', 'args': ['VICI M50', 'COM3'],
-            'kwargs': {'flow_cal': '627.72', 'backlash_cal': '9.814'},
-            'ctrl_args': {'flow_rate': 1}},
-        {'name': 'outlet', 'args': ['VICI M50', 'COM4'],
-            'kwargs': {'flow_cal': '628.68', 'backlash_cal': '9.962'},
-            'ctrl_args': {'flow_rate': 1}},
-        ]
+    # # Coflow pumps
+    # setup_devices = [
+    #     {'name': 'sheath', 'args': ['VICI M50', 'COM3'],
+    #         'kwargs': {'flow_cal': '627.72', 'backlash_cal': '9.814'},
+    #         'ctrl_args': {'flow_rate': 1}},
+    #     {'name': 'outlet', 'args': ['VICI M50', 'COM4'],
+    #         'kwargs': {'flow_cal': '628.68', 'backlash_cal': '9.962'},
+    #         'ctrl_args': {'flow_rate': 1}},
+    #     ]
 
     # # TR-SAXS PHD 4400 pumps
     # setup_devices = [
@@ -4453,20 +4452,20 @@ if __name__ == '__main__':
     #     ]
 
     # Teledyne SSI Reaxus pumps without scaling
-    # setup_devices = [
-    #     {'name': 'Buffer 1', 'args': ['SSI Next Gen', 'COM17'],
-    #         'kwargs': {'flow_rate_scale': 1,
-    #         'flow_rate_offset': 0,'scale_type': 'up'},
-    #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-    #     {'name': 'Sample', 'args': ['SSI Next Gen', 'COM15'],
-    #         'kwargs': {'flow_rate_scale': 1,
-    #         'flow_rate_offset': 0,'scale_type': 'up'},
-    #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-    #     {'name': 'Buffer 2', 'args': ['SSI Next Gen', 'COM18'],
-    #         'kwargs': {'flow_rate_scale': 1,
-    #         'flow_rate_offset': 0,'scale_type': 'up'},
-    #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-    #     ]
+    setup_devices = [
+        {'name': 'Pump 4', 'args': ['SSI Next Gen', 'COM15'],
+            'kwargs': {'flow_rate_scale': 1,
+            'flow_rate_offset': 0,'scale_type': 'up'},
+            'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
+        # {'name': 'Pump 3', 'args': ['SSI Next Gen', 'COM17'],
+        #     'kwargs': {'flow_rate_scale': 1,
+        #     'flow_rate_offset': 0,'scale_type': 'up'},
+        #     'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
+        # {'name': 'Pump 2', 'args': ['SSI Next Gen', 'COM18'],
+        #     'kwargs': {'flow_rate_scale': 1,
+        #     'flow_rate_offset': 0,'scale_type': 'up'},
+        #     'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
+        ]
 
     # # TR-SAXS Pico Plus pumps
     # setup_devices = [
