@@ -181,7 +181,7 @@ class BFS(FlowMeter):
         :param str name: A unique identifier for the pump
 
         :param float bfs_filter: Smoothing factor for measurement. 1 = minimum
-            filter, 0.00001 = maximum filter. Defaults to 1
+            filter, 0.00001 = maximum filter. Defaults to 0.5
         """
 
         FlowMeter.__init__(self, name, device, 'uL/min')
@@ -192,7 +192,7 @@ class BFS(FlowMeter):
 
         self.connect()
 
-        self.filter = 0.001
+        self.filter = 0.5
 
     def connect(self):
         if not self.connected:
@@ -821,8 +821,7 @@ class FlowMeterPanel(utils.DevicePanel):
             self.time_unit_ctrl.SetStringSelection(t_u)
             self.flow_units_lbl.SetLabel(units)
 
-    def _on_filter(self, evt):
-        val = self.bfs_filter.GetValue()
+    def _on_filter(self, obj, val):
         try:
             val = float(val)
         except Exception:

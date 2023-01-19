@@ -4234,7 +4234,7 @@ class PumpPanel(utils.DevicePanel):
             if val is not None and round(val, 4) != float(self.flow_readback.GetLabel()):
                 self._current_flow_rate = val
 
-                if self._current_flow_dir > 0:
+                if self._current_flow_dir >= 0:
                     wx.CallAfter(self.flow_readback.SetLabel, str(round(val, 4)))
 
         elif cmd == 'get_refill_rate':

@@ -363,9 +363,9 @@ if __name__ == '__main__':
     port3 = '5558'
     port4 = '5559'
 
-    # exp_type = 'coflow' #coflow or trsaxs_laminar or trsaxs_chaotic
+    exp_type = 'coflow' #coflow or trsaxs_laminar or trsaxs_chaotic
     # exp_type = 'trsaxs_chaotic'
-    exp_type = 'trsaxs_laminar'
+    # exp_type = 'trsaxs_laminar'
 
 
     if exp_type == 'coflow':
@@ -395,7 +395,7 @@ if __name__ == '__main__':
             ]
 
         setup_fms = [
-            {'name': 'sheath', 'args' : ['BFS', 'COM5'], 'kwargs': {}}
+            {'name': 'sheath', 'args' : ['BFS', 'COM5'], 'kwargs': {}},
             {'name': 'outlet', 'args' : ['BFS', 'COM6'], 'kwargs': {}}
             ]
 
