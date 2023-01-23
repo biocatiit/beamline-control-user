@@ -221,7 +221,7 @@ class SpectraData(object):
 
 class Spectrometer(object):
 
-    def __init__(self, name, history_time=60*60*24):
+    def __init__(self, name, device, history_time=60*60*24):
         """
         Spectrometer. Note that spectrum are expected to be returned as
         numpy arrays n x 2 arrays where each n datapoint is [lambda, spectral value].
@@ -235,6 +235,7 @@ class Spectrometer(object):
         """
         logger.info('Creating spectrometer %s', name)
         self.name = name
+        self.device = device
 
         self._history_length = history_time
 
@@ -1029,10 +1030,10 @@ class StellarnetUVVis(Spectrometer):
     Stellarnet black comet UV-Vis spectrometer
     """
 
-    def __init__(self, name, shutter_pv_name='18ID:LJT4:2:DI11',
+    def __init__(self, name, device, shutter_pv_name='18ID:LJT4:2:DI11',
         trigger_pv_name='18ID:LJT4:2:DI12'):
 
-        Spectrometer.__init__(self, name)
+        Spectrometer.__init__(self, name, device)
 
         self._x_timing = 3
         self._temp_comp = None
@@ -1335,49 +1336,19 @@ class UVCommThread(utils.CommManager):
     def _additional_new_comm(self, name):
         pass
 
-    def _connect_device(self, name, device_type, **kwargs):
-        logger.info("Connecting device %s", name)
-
-        comm_name = kwargs.pop('comm_name', None)
-
-        if name not in self._connected_devices:
-            if device not in self._connected_coms:
-                new_device = self.known_devices[device_type](name, **kwargs)
-                new_device.connect()
-                self._connected_devices[name] = new_device
-                self._connected_coms[device] = new_device
-                logger.debug("Device %s connected", name)
-            else:
-                self._connected_devices[name] = self.connected_coms[device]
-                logger.debug("Device already connected on %s", device)
-
-            self._series_q[name] = deque()
-
-        self._return_value((name, 'connect', True), comm_name)
-
-
-    def _disconnect_device(self, name, **kwargs):
-        logger.info("Disconnecting device %s", name)
-
-        comm_name = kwargs.pop('comm_name', None)
-
-        device = self._connected_devices.pop(name, None)
-        if device is not None:
-            device.disconnect()
-
-        self._return_value((name, 'disconnect', True), comm_name)
-
-        logger.debug("Device %s disconnected", name)
+    def _additional_connect_device(self, name, device_type, device, **kwargs):
+        self._series_q[name] = deque()
 
     def _set_int_time(self, name, val, **kwargs):
         logger.debug("Setting device %s integration time to %s s", name, val)
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         device.set_integration_time(val, **kwargs)
 
-        self._return_value((name, 'set_int_time', True), comm_name)
+        self._return_value((name, cmd, True), comm_name)
 
         logger.debug("Device %s integraiton time set", name)
 
@@ -1385,11 +1356,12 @@ class UVCommThread(utils.CommManager):
         logger.debug("Setting device %s scan averages to %s", name, val)
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         device.set_scan_avg(val, **kwargs)
 
-        self._return_value((name, 'set_scan_avg', True), comm_name)
+        self._return_value((name, cmd, True), comm_name)
 
         logger.debug("Device %s scan averages set", name)
 
@@ -1397,11 +1369,12 @@ class UVCommThread(utils.CommManager):
         logger.debug("Setting device %s smoothing to %s", name, val)
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         device.set_smoothing(val, **kwargs)
 
-        self._return_value((name, 'set_smoothing', True), comm_name)
+        self._return_value((name, cmd, True), comm_name)
 
         logger.debug("Device %s smoothing set", name)
 
@@ -1409,11 +1382,12 @@ class UVCommThread(utils.CommManager):
         logger.debug("Setting device %s xtiming to %s", name, val)
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         device.set_xtiming(val, **kwargs)
 
-        self._return_value((name, 'set_xtiming', True), comm_name)
+        self._return_value((name, cmd, True), comm_name)
 
         logger.debug("Device %s xtiming set", name)
 
@@ -1421,11 +1395,12 @@ class UVCommThread(utils.CommManager):
         logger.debug("Getting device %s integration time", name)
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         val = device.get_integration_time(**kwargs)
 
-        self._return_value((name, 'get_int_time', val), comm_name)
+        self._return_value((name, cmd, val), comm_name)
 
         logger.debug("Device %s integration time is %s s", name, val)
 
@@ -1433,11 +1408,12 @@ class UVCommThread(utils.CommManager):
         logger.debug("Getting device %s scan averages", name)
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         val = device.get_scan_avg(**kwargs)
 
-        self._return_value((name, 'get_scan_avg', val), comm_name)
+        self._return_value((name, cmd, val), comm_name)
 
         logger.debug("Device %s scan averages: %s", name, val)
 
@@ -1445,11 +1421,12 @@ class UVCommThread(utils.CommManager):
         logger.debug("Getting device %s smoothing", name)
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         val = device.get_smoothing(**kwargs)
 
-        self._return_value((name, 'get_smoothing', val), comm_name)
+        self._return_value((name, cmd, val), comm_name)
 
         logger.debug("Device %s smoothing: %s", name, val)
 
@@ -1457,11 +1434,12 @@ class UVCommThread(utils.CommManager):
         logger.debug("Getting device %s xtiming", name)
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         val = device.get_xtiming(**kwargs)
 
-        self._return_value((name, 'get_xtiming', val), comm_name)
+        self._return_value((name, cmd, val), comm_name)
 
         logger.debug("Device %s xtiming: %s", name, val)
 
@@ -1469,11 +1447,12 @@ class UVCommThread(utils.CommManager):
         logger.debug("Setting device %s dark to %s", name, val)
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         device.set_dark(val, **kwargs)
 
-        self._return_value((name, 'set_dark', True), comm_name)
+        self._return_value((name, cmd, True), comm_name)
 
         logger.debug("Device %s dark set", name)
 
@@ -1481,6 +1460,7 @@ class UVCommThread(utils.CommManager):
         logger.debug("Getting device %s dark", name)
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         try:
@@ -1488,7 +1468,7 @@ class UVCommThread(utils.CommManager):
         except RuntimeError:
             val = None
 
-        self._return_value((name, 'get_dark', val), comm_name)
+        self._return_value((name, cmd, val), comm_name)
 
         logger.debug("Device %s dark: %s", name, val)
 
@@ -1496,12 +1476,13 @@ class UVCommThread(utils.CommManager):
         logger.debug("Collecting device %s dark", name)
 
         comm_name = kwargs.pop('comm_name', None)
-        comm_name = 'status'
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         val = device.collect_dark(**kwargs)
 
-        self._return_value((name, 'collect_dark', val), comm_name)
+        self._return_value((name, cmd, val), comm_name)
+        self._return_value((name, cmd, val), 'status')
 
         logger.debug("Device %s dark: %s", name, val)
 
@@ -1509,11 +1490,12 @@ class UVCommThread(utils.CommManager):
         logger.debug("Setting device %s ref to %s", name, val)
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         device.set_reference_spectrum(val, **kwargs)
 
-        self._return_value((name, 'set_ref', True), comm_name)
+        self._return_value((name, cmd, True), comm_name)
 
         logger.debug("Device %s ref set", name)
 
@@ -1521,6 +1503,7 @@ class UVCommThread(utils.CommManager):
         logger.debug("Getting device %s ref", name)
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         try:
@@ -1528,7 +1511,7 @@ class UVCommThread(utils.CommManager):
         except RuntimeError:
             val = None
 
-        self._return_value((name, 'get_ref', val), comm_name)
+        self._return_value((name, cmd, val), comm_name)
 
         logger.debug("Device %s ref: %s", name, val)
 
@@ -1536,12 +1519,13 @@ class UVCommThread(utils.CommManager):
         logger.debug("Collecting device %s ref", name)
 
         comm_name = kwargs.pop('comm_name', None)
-        comm_name = 'status'
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         val = device.collect_reference_spectrum(**kwargs)
 
-        self._return_value((name, 'collect_ref', val), comm_name)
+        self._return_value((name, cmd, val), comm_name)
+        self._return_value((name, cmd, val), 'status')
 
         logger.debug("Device %s ref: %s", name, val)
 
@@ -1549,12 +1533,13 @@ class UVCommThread(utils.CommManager):
         logger.debug("Collecting device %s spectrum", name)
 
         comm_name = kwargs.pop('comm_name', None)
-        comm_name = 'status'
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         val = device.collect_spectrum(**kwargs)
 
-        self._return_value((name, 'collect_spec', val), comm_name)
+        self._return_value((name, cmd, val), comm_name)
+        self._return_value((name, cmd, val), 'status')
 
         logger.debug("Device %s spectrum: %s", name, val)
 
@@ -1562,6 +1547,7 @@ class UVCommThread(utils.CommManager):
         logger.debug("Collecting device %s spectra series of %s spectra", name, val)
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         self._return_value((name, 'collect_series_start', val), 'status')
 
@@ -1581,7 +1567,7 @@ class UVCommThread(utils.CommManager):
         while not device.series_ready_event.is_set():
             time.sleep(0.01)
 
-        self._return_value((name, 'collect_series', True), comm_name)
+        self._return_value((name, cmd, True), comm_name)
 
         logger.debug("Device %s series started", name)
 
@@ -1589,11 +1575,12 @@ class UVCommThread(utils.CommManager):
         logger.debug("Getting device %s %s most recent spectra", name, val)
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         hist = device.get_last_n_spectra(val, **kwargs)
 
-        self._return_value((name, 'get_last_n', hist), comm_name)
+        self._return_value((name, cmd, hist), comm_name)
 
         logger.debug("Device %s history returned", name)
 
@@ -1601,11 +1588,12 @@ class UVCommThread(utils.CommManager):
         logger.debug("Getting device %s spectra in the last %s s", name, val)
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         hist = device.get_spectra_in_last_t(val, **kwargs)
 
-        self._return_value((name, 'get_last_t', hist), comm_name)
+        self._return_value((name, cmd, hist), comm_name)
 
         logger.debug("Device %s history returned", name)
 
@@ -1613,11 +1601,12 @@ class UVCommThread(utils.CommManager):
         logger.debug("Getting device %s full spectra history", name)
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         val = device.get_full_history(**kwargs)
 
-        self._return_value((name, 'get_full_hist', val), comm_name)
+        self._return_value((name, cmd, val), comm_name)
 
         logger.debug("Device %s history returned", name)
 
@@ -1625,11 +1614,12 @@ class UVCommThread(utils.CommManager):
         logger.debug("Getting device %s full history", name)
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         val = device.get_full_history_ts(**kwargs)
 
-        self._return_value((name, 'get_full_hist_ts', val), comm_name)
+        self._return_value((name, cmd, val), comm_name)
 
         logger.debug("Device %s history returned", name)
 
@@ -1637,11 +1627,12 @@ class UVCommThread(utils.CommManager):
         logger.debug("Setting device %s history length to %s s", name, val)
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         device.set_history_time(val, **kwargs)
 
-        self._return_value((name, 'set_hist_time', True), comm_name)
+        self._return_value((name, cmd, True), comm_name)
 
         logger.debug("Device %s history length set", name)
 
@@ -1649,11 +1640,12 @@ class UVCommThread(utils.CommManager):
         logger.debug("Getting device %s history length", name)
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         val = device.get_history_time(**kwargs)
 
-        self._return_value((name, 'get_hist_time', val), comm_name)
+        self._return_value((name, cmd, val), comm_name)
 
         logger.debug("Device %s history time: %s s", name, val)
 
@@ -1661,11 +1653,12 @@ class UVCommThread(utils.CommManager):
         logger.debug("Device %s adding absorbance wavelenght %s nm", name, val)
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         device.add_absorbance_wavelength(val, **kwargs)
 
-        self._return_value((name, 'add_abs_wav', True), comm_name)
+        self._return_value((name, cmd, True), comm_name)
 
         logger.debug("Device %s absorbance wavelenght added", name)
 
@@ -1673,11 +1666,12 @@ class UVCommThread(utils.CommManager):
         logger.debug("Getting device %s absorbance wavelengths", name)
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         val = device.get_absorbance_wavelengths(**kwargs)
 
-        self._return_value((name, 'get_abs_wav', val), comm_name)
+        self._return_value((name, cmd, val), comm_name)
 
         logger.debug("Device %s absorbance wavelengths: %s", name, val)
 
@@ -1685,11 +1679,12 @@ class UVCommThread(utils.CommManager):
         logger.debug("Device %s removing absorbance wavelenght %s nm", name, val)
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         device.remove_absorbance_wavelength(val, **kwargs)
 
-        self._return_value((name, 'remove_abs_wav', True), comm_name)
+        self._return_value((name, cmd, True), comm_name)
 
         logger.debug("Device %s absorbance wavelength removed", name)
 
@@ -1697,11 +1692,12 @@ class UVCommThread(utils.CommManager):
         logger.debug("Device %s setting absorbance window %s nm", name, val)
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         device.set_absorbance_window(val, **kwargs)
 
-        self._return_value((name, 'set_abs_window', True), comm_name)
+        self._return_value((name, cmd, True), comm_name)
 
         logger.debug("Device %s absorbance window set", name)
 
@@ -1709,11 +1705,12 @@ class UVCommThread(utils.CommManager):
         logger.debug("Getting device %s absorbance window", name)
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         val = device.get_absorbance_window(**kwargs)
 
-        self._return_value((name, 'get_abs_window', val), comm_name)
+        self._return_value((name, cmd, val), comm_name)
 
         logger.debug("Device %s absorbance window: %s nm", name, val)
 
@@ -1721,11 +1718,12 @@ class UVCommThread(utils.CommManager):
         logger.debug("Device %s setting series autosave to %s", name, val)
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         device.set_autosave(val, **kwargs)
 
-        self._return_value((name, 'set_autosave_on', True), comm_name)
+        self._return_value((name, cmd, True), comm_name)
 
         logger.debug("Device %s autosave on set", name)
 
@@ -1733,11 +1731,12 @@ class UVCommThread(utils.CommManager):
         logger.debug("Getting device %s autosave on", name)
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         val = device.get_autosave(**kwargs)
 
-        self._return_value((name, 'get_autosave_on', val), comm_name)
+        self._return_value((name, cmd, val), comm_name)
 
         logger.debug("Device %s autosave on: %s", name, val)
 
@@ -1746,11 +1745,12 @@ class UVCommThread(utils.CommManager):
             name)
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         device.set_autosave_parameters(data_dir, prefix, **kwargs)
 
-        self._return_value((name, 'set_autosave_params', True), comm_name)
+        self._return_value((name, cmd, True), comm_name)
 
         logger.debug("Device %s autosave parameters set", name)
 
@@ -1758,11 +1758,12 @@ class UVCommThread(utils.CommManager):
         logger.debug("Getting device %s autosave parameters", name)
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         val = device.get_autosave_parameters(**kwargs)
 
-        self._return_value((name, 'get_autosave_params', val), comm_name)
+        self._return_value((name, cmd, val), comm_name)
 
         logger.debug("Device %s autosave parameters: %s", name, val)
 
@@ -1770,11 +1771,12 @@ class UVCommThread(utils.CommManager):
         logger.debug("Device %s setting external trigger %s", name, val)
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         device.set_external_trigger(val, **kwargs)
 
-        self._return_value((name, 'set_external_trig', True), comm_name)
+        self._return_value((name, cmd, True), comm_name)
 
         logger.debug("Device %s external trigger set", name)
 
@@ -1782,11 +1784,12 @@ class UVCommThread(utils.CommManager):
         logger.debug("Getting device %s external trigger", name)
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         val = device.get_external_trigger(**kwargs)
 
-        self._return_value((name, 'get_external_trig', val), comm_name)
+        self._return_value((name, cmd, val), comm_name)
 
         logger.debug("Device %s external trigger: %s", name, val)
 
@@ -1794,11 +1797,12 @@ class UVCommThread(utils.CommManager):
         logger.debug("Getting device %s busy", name)
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         val = device.is_busy(**kwargs)
 
-        self._return_value((name, 'get_busy', val), comm_name)
+        self._return_value((name, cmd, val), comm_name)
 
         logger.debug("Device %s busy: %s", name, val)
 
@@ -1806,11 +1810,12 @@ class UVCommThread(utils.CommManager):
         logger.debug("Aborting device %s collection", name)
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         device.abort_collection(**kwargs)
 
-        self._return_value((name, 'abort_collection', True), comm_name)
+        self._return_value((name, cmd, True), comm_name)
 
         logger.debug("Device %s aborted colelction", name)
 
@@ -1818,6 +1823,7 @@ class UVCommThread(utils.CommManager):
         logger.debug('Getting device %s settings', name)
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
 
@@ -1856,7 +1862,7 @@ class UVCommThread(utils.CommManager):
             'wl_range'  : wl_range,
         }
 
-        self._return_value((name, 'get_spec_settings', ret_vals), comm_name)
+        self._return_value((name, cmd, ret_vals), comm_name)
 
         logger.debug('Got device %s settings: %s', name, ret_vals)
 
@@ -1864,11 +1870,12 @@ class UVCommThread(utils.CommManager):
         logger.debug("Device %s setting lightsource shutter %s", name, val)
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         device.set_lightsource_shutter(val, **kwargs)
 
-        self._return_value((name, 'set_ls_shutter', True), comm_name)
+        self._return_value((name, cmd, True), comm_name)
 
         logger.debug("Device %s lightsource shutter set", name)
 
@@ -1876,11 +1883,12 @@ class UVCommThread(utils.CommManager):
         logger.debug("Getting device %s lightsource shutter", name)
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         val = device.get_lightsource_shutter(**kwargs)
 
-        self._return_value((name, 'get_ls_shutter', val), comm_name)
+        self._return_value((name, cmd, val), comm_name)
 
         logger.debug("Device %s lightsource shutter: %s", name, val)
 
@@ -1888,11 +1896,12 @@ class UVCommThread(utils.CommManager):
         logger.debug("Device %s setting internal_trigger %s", name, val)
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         device.set_int_trigger(val, **kwargs)
 
-        self._return_value((name, 'set_int_trig', True), comm_name)
+        self._return_value((name, cmd, True), comm_name)
 
         logger.debug("Device %s internal_trigger set", name)
 
@@ -1901,11 +1910,12 @@ class UVCommThread(utils.CommManager):
             start, end)
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         device.set_wavelength_range(start, end, **kwargs)
 
-        self._return_value((name, 'set_wl_range', True), comm_name)
+        self._return_value((name, cmd, True), comm_name)
 
         logger.debug("Device %s wavelength range set", name)
 
@@ -1913,11 +1923,12 @@ class UVCommThread(utils.CommManager):
         logger.debug("Getting device %s wavelength range", name)
 
         comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
         val = device.get_wavelength_range(**kwargs)
 
-        self._return_value((name, 'get_wl_range', val), comm_name)
+        self._return_value((name, cmd, val), comm_name)
 
         logger.debug("Device %s wavelength range: %s to %s", name, val[0],
             val[1])
@@ -1961,7 +1972,10 @@ class UVPanel(utils.DevicePanel):
         if biocon is not None:
             settings['device_data'] = settings['device_init'][0]
 
-        super(UVPanel, self).__init__(parent, panel_id, settings, *args, **kwargs)
+        if settings['inline_panel']:
+            self.inline = True
+        else:
+            self.inline = False
 
         self._dark_spectrum = None
         self._reference_spectrum = None
@@ -1994,7 +2008,9 @@ class UVPanel(utils.DevicePanel):
         self.uvplot_frame = None
         self.uv_plot = None
 
-        if not self.remote:
+        super(UVPanel, self).__init__(parent, panel_id, settings, *args, **kwargs)
+
+        if not self.inline:
             self._live_update_evt = threading.Event()
             self._live_update_evt.clear()
             self._live_update_stop = threading.Event()
@@ -2004,12 +2020,10 @@ class UVPanel(utils.DevicePanel):
             self._live_update_thread.start()
             self._restart_live_update = False
 
-        self._init_controls()
-
     def _create_layout(self):
         """Creates the layout for the panel."""
 
-        if not self.remote:
+        if not self.inline:
             status_parent = wx.StaticBox(self, label='Status:')
             self.status = wx.StaticText(status_parent, size=self._FromDIP((150, -1)),
                 style=wx.ST_NO_AUTORESIZE)
@@ -2439,6 +2453,8 @@ class UVPanel(utils.DevicePanel):
         Initializes the device parameters if any were provided. If enough are
         provided the device is automatically connected.
         """
+        self._init_controls()
+
         device_data = settings['device_data']
         args = device_data['args']
         kwargs = device_data['kwargs']
@@ -2451,7 +2467,7 @@ class UVPanel(utils.DevicePanel):
 
         # Need some kind of delay or I get a USB error message from the stellarnet driver?
 
-        if self.remote:
+        if self.inline:
             cmd = ['set_hist_time', [self.name, float(self._history_length)], {}]
             self._send_cmd(cmd)
 
@@ -2471,7 +2487,7 @@ class UVPanel(utils.DevicePanel):
 
         self._set_status_commands()
 
-        if args[1] != 'StellarNet' and not self.remote:
+        if args[1] != 'StellarNet' and not self.inline:
             self.settings_sizer.Hide(self.xtiming_label)
             self.setitngs_sizer.Hide(self.xtiming)
             self.parent.Layout()
@@ -2498,7 +2514,7 @@ class UVPanel(utils.DevicePanel):
             self._reference_spectrum = ref
 
     def _init_controls(self):
-        if self.remote:
+        if self.inline:
             self.auto_dark.SetValue(self.settings['auto_dark'])
             self.auto_dark_period.SetValue('{}'.format(self.settings['auto_dark_t']))
             self.dark_avgs.SetValue('{}'.format(self.settings['dark_avgs']))
@@ -2532,7 +2548,8 @@ class UVPanel(utils.DevicePanel):
 
     def _on_autoupdate(self, evt):
         if self.auto_update.GetValue():
-            self._live_update_evt.set()
+            if not self._series_running:
+                self._live_update_evt.set()
             self._restart_live_update = True
         else:
             self._live_update_evt.clear()
@@ -2558,7 +2575,7 @@ class UVPanel(utils.DevicePanel):
                 time.sleep(0.5)
 
     def _set_wavelength_range(self):
-        if self.remote:
+        if self.inline:
             update = False
             if self._current_wav_range is not None:
                 if ((self._current_wav_range[0] is None
@@ -2592,7 +2609,7 @@ class UVPanel(utils.DevicePanel):
     def _on_collect_single(self, evt):
         obj = evt.GetEventObject()
 
-        if not self.remote:
+        if not self.inline:
             self.auto_update.SetValue(False)
             self._live_update_evt.clear()
 
@@ -2633,7 +2650,7 @@ class UVPanel(utils.DevicePanel):
         is_busy = self._get_busy()
 
         if not is_busy:
-            if self.remote:
+            if self.inline:
                 self._set_wavelength_range()
                 dark_correct = self.settings['dark_correct']
             else:
@@ -2643,7 +2660,10 @@ class UVPanel(utils.DevicePanel):
             dark_time = float(self.auto_dark_period.GetValue())
 
             if stype == 'normal':
-                spec_type = self.spectrum_type.GetStringSelection()
+                if self.inline:
+                    spec_type = self.settings['spectrum_type']
+                else:
+                    spec_type = self.spectrum_type.GetStringSelection()
 
                 if spec_type == 'Absorbance':
                     spec_type = 'abs'
@@ -2693,7 +2713,6 @@ class UVPanel(utils.DevicePanel):
         num_spectra = int(self.series_num.GetValue())
         period = float(self.series_period.GetValue())
 
-
         self._collect_series(num_spectra, period, None, None, None)
 
     def _collect_series(self, num_spectra, int_time, scan_avgs, exp_period,
@@ -2701,7 +2720,7 @@ class UVPanel(utils.DevicePanel):
         is_busy = self._get_busy()
 
         if not is_busy:
-            if self.remote:
+            if self.inline:
                 self._set_wavelength_range()
                 self._set_exposure_settings(int_time, scan_avgs)
                 self._set_abs_params()
@@ -2709,6 +2728,8 @@ class UVPanel(utils.DevicePanel):
                 spec_type = self.settings['spectrum_type']
                 dark_correct = self.settings['dark_correct']
                 take_ref = self.settings['series_ref_at_start']
+
+                int_trigger = False
 
                 uv_time = max(int_time*self.settings['int_t_scale'], 0.05)*scan_avgs
 
@@ -2726,6 +2747,8 @@ class UVPanel(utils.DevicePanel):
 
                 delta_t_min = int_time
 
+                int_trigger = True
+
             auto_dark = self.auto_dark.GetValue()
             dark_time = float(self.auto_dark_period.GetValue())
             ref_avgs = int(self.ref_avgs.GetValue())
@@ -2741,7 +2764,7 @@ class UVPanel(utils.DevicePanel):
                 'spec_type'     : spec_type,
                 'delta_t_min'   : delta_t_min,
                 'dark_correct'  : dark_correct,
-                'int_trigger'   : True,
+                'int_trigger'   : int_trigger,
                 'auto_dark'     : auto_dark,
                 'dark_time'     : dark_time,
                 'take_ref'      : take_ref,
@@ -2825,7 +2848,7 @@ class UVPanel(utils.DevicePanel):
 
     def _set_autosave_parameters(self, prefix, data_dir):
 
-        if not self.remote:
+        if not self.inline:
             autosave_on = self.autosave_series.GetValue()
             autosave_choice = self.autosave_choice.GetStringSelection()
         else:
@@ -2872,7 +2895,7 @@ class UVPanel(utils.DevicePanel):
                 save_trans = True
                 save_abs = False
 
-            if not self.remote:
+            if not self.inline:
                 prefix = self.autosave_prefix.GetValue()
                 data_dir = self.autosave_dir.GetValue()
                 data_dir = os.path.abspath(os.path.expanduser(data_dir))
@@ -2919,15 +2942,15 @@ class UVPanel(utils.DevicePanel):
                 self.int_time.SafeChangeValue(str(val))
                 self._current_int_time = int_time
 
-        elif cmd == 'set_scan_avg' and not self.remote:
+        elif cmd == 'set_scan_avg' and not self.inline:
             if str(val) != self.scan_avg.GetValue():
                 self.scan_avg.SafeChangeValue(str(val))
 
-        elif cmd == 'set_smoothing' and not self.remote:
+        elif cmd == 'set_smoothing' and not self.inline:
             if str(val) != self.smoothing.GetValue():
                 self.smoothing.SafeChangeValue(str(val))
 
-        elif cmd == 'set_xtiming' and not self.remote:
+        elif cmd == 'set_xtiming' and not self.inline:
             if str(val) != self.xtiming.GetValue():
                 self.xtiming.SafeChangeValue(str(val))
 
@@ -2949,13 +2972,13 @@ class UVPanel(utils.DevicePanel):
             ls_shutter = val['ls_shutter']
             wl_range = val['wl_range']
 
-            if str(int_time) != self.int_time.GetValue() and not self.remote:
+            if not self.inline and str(int_time) != self.int_time.GetValue():
                 self.int_time.SafeChangeValue(str(int_time))
-            if str(scan_avg) != self.scan_avg.GetValue() and not self.remote:
+            if not self.inline and str(scan_avg) != self.scan_avg.GetValue():
                 self.scan_avg.SafeChangeValue(str(scan_avg))
-            if str(smooth) != self.smoothing.GetValue() and not self.remote:
+            if not self.inline and str(smooth) != self.smoothing.GetValue():
                 self.smoothing.SafeChangeValue(str(smooth))
-            if str(xtiming) != self.xtiming.GetValue() and not self.remote:
+            if not self.inline and str(xtiming) != self.xtiming.GetValue():
                 self.xtiming.SafeChangeValue(str(xtiming))
             if hist_t != self._history_length:
                 self.history_time.SafeChangeValue(str(hist_t))
@@ -2972,7 +2995,7 @@ class UVPanel(utils.DevicePanel):
             self._dark_spectrum = dark
             self._reference_spectrum = ref
 
-            if ls_shutter != self._ls_shutter and self.remote:
+            if self.inline and ls_shutter != self._ls_shutter:
                 self._ls_shutter = ls_shutter
 
                 if self._ls_shutter:
@@ -3025,7 +3048,7 @@ class UVPanel(utils.DevicePanel):
             self._series_running = True
             self._series_count = 0
 
-            if not self.remote and self._restart_live_update:
+            if not self.inline and self._restart_live_update:
                 self._live_update_evt.set()
 
     def _add_new_spectrum(self, val):
@@ -3202,13 +3225,10 @@ class UVPanel(utils.DevicePanel):
         obj = evt.GetEventObject()
 
         if obj == self.save_current:
-            print('saving current spectrum')
             spectrum = self._current_spectrum
         elif obj == self.save_ref:
-            print('saving reference spectrum')
             spectrum = self._reference_spectrum
         elif obj == self.save_dark:
-            print('saving dark spectrum')
             spectrum = self._dark_spectrum
 
         if spectrum is not None:
@@ -3246,7 +3266,7 @@ class UVPanel(utils.DevicePanel):
     def _on_close(self):
         """Device specific stuff goes here"""
 
-        if not self.remote:
+        if not self.inline:
             self._live_update_stop.set()
             self._live_update_thread.join()
 
@@ -3729,22 +3749,12 @@ class UVFrame(utils.DeviceFrame):
         Initializes the device frame. Takes frame name, utils.CommManager thread
         (or subclass), the device_panel class, and args and kwargs for the wx.Frame class.
         """
-        super(UVFrame, self).__init__(name, settings, *args, **kwargs)
+        super(UVFrame, self).__init__(name, settings, UVPanel, *args, **kwargs)
 
         # Enable these to init devices on startup
         self.setup_devices = self.settings.pop('device_init', None)
 
         self._init_devices()
-
-    def _create_layout(self):
-        """Creates the layout"""
-
-        self.sizer = wx.BoxSizer(wx.HORIZONTAL)
-
-        top_sizer = wx.BoxSizer(wx.VERTICAL)
-        top_sizer.Add(self.sizer, 1, flag=wx.EXPAND)
-
-        return top_sizer
 
 if __name__ == '__main__':
     logger = logging.getLogger()
@@ -4017,7 +4027,7 @@ if __name__ == '__main__':
 
     spectrometer_settings = {
         'name'                  :  'CoflowUV',
-        'device_init'           : [{'name': 'CoflowUV', 'args': ['StellarNet'],
+        'device_init'           : [{'name': 'CoflowUV', 'args': ['StellarNet', None],
                                     'kwargs': {'shutter_pv_name': '18ID:LJT4:2:DO11',
                                     'trigger_pv_name' : '18ID:LJT4:2:DO12'}}],
         'max_int_t'             : 0.025, # in s
@@ -4028,8 +4038,8 @@ if __name__ == '__main__':
         'dark_correct'          : True,
         'auto_dark'             : True,
         'auto_dark_t'           : 60*60, #in s
-        'dark_avgs'             : 10,
-        'ref_avgs'              : 10,
+        'dark_avgs'             : 2,
+        'ref_avgs'              : 2,
         'history_t'             : 60*60*24, #in s
         'save_subdir'           : 'UV',
         'save_type'             : 'Absorbance',
@@ -4043,12 +4053,13 @@ if __name__ == '__main__':
         'remote'                : False,
         'remote_device'         : 'uv',
         'com_thread'            : com_thread,
-        'remote_dir_prefix'     : {'local' : '/nas_data', 'remote' : 'Y:\\'}
+        'remote_dir_prefix'     : {'local' : '/nas_data', 'remote' : 'Y:\\'},
+        'inline_panel'          : True,
     }
 
     app = wx.App()
     logger.debug('Setting up wx app')
-    frame = UVFrame('UVFrame', setup_devices, com_thread, parent=None,
+    frame = UVFrame('UVFrame', spectrometer_settings, parent=None,
         title='UV Spectrometer Control')
     frame.Show()
     app.MainLoop()

@@ -713,7 +713,12 @@ class CommManager(threading.Thread):
                 self._connected_devices[name] = self._connected_coms[device]
                 logger.debug("Device already connected on %s", device)
 
+            self._additional_connect_device(name, device_type, device, **kwargs)
+
         self._return_value((name, cmd, True), comm_name)
+
+    def _additional_connect_device(name, device_type, device, **kwargs):
+        pass # Device specific stuff here if needed
 
     def _disconnect_device(self, name, **kwargs):
         logger.info("Disconnecting device %s", name)
