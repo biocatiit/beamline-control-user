@@ -30,8 +30,9 @@ import six
 from six.moves import StringIO as bytesio
 import platform
 import threading
-from collections import deque
+from collections import deque, OrderedDict
 import time
+import copy
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,8 @@ from wx.lib.stattext import GenStaticText as StaticText
 from matplotlib.backends.backend_wxagg import NavigationToolbar2WxAgg
 import numpy as np
 import serial.tools.list_ports as list_ports
+
+import client
 
 class CharValidator(wx.Validator):
     ''' Validates data as it is entered into the text controls. '''
@@ -85,6 +88,8 @@ class CharValidator(wx.Validator):
             elif self.flag == 'float_te' and key not in string.digits+'-.\n\r':
                 return
             elif self.flag == 'float_neg' and key not in string.digits+'.-':
+                return
+            elif self.flag == 'float_pos_te' and key not in string.digits+'.\n\r':
                 return
 
         event.Skip()
@@ -420,7 +425,7 @@ class IntSpinCtrl(wx.Panel):
         self.max = value
 
 class WarningMessage(wx.Frame):
-    def __init__(self, parent, msg, title, *args, **kwargs):
+    def __init__(self, parent, msg, title, callback, *args, **kwargs):
         """
         Initializes the pump frame. Takes args and kwargs for the wx.Frame class.
         """
@@ -430,6 +435,8 @@ class WarningMessage(wx.Frame):
         self.Bind(wx.EVT_CLOSE, self._on_exit)
 
         self._create_layout(msg)
+
+        self.exit_callback = callback
 
         self.Layout()
         self.SendSizeEvent()
@@ -464,8 +471,7 @@ class WarningMessage(wx.Frame):
         self.SetSizer(top_sizer)
 
     def _on_exit(self, evt):
-        parent=self.GetParent()
-        parent.warning_dialog = None
+        self.exit_callback()
 
         self.Destroy()
 
@@ -540,6 +546,9 @@ class CommManager(threading.Thread):
 
         self._commands = {'example_command' : self._example_command} # overwrite
 
+        self._connected_devices = OrderedDict()
+        self._connected_coms = OrderedDict()
+
         # Need to make run and abort work for multiple queues
         # Need to add a way to set status commands and intervals
         # Need to add a way to add on stop commands?
@@ -566,6 +575,7 @@ class CommManager(threading.Thread):
 
                     if command is not None:
                         kwargs['comm_name'] = comm_name
+                        kwargs['cmd'] = command
                         self._run_command(command, args, kwargs)
 
                         cmds_run = True
@@ -576,7 +586,6 @@ class CommManager(threading.Thread):
 
             if self._stop_event.is_set():
                 logger.debug("Stop event detected")
-                self._abort()
                 break
 
             with self._queue_lock:
@@ -594,6 +603,7 @@ class CommManager(threading.Thread):
 
                     if time.time() - last_t > period:
                         kwargs['comm_name'] = 'status'
+                        kwargs['cmd'] = cmd
                         self._run_command(cmd, args, kwargs)
                         self._status_cmds[status_cmd]['last_run'] = time.time()
 
@@ -663,7 +673,8 @@ class CommManager(threading.Thread):
     def add_status_cmd(self, cmd, period):
         logger.debug('Adding status command: %s', cmd)
         with self._queue_lock:
-            self._status_cmds[cmd[0]] = {'cmd' : cmd, 'period' : period, 'last_run': 0}
+            cmd_key = '{}_{}'.format(cmd[0], cmd[1][0])
+            self._status_cmds[cmd_key] = {'cmd' : cmd, 'period' : period, 'last_run': 0}
 
         logger.debug('Added status command')
 
@@ -675,16 +686,53 @@ class CommManager(threading.Thread):
 
         logger.debug('Removed status command')
 
-    def _example_command(self, comm_name=None):
+    def _example_command(self, name, **kwargs):
         """
         Commands need to take in 0 or more arguments, 0 or more key word agruments,
         and additionally must always take in the comm_name keyword argument, which
         is used to make sure the right return queue is used.
         """
-        if comm_name == 'status':
-            return_queue_list = self._status_queues.values()
-        else:
-            return_queue_list = [self._return_queues[comm_name]]
+        comm_name = kwargs.pop('comm_name', None)
+        self._return_value((name, 'example_command', None), comm_name)
+        pass
+
+    def _connect_device(self, name, device_type, device, **kwargs):
+        logger.info("Connecting device %s", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        if name not in self._connected_devices:
+            if device is None or device not in self._connected_coms:
+                new_device = self.known_devices[device_type](name, device, **kwargs)
+                new_device.connect()
+                self._connected_devices[name] = new_device
+                self._connected_coms[device] = new_device
+                logger.debug("Device %s connected", name)
+            else:
+                self._connected_devices[name] = self._connected_coms[device]
+                logger.debug("Device already connected on %s", device)
+
+            self._additional_connect_device(name, device_type, device, **kwargs)
+
+        self._return_value((name, cmd, True), comm_name)
+
+    def _additional_connect_device(name, device_type, device, **kwargs):
+        pass # Device specific stuff here if needed
+
+    def _disconnect_device(self, name, **kwargs):
+        logger.info("Disconnecting device %s", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices.pop(name, None)
+        if device is not None:
+            device.disconnect()
+
+        self._return_value((name, cmd, True), comm_name)
+
+        logger.debug("Device %s disconnected", name)
 
     def _return_value(self, val, comm_name):
         if comm_name == 'status':
@@ -736,7 +784,7 @@ class DevicePanel(wx.Panel):
     be instanced several times, once for each device. It communciates
     with the devices using the :py:class:`CommManager`.
     """
-    def __init__(self, parent, panel_id, com_thread, device_data, *args, **kwargs):
+    def __init__(self, parent, panel_id, settings, *args, **kwargs):
         """
         :param wx.Window parent: Parent class for the panel.
 
@@ -750,7 +798,10 @@ class DevicePanel(wx.Panel):
         name, args, kwargs for the device.
 
         """
-        self.name = device_data['name']
+        self.settings = settings
+        self.remote = settings['remote']
+
+        self.name = settings['device_data']['name']
         self.parent = parent
 
         if 'name' not in kwargs:
@@ -766,17 +817,36 @@ class DevicePanel(wx.Panel):
         self.return_q = deque()
         self.status_q = deque()
 
-        self.com_thread = com_thread
+        if not self.remote:
+            self.com_thread = settings['com_thread']
 
-        if self.com_thread is not None:
-            self.com_thread.add_new_communication(self.name, self.cmd_q, self.return_q,
-                self.status_q)
+            self.com_timeout_event = None
+            self.remote_dev = None
+
+            if self.com_thread is not None:
+                self.com_thread.add_new_communication(self.name, self.cmd_q, self.return_q,
+                    self.status_q)
+
+        else:
+            self.com_abort_event = threading.Event()
+            self.com_timeout_event = threading.Event()
+
+            ip = settings['remote_ip']
+            port = settings['remote_port']
+            self.remote_dev = settings['remote_device']
+
+            self.com_thread = client.ControlClient(ip, port, self.cmd_q,
+                self.return_q, self.com_abort_event, self.com_timeout_event,
+                name='{}_ControlClient'.format(self.remote_dev),
+                status_queue=self.status_q)
+
+            self.com_thread.start()
 
         self._clear_return = threading.Lock()
         self._stop_status = threading.Event()
 
         self._create_layout()
-        self._init_device(device_data)
+        self._init_device(settings)
 
         # Dictionary of status settings that should be defined. If a status
         # response is returned, the command name is used as a key and the
@@ -800,14 +870,26 @@ class DevicePanel(wx.Panel):
 
         self.SetSizer(top_sizer)
 
-    def _init_device(self, device_data):
+    def _init_device(self, settings):
         """
         Initializes the device parameters if any were provided. If enough are
         provided the device is automatically connected.
         """
-        pass
+        device_data = settings['device_data']
 
-    def _send_cmd(self, cmd, wait_for_response=False):
+    def _update_status_cmd(self, cmd, status_period, add_status=True):
+        if self.remote:
+            self._send_cmd(cmd, is_status=True, status_period=status_period,
+                add_status=add_status)
+
+        else:
+            if add_status:
+                self.com_thread.add_status_cmd(cmd, status_period)
+            else:
+                self.com_thread.remove_status_cmd(cmd)
+
+    def _send_cmd(self, cmd, get_response=False, is_status=False,
+        status_period=1, add_status=True):
         """
         Sends commands to the pump using the ``cmd_q`` that was given
         to :py:class:`UVCommThread`.
@@ -817,29 +899,12 @@ class DevicePanel(wx.Panel):
         """
         logger.debug('Sending device %s command %s', self.name, cmd)
 
-        if wait_for_response:
-            with self._clear_return:
-                self.cmd_q.append(cmd)
-                result = self._wait_for_response()
-
-                if result[0] == cmd[1][0] and result[1] == cmd[0]:
-                    ret_val = result[2]
-                else:
-                    ret_val = None
-
-        else:
-            self.cmd_q.append(cmd)
-            ret_val = None
+        ret_val = send_cmd(cmd, self.cmd_q, self.return_q, self.com_timeout_event,
+            self._clear_return, self.remote, self.remote_dev,
+            get_response=get_response, is_status=is_status,
+            status_period=status_period, add_status=add_status)
 
         return ret_val
-
-    def _wait_for_response(self):
-        start_count = len(self.return_q)
-        while len(self.return_q) == start_count:
-            time.sleep(0.01)
-
-        answer = self.return_q.pop()
-        return answer
 
     def _get_status(self):
         while not self._stop_status.is_set():
@@ -867,15 +932,80 @@ class DevicePanel(wx.Panel):
 
     def close(self):
         self._on_close()
-        if self.com_thread is not None:
-            self.com_thread.remove_communication(self.name)
+
+        if not self.remote:
+            if self.com_thread is not None:
+                self.com_thread.remove_communication(self.name)
+        else:
+            self.com_thread.stop()
+
+            if not self.com_timeout_event.is_set():
+                self.com_thread.join(5)
+
         self._stop_status.set()
+        self._status_thread.join()
 
     def _on_close(self):
         """Device specific stuff goes here"""
         pass
 
+def send_cmd(cmd, cmd_q, return_q, timeout_event, return_lock, remote,
+    remote_dev, get_response=False, is_status=False, status_period=1,
+    add_status=True):
 
+    if remote:
+        if is_status:
+            device = '{}_status'.format(remote_dev)
+            cmd = [cmd, status_period, add_status]
+        else:
+            device = '{}'.format(remote_dev)
+
+        full_cmd = {'device': device, 'command': cmd, 'response': get_response}
+
+    else:
+        full_cmd = cmd
+
+    if not remote:
+        with return_lock:
+            cmd_q.append(full_cmd)
+            result = wait_for_response(return_q, timeout_event, remote)
+
+    else:
+        if get_response:
+            with return_lock:
+                cmd_q.append(full_cmd)
+                result = wait_for_response(return_q, timeout_event, remote)
+
+        else:
+            cmd_q.append(full_cmd)
+
+    if get_response:
+        if result is not None and result[0] == cmd[1][0] and result[1] == cmd[0]:
+            ret_val = result[2]
+        else:
+            ret_val = None
+    else:
+        ret_val = None
+
+    return ret_val
+
+def wait_for_response(return_q, timeout_event, remote):
+    start_count = len(return_q)
+    while len(return_q) == start_count:
+        time.sleep(0.01)
+
+        if remote and timeout_event.is_set():
+            break
+
+    if remote:
+        if not timeout_event.is_set():
+            answer = return_q.pop()
+        else:
+            answer = None
+    else:
+        answer = return_q.pop()
+
+    return answer
 
 class DeviceFrame(wx.Frame):
     """
@@ -883,7 +1013,7 @@ class DeviceFrame(wx.Frame):
     Only meant to be used when the device module is run directly,
     rather than when it is imported into another program.
     """
-    def __init__(self, name, comm_thread, device_panel, *args, **kwargs):
+    def __init__(self, name, settings, device_panel, *args, **kwargs):
         """
         Initializes the device frame. Takes frame name, utils.CommManager thread
         (or subclass), the device_panel class, and args and kwargs for the wx.Frame class.
@@ -895,15 +1025,13 @@ class DeviceFrame(wx.Frame):
 
         logger.debug('Setting up the DeviceFrame %s', self.name)
 
-        self.com_thread = comm_thread
+        self.settings = settings
 
         self.Bind(wx.EVT_CLOSE, self._on_exit)
 
         self.devices =[]
 
-        top_sizer = self._create_layout()
-
-        self.SetSizer(top_sizer)
+        self._create_layout()
 
         self.Fit()
         self.Raise()
@@ -924,33 +1052,19 @@ class DeviceFrame(wx.Frame):
         """Creates the layout"""
 
         #Overwrite this
-        new_device_panel = self.device_panel(self, wx.ID_ANY, self.cmd_q,
-            self.return_q, self.status_q, device)
-
         self.sizer = wx.BoxSizer(wx.HORIZONTAL)
-        self.sizer.Add(panel, flag=wx.RESERVE_SPACE_EVEN_IF_HIDDEN)
 
-        self.sizer.Hide(panel, recursive=True)
+        device_sizer = wx.BoxSizer(wx.VERTICAL)
+        device_sizer.Add(self.sizer, 1, flag=wx.EXPAND)
 
-        button_panel = wx.Panel(self)
+        self.device_parent = wx.Panel(self)
 
-        add_device = wx.Button(button_panel, label='Add device')
-        add_device.Bind(wx.EVT_BUTTON, self._on_add_device)
-
-        button_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        button_sizer.Add(add_device)
-
-        button_panel_sizer = wx.BoxSizer(wx.VERTICAL)
-        button_panel_sizer.Add(wx.StaticLine(button_panel), flag=wx.EXPAND|wx.TOP|wx.BOTTOM, border=2)
-        button_panel_sizer.Add(button_sizer, flag=wx.ALIGN_RIGHT|wx.BOTTOM|wx.RIGHT, border=2)
-
-        button_panel.SetSizer(button_panel_sizer)
+        self.device_parent.SetSizer(device_sizer)
 
         top_sizer = wx.BoxSizer(wx.VERTICAL)
-        top_sizer.Add(self.sizer, flag=wx.EXPAND)
-        top_sizer.Add(button_panel, flag=wx.EXPAND)
+        top_sizer.Add(self.device_parent, 1, flag=wx.EXPAND)
 
-        return top_sizer
+        self.SetSizer(top_sizer)
 
     def _init_devices(self):
         """
@@ -974,12 +1088,22 @@ class DeviceFrame(wx.Frame):
 
         logger.info('Initializing %s devices on startup', str(len(self.setup_devices)))
 
-        for device in self.setup_devices:
-            new_device = self.device_panel(self, wx.ID_ANY, self.com_thread,
-                device)
+        if self.setup_devices is not None:
+            for device in self.setup_devices:
+                dev_settings = {}
+                for key, val in self.settings.items():
+                    if key != 'com_thread':
+                        dev_settings[key] = copy.deepcopy(val)
+                    else:
+                        dev_settings[key] = val
 
-            self.sizer.Add(new_device, 1, flag=wx.EXPAND)
-            self.devices.append(new_device)
+                dev_settings['device_data'] = device
+                new_device = self.device_panel(self.device_parent, wx.ID_ANY,
+                    dev_settings)
+
+                self.sizer.Add(new_device, 1, flag=wx.EXPAND|wx.ALL,
+                    border=self._FromDIP(3))
+                self.devices.append(new_device)
 
         self.Layout()
         self.Fit()
@@ -1014,17 +1138,6 @@ class DeviceFrame(wx.Frame):
             self.Fit()
 
         return
-
-    def _get_ports(self):
-        """
-        Gets a list of active comports.
-
-        .. note:: This doesn't update after the program is opened.
-        """
-        port_info = list_ports.comports()
-        self.ports = [port.device for port in port_info]
-
-        logger.debug('Found the following comports for the DeviceFrame: %s', ' '.join(self.ports))
 
     def _on_exit(self, evt):
         """

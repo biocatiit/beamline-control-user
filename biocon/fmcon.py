@@ -50,6 +50,8 @@ except Exception:
     except Exception:
         pass
 
+import utils
+
 print_lock = threading.RLock()
 
 
@@ -63,7 +65,7 @@ class FlowMeter(object):
     documentation contains an example.
     """
 
-    def __init__(self, device, name, base_units):
+    def __init__(self, name, device, base_units, comm_lock=None):
         """
         :param str device: The device comport
 
@@ -80,7 +82,12 @@ class FlowMeter(object):
         self._units = self._base_units
         self._flow_mult = 1.
 
-        self.units = self._base_units
+        self.connected = False
+
+        if comm_lock is None:
+            self.comm_lock = threading.Lock()
+        else:
+            self.comm_lock = comm_lock
 
 
     def __repr__(self):
@@ -88,6 +95,11 @@ class FlowMeter(object):
 
     def __str__(self):
         return '{} {}, connected to {}'.format(self.__class__.__name__, self.name, self.device)
+
+    def connect(self):
+        # Overwrite
+        if not self.connected:
+            self.connected = True
 
     @property
     def flow_rate(self):
@@ -146,6 +158,9 @@ class FlowMeter(object):
     def stop(self):
         pass
 
+    def disconnect(self):
+        pass
+
 class BFS(FlowMeter):
     """
     This class contains information for initializing and communicating with
@@ -156,7 +171,7 @@ class BFS(FlowMeter):
         >>> print(my_bfs.flow_rate)
     """
 
-    def __init__(self, device, name, bfs_filter=1):
+    def __init__(self, name, device):
         """
         This makes the initial serial connection, and then sets the MForce
         controller parameters to the correct values.
@@ -166,29 +181,39 @@ class BFS(FlowMeter):
         :param str name: A unique identifier for the pump
 
         :param float bfs_filter: Smoothing factor for measurement. 1 = minimum
-            filter, 0.00001 = maximum filter. Defaults to 1
+            filter, 0.00001 = maximum filter. Defaults to 0.5
         """
-        com = device.lstrip('COM')
-        device = "ASRL{}::INSTR".format(com).encode('ascii')
-        FlowMeter.__init__(self, device, name, 'uL/min')
+
+        FlowMeter.__init__(self, name, device, 'uL/min')
+
         logstr = ("Initializing flow meter {} on port {}".format(self.name,
             self.device))
         logger.info(logstr)
 
-        self.instr_ID = ctypes.c_int32()
-        error = Elveflow.BFS_Initialization(device,
-            ctypes.byref(self.instr_ID))
-        logger.exception('Initialization error: {}'.format(error))
+        self.connect()
 
-        self._filter = bfs_filter
+        self.filter = 0.5
 
+    def connect(self):
+        if not self.connected:
+            com = self.device.lstrip('COM')
+            self.api_device = "ASRL{}::INSTR".format(com).encode('ascii')
+
+            self.instr_ID = ctypes.c_int32()
+            with self.comm_lock:
+                error = Elveflow.BFS_Initialization(self.api_device,
+                    ctypes.byref(self.instr_ID))
+            logger.exception('Initialization error: {}'.format(error))
+
+            self.connected = True
 
     @property
     def flow_rate(self):
         self.density
 
         flow = ctypes.c_double(-1)
-        error = Elveflow.BFS_Get_Flow(self.instr_ID.value, ctypes.byref(flow))
+        with self.comm_lock:
+            error = Elveflow.BFS_Get_Flow(self.instr_ID.value, ctypes.byref(flow))
         flow = float(flow.value)*self._flow_mult
         logger.debug('Flow rate ({}): {}'.format(self.units, flow))
 
@@ -197,7 +222,9 @@ class BFS(FlowMeter):
     @property
     def density(self):
         density = ctypes.c_double(-1)
-        error = Elveflow.BFS_Get_Density(self.instr_ID.value, ctypes.byref(density))
+        with self.comm_lock:
+            error = Elveflow.BFS_Get_Density(self.instr_ID.value,
+                ctypes.byref(density))
         density = float(density.value)
         logger.debug('Density: {}'.format(density))
 
@@ -206,7 +233,9 @@ class BFS(FlowMeter):
     @property
     def temperature(self):
         temperature = ctypes.c_double(-1)
-        error = Elveflow.BFS_Get_Temperature(self.instr_ID.value, ctypes.byref(temperature))
+        with self.comm_lock:
+            error = Elveflow.BFS_Get_Temperature(self.instr_ID.value,
+                ctypes.byref(temperature))
         temperature = float(temperature.value)
         logger.debug('Temperature: {}'.format(temperature))
 
@@ -221,10 +250,12 @@ class BFS(FlowMeter):
         self._filter = bfs_filter
 
         cfilter = ctypes.c_double(self._filter) #convert to c_double
-        error = Elveflow.BFS_Set_Filter(self.instr_ID.value, cfilter)
+        with self.comm_lock:
+            error = Elveflow.BFS_Set_Filter(self.instr_ID.value, cfilter)
 
     def stop(self):
-        Elveflow.BFS_Destructor(self.instr_ID.value)
+        with self.comm_lock:
+            Elveflow.BFS_Destructor(self.instr_ID.value)
 
 
 class SoftFlowMeter(FlowMeter):
@@ -237,7 +268,7 @@ class SoftFlowMeter(FlowMeter):
     documentation contains an example.
     """
 
-    def __init__(self, device, name):
+    def __init__(self, name, device=None):
         """
         :param str device: The device comport
 
@@ -246,9 +277,14 @@ class SoftFlowMeter(FlowMeter):
         :param str base_unis: Units reported by the flow meter. Should be one
             of: nL/s, nL/min, uL/s, uL/min, mL/s, mL/min
         """
-        FlowMeter.__init__(self, device, name, 'mL/min')
+        FlowMeter.__init__(self, name, device, 'mL/min')
 
         self._flow_rate = 0
+
+        self.density = 1
+        self.temperature = 20
+
+        self.connect()
 
     @property
     def flow_rate(self):
@@ -263,162 +299,58 @@ class SoftFlowMeter(FlowMeter):
 
     @flow_rate.setter
     def flow_rate(self, rate):
-        self._flow_rate = rate
+        with self.comm_lock:
+            self._flow_rate = rate
 
-class FlowMeterCommThread(threading.Thread):
+class FlowMeterCommThread(utils.CommManager):
     """
     This class creates a control thread for flow meters attached to the system.
     This thread is designed for using a GUI application. For command line
     use, most people will find working directly with a flow meter object much
-    more transparent. Below you'll find an example that initializes a
-    :py:class:`BFS` and measures the flow. ::
-
-        import collections
-        import threading
-
-        pump_cmd_q = collections.deque()
-        abort_event = threading.Event()
-        my_pumpcon = PumpCommThread(pump_cmd_q, abort_event)
-        my_pumpcon.start()
-
-        init_cmd = ('connect', ('COM6', 'pump2', 'VICI_M50'),
-            {'flow_cal': 626.2, 'backlash_cal': 9.278})
-        flow_rate_cmd = ('set_flow_rate', ('pump2', 2000), {})
-        start_cmd = ('start_flow', ('pump2',), {})
-        stop_cmd = ('stop', ('pump2',), {})
-
-        pump_cmd_q.append(init_cmd)
-        pump_cmd_q.append(start_cmd)
-        pump_cmd_q.append(flow_rate_cmd)
-        time.sleep(5)
-        pump_cmd_q.append(stop_cmd)
-
-        my_pumpcon.stop()
+    more transparent.
     """
 
-    def __init__(self, command_queue, return_queue, abort_event, name=None):
+    def __init__(self, name):
         """
-        Initializes the custom thread. Important parameters here are the
-        list of known commands ``_commands`` and known pumps ``known_fms``.
-
-        :param collections.deque command_queue: The queue used to pass commands
-            to the thread.
-
-        :param collections.deque return_queue: The queue used to return data
-            from the thread.
-
-        :param threading.Event abort_event: An event that is set when the thread
-            needs to abort, and otherwise is not set.
+        Initializes the custom thread.
         """
-        threading.Thread.__init__(self, name=name)
-        self.daemon = True
+        utils.CommManager.__init__(self, name)
 
         logger.info("Starting flow meter control thread: %s", self.name)
 
-        self.command_queue = command_queue
-        self.return_queue = return_queue
-        self._abort_event = abort_event
-        self._stop_event = threading.Event()
+        self._commands = {
+            'connect'                       : self._connect_device,
+            'get_flow_rate'                 : self._get_flow_rate,
+            'get_units'                     : self._get_units,
+            'set_units'                     : self._set_units,
+            'get_density'                   : self._get_density,
+            'get_temperature'               : self._get_temperature,
+            'disconnect'                    : self._disconnect_device,
+            'get_fr_multi'                  : self._get_flow_rate_multiple,
+            'get_all_multi'                 : self._get_all_multiple,
+            'set_flow_rate'                 : self._set_flow_rate, #Simulations only!
+            'get_density_and_temperature'   : self._get_density_and_temperature,
+            'get_filter'                    : self._get_filter,
+            'set_filter'                    : self._set_filter,
+            'get_settings'                  : self._get_settings,
+            }
 
-        self._commands = {'connect'         : self._connect_fm,
-                        'get_flow_rate'     : self._get_flow_rate,
-                        'set_units'         : self._set_units,
-                        'get_density'       : self._get_density,
-                        'get_temperature'   : self._get_temperature,
-                        'disconnect'        : self._disconnect,
-                        'get_fr_multi'      : self._get_flow_rate_multiple,
-                        'get_all_multi'     : self._get_all_multiple,
-                        'set_flow_rate'     : self._set_flow_rate, #Simulations only!
-                        }
+        self._connected_devices = OrderedDict()
+        self._connected_coms = OrderedDict()
 
-        self._connected_fms = OrderedDict()
-
-        self.known_fms = {'BFS' : BFS,
+        self.known_devices = {
+            'BFS' : BFS,
             'Soft'  : SoftFlowMeter,
             }
 
-    def run(self):
-        """
-        Custom run method for the thread.
-        """
-        while True:
-            if len(self.command_queue) > 0:
-                logger.debug("Getting new command")
-                command, args, kwargs = self.command_queue.popleft()
-            else:
-                command = None
+    def _cleanup_devices(self):
+        for device in self._connected_devices.values():
+            device.stop()
 
-            if self._abort_event.is_set():
-                logger.debug("Abort event detected")
-                self._abort()
-                command = None
+    def _additional_new_comm(self, name):
+        pass
 
-            if self._stop_event.is_set():
-                logger.debug("Stop event detected")
-                self._abort()
-                break
-
-            if command is not None:
-                logger.debug("Processing cmd '%s' with args: %s and kwargs: %s ", command, ', '.join(['{}'.format(a) for a in args]), ', '.join(['{}:{}'.format(kw, item) for kw, item in kwargs.items()]))
-                try:
-                    self._commands[command](*args, **kwargs)
-                except Exception:
-                    msg = ("Flow meter control thread failed to run command '%s' "
-                        "with args: %s and kwargs: %s " %(command,
-                        ', '.join(['{}'.format(a) for a in args]),
-                        ', '.join(['{}:{}'.format(kw, item) for kw, item in kwargs.items()])))
-                    logger.exception(msg)
-
-                    if command == 'connect' or command == 'disconnect':
-                        self.return_queue.append((command, False))
-
-            else:
-                time.sleep(0.01)
-
-        if self._stop_event.is_set():
-            self._stop_event.clear()
-        else:
-            self._abort()
-
-        for fm in self._connected_fms.values():
-            fm.stop()
-
-        logger.info("Quitting flow meter control thread: %s", self.name)
-
-    def _connect_fm(self, device, name, fm_type, **kwargs):
-        """
-        This method connects to a flow meter by creating a new :py:class:`FlowMeter`
-        subclass object (e.g. a new :py:class:`BFS` object). This pump is saved
-        in the thread and can be called later to do stuff. All pumps must be
-        connected before they can be used.
-
-        :param str device: The device comport
-
-        :param str name: A unique identifier for the pump
-
-        :param str pump_type: A pump type in the ``known_fms`` dictionary.
-
-        :param \*\*kwargs: This function accepts arbitrary keyword args that
-            are passed directly to the :py:class:`FlowMeter` subclass that is
-            called. For example, for a :py:class:`BFS` you could pass ``bfs_filter``.
-        """
-        logger.info("Connecting flow meter %s", name)
-        new_fm = self.known_fms[fm_type](device, name, **kwargs)
-        self._connected_fms[name] = new_fm
-        logger.debug("Flow meter %s connected", name)
-
-        self.return_queue.append(('connected', True))
-
-    def _disconnect(self, name):
-        logger.info("Disconnecting flow meter %s", name)
-        fm = self._connected_fms[name]
-        fm.stop()
-        del self._connected_fms[name]
-        logger.debug("Flow meter %s disconnected", name)
-
-        self.return_queue.append(('disconnected', True))
-
-    def _get_flow_rate(self, name):
+    def _get_flow_rate(self, name, **kwargs):
         """
         This method gets the flow rate measured by a flow meter.
 
@@ -426,13 +358,18 @@ class FlowMeterCommThread(threading.Thread):
             in the :py:func:`_connect_fm` method.
         """
         logger.debug("Getting flow meter %s flow rate", name)
-        fm = self._connected_fms[name]
-        flow_rate = fm.flow_rate
-        logger.debug("Flow meter %s flow rate: %f", name, flow_rate)
 
-        self.return_queue.append(('flow_rate', flow_rate))
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
-    def _set_flow_rate(self, name, flow_rate):
+        device = self._connected_devices[name]
+        val = device.flow_rate
+
+        self._return_value((name, cmd, val), comm_name)
+
+        logger.debug("Flow meter %s flow rate: %f", name, val)
+
+    def _set_flow_rate(self, name, val, **kwargs):
         """
         This method sets the flow rate measured by a simulated flow meter.
 
@@ -440,13 +377,18 @@ class FlowMeterCommThread(threading.Thread):
             in the :py:func:`_connect_fm` method.
         """
         logger.debug("Setting flow meter %s flow rate", name)
-        fm = self._connected_fms[name]
-        fm.flow_rate = flow_rate
-        logger.debug("Flow meter %s flow rate set to: %f", name, flow_rate)
 
-        self.return_queue.append(('set_flow_rate', True))
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
-    def _get_density(self, name):
+        device = self._connected_devices[name]
+        device.flow_rate = val
+
+        self._return_value((name, cmd, True), comm_name)
+
+        logger.debug("Flow meter %s flow rate set to: %f", name, val)
+
+    def _get_density(self, name, **kwargs):
         """
         This method gets the flow rate measured by a flow meter.
 
@@ -456,13 +398,18 @@ class FlowMeterCommThread(threading.Thread):
         .. note:: Only the BFS flow meters can read density as well as flow rate.
         """
         logger.debug("Getting flow meter %s density", name)
-        fm = self._connected_fms[name]
-        density = fm.density
-        logger.debug("Flow meter %s density: %f", name, density)
 
-        self.return_queue.append(('density', density))
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
-    def _get_temperature(self, name):
+        device = self._connected_devices[name]
+        val = device.density
+
+        self._return_value((name, cmd, val), comm_name)
+
+        logger.debug("Flow meter %s density: %f", name, val)
+
+    def _get_temperature(self, name, **kwargs):
         """
         This method gets the flow rate measured by a flow meter.
 
@@ -472,13 +419,39 @@ class FlowMeterCommThread(threading.Thread):
         .. note:: Only the BFS flow meters can read temperature as well as flow rate.
         """
         logger.debug("Getting flow meter %s temperature", name)
-        fm = self._connected_fms[name]
-        temperature = fm.temperature
-        logger.debug("Flow meter %s temperature: %f", name, temperature)
 
-        self.return_queue.append(('temperature', temperature))
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
-    def _set_units(self, name, units):
+        device = self._connected_devices[name]
+        val = device.temperature
+
+        self._return_value((name, cmd, val), comm_name)
+
+        logger.debug("Flow meter %s temperature: %f", name, val)
+
+    def _get_units(self, name, **kwargs):
+        """
+        This method gets the flow rate measured by a flow meter.
+
+        :param str name: The unique identifier for a flow meter that was used
+            in the :py:func:`_connect_fm` method.
+
+        .. note:: Only the BFS flow meters can read units as well as flow rate.
+        """
+        logger.debug("Getting flow meter %s units", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        val = device.units
+
+        self._return_value((name, cmd, val), comm_name)
+
+        logger.debug("Flow meter %s units: %s", name, val)
+
+    def _set_units(self, name, val, **kwargs):
         """
         This method sets the units for the flow rate for a flow meter. This
         can be set to: nL/s, nL/min, uL/s, uL/min, mL/s, mL/min.
@@ -486,14 +459,21 @@ class FlowMeterCommThread(threading.Thread):
         :param str name: The unique identifier for a flow meter that was used
             in the :py:func:`_connect_fm` method.
 
-        :param str units: The units for the fm.
+        :param str val: The units for the fm.
         """
         logger.info("Setting flow meter %s units", name)
-        fm = self._connected_fms[name]
-        fm.units = units
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        device.units = val
+
+        self._return_value((name, cmd, True), comm_name)
+
         logger.debug("Flow meter %s units set", name)
 
-    def _get_flow_rate_multiple(self, names):
+    def _get_flow_rate_multiple(self, names, **kwargs):
         """
         This method gets the flow rate measured by a flow meter.
 
@@ -501,25 +481,34 @@ class FlowMeterCommThread(threading.Thread):
             in the :py:func:`_connect_fm` method.
         """
         logger.debug("Getting multiple flow rates")
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
         flow_rates = []
         for name in names:
-            fm = self._connected_fms[name]
-            flow_rate = fm.flow_rate
-            flow_rates.append(flow_rate)
+            device = self._connected_devices[name]
+            val = device.flow_rate
+            flow_rates.append(val)
 
-        self.return_queue.append(('multi_flow', names, flow_rates))
+        self._return_value((names, cmd, [names, flow_rates]),
+            comm_name)
 
-    def _get_all_multiple(self, names):
+    def _get_all_multiple(self, names, **kwargs):
         """
         This method gets the flow rate measured by a flow meter.
 
         :param str name: The unique identifier for a flow meter that was used
             in the :py:func:`_connect_fm` method.
         """
-        logger.debug("Getting multiple flow rates")
+        logger.debug("Getting multiple readouts")
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
         vals = []
         for name in names:
-            fm = self._connected_fms[name]
+            fm = self._connected_devices[name]
             if isinstance(fm, BFS):
                 density = fm.density
                 temperature = fm.temperature
@@ -529,25 +518,89 @@ class FlowMeterCommThread(threading.Thread):
             flow_rate = fm.flow_rate
             vals.append((flow_rate, density, temperature))
 
-        self.return_queue.append(('multi_all', names, vals))
+        self._return_value((names, cmd, [names, vals]), comm_name)
 
-    def _abort(self):
+    def _get_density_and_temperature(self, name, **kwargs):
+        logger.debug('Getting density and temperature')
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        val_d = device.density
+        val_t = device.temperature
+
+        self._return_value((name, 'get_density_and_temperature', [val_d, val_t]),
+            comm_name)
+
+    def _get_filter(self, name, **kwargs):
         """
-        Clears the ``command_queue`` and the ``return_queue``.
+        This method gets the filter setting for a flow meter.
+
+        :param str name: The unique identifier for a flow meter that was used
+            in the :py:func:`_connect_fm` method.
         """
-        logger.info("Aborting flow meter control thread %s current and future commands", self.name)
-        self.command_queue.clear()
-        self.return_queue.clear()
+        logger.debug("Getting flow meter %s filter", name)
 
-        self._abort_event.clear()
-        logger.debug("Flow meter control thread %s aborted", self.name)
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
 
-    def stop(self):
-        """Stops the thread cleanly."""
-        logger.info("Starting to clean up and shut down flow meter control thread: %s", self.name)
-        self._stop_event.set()
+        device = self._connected_devices[name]
+        val = device.filter
 
-class FlowMeterPanel(wx.Panel):
+        self._return_value((name, cmd, val), comm_name)
+
+        logger.debug("Flow meter %s filter: %f", name, val)
+
+    def _set_filter(self, name, val, **kwargs):
+        """
+        This method sets the filter setting for a flow meter.
+
+        :param str name: The unique identifier for a flow meter that was used
+            in the :py:func:`_connect_fm` method.
+        """
+        logger.debug("Setting flow meter %s filter", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        device.filter = val
+
+        self._return_value((name, cmd, True), comm_name)
+
+        logger.debug("Flow meter %s filter set to: %f", name, val)
+
+    def _get_settings(self, name, **kwargs):
+        """
+        This method gets the filter setting for a flow meter.
+
+        :param str name: The unique identifier for a flow meter that was used
+            in the :py:func:`_connect_fm` method.
+        """
+        logger.debug("Getting flow meter %s settings", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        units = device.units
+
+        try:
+            filt = device.filter
+        except Exception:
+            filt = None
+
+        ret_vals = {
+            'units'     : units,
+            'filter'    : filt,
+            }
+
+        self._return_value((name, cmd, ret_vals), comm_name)
+
+        logger.debug("Flow meter %s settings: %s", name, ret_vals)
+
+class FlowMeterPanel(utils.DevicePanel):
     """
     This flow meter panel supports standard settings, including connection settings,
     for a flow meter. It is meant to be embedded in a larger application and can
@@ -559,9 +612,8 @@ class FlowMeterPanel(wx.Panel):
     ``bfs_pump_sizer`` is constructed in the :py:func:`_create_layout` function,
     and then add in type switching in the :py:func:`_on_type` function.
     """
-    def __init__(self, parent, panel_id, panel_name, all_comports, fm_cmd_q,
-        fm_return_q, known_fms, fm_name, fm_type=None, comport=None, fm_args=[],
-        fm_kwargs={}):
+    def __init__(self, parent, panel_id, settings, *args,
+        **kwargs):
         """
         Initializes the custom thread. Important parameters here are the
         list of known commands ``_commands`` and known pumps ``known_fms``.
@@ -570,267 +622,215 @@ class FlowMeterPanel(wx.Panel):
 
         :param int panel_id: wx ID for the panel.
 
-        :param str panel_name: Name for the panel
-
-        :param list all_comports: A list containing all comports that the flow meter
-            could be connected to.
-
-        :param collections.deque fm_cmd_q: The ``fm_cmd_q`` that was passed to
-            the :py:class:`FlowMeterCommThread`.
-
-        :param collections.deque fm_return_q: The ``fm_return_q`` that was passed to
-            the :py:class:`FlowMeterCommThread`.
-
-        :param list known_fms: The list of known flow meter types, obtained from
-            the :py:class:`FlowMeterCommThread`.
-
-        :param str fm_name: An identifier for the flow meter, displayed in the
-            flow meter panel.
-
-        :param str fm_type: One of the ``known_fms``, corresponding to the flow
-            meter connected to this panel. Only required if you are connecting
-            the flow meter when the panel is first set up (rather than manually
-            later).
-
-        :param str comport: The comport the flow meter is connected to. Only required
-            if you are connecting the flow meter when the panel is first set up (rather
-            than manually later).
-
-        :param list fm_args: Flow meter specific arguments for initialization.
-            Only required if you are connecting the flow meter when the panel is first
-            set up (rather than manually later).
-
-        :param dict fm_kwargs: Flow meter specific keyword arguments for initialization.
-            Only required if you are connecting the flow meter when the panel is first
-            set up (rather than manually later).
-
         """
 
-        wx.Panel.__init__(self, parent, panel_id, name=panel_name)
-        logger.debug('Initializing FlowMeterPanel for flow meter %s', fm_name)
-
-        self.name = fm_name
-        self.fm_cmd_q = fm_cmd_q
-        self.all_comports = all_comports
-        self.known_fms = known_fms
-        self.answer_q = fm_return_q
-        self.connected = False
-
-        self.top_sizer = self._create_layout()
-
-        self._flow_timer = wx.Timer(self)
-        self._measurement_timer = wx.Timer(self)
-        self.Bind(wx.EVT_TIMER, self._on_flow_timer, self._flow_timer)
-        self.Bind(wx.EVT_TIMER, self._on_meas_timer, self._measurement_timer)
-
-        self.SetSizer(self.top_sizer)
-
-        self._initfm(fm_type, comport, fm_args, fm_kwargs)
-
+        super(FlowMeterPanel, self).__init__(parent, panel_id, settings,
+            *args, **kwargs)
 
     def _create_layout(self):
         """Creates the layout for the panel."""
         self.status = wx.StaticText(self, label='Not connected')
 
-        status_grid = wx.FlexGridSizer(rows=2, cols=2, vgap=2, hgap=2)
+        status_grid = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(2),
+            hgap=self._FromDIP(5))
         status_grid.AddGrowableCol(1)
-        status_grid.Add(wx.StaticText(self, label='Flow meter name:'))
-        status_grid.Add(wx.StaticText(self, label=self.name), 1, wx.EXPAND)
+        status_grid.Add(wx.StaticText(self, label='Flow meter name:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        status_grid.Add(wx.StaticText(self, label=self.name), 1,
+            flag=wx.EXPAND|wx.ALIGN_CENTER_VERTICAL)
         status_grid.Add(wx.StaticText(self, label='Status: '))
-        status_grid.Add(self.status, 1, wx.EXPAND)
+        status_grid.Add(self.status, 1, flag=wx.EXPAND|wx.ALIGN_CENTER_HORIZONTAL)
 
         status_sizer = wx.StaticBoxSizer(wx.StaticBox(self, label='Info'),
             wx.VERTICAL)
         status_sizer.Add(status_grid, 1, wx.EXPAND)
 
-        self.type_ctrl = wx.Choice(self,
-            choices=[item.replace('_', ' ') for item in self.known_fms.keys()],
-            style=wx.CB_SORT)
-        self.type_ctrl.SetSelection(0)
-        self.com_ctrl = wx.Choice(self, choices=self.all_comports, style=wx.CB_SORT)
         self.vol_unit_ctrl = wx.Choice(self, choices=['nL', 'uL', 'mL'])
         self.vol_unit_ctrl.SetSelection(1)
         self.time_unit_ctrl = wx.Choice(self, choices=['s', 'min'])
         self.time_unit_ctrl.SetSelection(1)
 
-        self.type_ctrl.Bind(wx.EVT_CHOICE, self._on_type)
         self.vol_unit_ctrl.Bind(wx.EVT_CHOICE, self._on_units)
         self.time_unit_ctrl.Bind(wx.EVT_CHOICE, self._on_units)
 
-        gen_settings_sizer = wx.FlexGridSizer(rows=4, cols=2, vgap=2, hgap=2)
+        gen_settings_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(2),
+            hgap=self._FromDIP(5))
         gen_settings_sizer.AddGrowableCol(1)
-        gen_settings_sizer.Add(wx.StaticText(self, label='Flow meter type:'))
-        gen_settings_sizer.Add(self.type_ctrl, 1, wx.EXPAND)
-        gen_settings_sizer.Add(wx.StaticText(self, label='COM port:'))
-        gen_settings_sizer.Add(self.com_ctrl, 1, wx.EXPAND)
-        gen_settings_sizer.Add(wx.StaticText(self, label='Volume unit:'))
-        gen_settings_sizer.Add(self.vol_unit_ctrl)
-        gen_settings_sizer.Add(wx.StaticText(self, label='Time unit:'))
-        gen_settings_sizer.Add(self.time_unit_ctrl)
+        gen_settings_sizer.Add(wx.StaticText(self, label='Volume unit:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        gen_settings_sizer.Add(self.vol_unit_ctrl, flag=wx.ALIGN_CENTER_VERTICAL)
+        gen_settings_sizer.Add(wx.StaticText(self, label='Time unit:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        gen_settings_sizer.Add(self.time_unit_ctrl, flag=wx.ALIGN_CENTER_VERTICAL)
 
 
-        self.flow_rate = wx.TextCtrl(self)
+        self.flow_rate = wx.StaticText(self, size=self._FromDIP((60, -1)),
+            style=wx.ST_NO_AUTORESIZE)
         self.flow_units_lbl = wx.StaticText(self)
 
-        gen_results_sizer = wx.FlexGridSizer(rows=1, cols=3, vgap=2, hgap=2)
-        gen_results_sizer.AddGrowableCol(1)
-        gen_results_sizer.Add(wx.StaticText(self, label='Flow rate:'))
-        gen_results_sizer.Add(self.flow_rate, 1, wx.EXPAND)
-        gen_results_sizer.Add(self.flow_units_lbl)
+        self.gen_results_sizer = wx.FlexGridSizer(cols=3, vgap=self._FromDIP(2),
+            hgap=self._FromDIP(5))
+        self.gen_results_sizer.AddGrowableCol(1)
+        self.gen_results_sizer.Add(wx.StaticText(self, label='Flow rate:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        self.gen_results_sizer.Add(self.flow_rate, 1,
+            flag=wx.EXPAND|wx.ALIGN_CENTER_VERTICAL)
+        self.gen_results_sizer.Add(self.flow_units_lbl, flag=wx.ALIGN_CENTER_VERTICAL)
 
 
         ###BFS specific stuff
-        self.bfs_filter = wx.TextCtrl(self, value='0.001', style=wx.TE_PROCESS_ENTER)
-        self.bfs_filter.Bind(wx.EVT_TEXT_ENTER, self._on_filter)
+        self.bfs_filter = utils.ValueEntry(self._on_filter, self,
+            validator=utils.CharValidator('float_pos_te'))
 
-        self.bfs_settings_sizer = wx.FlexGridSizer(rows=1, cols=2, vgap=2, hgap=2)
+        self.bfs_settings_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(2),
+            hgap=self._FromDIP(5))
         self.bfs_settings_sizer.AddGrowableCol(1)
-        self.bfs_settings_sizer.Add(wx.StaticText(self, label='Filter:'))
-        self.bfs_settings_sizer.Add(self.bfs_filter,1, wx.EXPAND)
+        self.bfs_settings_sizer.Add(wx.StaticText(self, label='Filter:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        self.bfs_settings_sizer.Add(self.bfs_filter,1,
+            flag=wx.EXPAND|wx.ALIGN_CENTER_VERTICAL)
 
-        self.bfs_density = wx.TextCtrl(self)
-        self.bfs_temperature = wx.TextCtrl(self)
+        self.bfs_density = wx.StaticText(self, size=self._FromDIP((60, -1)),
+            style=wx.ST_NO_AUTORESIZE)
+        self.bfs_temperature = wx.StaticText(self, size=self._FromDIP((60, -1)),
+            style=wx.ST_NO_AUTORESIZE)
 
-        self.bfs_results_sizer = wx.FlexGridSizer(rows=2, cols=3, vgap=2, hgap=2)
-        self.bfs_results_sizer.Add(wx.StaticText(self, label='Density:'))
-        self.bfs_results_sizer.Add(self.bfs_density)
-        self.bfs_results_sizer.Add(wx.StaticText(self, label='g/L'))
-        self.bfs_results_sizer.Add(wx.StaticText(self, label='Temperature'))
-        self.bfs_results_sizer.Add(self.bfs_temperature)
-        self.bfs_results_sizer.Add(wx.StaticText(self, label='°C'))
+        self.density_label = wx.StaticText(self, label='Density:')
+        self.density_units = wx.StaticText(self, label='g/L')
+        self.temperature_label = wx.StaticText(self, label='Temperature:')
+        self.temperature_units = wx.StaticText(self, label='°C')
+
+        self.gen_results_sizer.Add(self.density_label, flag=wx.ALIGN_CENTER_VERTICAL)
+        self.gen_results_sizer.Add(self.bfs_density, flag=wx.ALIGN_CENTER_VERTICAL)
+        self.gen_results_sizer.Add(self.density_units, flag=wx.ALIGN_CENTER_VERTICAL)
+        self.gen_results_sizer.Add(self.temperature_label, flag=wx.ALIGN_CENTER_VERTICAL)
+        self.gen_results_sizer.Add(self.bfs_temperature, flag=wx.ALIGN_CENTER_VERTICAL)
+        self.gen_results_sizer.Add(self.temperature_units, flag=wx.ALIGN_CENTER_VERTICAL)
         ###End BFS specific stuff
 
-        self.connect_button = wx.Button(self, label='Connect')
-        self.connect_button.Bind(wx.EVT_BUTTON, self._on_connect)
 
         self.settings_box_sizer = wx.StaticBoxSizer(wx.StaticBox(self, label='Settings'),
             wx.VERTICAL)
         self.settings_box_sizer.Add(gen_settings_sizer, flag=wx.EXPAND)
-        self.settings_box_sizer.Add(self.bfs_settings_sizer, flag=wx.EXPAND|wx.TOP, border=2)
-        self.settings_box_sizer.Add(self.connect_button, flag=wx.ALIGN_CENTER_HORIZONTAL|wx.TOP, border=2)
+        self.settings_box_sizer.Add(self.bfs_settings_sizer, flag=wx.EXPAND|wx.TOP,
+            border=self._FromDIP(2))
 
         self.results_box_sizer = wx.StaticBoxSizer(wx.StaticBox(self, label='Readings'),
             wx.VERTICAL)
-        self.results_box_sizer.Add(gen_results_sizer, flag=wx.EXPAND)
-        self.results_box_sizer.Add(self.bfs_results_sizer, flag=wx.EXPAND|wx.TOP, border=2)
+        self.results_box_sizer.Add(self.gen_results_sizer, flag=wx.EXPAND)
 
         top_sizer = wx.BoxSizer(wx.VERTICAL)
         top_sizer.Add(status_sizer, flag=wx.EXPAND)
         top_sizer.Add(self.results_box_sizer, flag=wx.EXPAND)
         top_sizer.Add(self.settings_box_sizer, flag=wx.EXPAND)
 
-        if self.type_ctrl.GetStringSelection() != 'BFS':
-            self.settings_box_sizer.Hide(self.bfs_settings_sizer, recursive=True)
-            self.results_box_sizer.Hide(self.bfs_results_sizer, recursive=True)
-
         vol_unit = self.vol_unit_ctrl.GetStringSelection()
         t_unit = self.time_unit_ctrl.GetStringSelection()
         self.flow_units_lbl.SetLabel('{}/{}'.format(vol_unit, t_unit))
         self.Refresh()
 
-        return top_sizer
-
-    def _initfm(self, fm_type, comport, fm_args, fm_kwargs):
-        """
-        Initializes the flow meter parameters if any were provided. If enough are
-        provided the flow meter is automatically connected.
-
-        :param str fm_type: The flow meter type, corresponding to a ``known_fm``.
-
-        :param str comport: The comport the flow meter is attached to.
-
-        :param list fm_args: The flow meter positional initialization values.
-            Appropriate values depend on the flow meter.
-
-        :param dict fm_kwargs: The flow meter key word arguments. Appropriate
-            values depend on the flow meter.
-        """
-        my_fms = [item.replace('_', ' ') for item in self.known_fms.keys()]
-        if fm_type in my_fms:
-            self.type_ctrl.SetStringSelection(fm_type)
-            self._on_type(None)
-
-        if comport in self.all_comports:
-            self.com_ctrl.SetStringSelection(comport)
-
-        if fm_type == 'BFS':
-            if 'bfs_filter' in fm_kwargs.keys():
-                self.bfs_filter.ChangeValue(fm_kwargs['bfs_filter'])
-
-            if len(fm_args) >= 1:
-                self.bfs_filter.ChangeValue(fm_args[0])
-
-        if fm_type in my_fms and comport in self.all_comports:
-            logger.info('Initialized flow meter %s on startup', self.name)
-            self._connect()
-
-        elif fm_type == 'Soft':
-            logger.info('Initialized flow meter %s on startup', self.name)
-            self._connect()
-
-    def _on_type(self, evt):
-        """Called when the flow meter type is changed in the GUI."""
-        fm = self.type_ctrl.GetStringSelection()
-        logger.info('Changed the flow meter type to %s for flow meter %s', fm, self.name)
-
-        if fm == 'BFS':
-            self.settings_box_sizer.Show(self.bfs_settings_sizer, recursive=True)
-            self.results_box_sizer.Show(self.bfs_results_sizer, recursive=True)
-
-        elif fm == 'Soft':
-            self.settings_box_sizer.Hide(self.bfs_settings_sizer, recursive=True)
-            self.results_box_sizer.Hide(self.bfs_results_sizer, recursive=True)
-
-    def _on_units(self, evt):
-        """Called when the units are changed in the GUI."""
-        vol_unit = self.vol_unit_ctrl.GetStringSelection()
-        t_unit = self.time_unit_ctrl.GetStringSelection()
-
-        self.flow_units_lbl.SetLabel('{}/{}'.format(vol_unit, t_unit))
-
-        self._send_cmd('set_units')
-
-        logger.debug('Changed the flow meter units to %s and %s for flow meter %s', vol_unit, t_unit, self.name)
-
-    def _on_filter(self, evt):
-        pass #Needs to be done!
-
-    def _on_connect(self, evt):
-        """Called when a flow meter is connected in the GUI."""
-        self._connect()
-
-    def _connect(self):
-        """Initializes the flow meter in the FlowMeterCommThread"""
-        fm = self.type_ctrl.GetStringSelection().replace(' ', '_')
-
-        if fm == 'BFS':
-            try:
-                float(self.bfs_filter.GetValue())
-            except Exception:
-                msg = "Calibration values must be numbers."
-                wx.MessageBox(msg, "Error setting calibration values")
-                logger.debug('Failed to connect to flow meter %s because the BFS calibration values were bad', self.name)
-                return
-
-        logger.info('Connected to flow meter %s', self.name)
-        self.connected = True
-        self.connect_button.SetLabel('Reconnect')
-        self._send_cmd('connect')
-        if fm == 'BFS':
-            self._send_cmd('get_density')
-            self._send_cmd('get_temperature')
-        self._send_cmd('get_flow_rate')
-        self._set_status('Connected')
-
-        self._flow_timer.Start(200)
-        answer_thread = threading.Thread(target=self._wait_for_answer)
-        answer_thread.daemon = True
-        answer_thread.start()
-        self._measurement_timer.Start(5000)
+        self.SetSizer(top_sizer)
 
         return
 
-    def _set_status(self, status):
+    def _init_device(self, settings):
+        """
+        Initializes the flow meter.
+        """
+        device_data = settings['device_data']
+        args = device_data['args']
+        kwargs = device_data['kwargs']
+
+        args.insert(0, self.name)
+
+        self.fm_type = args[1]
+
+        if self.fm_type != 'BFS':
+            self.settings_box_sizer.Hide(self.bfs_settings_sizer, recursive=True)
+            self.gen_results_sizer.Hide(self.density_label, recursive=True)
+            self.gen_results_sizer.Hide(self.bfs_density, recursive=True)
+            self.gen_results_sizer.Hide(self.density_units, recursive=True)
+            self.gen_results_sizer.Hide(self.temperature_label, recursive=True)
+            self.gen_results_sizer.Hide(self.bfs_temperature, recursive=True)
+            self.gen_results_sizer.Hide(self.temperature_units, recursive=True)
+
+        connect_cmd = ['connect', args, kwargs]
+
+        self._send_cmd(connect_cmd, True)
+
+        if self.fm_type == 'BFS':
+            density_cmd = ['get_density', [self.name,], {}]
+            ret = self._send_cmd(density_cmd, True)
+
+            if ret is not None:
+                self.bfs_density.SetLabel(str(ret))
+
+            temperature_cmd = ['get_temperature', [self.name,], {}]
+            ret = self._send_cmd(temperature_cmd, True)
+
+            if ret is not None:
+                self.bfs_temperature.SetLabel(str(ret))
+
+            filter_cmd = ['get_filter', [self.name,], {}]
+            ret = self._send_cmd(filter_cmd, True)
+
+            if ret is not None:
+                self.bfs_filter.SafeChangeValue(str(ret))
+
+            d_and_t_cmd = ['get_density_and_temperature', [self.name,], {}]
+            self._update_status_cmd(d_and_t_cmd, 1)
+
+        units_cmd = ['get_units', [self.name,], {}]
+        ret = self._send_cmd(units_cmd, True)
+
+        if ret is not None:
+            self._set_gui_units(ret)
+
+        settings_cmd = ['get_settings', [self.name,], {}]
+        self._update_status_cmd(settings_cmd, 5)
+
+        flow_cmd = ['get_flow_rate', [self.name,], {}]
+        self._update_status_cmd(flow_cmd, 1)
+
+        self._set_status_label('Connected')
+
+        logger.info('Initialized flow meter %s on startup', self.name)
+
+    def _on_units(self, evt):
+        """Called when the units are changed in the GUI."""
+        self._set_units()
+
+    def _set_units(self):
+        vol_unit = self.vol_unit_ctrl.GetStringSelection()
+        t_unit = self.time_unit_ctrl.GetStringSelection()
+
+        units = '{}/{}'.format(vol_unit, t_unit)
+
+        self.flow_units_lbl.SetLabel(units)
+
+        units_cmd = ['set_units', [self.name, units], {}]
+        self._send_cmd(units_cmd)
+
+        logger.debug('Changed the flow meter units to %s and %s for flow meter %s', vol_unit, t_unit, self.name)
+
+    def _set_gui_units(self, units):
+        if units != self.flow_units_lbl.GetLabel():
+            vol_u, t_u = units.split('/')
+
+            self.vol_unit_ctrl.SetStringSelection(vol_u)
+            self.time_unit_ctrl.SetStringSelection(t_u)
+            self.flow_units_lbl.SetLabel(units)
+
+    def _on_filter(self, obj, val):
+        try:
+            val = float(val)
+        except Exception:
+            return
+
+        filter_cmd = ['set_filter', [self.name, val], {}]
+        self._send_cmd(filter_cmd, True)
+
+    def _set_status_label(self, status):
         """
         Changes the status in the GUI.
 
@@ -839,212 +839,73 @@ class FlowMeterPanel(wx.Panel):
         logger.debug('Setting flow meter %s status to %s', self.name, status)
         self.status.SetLabel(status)
 
-    def _on_flow_timer(self, evt):
-        """
-        Called every 100 ms when the flow meter is connected. It gets the
-        flow rate.
-        """
-        self._send_cmd('get_flow_rate')
-
-    def _on_meas_timer(self, evt):
-        if self.type_ctrl.GetStringSelection().replace(' ', '_') == 'BFS':
-            self._send_cmd('get_density')
-            self._send_cmd('get_temperature')
-
-    def _send_cmd(self, cmd):
-        """
-        Sends commands to the pump using the ``fm_cmd_q`` that was given
-        to :py:class:`FlowMeterCommThread`.
-
-        :param str cmd: The command to send, matching the command in the
-            :py:class:`FlowMeterCommThread` ``_commands`` dictionary.
-        """
-        logger.debug('Sending flow meter %s command %s', self.name, cmd)
+    def _set_status(self, cmd, val):
         if cmd == 'get_flow_rate':
-            self.fm_cmd_q.append(('get_flow_rate', (self.name,), {}))
+            if val is not None:
+                val = str(round(val,3))
+
+                if val != self.flow_rate.GetLabel():
+                    self.flow_rate.SetLabel(val)
+
+        elif cmd == 'get_density_and_temperature':
+            if val is not None:
+                val_d, val_t = val
+                val_d = str(round(val_d,3))
+                val_t = str(round(val_t,3))
+
+                if val_d != self.bfs_density.GetLabel():
+                    self.bfs_density.SetLabel(val_d)
+
+                if val_t != self.bfs_temperature.GetLabel():
+                    self.bfs_temperature.SetLabel(val_t)
+
         elif cmd == 'get_density':
-            self.fm_cmd_q.append(('get_density', (self.name,), {}))
+            if val is not None:
+                val = str(round(val,3))
+
+                if val != self.bfs_density.GetLabel():
+                    self.bfs_density.SetLabel(val)
+
         elif cmd == 'get_temperature':
-            self.fm_cmd_q.append(('get_temperature', (self.name,), {}))
-        elif cmd == 'set_units':
-            units = self.flow_units_lbl.GetLabel()
-            self.fm_cmd_q.append(('set_units', (self.name, units), {}))
-        elif cmd == 'connect':
-            com = self.com_ctrl.GetStringSelection()
-            fm = self.type_ctrl.GetStringSelection().replace(' ', '_')
+            if val is not None:
+                val = str(round(val,3))
 
-            args = (com, self.name, fm)
+                if val != self.bfs_temperature.GetLabel():
+                    self.bfs_temperature.SetLabel(val)
 
-            if fm == 'BFS':
-                bfs_filter = float(self.bfs_filter.GetValue())
-                kwargs = {'bfs_filter': bfs_filter}
-            else:
-                kwargs = {}
+        elif cmd == 'get_filter':
+            if str(val) != self.bfs_filter.GetValue():
+                self.bfs_filter.SafeChangeValue(str(val))
 
-            self.fm_cmd_q.append(('connect', args, kwargs))
+        elif cmd == 'get_units':
+            self._set_gui_units(val)
 
-    def _wait_for_answer(self):
-        while True:
-            if len(self.answer_q) > 0:
-                answer = self.answer_q.popleft()
-                if answer[0] == 'flow_rate':
-                    wx.CallAfter(self.flow_rate.ChangeValue, str(round(answer[1],3)))
-                elif answer[0] == 'density':
-                    wx.CallAfter(self.bfs_density.ChangeValue, str(round(answer[1],3)))
-                elif answer[0] == 'temperature':
-                    wx.CallAfter(self.bfs_temperature.ChangeValue, str(round(answer[1],3)))
-            else:
-                time.sleep(0.05)
+        elif cmd == 'get_settings':
+            units = val['units']
+            filt = val['filter']
+
+            self._set_gui_units(units)
+
+            if filt is not None:
+                if str(filt) != self.bfs_filter.GetValue():
+                    self.bfs_filter.SafeChangeValue(str(filt))
 
 
-class FlowMeterFrame(wx.Frame):
-    """
-    A lightweight frame allowing one to work with arbitrary number of flow meters.
-    Only meant to be used when the fscon module is run directly,
-    rather than when it is imported into another program.
-    """
-    def __init__(self, *args, **kwargs):
+class FlowMeterFrame(utils.DeviceFrame):
+
+    def __init__(self, name, settings, *args, **kwargs):
         """
-        Initializes the flow meter frame. Takes args and kwargs for the wx.Frame class.
+        Initializes the device frame. Takes frame name, utils.CommManager thread
+        (or subclass), the device_panel class, and args and kwargs for the wx.Frame class.
         """
-        super(FlowMeterFrame, self).__init__(*args, **kwargs)
-        logger.debug('Setting up the FlowMeterFrame')
-        self.fm_cmd_q = deque()
-        self.fm_return_q = deque()
-        self.abort_event = threading.Event()
-        self.fm_con = FlowMeterCommThread(self.fm_cmd_q, self.fm_return_q,
-            self.abort_event, 'FMCon')
-        self.fm_con.start()
+        super(FlowMeterFrame, self).__init__(name, settings, FlowMeterPanel,
+            *args, **kwargs)
 
-        self.Bind(wx.EVT_CLOSE, self._on_exit)
+        # Enable these to init devices on startup
+        self.setup_devices = self.settings.pop('device_init', None)
 
-        self._get_ports()
+        self._init_devices()
 
-        self.fms =[]
-
-        top_sizer = self._create_layout()
-
-        self.SetSizer(top_sizer)
-
-        self.Fit()
-        self.Raise()
-
-        self._initfms()
-
-    def _create_layout(self):
-        """Creates the layout"""
-        fm_panel = FlowMeterPanel(self, wx.ID_ANY, 'stand_in', self.ports,
-            self.fm_cmd_q, self.fm_return_q, self.fm_con.known_fms, 'stand_in')
-
-        self.fm_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        self.fm_sizer.Add(fm_panel, flag=wx.RESERVE_SPACE_EVEN_IF_HIDDEN)
-
-        self.fm_sizer.Hide(fm_panel, recursive=True)
-
-        button_panel = wx.Panel(self)
-
-        add_fm = wx.Button(button_panel, label='Add flow meter')
-        add_fm.Bind(wx.EVT_BUTTON, self._on_addfm)
-
-        button_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        button_sizer.Add(add_fm)
-
-        button_panel_sizer = wx.BoxSizer(wx.VERTICAL)
-        button_panel_sizer.Add(wx.StaticLine(button_panel), flag=wx.EXPAND|wx.TOP|wx.BOTTOM, border=2)
-        button_panel_sizer.Add(button_sizer, flag=wx.ALIGN_RIGHT|wx.BOTTOM|wx.RIGHT, border=2)
-
-        button_panel.SetSizer(button_panel_sizer)
-
-        top_sizer = wx.BoxSizer(wx.VERTICAL)
-        top_sizer.Add(self.fm_sizer, flag=wx.EXPAND)
-        top_sizer.Add(button_panel, flag=wx.EXPAND)
-
-        return top_sizer
-
-    def _initfms(self):
-        """
-        This is a convenience function for initalizing flow meters on startup, if you
-        already know what flow meters you want to add. You can comment it out in
-        the ``__init__`` if you want to not load any flow meters on startup.
-
-        If you want to add flow meters here, add them to the ``setup_fmss`` list.
-        Each entry should be an iterable with the following parameters: name,
-        flow meter type, comport, arg list, and kwarg dict in that order. How the
-        arg list and kwarg dict are handled are defined in the
-        :py:func:`FlowMeterPanel._initfm` function, and depends on the flow meter type.
-        """
-        if not self.fms:
-            self.fm_sizer.Remove(0)
-
-        # setup_fms = [('3', 'BFS', 'COM5', [], {}),
-        #     ('4', 'BFS', 'COM6', [], {}),
-        #             ]
-
-        setup_fms = [('FlowMeter', 'Soft', '', [], {})
-                    ]
-
-        logger.info('Initializing %s flow meters on startup', str(len(setup_fms)))
-
-        for fm in setup_fms:
-            new_fm = FlowMeterPanel(self, wx.ID_ANY, fm[0], self.ports, self.fm_cmd_q,
-                self.fm_return_q, self.fm_con.known_fms, fm[0], fm[1], fm[2], fm[3], fm[4])
-
-            self.fm_sizer.Add(new_fm)
-            self.fms.append(new_fm)
-
-        self.Layout()
-        self.Fit()
-
-    def _on_addfm(self, evt):
-        """
-        Called when the Add Flow Meter button is used. Adds a new flow meter
-        to the control panel.
-
-        .. note:: FLow meter names must be distinct.
-        """
-        if not self.fms:
-            self.fm_sizer.Remove(0)
-
-        dlg = wx.TextEntryDialog(self, "Enter flow meter name:", "Create new flow meter")
-        if dlg.ShowModal() == wx.ID_OK:
-            name = dlg.GetValue()
-            for fm in self.fms:
-                if name == fm.name:
-                    msg = "Flow meter names must be distinct. Please choose a different name."
-                    wx.MessageBox(msg, "Failed to add flow meter")
-                    logger.debug('Attempted to add a flow meter with the same name (%s) as another pump.', name)
-                    return
-
-            new_fm = FlowMeterPanel(self, wx.ID_ANY, name, self.ports, self.fm_cmd_q,
-                self.fm_return_q, self.fm_con.known_fms, name)
-            logger.info('Added new flow meter %s to the flow meter control panel.', name)
-            self.fm_sizer.Add(new_fm)
-            self.fms.append(new_fm)
-
-            self.Layout()
-            self.Fit()
-
-        return
-
-    def _get_ports(self):
-        """
-        Gets a list of active comports.
-
-        .. note:: This doesn't update after the program is opened, so you need
-            to start the program after all pumps are connected to the computer.
-        """
-        port_info = list_ports.comports()
-        self.ports = [port.device for port in port_info]
-
-        logger.debug('Found the following comports for the FlowMeterFrame: %s', ' '.join(self.ports))
-
-    def _on_exit(self, evt):
-        """Stops all current pump motions and then closes the frame."""
-        logger.debug('Closing the FlowMeter')
-        self.fm_con.stop()
-        while self.fm_con.is_alive():
-            time.sleep(0.001)
-        self.Destroy()
 
 if __name__ == '__main__':
     logger = logging.getLogger()
@@ -1055,6 +916,12 @@ if __name__ == '__main__':
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
     h1.setFormatter(formatter)
     logger.addHandler(h1)
+
+    com_thread = FlowMeterCommThread('FlowComm')
+    com_thread.start()
+
+    # Remote
+    # com_thread = None
 
     # my_bfs = BFS('COM8', 'BFS1')
     # my_bfs.filter = 1
@@ -1081,10 +948,33 @@ if __name__ == '__main__':
     # time.sleep(5)
     # my_fmcon.stop()
 
+    # Coflow flow meters
+    setup_devices = [
+        {'name': 'sheath', 'args' : ['BFS', 'COM5'], 'kwargs': {}},
+        {'name': 'outlet', 'args' : ['BFS', 'COM6'], 'kwargs': {}},
+        ]
+
+    # # Simulated flow meter
+    # setup_devices = [
+    #     {'name': 'sheath', 'args': ['Soft', None], 'kwargs': {}},
+    #     ]
+
+    settings = {
+        'remote'        : False,
+        'remote_device' : 'fm',
+        'device_init'   : setup_devices,
+        'remote_ip'     : '192.168.1.16',
+        'remote_port'   : '5557',
+        'com_thread'    : com_thread,
+        }
+
     app = wx.App()
     logger.debug('Setting up wx app')
-    frame = FlowMeterFrame(None, title='FM Control')
+    frame = FlowMeterFrame('FMFrame', settings, parent=None,
+        title='FM Control')
     frame.Show()
     app.MainLoop()
 
-
+    if com_thread is not None:
+        com_thread.stop()
+        com_thread.join()

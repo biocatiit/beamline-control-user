@@ -85,6 +85,19 @@ class ControlClient(threading.Thread):
         self.socket.set(zmq.LINGER, 0)
         self.socket.connect("tcp://{}:{}".format(self.ip, self.port))
 
+        # Clear backlog of incomming messages on startup
+        start = time.time()
+        while time.time()-start < 0.1:
+            if self.socket.poll(10) > 0:
+                resp = self.socket.recv_pyobj()
+
+                res_type, response = resp
+
+                if res_type != 'status':
+                    break
+                else:
+                    start = time.time()
+
         while True:
             action_taken = False
 

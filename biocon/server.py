@@ -89,23 +89,25 @@ class ControlServer(threading.Thread):
         self.context = zmq.Context()
         self.socket = self.context.socket(zmq.PAIR)
         self.socket.set(zmq.LINGER, 0)
+        self.socket.set_hwm(10)
         self.socket.bind("tcp://{}:{}".format(self.ip, self.port))
 
 
         if self._start_pump:
             pump_cmd_q = deque()
             pump_return_q = deque()
-            pump_abort_event = threading.Event()
-            pump_con = pumpcon.PumpCommThread(pump_cmd_q, pump_return_q, pump_abort_event, 'PumpCon')
+            pump_status_q = deque()
+            pump_con = pumpcon.PumpCommThread('PumpCon')
             pump_con.start()
 
-            if self.pump_comm_locks is not None:
-                pump_cmd_q.append(('add_comlocks', (self.pump_comm_locks,), {}))
+            pump_con.add_new_communication('zmq_server', pump_cmd_q,
+                pump_return_q, pump_status_q)
 
-            pump_ctrl = {'queue': pump_cmd_q,
-                'abort': pump_abort_event,
-                'thread': pump_con,
-                'answer_q': pump_return_q
+            pump_ctrl = {
+                'queue'     : pump_cmd_q,
+                'answer_q'  : pump_return_q,
+                'status_q'  : pump_status_q,
+                'thread'    : pump_con,
                 }
 
             self._device_control['pump'] = pump_ctrl
@@ -114,14 +116,18 @@ class ControlServer(threading.Thread):
         if self._start_fm:
             fm_cmd_q = deque()
             fm_return_q = deque()
-            fm_abort_event = threading.Event()
-            fm_con = fmcon.FlowMeterCommThread(fm_cmd_q, fm_return_q, fm_abort_event, 'FMCon')
+            fm_status_q = deque()
+            fm_con = fmcon.FlowMeterCommThread('FMCon')
             fm_con.start()
 
-            fm_ctrl = {'queue': fm_cmd_q,
-                'abort': fm_abort_event,
-                'thread': fm_con,
-                'answer_q': fm_return_q
+            fm_con.add_new_communication('zmq_server', fm_cmd_q, fm_return_q,
+                fm_status_q)
+
+            fm_ctrl = {
+                'queue'     : fm_cmd_q,
+                'answer_q'  : fm_return_q,
+                'status_q'  : fm_status_q,
+                'thread'    : fm_con,
                 }
 
             self._device_control['fm'] = fm_ctrl
@@ -130,17 +136,18 @@ class ControlServer(threading.Thread):
         if self._start_valve:
             valve_cmd_q = deque()
             valve_return_q = deque()
-            valve_abort_event = threading.Event()
-            valve_con = valvecon.ValveCommThread(valve_cmd_q, valve_return_q, valve_abort_event, 'ValveCon')
+            valve_status_q = deque()
+            valve_con = valvecon.ValveCommThread('ValveCon')
             valve_con.start()
 
-            if self.valve_comm_locks is not None:
-                valve_cmd_q.append(('add_comlocks', (self.valve_comm_locks,), {}))
+            valve_con.add_new_communication('zmq_server', valve_cmd_q, valve_return_q,
+                valve_status_q)
 
-            valve_ctrl = {'queue': valve_cmd_q,
-                'abort': valve_abort_event,
-                'thread': valve_con,
-                'answer_q': valve_return_q
+            valve_ctrl = {
+                'queue'     : valve_cmd_q,
+                'answer_q'  : valve_return_q,
+                'status_q'  : valve_status_q,
+                'thread'    : valve_con,
                 }
 
             self._device_control['valve'] = valve_ctrl
@@ -159,7 +166,7 @@ class ControlServer(threading.Thread):
                 'queue'     : uv_cmd_q,
                 'answer_q'  : uv_return_q,
                 'status_q'  : uv_status_q,
-                'thread'    : uv_con
+                'thread'    : uv_con,
                 }
 
             self._device_control['uv'] = uv_ctrl
@@ -176,11 +183,6 @@ class ControlServer(threading.Thread):
                         command = None
                 except Exception:
                     command = None
-
-                # if self._abort_event.is_set():
-                #     logger.debug("Abort event detected")
-                #     self._abort()
-                #     command = None
 
                 if self._stop_event.is_set():
                     logger.debug("Stop event detected")
@@ -248,7 +250,7 @@ class ControlServer(threading.Thread):
 
                         if answer == '':
                             logger.exception('No response received from device')
-                        else:                            
+                        else:
                             answer = ['response', answer]
                             logger.debug('Sending command response: %s', answer)
                             self.socket.send_pyobj(answer, protocol=2)
@@ -266,6 +268,17 @@ class ControlServer(threading.Thread):
                 for device, device_ctrl in self._device_control.items():
                     if 'status_q' in device_ctrl:
                         status_q = device_ctrl['status_q']
+
+                        if len(status_q) > 5:
+                            temp = []
+                            for i in range(5):
+                                temp.append(status_q.pop())
+
+                            temp = temp[::-1]
+                            status_q.clear()
+
+                            for a in temp:
+                                status_q.append(a)
 
                         if len(status_q) > 0:
                             cmds_run =  True
@@ -287,8 +300,13 @@ class ControlServer(threading.Thread):
         self.socket.close(0)
         self.context.destroy(0)
 
-        for device in self._device_control:
-            self._device_control[device]['abort'].set()
+        for device, device_ctrl in self._device_control.items():
+            if 'abort' in device_ctrl:
+                device_ctrl['abort'].set()
+
+            else:
+                device_ctrl['thread'].stop()
+                device_ctrl['thread'].join()
 
         if self._stop_event.is_set():
             self._stop_event.clear()
@@ -328,10 +346,12 @@ if __name__ == '__main__':
 
     standard_paths = wx.StandardPaths.Get() #Can't do this until you start the wx app
     info_dir = standard_paths.GetUserLocalDataDir()
-    print (info_dir)
+    print('Log directory: {}'.format(info_dir))
     if not os.path.exists(info_dir):
         os.mkdir(info_dir)
-    h2 = handlers.RotatingFileHandler(os.path.join(info_dir, 'biocon_server.log'), maxBytes=100e6, backupCount=20, delay=True)
+
+    h2 = handlers.RotatingFileHandler(os.path.join(info_dir, 'biocon_server.log'),
+        maxBytes=100e6, backupCount=20, delay=True)
     h2.setLevel(logging.DEBUG)
     formatter2 = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
     h2.setFormatter(formatter2)
@@ -343,28 +363,9 @@ if __name__ == '__main__':
     port3 = '5558'
     port4 = '5559'
 
-    # Both
-
-    pump_comm_locks = {
-        'COM3'  : threading.Lock(),
-        'COM4'  : threading.Lock(),
-        'COM10' : threading.Lock(),
-        'COM11' : threading.Lock(),
-        'COM15' : threading.Lock(),
-        'COM17' : threading.Lock(),
-        'COM18' : threading.Lock(),
-        }
-
-    valve_comm_locks = {
-        'COM6'  : threading.Lock(),
-        'COM7'  : threading.Lock(),
-        'COM8'  : threading.Lock(),
-        'COM9'  : threading.Lock(),
-        'COM12' : threading.Lock(),
-        'COM14' : threading.Lock(),
-        }
-
     exp_type = 'coflow' #coflow or trsaxs_laminar or trsaxs_chaotic
+    # exp_type = 'trsaxs_chaotic'
+    # exp_type = 'trsaxs_laminar'
 
 
     if exp_type == 'coflow':
@@ -373,44 +374,73 @@ if __name__ == '__main__':
         ip = '164.54.204.53'
         # ip = '164.54.204.24'
 
-        setup_pumps = [('sheath', 'VICI M50', 'COM3', ['627.72', '9.814'], {}, {}),
-            ('outlet', 'VICI M50', 'COM4', ['628.68', '9.962'], {}, {})
+        setup_pumps = [
+            {'name': 'sheath', 'args': ['VICI M50', 'COM3'],
+                'kwargs': {'flow_cal': '627.72', 'backlash_cal': '9.814'},
+                'ctrl_args': {'flow_rate': 1}},
+            {'name': 'outlet', 'args': ['VICI M50', 'COM4'],
+                'kwargs': {'flow_cal': '628.68', 'backlash_cal': '9.962'},
+                'ctrl_args': {'flow_rate': 1}},
             ]
 
-        pump_local_comm_locks = {'sheath'    : pump_comm_locks[setup_pumps[0][2]],
-            'outlet'    : pump_comm_locks[setup_pumps[1][2]]
-            }
-
-        setup_valves = [('Coflow Sheath', 'Cheminert', 'COM7', [], {'positions' : 10}),
+        setup_valves = [
+            {'name': 'Coflow Sheath', 'args': ['Cheminert', 'COM7'],
+                'kwargs': {'positions' : 10}},
             ]
 
         setup_uv = [
-            {'name': 'CoflowUV', 'args': ['StellarNet'], 'kwargs': 
+            {'name': 'CoflowUV', 'args': ['StellarNet'], 'kwargs':
             {'shutter_pv_name': '18ID:LJT4:2:DO11',
             'trigger_pv_name' : '18ID:LJT4:2:DO12'}},
             ]
+
+        setup_fms = [
+            {'name': 'sheath', 'args' : ['BFS', 'COM5'], 'kwargs': {}},
+            {'name': 'outlet', 'args' : ['BFS', 'COM6'], 'kwargs': {}}
+            ]
+
+        # # Simulated devices for testing
+
+        # setup_pumps = [
+        #     {'name': 'sheath', 'args': ['Soft', None], 'kwargs': {}},
+        #     {'name': 'outlet', 'args': ['Soft', None], 'kwargs': {}},
+        #     ]
+
+        # setup_valves = [
+        #     {'name': 'Coflow Sheath', 'args': ['Soft', None], 'kwargs':
+        #         {'positions': 10}},
+        #     ]
+
+        # setup_fms = [
+        #     {'name': 'sheath', 'args': ['Soft', None], 'kwargs': {}},
+        #     {'name': 'outlet', 'args': ['Soft', None], 'kwargs': {}},
+        #     ]
 
     elif exp_type.startswith('trsaxs'):
         # TR SAXS
 
         ip = '164.54.204.8'
+        # ip = '164.54.204.24'
 
         if exp_type == 'trsaxs_chaotic':
             # Chaotic flow
 
             setup_pumps = [
-                # ('Sample', 'PHD 4400', 'COM4', ['10 mL, Medline P.C.', '1'], {},
-                #     {'flow_rate' : '10', 'refill_rate' : '10'}),
-                # ('Buffer 1', 'PHD 4400', 'COM4', ['20 mL, Medline P.C.', '2'], {},
-                #     {'flow_rate' : '10', 'refill_rate' : '10'}),
-                # ('Buffer 2', 'PHD 4400', 'COM4', ['20 mL, Medline P.C.', '3'], {},
-                #     {'flow_rate' : '10', 'refill_rate' : '10'}),
-                ('Buffer 1', 'SSI Next Gen', 'COM17', [], {'flow_rate_scale': 1.0478,
-                    'flow_rate_offset': -72.82/1000,'scale_type': 'up'}, {}),
-                ('Sample', 'SSI Next Gen', 'COM15', [], {'flow_rate_scale': 1.0204,
-                    'flow_rate_offset': 15.346/1000, 'scale_type': 'up'}, {}),
-                ('Buffer 2', 'SSI Next Gen', 'COM18', [], {'flow_rate_scale': 1.0179,
-                    'flow_rate_offset': -20.842/1000, 'scale_type': 'up'}, {}),
+                {'name': 'Buffer 1', 'args': ['SSI Next Gen', 'COM17'],
+                    'kwargs': {'flow_rate_scale': 1.0478,
+                    'flow_rate_offset': -72.82/1000,'scale_type': 'up'},
+                    'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
+                    'max_pressure': 1800}},
+                {'name': 'Sample', 'args': ['SSI Next Gen', 'COM15'],
+                    'kwargs': {'flow_rate_scale': 1.0204,
+                    'flow_rate_offset': 15.346/1000,'scale_type': 'up'},
+                    'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
+                    'max_pressure': 1500}},
+                {'name': 'Buffer 2', 'args': ['SSI Next Gen', 'COM18'],
+                    'kwargs': {'flow_rate_scale': 1.0179,
+                    'flow_rate_offset': -20.842/10000,'scale_type': 'up'},
+                    'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
+                    'max_pressure': 1800}},
                 ]
 
             pump_local_comm_locks = {
@@ -420,63 +450,139 @@ if __name__ == '__main__':
                 }
 
             setup_valves = [
-                ('Injection', 'Rheodyne', 'COM6', [], {'positions' : 2}),
-                # ('Sample', 'Rheodyne', 'COM9', [], {'positions' : 6}),
-                # ('Buffer 1', 'Rheodyne', 'COM8', [], {'positions' : 6}),
-                # ('Buffer 2', 'Rheodyne', 'COM7', [], {'positions' : 6}),
+                {'name': 'Injection', 'args': ['Rheodyne', 'COM6'],
+                    'kwargs': {'positions' : 2}},
                 ]
 
-            valve_local_comm_locks = {
-                'Injection'    : valve_comm_locks[setup_valves[0][2]],
-                # 'Sample'    : valve_comm_locks[setup_valves[1][2]],
-                # 'Buffer 1'    : valve_comm_locks[setup_valves[2][2]],
-                # 'Buffer 2'    : valve_comm_locks[setup_valves[3][2]],
-               }
+            setup_fms = [
+                {'name': 'outlet', 'args' : ['BFS', 'COM5'], 'kwargs': {}}
+                ]
+
+
+            # # Simulated device, for testing purposes
+
+            # setup_fms = [
+            #     {'name': 'outlet', 'args' : ['Soft', None], 'kwargs': {}},
+            #     ]
+
+            # # # Syringe pumps
+            # # setup_pumps = [
+            # #     {'name': 'Buffer 1', 'args': ['Soft Syringe', None],
+            # #         'kwargs': {'syringe_id': '20 mL, Medline P.C.', 'flow_rate': 1,
+            # #             'refill_rate': 10}},
+            # #     {'name': 'Sample', 'args': ['Soft Syringe', None],
+            # #         'kwargs': {'syringe_id': '10 mL, Medline P.C.', 'flow_rate': 1,
+            # #             'refill_rate': 10}},
+            # #     {'name': 'Buffer 2', 'args': ['Soft Syringe', None],
+            # #         'kwargs': {'syringe_id': '20 mL, Medline P.C.', 'flow_rate': 1,
+            # #             'refill_rate': 10}},
+            # #     ]
+
+
+            # # setup_valves = [
+            # #     {'name': 'Injection', 'args': ['Soft', None],
+            # #         'kwargs': {'positions': 2}},
+            # #     {'name': 'Buffer 1', 'args': ['Soft', None],
+            # #         'kwargs': {'positions': 6}},
+            # #     {'name': 'Sample', 'args': ['Soft', None],
+            # #         'kwargs': {'positions': 6}},
+            # #     {'name': 'Buffer 2', 'args': ['Soft', None],
+            # #         'kwargs': {'positions': 6}},
+            # #     ]
+
+            # # Continuous flow pumps
+            # setup_pumps = [
+            #     {'name': 'Buffer 1', 'args': ['Soft', None], 'kwargs': {}},
+            #     {'name': 'Sample', 'args': ['Soft', None], 'kwargs': {}},
+            #     {'name': 'Buffer 2', 'args': ['Soft', None], 'kwargs': {}},
+            #     ]
+
+            # setup_valves = [
+            #     {'name': 'Injection', 'args': ['Soft', None],
+            #         'kwargs': {'positions': 2}},
+            #     ]
+
 
         elif exp_type == 'trsaxs_laminar':
             # Laminar flow
             setup_pumps = [
-                ('Buffer 1', 'PHD 4400', 'COM4', ['10 mL, Medline P.C.', '1'], {},
-                    {'flow_rate' : '0.068', 'refill_rate' : '5'}),
-                ('Buffer 2', 'PHD 4400', 'COM4', ['10 mL, Medline P.C.', '2'], {},
-                    {'flow_rate' : '0.068', 'refill_rate' : '5'}),
-                ('Sheath', 'NE 500', 'COM10', ['3 mL, Medline P.C.', '01'],
-                    {'dual_syringe': 'False'}, {'flow_rate' : '0.002', 'refill_rate' : '1.5'}),
-                ('Sample', 'PHD 4400', 'COM4', ['3 mL, Medline P.C.', '3'], {},
-                    {'flow_rate' : '0.009', 'refill_rate' : '1.5'}),
+                {'name': 'Buffer', 'args': ['Pico Plus', 'COM19'],
+                    'kwargs': {'syringe_id': '10 mL, Medline P.C.',
+                    'pump_address': '00'}, 'ctrl_args': {'flow_rate' : '0.068',
+                    'refill_rate' : '5'}},
+                {'name': 'Sheath', 'args': ['Pico Plus', 'COM18'],
+                    'kwargs': {'syringe_id': '3 mL, Medline P.C.',
+                    'pump_address': '00'}, 'ctrl_args': {'flow_rate' : '0.002',
+                    'refill_rate' : '1.5'}},
+                {'name': 'Sample', 'args': ['Pico Plus', 'COM20'],
+                    'kwargs': {'syringe_id': '3 mL, Medline P.C.',
+                    'pump_address': '00'}, 'ctrl_args': {'flow_rate' : '0.009',
+                    'refill_rate' : '1.5'}},
                 ]
-
-            pump_local_comm_locks = {
-                'Buffer 1'    : pump_comm_locks[setup_pumps[0][2]],
-                'Buffer 2'    : pump_comm_locks[setup_pumps[1][2]],
-                'Sheath'    : pump_comm_locks[setup_pumps[2][2]],
-                'Sample'    : pump_comm_locks[setup_pumps[3][2]]
-                }
 
             setup_valves = [
-                ('Injection', 'Rheodyne', 'COM6', [], {'positions' : 2}),
-                ('Buffer 1', 'Rheodyne', 'COM12', [], {'positions' : 6}),
-                ('Buffer 2', 'Rheodyne', 'COM14', [], {'positions' : 6}),
-                ('Sheath 1', 'Rheodyne', 'COM9', [], {'positions' : 6}),
-                ('Sheath 2', 'Rheodyne', 'COM8', [], {'positions' : 6}),
-                ('Sample', 'Rheodyne', 'COM7', [], {'positions' : 6}),
+                {'name': 'Injection', 'args': ['Rheodyne', 'COM6'],
+                    'kwargs': {'positions' : 2}},
+                {'name': 'Buffer 1', 'args': ['Rheodyne', 'COM12'],
+                    'kwargs': {'positions' : 6}},
+                {'name': 'Buffer 2', 'args': ['Rheodyne', 'COM14'],
+                    'kwargs': {'positions' : 6}},
+                {'name': 'Sheath 1', 'args': ['Rheodyne', 'COM21'],
+                    'kwargs': {'positions' : 6}},
+                {'name': 'Sheath 2', 'args': ['Rheodyne', 'COM8'],
+                    'kwargs': {'positions' : 6}},
+                {'name': 'Sample', 'args': ['Rheodyne', 'COM17'],
+                    'kwargs': {'positions' : 6}},
                 ]
+
+            setup_fms = [
+                {'name': 'outlet', 'args' : ['BFS', 'COM13'], 'kwargs': {}}
+                ]
+
+
+            # # Simulated device, for testing purposes
+
+            # setup_fms = [
+            #     {'name': 'outlet', 'args' : ['Soft', None], 'kwargs': {}},
+            #     ]
+
+            # # Syringe pumps
+            # setup_pumps = [
+            #     {'name': 'Buffer', 'args': ['Soft Syringe', None],
+            #         'kwargs': {'syringe_id': '3 mL, Medline P.C.'},
+            #         'ctrl_args': {'flow_rate': 1, 'refill_rate': 3}},
+            #     {'name': 'Sample', 'args': ['Soft Syringe', None],
+            #         'kwargs': {'syringe_id': '3 mL, Medline P.C.'},
+            #         'ctrl_args': {'flow_rate': 1, 'refill_rate': 3}},
+            #     {'name': 'Sheath', 'args': ['Soft Syringe', None],
+            #         'kwargs': {'syringe_id': '3 mL, Medline P.C.'},
+            #         'ctrl_args': {'flow_rate': 1, 'refill_rate': 3}},
+            #     ]
+
+            # # Valves
+            # setup_valves = [
+            #     {'name': 'Injection', 'args': ['Soft', None],
+            #         'kwargs': {'positions': 2}},
+            #     {'name': 'Buffer 1', 'args': ['Soft', None],
+            #         'kwargs': {'positions': 6}},
+            #     {'name': 'Buffer 2', 'args': ['Soft', None],
+            #         'kwargs': {'positions': 6}},
+            #     {'name': 'Sample', 'args': ['Soft', None],
+            #         'kwargs': {'positions': 6}},
+            #     {'name': 'Sheath 1', 'args': ['Soft', None],
+            #         'kwargs': {'positions': 6}},
+            #     {'name': 'Sheath 2', 'args': ['Soft', None],
+            #         'kwargs': {'positions': 6}},
+            #     ]
 
 
 
 
     # Both
 
-    pump_frame = pumpcon.PumpFrame(pump_local_comm_locks, setup_pumps, None,
-        title='Pump Control')
-    pump_frame.Show()
-
-    valve_frame = valvecon.ValveFrame(valve_comm_locks, setup_valves,
-        None, title='Valve Control')
-    valve_frame.Show()
 
     control_server_pump = ControlServer(ip, port1, name='PumpControlServer',
-        pump_comm_locks = pump_comm_locks, start_pump=True)
+        start_pump=True)
     control_server_pump.start()
 
     control_server_fm = ControlServer(ip, port2, name='FMControlServer',
@@ -484,22 +590,60 @@ if __name__ == '__main__':
     control_server_fm.start()
 
     control_server_valve = ControlServer(ip, port3, name='ValveControlServer',
-        valve_comm_locks = valve_comm_locks, start_valve=True)
+        start_valve=True)
     control_server_valve.start()
 
+    time.sleep(1)
 
-    if exp_type == 'coflow':
-        # Coflow only
-        control_server_uv = ControlServer(ip, port4, name='UVControlServer',
-            start_uv=True)
-        control_server_uv.start()
+    pump_comm_thread = control_server_pump.get_comm_thread('pump')
 
-        time.sleep(1)
-        uv_comm_thread = control_server_uv.get_comm_thread('uv')
+    pump_settings = {
+        'remote'        : False,
+        'device_init'   : setup_pumps,
+        'com_thread'    : pump_comm_thread,
+        }
 
-        uv_frame = spectrometercon.UVFrame('UVFrame', setup_uv, uv_comm_thread,
-            parent=None, title='UV Spectrometer Control')
-        uv_frame.Show()
+    pump_frame = pumpcon.PumpFrame('PumpFrame', pump_settings, parent=None,
+        title='Pump Control')
+    pump_frame.Show()
+
+    fm_comm_thread = control_server_fm.get_comm_thread('fm')
+
+    fm_settings = {
+        'remote'        : False,
+        'device_init'   : setup_fms,
+        'com_thread'    : fm_comm_thread,
+        }
+
+    fm_frame = fmcon.FlowMeterFrame('FMFrame', fm_settings, parent=None,
+        title='Flow Meter Control')
+    fm_frame.Show()
+
+
+    valve_comm_thread = control_server_valve.get_comm_thread('valve')
+
+    valve_settings = {
+        'remote'        : False,
+        'device_init'   : setup_valves,
+        'com_thread'    : valve_comm_thread,
+        }
+
+    valve_frame = valvecon.ValveFrame('valveFrame', valve_settings, parent=None,
+        title='Valve Control')
+    valve_frame.Show()
+
+    # if exp_type == 'coflow':
+    #     # Coflow only
+    #     control_server_uv = ControlServer(ip, port4, name='UVControlServer',
+    #         start_uv=True)
+    #     control_server_uv.start()
+
+    #     time.sleep(1)
+    #     uv_comm_thread = control_server_uv.get_comm_thread('uv')
+
+    #     uv_frame = spectrometercon.UVFrame('UVFrame', setup_uv, uv_comm_thread,
+    #         parent=None, title='UV Spectrometer Control')
+    #     uv_frame.Show()
 
     app.MainLoop()
 
@@ -507,6 +651,7 @@ if __name__ == '__main__':
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
+        print('stopping stuff')
         control_server_pump.stop()
         control_server_pump.join()
 
@@ -516,8 +661,8 @@ if __name__ == '__main__':
         control_server_valve.stop()
         control_server_valve.join()
 
-        if exp_type == 'coflow':
-            control_server_uv.stop()
-            control_server_uv.join()
+        # if exp_type == 'coflow':
+        #     control_server_uv.stop()
+        #     control_server_uv.join()
 
     logger.info("Quitting server")
