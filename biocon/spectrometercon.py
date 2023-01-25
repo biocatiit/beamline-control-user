@@ -4026,7 +4026,6 @@ if __name__ == '__main__':
     # com_thread = None
 
     spectrometer_settings = {
-        'name'                  :  'CoflowUV',
         'device_init'           : [{'name': 'CoflowUV', 'args': ['StellarNet', None],
                                     'kwargs': {'shutter_pv_name': '18ID:LJT4:2:DO11',
                                     'trigger_pv_name' : '18ID:LJT4:2:DO12'}}],
@@ -4054,7 +4053,7 @@ if __name__ == '__main__':
         'remote_device'         : 'uv',
         'com_thread'            : com_thread,
         'remote_dir_prefix'     : {'local' : '/nas_data', 'remote' : 'Y:\\'},
-        'inline_panel'          : True,
+        'inline_panel'          : False,
     }
 
     app = wx.App()
