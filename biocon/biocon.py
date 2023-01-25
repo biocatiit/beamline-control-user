@@ -68,6 +68,13 @@ class BioFrame(wx.Frame):
         self.Fit()
         self.Raise()
 
+    def _FromDIP(self, size):
+        # This is a hack to provide easy back compatibility with wxpython < 4.1
+        try:
+            return self.FromDIP(size)
+        except Exception:
+            return size
+
     def _create_layout(self):
         """Creates the layout"""
         top_panel = wx.Panel(self)
@@ -103,8 +110,8 @@ class BioFrame(wx.Frame):
                         self.settings[key], name=key)
 
                 component_sizer = wx.StaticBoxSizer(box, wx.VERTICAL)
-                component_sizer.Add(component_panel, proportion=1, border=2,
-                    flag=wx.EXPAND|wx.ALL)
+                component_sizer.Add(component_panel, proportion=1,
+                    border=self._FromDIP(2), flag=wx.EXPAND|wx.ALL)
 
                 component_sizers[key] = component_sizer
                 self.component_panels[key] = component_panel
@@ -123,14 +130,14 @@ class BioFrame(wx.Frame):
 
                 sub_sub_sizer = wx.BoxSizer(wx.HORIZONTAL)
                 sub_sub_sizer.Add(component_sizers['metadata'], proportion=1,
-                    border=10, flag=wx.EXPAND|wx.ALL)
+                    border=self._FromDIP(10), flag=wx.EXPAND|wx.ALL)
                 sub_sub_sizer.Add(component_sizers['exposure'], proportion=2,
-                    border=10, flag=wx.EXPAND|wx.ALL)
+                    border=self._FromDIP(10), flag=wx.EXPAND|wx.ALL)
 
                 sub_sizer = wx.BoxSizer(wx.VERTICAL)
                 sub_sizer.Add(sub_sub_sizer, flag=wx.EXPAND)
                 sub_sizer.Add(component_sizers['trsaxs_flow'], proportion=1,
-                    border=10, flag=wx.EXPAND|wx.ALL)
+                    border=self._FromDIP(10), flag=wx.EXPAND|wx.ALL)
 
                 exp_sizer.Add(sub_sizer, flag=wx.EXPAND, proportion=1)
 
@@ -138,37 +145,37 @@ class BioFrame(wx.Frame):
                 and 'trsaxs_flow' in component_sizers):
                 sub_sizer = wx.BoxSizer(wx.VERTICAL)
                 sub_sizer.Add(component_sizers['exposure'],
-                    border=10, flag=wx.EXPAND|wx.ALL)
+                    border=self._FromDIP(10), flag=wx.EXPAND|wx.ALL)
                 sub_sizer.Add(component_sizers['trsaxs_flow'], proportion=1,
-                    border=10, flag=wx.EXPAND|wx.ALL)
+                    border=self._FromDIP(10), flag=wx.EXPAND|wx.ALL)
 
                 exp_sizer.Add(sub_sizer, flag=wx.EXPAND, proportion=1)
 
             elif ('exposure' in component_sizers
                 and 'metadata' in component_sizers):
                 exp_sizer.Add(component_sizers['metadata'], proportion=1,
-                    border=10, flag=wx.EXPAND|wx.ALL)
+                    border=self._FromDIP(10), flag=wx.EXPAND|wx.ALL)
                 exp_sizer.Add(component_sizers['exposure'], proportion=2,
-                    border=10, flag=wx.EXPAND|wx.ALL)
+                    border=self._FromDIP(10), flag=wx.EXPAND|wx.ALL)
 
             elif 'exposure' in component_sizers:
                 exp_sizer.Add(component_sizers['exposure'], proportion=1,
-                    border=10, flag=wx.EXPAND|wx.ALL)
+                    border=self._FromDIP(10), flag=wx.EXPAND|wx.ALL)
 
             if 'coflow' in component_sizers:
-                exp_sizer.Add(component_sizers['coflow'], border=10,
-                    flag=wx.EXPAND|wx.ALL)
+                exp_sizer.Add(component_sizers['coflow'],
+                    border=self._FromDIP(10), flag=wx.EXPAND|wx.ALL)
 
             if 'trsaxs_scan' in component_sizers:
-                exp_sizer.Add(component_sizers['trsaxs_scan'], border=10,
-                    flag=wx.EXPAND|wx.ALL)
+                exp_sizer.Add(component_sizers['trsaxs_scan'],
+                    border=self._FromDIP(10), flag=wx.EXPAND|wx.ALL)
 
             if 'scan' in component_sizers:
-                exp_sizer.Add(component_sizers['scan'], border=5,
+                exp_sizer.Add(component_sizers['scan'], border=self._FromDIP(5),
                     flag=wx.EXPAND|wx.ALL)
 
             if 'uv' in component_sizers:
-                exp_sizer.Add(component_sizers['uv'], border=5,
+                exp_sizer.Add(component_sizers['uv'], border=self._FromDIP(5),
                     flag=wx.EXPAND|wx.ALL)
 
             panel_sizer.Add(exp_sizer, flag=wx.EXPAND)
@@ -651,6 +658,7 @@ if __name__ == '__main__':
         'com_thread'            : None,
         'remote_dir_prefix'     : {'local' : '/nas_data', 'remote' : 'Y:\\'},
         'inline_panel'          : True,
+        'plot_refresh_t'        : 1, #in s
     }
 
     biocon_settings = {}
