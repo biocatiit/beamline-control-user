@@ -1663,6 +1663,7 @@ class ExpCommThread(threading.Thread):
             self.return_queue.append(['exposing', None])
 
     def get_experiment_status(self, ab_burst, ab_burst_2, det, timeouts):
+        # logger.debug('getting experiment status')
         try:
             status = ab_burst.get_status()
             timeouts=0
@@ -1795,6 +1796,7 @@ class ExpCommThread(threading.Thread):
                 current_meas = struck.get_last_measurement_number()
 
                 if current_meas != last_meas and current_meas != -1:
+                    logger.debug('getting struck values')
                     cvals = struck.read_all()
 
                     if last_meas == 0:

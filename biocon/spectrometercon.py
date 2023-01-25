@@ -3270,6 +3270,9 @@ class UVPanel(utils.DevicePanel):
             self._live_update_stop.set()
             self._live_update_thread.join()
 
+    def on_exit(self):
+        self.close()
+
 
 class UVPlot(wx.Panel):
 
@@ -3409,7 +3412,7 @@ class UVPlot(wx.Panel):
 
     def _on_twindow_change(self, obj, val):
         self._time_window = float(val)
-
+        
         self.canvas.mpl_disconnect(self.cid)
         self.updatePlot()
         self.cid = self.canvas.mpl_connect('draw_event', self.ax_redraw)
@@ -3422,6 +3425,9 @@ class UVPlot(wx.Panel):
         self.update_plot_data(self.spectrum, self.abs_history, self.abs_wvl)
 
     def update_plot_data(self, spectrum, abs_history, abs_wvl):
+        print('updating_plot_data')
+        a = time.time()
+
         self.spectrum = spectrum
         self.abs_history = abs_history
         self.abs_wvl = abs_wvl
@@ -3442,8 +3448,11 @@ class UVPlot(wx.Panel):
             abs_data = []
 
         self.abs_data = abs_data
+        print(time.time()-a)
 
+        a = time.time()
         self.plot_data()
+        print(time.time()-a)
 
     def ax_redraw(self, widget=None):
         ''' Redraw plots on window resize event '''
@@ -3619,7 +3628,8 @@ class UVPlot(wx.Panel):
                     else:
                         cur_xmax = xmax
 
-                if cur_xmax > oldx[1] or cur_xmax < oldx[1] - self._time_window*0.1:
+                if (cur_xmax > oldx[1] or (oldx[1] - oldx[0] != self._time_window*1.1 
+                    and oldx[1] - oldx[0] != self._time_window)):
                     new_trange = True
                 else:
                     new_trange = False
@@ -4026,7 +4036,6 @@ if __name__ == '__main__':
     # com_thread = None
 
     spectrometer_settings = {
-        'name'                  :  'CoflowUV',
         'device_init'           : [{'name': 'CoflowUV', 'args': ['StellarNet', None],
                                     'kwargs': {'shutter_pv_name': '18ID:LJT4:2:DO11',
                                     'trigger_pv_name' : '18ID:LJT4:2:DO12'}}],

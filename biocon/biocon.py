@@ -94,8 +94,13 @@ class BioFrame(wx.Frame):
 
                 box = wx.StaticBox(top_panel, label=label)
                 box.SetOwnForegroundColour(wx.Colour('firebrick'))
-                component_panel = self.settings['components'][key](self.settings[key],
-                    box, name=key)
+
+                if key != 'uv':
+                    component_panel = self.settings['components'][key](self.settings[key],
+                        box, name=key)
+                else:
+                    component_panel = self.settings['components'][key](box, wx.ID_ANY,
+                        self.settings[key], name=key)
 
                 component_sizer = wx.StaticBoxSizer(box, wx.VERTICAL)
                 component_sizer.Add(component_panel, proportion=1, border=2,
@@ -325,7 +330,7 @@ if __name__ == '__main__':
 
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']
 
-     coflow_settings = {
+    coflow_settings = {
         'show_advanced_options'     : False,
         'device_communication'      : 'remote',
         'remote_pump_ip'            : '164.54.204.53',
@@ -618,10 +623,9 @@ if __name__ == '__main__':
         }
 
     spectrometer_settings = {
-        'name'                  :  'CoflowUV',
-        'device_init'           : {'name': 'CoflowUV', 'args': ['StellarNet'],
-            'kwargs': {'shutter_pv_name': '18ID:LJT4:2:DO11',
-            'trigger_pv_name' : '18ID:LJT4:2:DO12'}},
+        'device_init'           : [{'name': 'CoflowUV', 'args': ['StellarNet', None],
+                                    'kwargs': {'shutter_pv_name': '18ID:LJT4:2:DO11',
+                                    'trigger_pv_name' : '18ID:LJT4:2:DO12'}}],
         'max_int_t'             : 0.025, # in s
         'scan_avg'              : 1,
         'smoothing'             : 0,
@@ -634,7 +638,7 @@ if __name__ == '__main__':
         'ref_avgs'              : 2,
         'history_t'             : 60*60*24, #in s
         'save_subdir'           : 'UV',
-        'save_type'             : 'A & T & R',
+        'save_type'             : 'Absorbance',
         'series_ref_at_start'   : True,
         'abs_wav'               : [280, 260],
         'abs_window'            : 1,
@@ -642,20 +646,24 @@ if __name__ == '__main__':
         'wavelength_range'      : [200, 838.39],
         'remote_ip'             : '164.54.204.53',
         'remote_port'           : '5559',
-        'remote_dir_prefix'     : {'local' : '/nas_data', 'remote' : 'Y:\\'}
+        'remote'                : True,
+        'remote_device'         : 'uv',
+        'com_thread'            : None,
+        'remote_dir_prefix'     : {'local' : '/nas_data', 'remote' : 'Y:\\'},
+        'inline_panel'          : True,
     }
 
     biocon_settings = {}
 
     components = OrderedDict([
         ('exposure', expcon.ExpPanel),
-        # ('coflow', coflowcon.CoflowPanel),
+        ('coflow', coflowcon.CoflowPanel),
         # ('trsaxs_scan', trcon.TRScanPanel),
         # ('trsaxs_flow', trcon.TRFlowPanel),
         # ('scan',    scancon.ScanPanel),
         ('metadata', metadata.ParamPanel),
         # ('pipeline', pipeline_ctrl.PipelineControl),
-        # ('uv', spectrometercon.InlineUVPanel),
+        ('uv', spectrometercon.UVPanel),
         ])
 
     settings = {
