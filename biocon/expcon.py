@@ -1663,6 +1663,7 @@ class ExpCommThread(threading.Thread):
             self.return_queue.append(['exposing', None])
 
     def get_experiment_status(self, ab_burst, ab_burst_2, det, timeouts):
+        # logger.debug('getting experiment status')
         try:
             status = ab_burst.get_status()
             timeouts=0
@@ -1795,6 +1796,7 @@ class ExpCommThread(threading.Thread):
                 current_meas = struck.get_last_measurement_number()
 
                 if current_meas != last_meas and current_meas != -1:
+                    logger.debug('getting struck values')
                     cvals = struck.read_all()
 
                     if last_meas == 0:
@@ -2724,6 +2726,12 @@ class ExpPanel(wx.Panel):
 
         self._initialize()
 
+    def _FromDIP(self, size):
+        # This is a hack to provide easy back compatibility with wxpython < 4.1
+        try:
+            return self.FromDIP(size)
+        except Exception:
+            return size
 
     def _create_layout(self):
         """Creates the layout for the panel."""
@@ -2732,24 +2740,24 @@ class ExpPanel(wx.Panel):
 
         file_open = wx.ArtProvider.GetBitmap(wx.ART_FOLDER_OPEN, wx.ART_BUTTON)
         self.change_dir_btn = wx.BitmapButton(self, bitmap=file_open,
-            size=(file_open.GetWidth()+15, -1))
+            size=self._FromDIP((file_open.GetWidth()+15, -1)))
         self.change_dir_btn.Bind(wx.EVT_BUTTON, self._on_change_dir)
 
         self.filename = wx.TextCtrl(self, value=self.settings['filename'],
             validator=utils.CharValidator('fname'))
         self.num_frames = wx.TextCtrl(self, value=self.settings['exp_num'],
-            size=(60,-1), validator=utils.CharValidator('int'))
+            size=self._FromDIP((60,-1)), validator=utils.CharValidator('int'))
         self.exp_time = wx.TextCtrl(self, value=self.settings['exp_time'],
-            size=(60,-1), validator=utils.CharValidator('float'))
+            size=self._FromDIP((60,-1)), validator=utils.CharValidator('float'))
         self.exp_period = wx.TextCtrl(self, value=self.settings['exp_period'],
-            size=(60,-1), validator=utils.CharValidator('float'))
+            size=self._FromDIP((60,-1)), validator=utils.CharValidator('float'))
         self.run_num = wx.StaticText(self, label='_{:03d}'.format(self.settings['run_num']))
         self.wait_for_trig = wx.CheckBox(self, label='Wait for external trigger')
         self.wait_for_trig.SetValue(self.settings['wait_for_trig'])
         self.num_trig = wx.TextCtrl(self, value=self.settings['num_trig'],
-            size=(60,-1), validator=utils.CharValidator('int'))
+            size=self._FromDIP((60,-1)), validator=utils.CharValidator('int'))
         self.muscle_sampling = wx.TextCtrl(self, value=self.settings['struck_measurement_time'],
-            size=(60,-1), validator=utils.CharValidator('float'))
+            size=self._FromDIP((60,-1)), validator=utils.CharValidator('float'))
 
         if 'trsaxs_scan' in self.settings['components']:
             self.num_frames.SetValue('')
@@ -2761,7 +2769,8 @@ class ExpPanel(wx.Panel):
         file_prefix_sizer.Add(self.filename, proportion=1)
         file_prefix_sizer.Add(self.run_num, flag=wx.ALIGN_BOTTOM)
 
-        self.exp_name_sizer = wx.GridBagSizer(vgap=5, hgap=5)
+        self.exp_name_sizer = wx.GridBagSizer(vgap=self._FromDIP(5),
+            hgap=self._FromDIP(5))
 
         self.exp_name_sizer.Add(wx.StaticText(self, label='Data directory:'), (0,0),
             flag=wx.ALIGN_CENTER_VERTICAL)
@@ -2779,34 +2788,40 @@ class ExpPanel(wx.Panel):
         self.exp_time_sizer = wx.BoxSizer(wx.HORIZONTAL)
         self.exp_time_sizer.Add(wx.StaticText(self, label='Number of frames:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
-        self.exp_time_sizer.Add(self.num_frames, border=5, flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT)
+        self.exp_time_sizer.Add(self.num_frames, border=self._FromDIP(5),
+            flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT)
         self.exp_time_sizer.Add(wx.StaticText(self, label='Exp. time [s]:'),
-            border=5, flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT)
-        self.exp_time_sizer.Add(self.exp_time, border=5, flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT)
+            border=self._FromDIP(5), flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT)
+        self.exp_time_sizer.Add(self.exp_time, border=self._FromDIP(5),
+            flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT)
         self.exp_time_sizer.Add(wx.StaticText(self, label='Exp. period [s]:'),
-            border=5, flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT)
-        self.exp_time_sizer.Add(self.exp_period, border=5, flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT)
+            border=self._FromDIP(5), flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT)
+        self.exp_time_sizer.Add(self.exp_period, border=self._FromDIP(5),
+            flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT)
 
 
         trig_sizer = wx.BoxSizer(wx.HORIZONTAL)
         trig_sizer.Add(self.wait_for_trig, flag=wx.ALIGN_CENTER_VERTICAL)
         trig_sizer.Add(wx.StaticText(self, label='Number of triggers:'),
-            border=15, flag=wx.LEFT|wx.ALIGN_CENTER_VERTICAL)
-        trig_sizer.Add(self.num_trig, border=2, flag=wx.LEFT|wx.ALIGN_CENTER_VERTICAL)
+            border=self._FromDIP(15), flag=wx.LEFT|wx.ALIGN_CENTER_VERTICAL)
+        trig_sizer.Add(self.num_trig, border=self._FromDIP(2),
+            flag=wx.LEFT|wx.ALIGN_CENTER_VERTICAL)
         trig_sizer.AddStretchSpacer(1)
 
 
         self.muscle_sizer = wx.BoxSizer(wx.HORIZONTAL)
         self.muscle_sizer.Add(wx.StaticText(self, label='Parameter sampling time [s]:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
-        self.muscle_sizer.Add(self.muscle_sampling, border=2,
+        self.muscle_sizer.Add(self.muscle_sampling, border=self._FromDIP(2),
             flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT)
         self.muscle_sizer.AddStretchSpacer(1)
 
         self.advanced_options = wx.StaticBoxSizer(wx.StaticBox(self,
             label='Advanced Options'), wx.VERTICAL)
-        self.advanced_options.Add(trig_sizer, border=5, flag=wx.ALL|wx.EXPAND)
-        self.advanced_options.Add(self.muscle_sizer, border=5, flag=wx.ALL|wx.EXPAND)
+        self.advanced_options.Add(trig_sizer, border=self._FromDIP(5),
+            flag=wx.ALL|wx.EXPAND)
+        self.advanced_options.Add(self.muscle_sizer, border=self._FromDIP(5),
+            flag=wx.ALL|wx.EXPAND)
 
         self.start_scan_btn = wx.Button(self, label='Start Scan')
         self.start_scan_btn.Bind(wx.EVT_BUTTON, self._on_start_exp)
@@ -2825,24 +2840,24 @@ class ExpPanel(wx.Panel):
 
         self.exp_btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
         self.exp_btn_sizer.AddStretchSpacer(1)
-        self.exp_btn_sizer.Add(self.start_scan_btn, border=5,
+        self.exp_btn_sizer.Add(self.start_scan_btn, border=self._FromDIP(5),
             flag=wx.ALIGN_CENTER_VERTICAL|wx.ALIGN_RIGHT|wx.RIGHT)
-        self.exp_btn_sizer.Add(self.start_exp_btn, border=5,
+        self.exp_btn_sizer.Add(self.start_exp_btn, border=self._FromDIP(5),
             flag=wx.ALIGN_CENTER_VERTICAL|wx.ALIGN_RIGHT|wx.RIGHT)
-        self.exp_btn_sizer.Add(self.stop_exp_btn, border=5,
+        self.exp_btn_sizer.Add(self.stop_exp_btn, border=self._FromDIP(5),
             flag=wx.ALIGN_CENTER_VERTICAL|wx.ALIGN_LEFT|wx.LEFT)
         self.exp_btn_sizer.AddStretchSpacer(1)
 
         exp_ctrl_box_sizer = wx.StaticBoxSizer(wx.StaticBox(self,
             label='Exposure Controls'), wx.VERTICAL)
 
-        exp_ctrl_box_sizer.Add(self.exp_name_sizer, border=5,
+        exp_ctrl_box_sizer.Add(self.exp_name_sizer, border=self._FromDIP(5),
             flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT)
-        exp_ctrl_box_sizer.Add(self.exp_time_sizer, border=5,
+        exp_ctrl_box_sizer.Add(self.exp_time_sizer, border=self._FromDIP(5),
             flag=wx.TOP|wx.LEFT|wx.RIGHT)
-        exp_ctrl_box_sizer.Add(self.advanced_options, border=5,
+        exp_ctrl_box_sizer.Add(self.advanced_options, border=self._FromDIP(5),
             flag=wx.TOP|wx.LEFT|wx.RIGHT|wx.EXPAND)
-        exp_ctrl_box_sizer.Add(self.exp_btn_sizer, border=5,
+        exp_ctrl_box_sizer.Add(self.exp_btn_sizer, border=self._FromDIP(5),
             flag=wx.EXPAND|wx.ALIGN_CENTER_HORIZONTAL|wx.ALL)
 
         exp_ctrl_box_sizer.Show(self.advanced_options,
@@ -2854,38 +2869,40 @@ class ExpPanel(wx.Panel):
 
 
         self.status = wx.StaticText(self, label='Ready', style=wx.ST_NO_AUTORESIZE,
-            size=(150, -1))
+            size=self._FromDIP((150, -1)))
         self.status.SetForegroundColour(wx.RED)
         fsize = self.GetFont().GetPointSize()
         font = wx.Font(fsize, wx.DEFAULT, wx.NORMAL, wx.BOLD)
         self.status.SetFont(font)
 
         self.time_remaining = wx.StaticText(self, label='0', style=wx.ST_NO_AUTORESIZE,
-            size=(100, -1))
+            size=self._FromDIP((100, -1)))
         self.time_remaining.SetFont(font)
 
         self.scan_number = wx.StaticText(self, label='1', style=wx.ST_NO_AUTORESIZE,
-            size=(30, -1))
+            size=self._FromDIP((30, -1)))
         self.scan_number.SetFont(font)
 
         self.scan_num_sizer = wx.BoxSizer(wx.HORIZONTAL)
         self.scan_num_sizer.Add(wx.StaticText(self, label='Current scan:'),
             flag=wx.ALIGN_CENTER_VERTICAL|wx.RESERVE_SPACE_EVEN_IF_HIDDEN)
-        self.scan_num_sizer.Add(self.scan_number, border=5,
+        self.scan_num_sizer.Add(self.scan_number, border=self._FromDIP(5),
             flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT|wx.RESERVE_SPACE_EVEN_IF_HIDDEN)
 
         self.exp_status_sizer = wx.StaticBoxSizer(wx.StaticBox(self,
             label='Exposure Status'), wx.HORIZONTAL)
 
-        self.exp_status_sizer.Add(wx.StaticText(self, label='Status:'), border=5,
+        self.exp_status_sizer.Add(wx.StaticText(self, label='Status:'),
+            border=self._FromDIP(5),
             flag=wx.ALIGN_CENTER_VERTICAL|wx.TOP|wx.LEFT|wx.BOTTOM)
-        self.exp_status_sizer.Add(self.status, border=5,
+        self.exp_status_sizer.Add(self.status, border=self._FromDIP(5),
             flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT|wx.TOP|wx.BOTTOM)
-        self.exp_status_sizer.Add(wx.StaticText(self, label='Time remaining:'), border=5,
+        self.exp_status_sizer.Add(wx.StaticText(self, label='Time remaining:'),
+            border=self._FromDIP(5),
             flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT|wx.TOP|wx.BOTTOM)
-        self.exp_status_sizer.Add(self.time_remaining, border=5,
+        self.exp_status_sizer.Add(self.time_remaining, border=self._FromDIP(5),
             flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT|wx.TOP|wx.BOTTOM)
-        self.exp_status_sizer.Add(self.scan_num_sizer, border=5,
+        self.exp_status_sizer.Add(self.scan_num_sizer, border=self._FromDIP(5),
             flag=wx.ALIGN_CENTER_VERTICAL|wx.ALL|wx.RESERVE_SPACE_EVEN_IF_HIDDEN)
         self.exp_status_sizer.AddStretchSpacer(1)
 
@@ -2893,7 +2910,8 @@ class ExpPanel(wx.Panel):
 
         top_sizer = wx.BoxSizer(wx.VERTICAL)
         top_sizer.Add(exp_ctrl_box_sizer, flag=wx.EXPAND)
-        top_sizer.Add(self.exp_status_sizer, border=10, flag=wx.EXPAND|wx.TOP)
+        top_sizer.Add(self.exp_status_sizer, border=self._FromDIP(10),
+            flag=wx.EXPAND|wx.TOP)
 
         return top_sizer
 

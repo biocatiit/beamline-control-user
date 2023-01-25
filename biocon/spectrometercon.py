@@ -2256,7 +2256,7 @@ class UVPanel(utils.DevicePanel):
                 flag=wx.ALIGN_CENTER_VERTICAL)
             plot_settings_sizer.Add(self.update_period, flag=wx.ALIGN_CENTER_VERTICAL)
 
-            self.uv_plot = UVPlot(plot_parent)
+            self.uv_plot = UVPlot(plot_parent, self.settings['plot_refresh_t'])
 
             plot_sizer = wx.StaticBoxSizer(plot_parent, wx.VERTICAL)
             plot_sizer.Add(plot_settings_sizer, border=self._FromDIP(5),
@@ -3207,8 +3207,8 @@ class UVPanel(utils.DevicePanel):
 
     def _on_show_uv_plot(self, evt):
         if self.uvplot_frame is None:
-            self.uvplot_frame = UVPlotFrame(self, title='UV Plot',
-                size=self._FromDIP((500, 500)))
+            self.uvplot_frame = UVPlotFrame(self, self.settigns['plot_refresh_t'],
+                title='UV Plot', size=self._FromDIP((500, 500)))
 
             self.uv_plot = self.uvplot_frame.uv_plot
 
@@ -3270,10 +3270,13 @@ class UVPanel(utils.DevicePanel):
             self._live_update_stop.set()
             self._live_update_thread.join()
 
+    def on_exit(self):
+        self.close()
+
 
 class UVPlot(wx.Panel):
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, refresh_time=1, *args, **kwargs):
 
         super(UVPlot, self).__init__(*args, **kwargs)
 
@@ -3291,11 +3294,19 @@ class UVPlot(wx.Panel):
         self._time_window = 10
         self._time_zero = time.time()
 
+        self._refresh_time = refresh_time
+        self._last_refresh = 0
+        self._needs_refresh = True
+
         self._create_layout()
 
         # Connect the callback for the draw_event so that window resizing works:
         self.cid = self.canvas.mpl_connect('draw_event', self.ax_redraw)
         self.canvas.mpl_connect('motion_notify_event', self._onMouseMotionEvent)
+
+        self.refresh_timer = wx.Timer()
+        self.refresh_timer.Bind(self._on_refresh_timer)
+        self.refresh_timer.Start(self._refresh_time*1000)
 
 
     def _FromDIP(self, size):
@@ -3409,7 +3420,7 @@ class UVPlot(wx.Panel):
 
     def _on_twindow_change(self, obj, val):
         self._time_window = float(val)
-
+        
         self.canvas.mpl_disconnect(self.cid)
         self.updatePlot()
         self.cid = self.canvas.mpl_connect('draw_event', self.ax_redraw)
@@ -3421,7 +3432,17 @@ class UVPlot(wx.Panel):
         self._time_zero = time.time()
         self.update_plot_data(self.spectrum, self.abs_history, self.abs_wvl)
 
-    def update_plot_data(self, spectrum, abs_history, abs_wvl):
+    def _on_refresh_timer(self, evt):
+        if self._needs_refresh:
+            if time.time() - self._last_refresh > self._refresh_time:
+                self.plot_data()
+                self._last_refresh = time.time()
+                self._needs_refresh = False
+
+    def update_plot_data(self, spectrum, abs_history, abs_wvl, force_refresh=False):
+        print('updating_plot_data')
+        a = time.time()
+
         self.spectrum = spectrum
         self.abs_history = abs_history
         self.abs_wvl = abs_wvl
@@ -3442,8 +3463,14 @@ class UVPlot(wx.Panel):
             abs_data = []
 
         self.abs_data = abs_data
+        print(time.time()-a)
 
+                a = time.time()
+        if not force_refresh:
+            self._needs_refresh = True
+        else:
         self.plot_data()
+        print(time.time()-a)
 
     def ax_redraw(self, widget=None):
         ''' Redraw plots on window resize event '''
@@ -3619,7 +3646,8 @@ class UVPlot(wx.Panel):
                     else:
                         cur_xmax = xmax
 
-                if cur_xmax > oldx[1] or cur_xmax < oldx[1] - self._time_window*0.1:
+                if (cur_xmax > oldx[1] or (oldx[1] - oldx[0] != self._time_window*1.1 
+                    and oldx[1] - oldx[0] != self._time_window)):
                     new_trange = True
                 else:
                     new_trange = False
@@ -3720,18 +3748,18 @@ class UVPlot(wx.Panel):
             self.toolbar.set_status('')
 
 class UVPlotFrame(wx.Frame):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, plot_refresh_t=1, *args, **kwargs):
         super(UVPlotFrame, self).__init__(*args, **kwargs)
 
-        self._create_layout()
+        self._create_layout(plot_refresh_t)
 
         self.Bind(wx.EVT_CLOSE, self._on_exit)
 
         self.Raise()
         self.Show()
 
-    def _create_layout(self):
-        self.uv_plot = UVPlot(self)
+    def _create_layout(self, plot_refresh_t):
+        self.uv_plot = UVPlot(self, plot_refresh_t)
 
         sizer = wx.BoxSizer(wx.HORIZONTAL)
         sizer.Add(self.uv_plot, 1, flag=wx.EXPAND)
@@ -4054,6 +4082,7 @@ if __name__ == '__main__':
         'com_thread'            : com_thread,
         'remote_dir_prefix'     : {'local' : '/nas_data', 'remote' : 'Y:\\'},
         'inline_panel'          : False,
+        'plot_refresh_t'        : 1, #in s
     }
 
     app = wx.App()

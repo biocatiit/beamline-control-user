@@ -665,6 +665,8 @@ class CoflowPanel(wx.Panel):
                     self.stop_flow_button.Enable()
                     self.change_flow_button.Enable()
                     self.status.SetLabel('Coflow on')
+                    self.monitor_timer.Start(self.settings['settling_time'])
+                    self.coflow_control.coflow_on = True
                 else:
                     self.start_flow_button.Enable()
                     self.change_buffer_button.Enable()

@@ -68,6 +68,13 @@ class BioFrame(wx.Frame):
         self.Fit()
         self.Raise()
 
+    def _FromDIP(self, size):
+        # This is a hack to provide easy back compatibility with wxpython < 4.1
+        try:
+            return self.FromDIP(size)
+        except Exception:
+            return size
+
     def _create_layout(self):
         """Creates the layout"""
         top_panel = wx.Panel(self)
@@ -94,12 +101,17 @@ class BioFrame(wx.Frame):
 
                 box = wx.StaticBox(top_panel, label=label)
                 box.SetOwnForegroundColour(wx.Colour('firebrick'))
-                component_panel = self.settings['components'][key](self.settings[key],
-                    box, name=key)
+
+                if key != 'uv':
+                    component_panel = self.settings['components'][key](self.settings[key],
+                        box, name=key)
+                else:
+                    component_panel = self.settings['components'][key](box, wx.ID_ANY,
+                        self.settings[key], name=key)
 
                 component_sizer = wx.StaticBoxSizer(box, wx.VERTICAL)
-                component_sizer.Add(component_panel, proportion=1, border=2,
-                    flag=wx.EXPAND|wx.ALL)
+                component_sizer.Add(component_panel, proportion=1,
+                    border=self._FromDIP(2), flag=wx.EXPAND|wx.ALL)
 
                 component_sizers[key] = component_sizer
                 self.component_panels[key] = component_panel
@@ -118,14 +130,14 @@ class BioFrame(wx.Frame):
 
                 sub_sub_sizer = wx.BoxSizer(wx.HORIZONTAL)
                 sub_sub_sizer.Add(component_sizers['metadata'], proportion=1,
-                    border=10, flag=wx.EXPAND|wx.ALL)
+                    border=self._FromDIP(10), flag=wx.EXPAND|wx.ALL)
                 sub_sub_sizer.Add(component_sizers['exposure'], proportion=2,
-                    border=10, flag=wx.EXPAND|wx.ALL)
+                    border=self._FromDIP(10), flag=wx.EXPAND|wx.ALL)
 
                 sub_sizer = wx.BoxSizer(wx.VERTICAL)
                 sub_sizer.Add(sub_sub_sizer, flag=wx.EXPAND)
                 sub_sizer.Add(component_sizers['trsaxs_flow'], proportion=1,
-                    border=10, flag=wx.EXPAND|wx.ALL)
+                    border=self._FromDIP(10), flag=wx.EXPAND|wx.ALL)
 
                 exp_sizer.Add(sub_sizer, flag=wx.EXPAND, proportion=1)
 
@@ -133,37 +145,37 @@ class BioFrame(wx.Frame):
                 and 'trsaxs_flow' in component_sizers):
                 sub_sizer = wx.BoxSizer(wx.VERTICAL)
                 sub_sizer.Add(component_sizers['exposure'],
-                    border=10, flag=wx.EXPAND|wx.ALL)
+                    border=self._FromDIP(10), flag=wx.EXPAND|wx.ALL)
                 sub_sizer.Add(component_sizers['trsaxs_flow'], proportion=1,
-                    border=10, flag=wx.EXPAND|wx.ALL)
+                    border=self._FromDIP(10), flag=wx.EXPAND|wx.ALL)
 
                 exp_sizer.Add(sub_sizer, flag=wx.EXPAND, proportion=1)
 
             elif ('exposure' in component_sizers
                 and 'metadata' in component_sizers):
                 exp_sizer.Add(component_sizers['metadata'], proportion=1,
-                    border=10, flag=wx.EXPAND|wx.ALL)
+                    border=self._FromDIP(10), flag=wx.EXPAND|wx.ALL)
                 exp_sizer.Add(component_sizers['exposure'], proportion=2,
-                    border=10, flag=wx.EXPAND|wx.ALL)
+                    border=self._FromDIP(10), flag=wx.EXPAND|wx.ALL)
 
             elif 'exposure' in component_sizers:
                 exp_sizer.Add(component_sizers['exposure'], proportion=1,
-                    border=10, flag=wx.EXPAND|wx.ALL)
+                    border=self._FromDIP(10), flag=wx.EXPAND|wx.ALL)
 
             if 'coflow' in component_sizers:
-                exp_sizer.Add(component_sizers['coflow'], border=10,
-                    flag=wx.EXPAND|wx.ALL)
+                exp_sizer.Add(component_sizers['coflow'],
+                    border=self._FromDIP(10), flag=wx.EXPAND|wx.ALL)
 
             if 'trsaxs_scan' in component_sizers:
-                exp_sizer.Add(component_sizers['trsaxs_scan'], border=10,
-                    flag=wx.EXPAND|wx.ALL)
+                exp_sizer.Add(component_sizers['trsaxs_scan'],
+                    border=self._FromDIP(10), flag=wx.EXPAND|wx.ALL)
 
             if 'scan' in component_sizers:
-                exp_sizer.Add(component_sizers['scan'], border=5,
+                exp_sizer.Add(component_sizers['scan'], border=self._FromDIP(5),
                     flag=wx.EXPAND|wx.ALL)
 
             if 'uv' in component_sizers:
-                exp_sizer.Add(component_sizers['uv'], border=5,
+                exp_sizer.Add(component_sizers['uv'], border=self._FromDIP(5),
                     flag=wx.EXPAND|wx.ALL)
 
             panel_sizer.Add(exp_sizer, flag=wx.EXPAND)
@@ -320,12 +332,12 @@ if __name__ == '__main__':
             'sample_vac': {'check': False, 'thresh': 0.04}, 'sc_vac':
             {'check': True, 'thresh':0.04}},
         # 'base_data_dir'         : '/nas_data/Pilatus1M/2022_Run2', #CHANGE ME
-        'base_data_dir'         : '/nas_data/Eiger2x/2022_Run3', #CHANGE ME and pipeline local_basedir
+        'base_data_dir'         : '/nas_data/Eiger2x/2023_Run1', #CHANGE ME and pipeline local_basedir
         }
 
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']
 
-     coflow_settings = {
+    coflow_settings = {
         'show_advanced_options'     : False,
         'device_communication'      : 'remote',
         'remote_pump_ip'            : '164.54.204.53',
@@ -618,10 +630,9 @@ if __name__ == '__main__':
         }
 
     spectrometer_settings = {
-        'name'                  :  'CoflowUV',
-        'device_init'           : {'name': 'CoflowUV', 'args': ['StellarNet'],
-            'kwargs': {'shutter_pv_name': '18ID:LJT4:2:DO11',
-            'trigger_pv_name' : '18ID:LJT4:2:DO12'}},
+        'device_init'           : [{'name': 'CoflowUV', 'args': ['StellarNet', None],
+                                    'kwargs': {'shutter_pv_name': '18ID:LJT4:2:DO11',
+                                    'trigger_pv_name' : '18ID:LJT4:2:DO12'}}],
         'max_int_t'             : 0.025, # in s
         'scan_avg'              : 1,
         'smoothing'             : 0,
@@ -634,7 +645,7 @@ if __name__ == '__main__':
         'ref_avgs'              : 2,
         'history_t'             : 60*60*24, #in s
         'save_subdir'           : 'UV',
-        'save_type'             : 'A & T & R',
+        'save_type'             : 'Absorbance',
         'series_ref_at_start'   : True,
         'abs_wav'               : [280, 260],
         'abs_window'            : 1,
@@ -642,7 +653,12 @@ if __name__ == '__main__':
         'wavelength_range'      : [200, 838.39],
         'remote_ip'             : '164.54.204.53',
         'remote_port'           : '5559',
-        'remote_dir_prefix'     : {'local' : '/nas_data', 'remote' : 'Y:\\'}
+        'remote'                : True,
+        'remote_device'         : 'uv',
+        'com_thread'            : None,
+        'remote_dir_prefix'     : {'local' : '/nas_data', 'remote' : 'Y:\\'},
+        'inline_panel'          : True,
+        'plot_refresh_t'        : 1, #in s
     }
 
     biocon_settings = {}
@@ -654,8 +670,8 @@ if __name__ == '__main__':
         # ('trsaxs_flow', trcon.TRFlowPanel),
         # ('scan',    scancon.ScanPanel),
         ('metadata', metadata.ParamPanel),
-        ('pipeline', pipeline_ctrl.PipelineControl),
-        ('uv', spectrometercon.InlineUVPanel),
+        # ('pipeline', pipeline_ctrl.PipelineControl),
+        ('uv', spectrometercon.UVPanel),
         ])
 
     settings = {
