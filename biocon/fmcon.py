@@ -193,9 +193,9 @@ class BFS(FlowMeter):
 
         self.connect()
 
-        self.filter = 0.5
-
         self.remote = False
+
+        self.filter = 0.5
 
     def connect(self):
         if not self.connected:
@@ -269,7 +269,7 @@ class BFS(FlowMeter):
 
         else:
             self._set_remote_params(False, True)
-            flow, density, temp = self._read_remote()
+            flow, density, temperature = self._read_remote()
 
         logger.debug('Temperature: {}'.format(temperature))
 
@@ -318,29 +318,29 @@ class BFS(FlowMeter):
 
         with self.comm_lock:
             error = Elveflow.BFS_Get_Remote_Data(self.instr_ID.value,
-                ctypes.byref(data_sens), ctypes.byref(data_dens)
+                ctypes.byref(data_sens), ctypes.byref(data_dens),
                 ctypes.byref(data_temp))
 
         self._check_error(error)
 
-        flow = float(data_sense.value)
+        flow = float(data_sens.value)
         density = float(data_dens.value)
         temp = float(data_temp.value)
 
         return flow, density, temp
 
-    def _set_remote_params(read_density, read_temp):
+    def _set_remote_params(self, read_density, read_temp):
         filt = ctypes.c_double(self.filter)
 
         if read_temp:
-            m_temp = c_int32(1)
+            m_temp = ctypes.c_int32(1)
         else:
-            m_temp = c_int32(0)
+            m_temp = ctypes.c_int32(0)
 
         if read_density:
-            m_density = c_int32(1)
+            m_density = ctypes.c_int32(1)
         else:
-            m_density = c_int32(0)
+            m_density = ctypes.c_int32(0)
 
         Elveflow.BFS_Set_Remote_Params(self.instr_ID.value, filt, m_temp,
             m_density)

@@ -2260,7 +2260,7 @@ class SSINextGenPump(Pump):
         self._is_dispensing = False
         self._accel_stop.set()
 
-class OB1(Object):
+class OB1(object):
     def __init__(self, name, device, comm_lock=None, calib=None):
 
         self.name = name
@@ -2289,7 +2289,7 @@ class OB1(Object):
 
         self.connect()
 
-        self._remote_mode = False
+        self.remote = False
 
         self._connected_channels = []
 
@@ -2343,8 +2343,8 @@ class OB1Pump(Pump):
         Note: comm_lock needs to be an RLock for this device
         """
 
-        logstr = ("Initializing pump {} on serial port {}".format(self.name,
-            self.device))
+        logstr = ("Initializing pump {} on serial port {}".format(name,
+            device))
         logger.info(logstr)
 
         self._ob1 = ob1_device
@@ -2359,9 +2359,11 @@ class OB1Pump(Pump):
         self._pressure_units = 'mbar'
         self._target_pressure = 0
         self._target_flow = 0
+        self._min_pressure = min_pressure
+        self._max_pressure = max_pressure
 
         self._channel = int(channel)
-        self._ob1_chan = ctypes.c_int32(self.channel)
+        self._ob1_chan = ctypes.c_int32(self._channel)
 
         self._has_flow_meter = False
         self._PID_mode = False
@@ -2422,7 +2424,7 @@ class OB1Pump(Pump):
                     self._ob1_chan, 1, ctypes.byref(data_sens))
 
                 self._check_error(error)
-                rate = float(data_sense)
+                rate = float(data_sens)
 
             else:
                 flow = 0
@@ -2553,6 +2555,16 @@ class OB1Pump(Pump):
         pressure = self._convert_pressure(pressure, self.pressure_units,
             self._pump_pressure_units)
 
+        if pressure > self._max_pressure:
+            logger.warning('Pressure %s is greater than %s max pressure,'
+                'setting pressure to max', pressure, self.name)
+            pressure = self._max_pressure
+
+        if pressure < self._min_pressure:
+            logger.warning('Pressure %s is less than %s min pressure,'
+                'setting pressure to min', pressure, self.name)
+            pressure = self._min_pressure
+
         with self.comm_lock:
             if not self._ob1.remote:
                 set_pressure = float(pressure) #mbarr
@@ -2603,7 +2615,7 @@ class OB1Pump(Pump):
 
             self._ob1.remote = False
 
-    def _start_remote_PID(start_running):
+    def _start_remote_PID(self, start_running):
         if start_running:
             running = ctypes.c_int32(1)
         else:
@@ -2639,7 +2651,7 @@ class OB1Pump(Pump):
 
             self._check_error(error)
 
-    def initialize_remote_PID(P, I, bfs_instr_id, start_running):
+    def initialize_remote_PID(self, P, I, bfs_instr_ID, start_running):
         # Flow meter must already be in remote mode
         self._P = P
         self._I = I
@@ -2656,7 +2668,7 @@ class OB1Pump(Pump):
             running = ctypes.c_int32(0)
 
         with self.comm_lock:
-            error = lveflow.PID_Add_Remote(self.instr_ID.value, self._ob1_chan,
+            error = Elveflow.PID_Add_Remote(self.instr_ID.value, self._ob1_chan,
                 bfs_instr_ID.value, sensor_channel, P, I, running)
             self._check_error(error)
 
@@ -2664,7 +2676,7 @@ class OB1Pump(Pump):
         self._PID_mode = start_running
 
 
-    def set_PID_values(P, I, reset_err=True):
+    def set_PID_values(self, P, I, reset_err=True):
         self._P = P
         self._I = I
 
