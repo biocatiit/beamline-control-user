@@ -1149,3 +1149,14 @@ class DeviceFrame(wx.Frame):
             device.close()
 
         self.Destroy()
+
+
+elveflow_errors = {
+    -8000   : 'No digital sensor found',
+    -8001   : 'No pressure sensor compatible with OB1 MK3',
+    -8002   : 'No digital pressure sensor compatible with OB1 MK3+',
+    -8003   : 'No digital flow sensor compatible with OB1 MK3',
+    -8004   : 'No IPA config for this sensor',
+    -8005   : 'Sensor not compatible with AF1',
+    -8006   : 'No instrument with selected ID',
+    }
