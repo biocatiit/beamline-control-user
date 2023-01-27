@@ -389,7 +389,7 @@ if __name__ == '__main__':
             ]
 
         setup_uv = [
-            {'name': 'CoflowUV', 'args': ['StellarNet'], 'kwargs':
+            {'name': 'CoflowUV', 'args': ['StellarNet', None], 'kwargs':
             {'shutter_pv_name': '18ID:LJT4:2:DO11',
             'trigger_pv_name' : '18ID:LJT4:2:DO12'}},
             ]
@@ -442,12 +442,6 @@ if __name__ == '__main__':
                     'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
                     'max_pressure': 1800}},
                 ]
-
-            pump_local_comm_locks = {
-                'Buffer 1'    : pump_comm_locks[setup_pumps[0][2]],
-                'Sample'    : pump_comm_locks[setup_pumps[1][2]],
-                'Buffer 2'    : pump_comm_locks[setup_pumps[2][2]]
-                }
 
             setup_valves = [
                 {'name': 'Injection', 'args': ['Rheodyne', 'COM6'],
@@ -632,18 +626,25 @@ if __name__ == '__main__':
         title='Valve Control')
     valve_frame.Show()
 
-    # if exp_type == 'coflow':
-    #     # Coflow only
-    #     control_server_uv = ControlServer(ip, port4, name='UVControlServer',
-    #         start_uv=True)
-    #     control_server_uv.start()
+    if exp_type == 'coflow':
+        # Coflow only
+        control_server_uv = ControlServer(ip, port4, name='UVControlServer',
+            start_uv=True)
+        control_server_uv.start()
 
-    #     time.sleep(1)
-    #     uv_comm_thread = control_server_uv.get_comm_thread('uv')
+        time.sleep(1)
+        uv_comm_thread = control_server_uv.get_comm_thread('uv')
 
-    #     uv_frame = spectrometercon.UVFrame('UVFrame', setup_uv, uv_comm_thread,
-    #         parent=None, title='UV Spectrometer Control')
-    #     uv_frame.Show()
+        uv_settings = {
+            'remote'        : False,
+            'device_init'   : setup_uv,
+            'com_thread'    : uv_comm_thread,
+            'inline_panel'  : False,
+            }
+
+        uv_frame = spectrometercon.UVFrame('UVFrame', uv_settings,
+            parent=None, title='UV Spectrometer Control')
+        uv_frame.Show()
 
     app.MainLoop()
 
@@ -661,8 +662,8 @@ if __name__ == '__main__':
         control_server_valve.stop()
         control_server_valve.join()
 
-        # if exp_type == 'coflow':
-        #     control_server_uv.stop()
-        #     control_server_uv.join()
+        if exp_type == 'coflow':
+            control_server_uv.stop()
+            control_server_uv.join()
 
     logger.info("Quitting server")

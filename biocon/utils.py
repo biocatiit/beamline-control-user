@@ -717,7 +717,7 @@ class CommManager(threading.Thread):
 
         self._return_value((name, cmd, True), comm_name)
 
-    def _additional_connect_device(name, device_type, device, **kwargs):
+    def _additional_connect_device(self, name, device_type, device, **kwargs):
         pass # Device specific stuff here if needed
 
     def _disconnect_device(self, name, **kwargs):
