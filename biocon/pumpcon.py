@@ -4413,15 +4413,15 @@ if __name__ == '__main__':
     # pmp_cmd_q.append(stop_cmd)
     # my_pumpcon.stop()
 
-    # # Coflow pumps
-    # setup_devices = [
-    #     {'name': 'sheath', 'args': ['VICI M50', 'COM3'],
-    #         'kwargs': {'flow_cal': '627.72', 'backlash_cal': '9.814'},
-    #         'ctrl_args': {'flow_rate': 1}},
-    #     {'name': 'outlet', 'args': ['VICI M50', 'COM4'],
-    #         'kwargs': {'flow_cal': '628.68', 'backlash_cal': '9.962'},
-    #         'ctrl_args': {'flow_rate': 1}},
-    #     ]
+    # Coflow pumps
+    setup_devices = [
+        {'name': 'sheath', 'args': ['VICI M50', 'COM3'],
+            'kwargs': {'flow_cal': '627.72', 'backlash_cal': '9.814'},
+            'ctrl_args': {'flow_rate': 1}},
+        {'name': 'outlet', 'args': ['VICI M50', 'COM4'],
+            'kwargs': {'flow_cal': '628.68', 'backlash_cal': '9.962'},
+            'ctrl_args': {'flow_rate': 1}},
+        ]
 
     # # TR-SAXS PHD 4400 pumps
     # setup_devices = [
@@ -4482,20 +4482,20 @@ if __name__ == '__main__':
     #     ]
 
     # TR-SAXS Pico Plus pumps
-    setup_devices = [
-        {'name': 'Buffer', 'args': ['Pico Plus', 'COM19'],
-            'kwargs': {'syringe_id': '3 mL, Medline P.C.',
-            'pump_address': '00', 'dual_syringe': 'False'},
-            'ctrl_args': {'flow_rate' : '1', 'refill_rate' : '1'}},
-        # {'name': 'Sheath', 'args': ['Pico Plus', 'COM18'],
-        #     'kwargs': {'syringe_id': '3 mL, Medline P.C.',
-        #     'pump_address': '00'}, 'ctrl_args': {'flow_rate' : '0.002',
-        #     'refill_rate' : '1.5'}},
-        # {'name': 'Sample', 'args': ['Pico Plus', 'COM20'],
-        #     'kwargs': {'syringe_id': '3 mL, Medline P.C.',
-        #     'pump_address': '00'}, 'ctrl_args': {'flow_rate' : '0.009',
-        #     'refill_rate' : '1.5'}},
-        ]
+    # setup_devices = [
+    #     {'name': 'Buffer', 'args': ['Pico Plus', 'COM19'],
+    #         'kwargs': {'syringe_id': '3 mL, Medline P.C.',
+    #         'pump_address': '00', 'dual_syringe': 'False'},
+    #         'ctrl_args': {'flow_rate' : '1', 'refill_rate' : '1'}},
+    #     # {'name': 'Sheath', 'args': ['Pico Plus', 'COM18'],
+    #     #     'kwargs': {'syringe_id': '3 mL, Medline P.C.',
+    #     #     'pump_address': '00'}, 'ctrl_args': {'flow_rate' : '0.002',
+    #     #     'refill_rate' : '1.5'}},
+    #     # {'name': 'Sample', 'args': ['Pico Plus', 'COM20'],
+    #     #     'kwargs': {'syringe_id': '3 mL, Medline P.C.',
+    #     #     'pump_address': '00'}, 'ctrl_args': {'flow_rate' : '0.009',
+    #     #     'refill_rate' : '1.5'}},
+    #     ]
 
     # # Simulated pumps
     # setup_devices = [
