@@ -34,6 +34,7 @@ import copy
 import platform
 import datetime
 import ctypes
+import os
 
 if __name__ != '__main__':
     logger = logging.getLogger(__name__)
@@ -2261,7 +2262,7 @@ class SSINextGenPump(Pump):
         self._accel_stop.set()
 
 class OB1(object):
-    def __init__(self, name, device, comm_lock=None, calib=None):
+    def __init__(self, name, device, comm_lock=None, calib_path=None):
 
         self.name = name
         self.device = device
@@ -2271,23 +2272,23 @@ class OB1(object):
         else:
             self.comm_lock = comm_lock
 
-        self.calib = (ctypes.c_double*1000)()
-
-        if calib is not None:
-            error = Elveflow.Elveflow_Calibration_Load(calib,
-                ctypes.byref(self.calib), 1000)
-
-            self._check_error(error)
-
-        else:
-            error = Elveflow.Elveflow_Calibration_Default(ctypes.byref(self.calib),
-                1000)
-
-            self._check_error(error)
-
         self.connected = False
 
         self.connect()
+
+        self.calib = None
+
+        if calib_path is not None:
+            self.load_calibration(calib_path)
+
+        else:
+            calib = (ctypes.c_double*1000)()
+            error = Elveflow.Elveflow_Calibration_Default(ctypes.byref(calib),
+                1000)
+
+            self.calib = calib
+
+            self._check_error(error)
 
         self.remote = False
 
@@ -2303,23 +2304,31 @@ class OB1(object):
 
                 self._check_error(error)
 
-                # Get default calibration and set as current calibration
-                self.calib = (ctypes.c_double*1000)()
-
             self.connected = True
 
     def calibrate(self):
         calib = (ctypes.c_double*1000)()
-        error = Elveflow.OB1_Calib (Instr_ID.value, calib, 1000)
+        error = Elveflow.OB1_Calib(self.instr_ID.value, calib, 1000)
 
         self._check_error(error)
 
         self.calib = calib
 
     def save_calibration(self, path):
+        path = os.path.abspath(os.path.expanduser(path))
         error = Elveflow.Elveflow_Calibration_Save(path.encode('ascii'),
             ctypes.byref(self.calib), 1000)
 
+        self._check_error(error)
+
+    def load_calibration(self, path):
+        path = os.path.abspath(os.path.expanduser(path))
+        calib = (ctypes.c_double*1000)()
+
+        error = Elveflow.Elveflow_Calibration_Load(path.encode('ascii'),
+            ctypes.byref(calib), 1000)
+
+        self.calib = calib
         self._check_error(error)
 
     def _check_error(self, error):
