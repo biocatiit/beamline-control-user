@@ -2308,6 +2308,20 @@ class OB1(object):
 
             self.connected = True
 
+    def calibrate(self):
+        calib = (ctypes.c_double*1000)()
+        error = Elveflow.OB1_Calib (Instr_ID.value, calib, 1000)
+
+        self._check_error(error)
+
+        self.calib = calib
+
+    def save_calibration(self, path):
+        error = Elveflow.Elveflow_Calibration_Save(path.encode('ascii'),
+            ctypes.byref(self.calib), 1000)
+
+        self._check_error(error)
+
     def _check_error(self, error):
         error = int(error)
 
