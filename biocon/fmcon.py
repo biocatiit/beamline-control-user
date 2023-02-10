@@ -226,7 +226,7 @@ class BFS(FlowMeter):
             flow = float(flow.value)
 
         else:
-            self._set_remote_params(True, False)
+            # self._set_remote_params(True, True)
             flow, density, temp = self._read_remote()
 
         flow = flow*self._flow_mult
@@ -248,7 +248,7 @@ class BFS(FlowMeter):
             density = float(density.value)
 
         else:
-            self._set_remote_params(True, False)
+            # self._set_remote_params(True, True)
             flow, density, temp = self._read_remote()
 
         logger.debug('Density: {}'.format(density))
@@ -268,7 +268,7 @@ class BFS(FlowMeter):
             temperature = float(temperature.value)
 
         else:
-            self._set_remote_params(False, True)
+            # self._set_remote_params(True, True)
             flow, density, temperature = self._read_remote()
 
         logger.debug('Temperature: {}'.format(temperature))
@@ -291,13 +291,13 @@ class BFS(FlowMeter):
             self._check_error(error)
 
         else:
-            self._set_remote_params(False, False)
+            self._set_remote_params(True, True)
 
     def start_remote(self):
         with self.comm_lock:
             error = Elveflow.BFS_Start_Remote_Measurement(self.instr_ID.value)
 
-        self._set_remote_params(False, False)
+        self._set_remote_params(True, True)
 
         self._check_error(error)
 

@@ -2466,7 +2466,7 @@ class OB1Pump(Pump):
 
     @flow_rate.setter
     def flow_rate(self, rate):
-        rate = self._convert_flow_rate(rate, self._pump_base_units, self.units)
+        rate = self._convert_flow_rate(rate, self.units, self._pump_base_units)
 
         with self.comm_lock:
             if self._has_flow_meter and self._PID_mode and self._ob1.remote:
@@ -2487,12 +2487,13 @@ class OB1Pump(Pump):
                 logger.error('Failed to set flow rate for %s because there '
                     'is not a flow meter associated with the device.', self.name)
 
-        self._flow_rate = rate
+        if self._is_flowing:
+            self._flow_rate = rate
 
-        if self._flow_rate > 0:
-            self._flow_dir = 1
-        else:
-            self._flow_dir = -1
+            if self._flow_rate > 0:
+                self._flow_dir = 1
+            else:
+                self._flow_dir = -1
 
     def is_moving(self):
         """
