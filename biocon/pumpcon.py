@@ -5105,7 +5105,7 @@ if __name__ == '__main__':
             'ctrl_args': {'flow_rate': 1}},
         {'name': 'outlet', 'args': ['OB1 Pump', 'COM8'],
             'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
-            'min_pressure': -1000, 'max_pressure': 1000, 'P': 10, 'I': 0.002,
+            'min_pressure': -1000, 'max_pressure': 1000, 'P': 5, 'I': 0.00015,
             'D': 0, 'bfs_instr_ID': bfs.instr_ID, 'comm_lock': ob1_comm_lock,
             'calib_path': './resources/ob1_calib.txt'},
             'ctrl_args': {}}

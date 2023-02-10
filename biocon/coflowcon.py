@@ -72,6 +72,9 @@ class CoflowControl(object):
         self.fm_outlet_init = False
         self.valve_sheath_init = False
 
+        self.sheath_fr_mult = settings['sheath_fr_mult']
+        self.outlet_fr_mult = settings['outlet_fr_mult']
+
         if not self.timeout_event.is_set():
             self.init_pumps()
             self.init_fms()
@@ -380,15 +383,18 @@ class CoflowControl(object):
         sheath_flow = flow_rate*excess
         outlet_flow = flow_rate/(1-ratio)
 
-        self.sheath_setpoint = sheath_flow
-        self.outlet_setpoint = outlet_flow
-
-        sheath_fr_cmd = ('set_flow_rate', (self.sheath_pump_name, sheath_flow), {})
-        outlet_fr_cmd = ('set_flow_rate', (self.outlet_pump_name, outlet_flow), {})
-
         logger.info('LC flow input to %f %s', flow_rate, self.settings['flow_units'])
         logger.info('Setting sheath flow to %f %s', sheath_flow, self.settings['flow_units'])
         logger.info('Setting outlet flow to %f %s', outlet_flow, self.settings['flow_units'])
+
+        self.sheath_setpoint = sheath_flow
+        self.outlet_setpoint = outlet_flow
+
+        sheath_flow = sheath_flow*self.sheath_fr_mult
+        outlet_flow = outlet_flow*self.outlet_fr_mult
+
+        sheath_fr_cmd = ('set_flow_rate', (self.sheath_pump_name, sheath_flow), {})
+        outlet_fr_cmd = ('set_flow_rate', (self.outlet_pump_name, outlet_flow), {})
 
         self._send_pumpcmd(sheath_fr_cmd)
         self._send_pumpcmd(outlet_fr_cmd)
@@ -399,7 +405,7 @@ class CoflowControl(object):
         ret = self._send_fmcmd(sheath_fr_cmd, True)
         if ret is not None:
             ret_type = 'flow_rate'
-            ret_val = ret
+            ret_val = ret*self.sheath_fr_mult
         else:
             ret_type = None
             ret_val = None
@@ -438,7 +444,7 @@ class CoflowControl(object):
         ret = self._send_fmcmd(outlet_fr_cmd, True)
         if ret is not None:
             ret_type = 'flow_rate'
-            ret_val = ret
+            ret_val = ret*self.outlet_fr_mult
         else:
             ret_type = None
             ret_val = None
@@ -677,7 +683,7 @@ class CoflowPanel(wx.Panel):
                 self.get_fr_thread.daemon = True
                 self.get_fr_thread.start()
 
-                self.coflow_control.change_flow_rate(float(self.settings['lc_flow_rate']))
+                # self.coflow_control.change_flow_rate(float(self.settings['lc_flow_rate']))
 
             elif self.coflow_control.timeout_event.is_set():
                 logger.error('Timeout connecting to the coflow control server.')
@@ -1119,7 +1125,7 @@ class CoflowPanel(wx.Panel):
         self._change_flow_rate(self.settings['buffer_change_fr'])
 
         #Start flow
-        self._start_flow()
+        self._start_flow(False)
         wx.CallAfter(self.status.SetLabel, 'Changing buffer')
         #Start flow timer
         fr = self.coflow_control.sheath_setpoint
@@ -1347,7 +1353,7 @@ class CoflowPanel(wx.Panel):
             if valid:
                 self._start_flow()
 
-    def _start_flow(self):
+    def _start_flow(self, start_monitor=True):
         self.start_flow_button.Disable()
         self.change_buffer_button.Disable()
         self.stop_flow_button.Enable()
@@ -1357,7 +1363,8 @@ class CoflowPanel(wx.Panel):
 
         self.status.SetLabel('Coflow on')
 
-        self.monitor_timer.Start(self.settings['settling_time'])
+        if start_monitor:
+            self.monitor_timer.Start(self.settings['settling_time'])
 
     def stop_flow(self):
         logger.debug('Stopping flow')
@@ -1505,8 +1512,11 @@ class CoflowPanel(wx.Panel):
     def _get_flow_rates(self):
         logger.info('Starting continuous logging of flow rates')
 
-        low_warning = self.settings['warning_threshold_low']
-        high_warning = self.settings['warning_threshold_high']
+        sheath_low_warning = self.settings['sheath_warning_threshold_low']
+        sheath_high_warning = self.settings['sheath_warning_threshold_high']
+
+        outlet_low_warning = self.settings['outlet_warning_threshold_low']
+        outlet_high_warning = self.settings['outlet_warning_threshold_high']
 
         cycle_time = time.time()
         long_cycle_time = copy.copy(cycle_time)
@@ -1543,22 +1553,22 @@ class CoflowPanel(wx.Panel):
                     self.fr_time_list.append(time.time()-self.start_time)
 
                 if self.coflow_control.monitor:
-                    if ((sheath_fr < low_warning*self.coflow_control.sheath_setpoint or
-                        sheath_fr > high_warning*self.coflow_control.sheath_setpoint)
+                    if ((sheath_fr < sheath_low_warning*self.coflow_control.sheath_setpoint or
+                        sheath_fr > sheath_high_warning*self.coflow_control.sheath_setpoint)
                         and self.settings['show_sheath_warning']):
                         wx.CallAfter(self._show_warning_dialog, 'sheath', sheath_fr)
                         logger.error('Sheath flow out of bounds (%f to %f): %f',
-                            low_warning*self.coflow_control.sheath_setpoint,
-                            high_warning*self.coflow_control.sheath_setpoint,
+                            sheath_low_warning*self.coflow_control.sheath_setpoint,
+                            sheath_high_warning*self.coflow_control.sheath_setpoint,
                             sheath_fr)
 
-                    if ((outlet_fr < low_warning*self.coflow_control.outlet_setpoint or
-                        outlet_fr > high_warning*self.coflow_control.outlet_setpoint)
+                    if ((outlet_fr < outlet_low_warning*self.coflow_control.outlet_setpoint or
+                        outlet_fr > outlet_high_warning*self.coflow_control.outlet_setpoint)
                         and self.settings['show_outlet_warning']):
                         wx.CallAfter(self._show_warning_dialog, 'outlet', outlet_fr)
                         logger.error('Outlet flow out of bounds (%f to %f): %f',
-                            low_warning*self.coflow_control.outlet_setpoint,
-                            high_warning*self.coflow_control.outlet_setpoint,
+                            outlet_low_warning*self.coflow_control.outlet_setpoint,
+                            outlet_high_warning*self.coflow_control.outlet_setpoint,
                             outlet_fr)
 
             if time.time() - cycle_time > 0.25:
@@ -1632,16 +1642,19 @@ class CoflowPanel(wx.Panel):
 
         logger.info('Flow monitoring started')
 
-        low_warning = self.settings['warning_threshold_low']
-        high_warning = self.settings['warning_threshold_high']
+        sheath_low_warning = self.settings['sheath_warning_threshold_low']
+        sheath_high_warning = self.settings['sheath_warning_threshold_high']
+
+        outlet_low_warning = self.settings['outlet_warning_threshold_low']
+        outlet_high_warning = self.settings['outlet_warning_threshold_high']
 
         logger.info('Sheath flow bounds: %f to %f %s',
-            low_warning*self.coflow_control.sheath_setpoint,
-            high_warning*self.coflow_control.sheath_setpoint,
+            sheath_low_warning*self.coflow_control.sheath_setpoint,
+            sheath_high_warning*self.coflow_control.sheath_setpoint,
             self.settings['flow_units'])
         logger.info('Outlet flow bounds: %f to %f %s',
-            low_warning*self.coflow_control.outlet_setpoint,
-            high_warning*self.coflow_control.outlet_setpoint,
+            outlet_low_warning*self.coflow_control.outlet_setpoint,
+            outlet_high_warning*self.coflow_control.outlet_setpoint,
             self.settings['flow_units'])
 
         self.coflow_control.monitor = True
@@ -2205,10 +2218,16 @@ if __name__ == '__main__':
                                         'kwargs': {'flow_cal': '627.72',
                                         'backlash_cal': '9.814'},
                                         'ctrl_args': {'flow_rate': 1}},
-        'outlet_pump'               : {'name': 'outlet', 'args': ['VICI M50', 'COM4'],
-                                        'kwargs': {'flow_cal': '628.68',
-                                        'backlash_cal': '9.962'},
-                                        'ctrl_args': {'flow_rate': 1}},
+        # 'outlet_pump'               : {'name': 'outlet', 'args': ['VICI M50', 'COM4'],
+        #                                 'kwargs': {'flow_cal': '628.68',
+        #                                 'backlash_cal': '9.962'},
+        #                                 'ctrl_args': {'flow_rate': 1}},
+        'outlet_pump'               : {'name': 'outlet', 'args': ['OB1 Pump', 'COM8'],
+                                        'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
+                                        'min_pressure': -1000, 'max_pressure': 1000, 'P': 5, 'I': 0.00015,
+                                        'D': 0, 'bfs_instr_ID': None, 'comm_lock': None,
+                                        'calib_path': './resources/ob1_calib.txt'},
+                                        'ctrl_args': {}},
         'sheath_fm'                 : {'name': 'sheath', 'args': ['BFS', 'COM5'],
                                         'kwargs':{}},
         'outlet_fm'                 : {'name': 'outlet', 'args': ['BFS', 'COM6'],
@@ -2229,9 +2248,15 @@ if __name__ == '__main__':
         #                                 'kwargs': {'positions' : 10}},
         'sheath_ratio'              : 0.3,
         'sheath_excess'             : 1.5,
-        'warning_threshold_low'     : 0.8,
-        'warning_threshold_high'    : 1.2,
-        'settling_time'             : 5000, #in ms
+        'sheath_warning_threshold_low'  : 0.8,
+        'sheath_warning_threshold_high' : 1.2,
+        'outlet_warning_threshold_low'  : 0.98,
+        'outlet_warning_threshold_high' : 1.02,
+        'sheath_fr_mult'            : 1,
+        # 'outlet_fr_mult'            : 1,
+        'outlet_fr_mult'            : -1,
+        # 'settling_time'             : 5000, #in ms
+        'settling_time'             : 120000, #in ms
         'lc_flow_rate'              : '0.6',
         'show_sheath_warning'       : True,
         'show_outlet_warning'       : True,
