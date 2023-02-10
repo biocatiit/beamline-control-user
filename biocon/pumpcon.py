@@ -57,6 +57,7 @@ except Exception:
     except Exception:
         pass
 
+import fmcon
 import utils
 
 class SerialComm(object):
@@ -2351,6 +2352,9 @@ class OB1(object):
 
                 self.connected = False
 
+    def stop(self):
+        pass
+
 
 class OB1Pump(Pump):
     def __init__(self, name, device, channel, min_pressure, max_pressure,
@@ -2464,8 +2468,6 @@ class OB1Pump(Pump):
     def flow_rate(self, rate):
         rate = self._convert_flow_rate(rate, self._pump_base_units, self.units)
 
-
-
         with self.comm_lock:
             if self._has_flow_meter and self._PID_mode and self._ob1.remote:
                 self._set_remote_target(rate)
@@ -2485,13 +2487,12 @@ class OB1Pump(Pump):
                 logger.error('Failed to set flow rate for %s because there '
                     'is not a flow meter associated with the device.', self.name)
 
-        if self._is_flowing:
-            self._flow_rate = rate
+        self._flow_rate = rate
 
-            if self._flow_rate > 0:
-                self._flow_dir = 1
-            else:
-                self._flow_dir = -1
+        if self._flow_rate > 0:
+            self._flow_dir = 1
+        else:
+            self._flow_dir = -1
 
     def is_moving(self):
         """
@@ -3880,7 +3881,8 @@ class PumpCommThread(utils.CommManager):
         self._return_value((name, cmd, device), comm_name)
         logger.debug("Got pump %s", name)
 
-    def _initialize_ob1_pid(self, P, I, D, fm_instr_id, start_running):
+    def _initialize_ob1_pid(self, name, P, I, D, fm_instr_id, start_running,
+        **kwargs):
         logger.info("Initializing pump %s PID, P: %s, I: %s D: %s", name,
             P, I, D)
 
@@ -3893,7 +3895,7 @@ class PumpCommThread(utils.CommManager):
         self._return_value((name, cmd, True), comm_name)
         logger.debug("Initialized pump %s PID", name)
 
-    def _set_pid(self, P, I, D):
+    def _set_pid(self, name, P, I, D, **kwargs):
         logger.info("Setting pump %s PID, P: %s, I: %s D: %s", name,
             P, I, D)
 
@@ -3901,7 +3903,7 @@ class PumpCommThread(utils.CommManager):
         cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
-        device.set_PID_values(P, I, D, fm_instr_id, start_running)
+        device.set_PID_values(P, I, D)
 
         self._return_value((name, cmd, True), comm_name)
         logger.debug("Set pump %s PID", name)
@@ -4171,7 +4173,7 @@ class PumpPanel(utils.DevicePanel):
         self.ob1_ctrl_sizer.Add(wx.StaticText(self, label='Pressure:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
         self.ob1_ctrl_sizer.Add(self.pressure_ctrl, border=self._FromDIP(2),
-            flag=wx.ALIGN_CENTER_VERTICAL)
+            flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT)
 
         self.vol_unit_ctrl = wx.Choice(self, choices=['nL', 'uL', 'mL'])
         self.vol_unit_ctrl.SetSelection(2)
@@ -4261,26 +4263,29 @@ class PumpPanel(utils.DevicePanel):
         self.feedback_d = utils.ValueEntry(self._on_pid_change, self,
             size=self._FromDIP((60, -1)), validator=utils.CharValidator('float_te'))
 
-        self.feedback_p.SafeChangeValue(0)
-        self.feedback_d.SafeChangeValue(0)
-        self.feedback_i.SafeChangeValue(0)
+        self.feedback_p.SafeChangeValue('0')
+        self.feedback_d.SafeChangeValue('0')
+        self.feedback_i.SafeChangeValue('0')
 
         self.ob1_settings_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(2),
             hgap=self._FromDIP(2))
-        self.ob1_settings_sizer.Add(wx.StaticText('P:'), flag=wx.ALIGN_CENTER_VERTICAL)
+        self.ob1_settings_sizer.Add(wx.StaticText(self, label='P:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
         self.ob1_settings_sizer.Add(self.feedback_p, flag=wx.ALIGN_CENTER_VERTICAL)
-        self.ob1_settings_sizer.Add(wx.StaticText('I:'), flag=wx.ALIGN_CENTER_VERTICAL)
+        self.ob1_settings_sizer.Add(wx.StaticText(self, label='I:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
         self.ob1_settings_sizer.Add(self.feedback_i, flag=wx.ALIGN_CENTER_VERTICAL)
-        self.ob1_settings_sizer.Add(wx.StaticText('D:'), flag=wx.ALIGN_CENTER_VERTICAL)
+        self.ob1_settings_sizer.Add(wx.StaticText(self, label='D:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
         self.ob1_settings_sizer.Add(self.feedback_d, flag=wx.ALIGN_CENTER_VERTICAL)
 
 
         self.control_box_sizer = wx.StaticBoxSizer(wx.StaticBox(self, label='Controls'),
             wx.VERTICAL)
         self.control_box_sizer.Add(basic_ctrl_sizer, flag=wx.EXPAND)
-        self.control_box_sizer.Add(self.ob1_ctrl_sizer, flag=wx.EXPAND|wx.TOP,
-            border=self._FromDIP(2))
         self.control_box_sizer.Add(button_ctrl_sizer, flag=wx.ALIGN_CENTER_HORIZONTAL|wx.TOP,
+            border=self._FromDIP(2))
+        self.control_box_sizer.Add(self.ob1_ctrl_sizer, flag=wx.EXPAND|wx.TOP,
             border=self._FromDIP(2))
 
         self.settings_box_sizer = wx.StaticBoxSizer(wx.StaticBox(self, label='Settings'),
@@ -4340,9 +4345,12 @@ class PumpPanel(utils.DevicePanel):
 
             self.pump_mode = 'continuous'
 
-        elif self.pump_type == 'OB1' or self.pump_type == 'OB1Pump':
+        elif self.pump_type == 'OB1' or self.pump_type == 'OB1 Pump':
+            self.status_sizer.Show(self.ssi_status_sizer, recursive=True)
             self.control_box_sizer.Show(self.ob1_ctrl_sizer, recursive=True)
             self.settings_box_sizer.Show(self.ob1_settings_sizer, recursive=True)
+
+            self.pump_mode = 'continuous'
 
         if self.pump_mode == 'continuous':
             self.status_sizer.Hide(self.vol_gauge, recursive=True)
@@ -4397,12 +4405,12 @@ class PumpPanel(utils.DevicePanel):
         if self.pump_type == 'OB1 Pump':
             ob1_device_name = kwargs.pop('ob1_device_name')
             calib_path = kwargs.pop('calib_path')
-            get_ob1_cmd = ['get_pump', [self.name, ob1_device_name], {}]
+            get_ob1_cmd = ['get_pump', [ob1_device_name], {}]
 
             ob1_device = self._send_cmd(get_ob1_cmd, True)
 
             if ob1_device is None:
-                ob1_args = [ob1_device_name, 'OB1'] + args[2:]
+                ob1_args = [ob1_device_name, 'OB1', args[2]]
                 ob1_kwargs = {'comm_lock': kwargs['comm_lock'],
                     'calib_path': calib_path}
 
@@ -4413,6 +4421,15 @@ class PumpPanel(utils.DevicePanel):
                 ob1_device = self._send_cmd(get_ob1_cmd, True)
 
             kwargs['ob1_device'] = ob1_device
+
+            if 'P' in kwargs:
+                self.feedback_p.SafeChangeValue(str(kwargs['P']))
+
+            if 'I' in kwargs:
+                self.feedback_i.SafeChangeValue(str(kwargs['I']))
+
+            if 'D' in kwargs:
+                self.feedback_d.SafeChangeValue(str(kwargs['D']))
 
         connect_cmd = ['connect', args, kwargs]
 
@@ -4707,15 +4724,15 @@ class PumpPanel(utils.DevicePanel):
         self._send_cmd(cmd)
 
     def _on_pid_change(self, obj, value):
-        P = self.feedback_P.GetValue()
-        I = self.feedback_I.GetValue()
+        P = self.feedback_p.GetValue()
+        I = self.feedback_i.GetValue()
         D = self.feedback_d.GetValue()
 
         P = float(P)
         I = float(I)
         D = float(D)
 
-        cmd = ['set_pid', P, I, D]
+        cmd = ['set_pid', [self.name, P, I, D], {}]
         self._send_cmd(cmd)
 
     def _set_pressure_units_gui(self, units):
@@ -4901,7 +4918,7 @@ class PumpPanel(utils.DevicePanel):
             if val is not None and round(val, 4) != float(self.flow_readback.GetLabel()):
                 self._current_flow_rate = val
 
-                if self._current_flow_dir >= 0:
+                if self.pump_mode =='continuous' or self._current_flow_dir >= 0:
                     wx.CallAfter(self.flow_readback.SetLabel, str(round(val, 4)))
 
         elif cmd == 'get_refill_rate':
@@ -4911,7 +4928,7 @@ class PumpPanel(utils.DevicePanel):
             if val is not None and round(val, 4) != float(self.flow_readback.GetLabel()):
                 self._current_refill_rate = val
 
-                if self._current_flow_dir < 0:
+                if self.pump_mode == 'syringe' and self._current_flow_dir < 0:
                     wx.CallAfter(self.flow_readback.SetLabel, str(round(val, 4)))
 
         elif cmd == 'get_flow_dir':
@@ -5075,13 +5092,22 @@ if __name__ == '__main__':
     #     ]
 
 
+    # Coflow with
+    bfs = fmcon.BFS('outlet_fm', 'COM6')
+    bfs.start_remote()
+
     ob1_comm_lock = threading.RLock()
 
     setup_devices = [
-        {'name': 'outlet', 'args': ['OB1 Pump', 'COM8', 1, -1000, 1000],
-            'kwargs': {'ob1_device_name': 'Outlet OB1', 'P': 10, 'I': 0.002, 'D': 0,
-            'bfs_instr_ID': None, 'comm_lock': ob1_comm_lock,
-            'calib_path': './resources/ob1_calib.txt'}}
+        {'name': 'sheath', 'args': ['VICI M50', 'COM3'],
+            'kwargs': {'flow_cal': '627.72', 'backlash_cal': '9.814'},
+            'ctrl_args': {'flow_rate': 1}},
+        {'name': 'outlet', 'args': ['OB1 Pump', 'COM8'],
+            'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
+            'min_pressure': -1000, 'max_pressure': 1000, 'P': 10, 'I': 0.002,
+            'D': 0, 'bfs_instr_ID': bfs.instr_ID, 'comm_lock': ob1_comm_lock,
+            'calib_path': './resources/ob1_calib.txt'},
+            'ctrl_args': {}}
         ]
 
     # # TR-SAXS PHD 4400 pumps

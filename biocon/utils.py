@@ -703,15 +703,21 @@ class CommManager(threading.Thread):
         cmd = kwargs.pop('cmd', None)
 
         if name not in self._connected_devices:
-            if device is None or device not in self._connected_coms:
-                new_device = self.known_devices[device_type](name, device, **kwargs)
-                new_device.connect()
-                self._connected_devices[name] = new_device
-                self._connected_coms[device] = new_device
-                logger.debug("Device %s connected", name)
-            else:
-                self._connected_devices[name] = self._connected_coms[device]
-                logger.debug("Device already connected on %s", device)
+            # if device is None or device not in self._connected_coms:
+            #     new_device = self.known_devices[device_type](name, device, **kwargs)
+            #     new_device.connect()
+            #     self._connected_devices[name] = new_device
+            #     self._connected_coms[device] = new_device
+            #     logger.debug("Device %s connected", name)
+            # else:
+            #     self._connected_devices[name] = self._connected_coms[device]
+            #     logger.debug("Device already connected on %s", device)
+
+            new_device = self.known_devices[device_type](name, device, **kwargs)
+            new_device.connect()
+            self._connected_devices[name] = new_device
+            self._connected_coms[device] = new_device
+            logger.debug("Device %s connected", name)
 
             self._additional_connect_device(name, device_type, device, **kwargs)
 

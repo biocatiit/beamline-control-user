@@ -434,6 +434,8 @@ class FlowMeterCommThread(utils.CommManager):
             'get_filter'                    : self._get_filter,
             'set_filter'                    : self._set_filter,
             'get_settings'                  : self._get_settings,
+            'get_bfs_instr_id'              : self._get_bfs_instr_id,
+            'start_remote'                  : self._start_remote,
             }
 
         self._connected_devices = OrderedDict()
@@ -700,6 +702,40 @@ class FlowMeterCommThread(utils.CommManager):
         self._return_value((name, cmd, ret_vals), comm_name)
 
         logger.debug("Flow meter %s settings: %s", name, ret_vals)
+
+    def _get_bfs_instr_id(self, name, **kwargs):
+        """
+        This method gets the filter setting for a flow meter.
+
+        :param str name: The unique identifier for a flow meter that was used
+            in the :py:func:`_connect_fm` method.
+        """
+        logger.debug("Getting bfs instr_ID for %s", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        val = device.instr_ID
+
+        self._return_value((name, cmd, val), comm_name)
+
+    def _start_remote(self, name, **kwargs):
+        """
+        This method gets the filter setting for a flow meter.
+
+        :param str name: The unique identifier for a flow meter that was used
+            in the :py:func:`_connect_fm` method.
+        """
+        logger.debug("Starting remote mode for %s", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        device.start_remote()
+
+        self._return_value((name, cmd, True), comm_name)
 
 class FlowMeterPanel(utils.DevicePanel):
     """
