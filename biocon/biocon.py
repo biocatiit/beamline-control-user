@@ -356,6 +356,12 @@ if __name__ == '__main__':
                                         'kwargs': {'flow_cal': '628.68',
                                         'backlash_cal': '9.962'},
                                         'ctrl_args': {'flow_rate': 1}},
+        # 'outlet_pump'               : {'name': 'outlet', 'args': ['OB1 Pump', 'COM8'],
+        #                                 'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
+        #                                 'min_pressure': -1000, 'max_pressure': 1000, 'P': 5, 'I': 0.00015,
+        #                                 'D': 0, 'bfs_instr_ID': None, 'comm_lock': None,
+        #                                 'calib_path': './resources/ob1_calib.txt'},
+        #                                 'ctrl_args': {}},
         'sheath_fm'                 : {'name': 'sheath', 'args': ['BFS', 'COM5'],
                                         'kwargs':{}},
         'outlet_fm'                 : {'name': 'outlet', 'args': ['BFS', 'COM6'],
@@ -376,9 +382,17 @@ if __name__ == '__main__':
         #                                 'kwargs': {'positions' : 10}},
         'sheath_ratio'              : 0.3,
         'sheath_excess'             : 1.5,
-        'warning_threshold_low'     : 0.8,
-        'warning_threshold_high'    : 1.2,
+        'sheath_warning_threshold_low'  : 0.8,
+        'sheath_warning_threshold_high' : 1.2,
+        'outlet_warning_threshold_low'  : 0.8,
+        'outlet_warning_threshold_high' : 1.2,
+        # 'outlet_warning_threshold_low'  : 0.98,
+        # 'outlet_warning_threshold_high' : 1.02,
+        'sheath_fr_mult'            : 1,
+        'outlet_fr_mult'            : 1,
+        # 'outlet_fr_mult'            : -1,
         'settling_time'             : 5000, #in ms
+        # 'settling_time'             : 120000, #in ms
         'lc_flow_rate'              : '0.6',
         'show_sheath_warning'       : True,
         'show_outlet_warning'       : True,
@@ -641,8 +655,8 @@ if __name__ == '__main__':
         'dark_correct'          : True,
         'auto_dark'             : True,
         'auto_dark_t'           : 60*60, #in s
-        'dark_avgs'             : 2,
-        'ref_avgs'              : 2,
+        'dark_avgs'             : 9,
+        'ref_avgs'              : 9,
         'history_t'             : 60*60*24, #in s
         'save_subdir'           : 'UV',
         'save_type'             : 'Absorbance',
@@ -665,13 +679,13 @@ if __name__ == '__main__':
 
     components = OrderedDict([
         ('exposure', expcon.ExpPanel),
-        # ('coflow', coflowcon.CoflowPanel),
+        ('coflow', coflowcon.CoflowPanel),
         # ('trsaxs_scan', trcon.TRScanPanel),
         # ('trsaxs_flow', trcon.TRFlowPanel),
         # ('scan',    scancon.ScanPanel),
-        # ('metadata', metadata.ParamPanel),
-        # ('pipeline', pipeline_ctrl.PipelineControl),
-        # ('uv', spectrometercon.UVPanel),
+        ('metadata', metadata.ParamPanel),
+        ('pipeline', pipeline_ctrl.PipelineControl),
+        ('uv', spectrometercon.UVPanel),
         ])
 
     settings = {

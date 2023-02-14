@@ -2239,7 +2239,7 @@ class UVPanel(utils.DevicePanel):
 
             plot_parent = wx.StaticBox(self, label='Plot')
 
-            self.auto_update = wx.CheckBox(plot_parent, label='Autoupdate')
+            self.auto_update = wx.CheckBox(plot_parent, label='Auto update')
             self.auto_update.SetValue(False)
             self.auto_update.Bind(wx.EVT_CHECKBOX, self._on_autoupdate)
 
@@ -3045,7 +3045,7 @@ class UVPanel(utils.DevicePanel):
                 wx.CallAfter(self.uv_plot.set_time_zero)
 
         elif cmd == 'collect_series_end':
-            self._series_running = True
+            self._series_running = False
             self._series_count = 0
 
             if not self.inline and self._restart_live_update:
@@ -3207,7 +3207,7 @@ class UVPanel(utils.DevicePanel):
 
     def _on_show_uv_plot(self, evt):
         if self.uvplot_frame is None:
-            self.uvplot_frame = UVPlotFrame(self, self.settings['plot_refresh_t'],
+            self.uvplot_frame = UVPlotFrame(self.settings['plot_refresh_t'], self, 
                 title='UV Plot', size=self._FromDIP((500, 500)))
 
             self.uv_plot = self.uvplot_frame.uv_plot
