@@ -3433,17 +3433,17 @@ class UVPlot(wx.Panel):
         self.update_plot_data(self.spectrum, self.abs_history, self.abs_wvl, True)
 
     def _on_refresh_timer(self, evt):
-        a = time.time()
+        # a = time.time()
         if self._needs_refresh:
             if time.time() - self._last_refresh > self._refresh_time:
                 self.plot_data()
                 self._last_refresh = time.time()
                 self._needs_refresh = False
-        print(time.time()-a)
+        # print(time.time()-a)
 
     def update_plot_data(self, spectrum, abs_history, abs_wvl, force_refresh=False):
-        print('updating_plot_data')
-        a = time.time()
+        # print('updating_plot_data')
+        # a = time.time()
 
         self.spectrum = spectrum
         self.abs_history = abs_history
@@ -3465,7 +3465,7 @@ class UVPlot(wx.Panel):
             abs_data = []
 
         self.abs_data = abs_data
-        print(time.time()-a)
+        # print(time.time()-a)
 
         if not force_refresh:
             self._needs_refresh = True

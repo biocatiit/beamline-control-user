@@ -679,6 +679,7 @@ if __name__ == '__main__':
             'device_init'   : setup_uv,
             'com_thread'    : uv_comm_thread,
             'inline_panel'  : False,
+            'plot_refresh_t': 0.1, #in s
             }
 
         uv_frame = spectrometercon.UVFrame('UVFrame', uv_settings,
