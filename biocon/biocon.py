@@ -229,32 +229,32 @@ if __name__ == '__main__':
         'exp_period'            : '1',
         'exp_num'               : '2',
 
-        # 'exp_time_min'          : 0.00105,  # For Pilatus3 X 1M
-        # 'exp_time_max'          : 5184000,
-        # 'exp_period_min'        : 0.002,
-        # 'exp_period_max'        : 5184000,
-        # 'nframes_max'           : 15000, # For Pilatus: 999999, for Struck: 15000 (set by maxChannels in the driver configuration)
-        # 'nparams_max'           : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
-        # 'exp_period_delta'      : 0.00095,
-        # 'local_dir_root'        : '/nas_data/Pilatus1M',
-        # 'remote_dir_root'       : '/nas_data',
-        # 'detector'              : 'pilatus_mx',
-        # 'det_args'              : {}, #Allows detector specific keyword arguments
-        # 'add_file_postfix'      : True,
-
-        'exp_time_min'          : 0.000000050, #Eiger2 XE 9M
-        'exp_time_max'          : 3600,
-        'exp_period_min'        : 0.001785714286, #There's an 8bit undocumented mode that can go faster, in theory
-        'exp_period_max'        : 5184000, # Not clear there is a maximum, so left it at this
-        'nframes_max'           : 15000, # For Eiger: 2000000000, for Struck: 15000 (set by maxChannels in the driver configuration)
+        'exp_time_min'          : 0.00105,  # For Pilatus3 X 1M
+        'exp_time_max'          : 5184000,
+        'exp_period_min'        : 0.002,
+        'exp_period_max'        : 5184000,
+        'nframes_max'           : 15000, # For Pilatus: 999999, for Struck: 15000 (set by maxChannels in the driver configuration)
         'nparams_max'           : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
-        'exp_period_delta'      : 0.000000200,
-        'local_dir_root'        : '/nas_data/Eiger2xe9M',
-        'remote_dir_root'       : '/nas_data/Eiger2xe9M',
-        'detector'              : '18ID:EIG2:_epics',
-        'det_args'              :  {'use_tiff_writer': False, 'use_file_writer': True,
-                                    'photon_energy' : 12.0, 'images_per_file': 100},
-        'add_file_postfix'      : False,
+        'exp_period_delta'      : 0.00095,
+        'local_dir_root'        : '/nas_data_bionaste/Pilatus1M',
+        'remote_dir_root'       : '/nas_data',
+        'detector'              : 'pilatus_mx',
+        'det_args'              : {}, #Allows detector specific keyword arguments
+        'add_file_postfix'      : True,
+
+        # 'exp_time_min'          : 0.000000050, #Eiger2 XE 9M
+        # 'exp_time_max'          : 3600,
+        # 'exp_period_min'        : 0.001785714286, #There's an 8bit undocumented mode that can go faster, in theory
+        # 'exp_period_max'        : 5184000, # Not clear there is a maximum, so left it at this
+        # 'nframes_max'           : 15000, # For Eiger: 2000000000, for Struck: 15000 (set by maxChannels in the driver configuration)
+        # 'nparams_max'           : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
+        # 'exp_period_delta'      : 0.000000200,
+        # 'local_dir_root'        : '/nas_data/Eiger2xe9M',
+        # 'remote_dir_root'       : '/nas_data/Eiger2xe9M',
+        # 'detector'              : '18ID:EIG2:_epics',
+        # 'det_args'              :  {'use_tiff_writer': False, 'use_file_writer': True,
+        #                             'photon_energy' : 12.0, 'images_per_file': 100},
+        # 'add_file_postfix'      : False,
 
         # 'shutter_speed_open'    : 0.004, #in s      NM vacuum shutter, broken
         # 'shutter_speed_close'   : 0.004, # in s
@@ -331,8 +331,8 @@ if __name__ == '__main__':
             'thresh': 0.04}, 'guard_vac' : {'check': True, 'thresh': 0.04},
             'sample_vac': {'check': False, 'thresh': 0.04}, 'sc_vac':
             {'check': True, 'thresh':0.04}},
-        # 'base_data_dir'         : '/nas_data/Pilatus1M/2022_Run2', #CHANGE ME
-        'base_data_dir'         : '/nas_data/Eiger2x/2023_Run1', #CHANGE ME and pipeline local_basedir
+        'base_data_dir'         : '/nas_data_bionaste/Pilatus1M/2023_Run1', #CHANGE ME
+        # 'base_data_dir'         : '/nas_data/Eiger2x/2023_Run1', #CHANGE ME and pipeline local_basedir
         }
 
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']
@@ -638,8 +638,10 @@ if __name__ == '__main__':
         'server_ip'     : '164.54.204.142',
         # 'server_ip'     : '164.54.204.82',
         # 'raw_settings'  : '/nas_data/Pilatus1M/2021_Run1/20210129_Hopkins/setup/calibration/pipeline_SAXS.cfg',
-        'local_basedir' : '/nas_data/Eiger2x',
-        'data_basedir'  : '/nas_data/Eiger2x',
+        # 'local_basedir' : '/nas_data/Eiger2x',
+        # 'data_basedir'  : '/nas_data/Eiger2x',
+        'local_basedir' : '/nas_data_bionaste/Pilatus1M',
+        'data_basedir'  : '/nas_data_bionaste/Pilatus1M',
         'output_basedir': '/nas_data/SAXS',
         }
 
@@ -679,13 +681,13 @@ if __name__ == '__main__':
 
     components = OrderedDict([
         ('exposure', expcon.ExpPanel),
-        ('coflow', coflowcon.CoflowPanel),
+        # ('coflow', coflowcon.CoflowPanel),
         # ('trsaxs_scan', trcon.TRScanPanel),
         # ('trsaxs_flow', trcon.TRFlowPanel),
         # ('scan',    scancon.ScanPanel),
         ('metadata', metadata.ParamPanel),
         ('pipeline', pipeline_ctrl.PipelineControl),
-        ('uv', spectrometercon.UVPanel),
+        # ('uv', spectrometercon.UVPanel),
         ])
 
     settings = {
