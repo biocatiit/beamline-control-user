@@ -3541,6 +3541,7 @@ class ExpPanel(wx.Panel):
             valid = False
 
         else:
+            local_data_dir = copy.copy(data_dir)
             data_dir = data_dir.replace(self.settings['local_dir_root'],
                 self.settings['remote_dir_root'], 1)
 
@@ -3550,10 +3551,12 @@ class ExpPanel(wx.Panel):
             else:
                 struck_num_meas = 0
 
-            exp_values = {'num_frames': num_frames,
+            exp_values = {
+                'num_frames'                : num_frames,
                 'exp_time'                  : exp_time,
                 'exp_period'                : exp_period,
                 'data_dir'                  : data_dir,
+                'local_data_dir'            : local_data_dir,
                 'fprefix'                   : filename+run_num,
                 'wait_for_trig'             : wait_for_trig,
                 'num_trig'                  : num_trig,
@@ -3566,6 +3569,7 @@ class ExpPanel(wx.Panel):
                 'struck_measurement_time'   : struck_measurement_time,
                 'struck_num_meas'           : struck_num_meas,
                 }
+
             valid = True
 
         self.current_exposure_values = exp_values
