@@ -59,6 +59,7 @@ except Exception:
 
 import fmcon
 import utils
+import pid
 
 class SerialComm(object):
     """
@@ -2358,8 +2359,9 @@ class OB1(object):
 
 class OB1Pump(Pump):
     def __init__(self, name, device, channel, min_pressure, max_pressure,
-        ob1_device, P=0, I=0, D=0, bfs_instr_ID=None, comm_lock=None,
-        flow_rate_scale=1, flow_rate_offset=0, scale_type='both'):
+        ob1_device, P=0, I=0, D=0, pid_sample_time=0.1, bfs_instr_ID=None,
+        comm_lock=None, fm_comm_lock=None, flow_rate_scale=1, flow_rate_offset=0,
+        scale_type='both'):
         """
         :param device: The device comport as sent to pyserial
         :type device: str
@@ -2395,12 +2397,29 @@ class OB1Pump(Pump):
         self._has_sensor = False #Used for reading flow rate but not necessarily PID
         self._has_flow_meter = False #Used for PID
         self._PID_mode = False
-        self._P = 0
-        self._I = 0
-        self._D = 0
+        self._P = P
+        self._I = I
+        self._D = D
+        self._pid_sample_time = pid_sample_time
 
-        if bfs_instr_ID is not None and (P != 0 or I != 0 or D != 0):
-            self.initialize_remote_PID(P, I, D, bfs_instr_ID, True)
+        self._PID = pid.PID(self._P, self._I, self._D, 0)
+        self._PID.sample_time = self._pid_sample_time
+        self._PID.output_limits = (self._min_pressure, self.max_pressure)
+
+        self._pid_on_evt = threading.Event()
+        self._abort_pid_evt = threading.Event()
+
+        self._bfs_instr_ID = bfs_instr_ID
+        self._fm_comm_lock = fm_comm_lock
+
+        if self._bfs_instr_ID is not None:
+            self.pid_thread = threading.Thread(target=self.run_PID)
+            self.pid_thread.daemon = True
+            self.pid_thread.start()
+
+            self._PID_mode = True
+            self._has_flow_meter = True
+
 
     def connect(self):
         if not self.connected:
@@ -2469,20 +2488,18 @@ class OB1Pump(Pump):
         rate = self._convert_flow_rate(rate, self.units, self._pump_base_units)
 
         with self.comm_lock:
-            if self._has_flow_meter and self._PID_mode and self._ob1.remote:
-                self._set_remote_target(rate)
+            if self._has_flow_meter:
+                self._PID.setpoint = rate
                 self._is_flowing = True
 
-            elif self._has_flow_meter and self._ob1.remote:
-                self._start_remote_PID(True)
-                self._set_remote_target(rate)
-                self._is_flowing = True
+                if not self._PID_mode:
+                    pressure = self._inner_get_pressure()
+                    self._PID.set_auto_mode(True, pressure)
+                    self._PID_mode = True
 
-            elif self._has_flow_meter:
-                self._start_remote()
-                self._start_remote_PID(True)
-                self._set_remote_target(rate)
-                self._is_flowing = True
+                if not self._pid_on_evt.is_set():
+                    self._pid_on_evt.set()
+
             else:
                 logger.error('Failed to set flow rate for %s because there '
                     'is not a flow meter associated with the device.', self.name)
@@ -2584,6 +2601,14 @@ class OB1Pump(Pump):
         pressure = self._convert_pressure(pressure, self.pressure_units,
             self._pump_pressure_units)
 
+        if self._PID_mode:
+            self._PID.auto_mode = False
+            self._PID_mode = False
+
+        self._inner_set_pressure(pressure)
+
+
+    def _inner_set_pressure(self, pressure):
         if pressure > self._max_pressure:
             logger.warning('Pressure %s is greater than %s max pressure,'
                 'setting pressure to max', pressure, self.name)
@@ -2595,6 +2620,7 @@ class OB1Pump(Pump):
             pressure = self._min_pressure
 
         with self.comm_lock:
+
             if not self._ob1.remote:
                 set_pressure = float(pressure) #mbarr
                 set_pressure = ctypes.c_double(set_pressure)#convert to c_double
@@ -2610,6 +2636,14 @@ class OB1Pump(Pump):
                 self._set_remote_target(pressure)
 
     def get_pressure(self):
+        pressure = self._inner_get_pressure()
+
+        pressure = self._convert_pressure(pressure, self._pump_pressure_units,
+            self.pressure_units)
+
+        return pressure
+
+    def _inner_get_pressure(self):
         with self.comm_lock:
             if not self._ob1.remote:
                 get_pressure = ctypes.c_double()
@@ -2624,10 +2658,114 @@ class OB1Pump(Pump):
             else:
                 pressure, flow = self._read_remote_channel()
 
-        pressure = self._convert_pressure(pressure, self._pump_pressure_units,
-            self.pressure_units)
-
         return pressure
+
+    def run_PID(self):
+        prev_dens = 0
+        while True:
+            if self._abort_pid_evt.is_set():
+                break
+
+            if self._pid_on_evt.is_set():
+                start_t = time.time()
+
+                fr, dens, temp = self.get_fm_values()
+
+                delta_t = time.time() - start_t
+
+                if dens > 700 and (prev_dens/dens < 1.05 and prev_dens/dens > 0.95):
+                    pressure = self._PID(fr)
+                    self._inner_set_pressure(pressure)
+
+                prev_dens = dens
+
+                while time.time() - start_t < self._pid_sample_time - delta_t:
+                    time.sleep(0.01)
+
+            else:
+                time.sleep(0.1)
+
+    def get_fm_values(self):
+        with self.fm_comm_lock:
+            density = ctypes.c_double(-1)
+            error = Elveflow.BFS_Get_Density(bfs_instr_ID.value, ctypes.byref(density))
+            density = float(density.value)
+            self._check_error(error)
+
+            temperature = ctypes.c_double(-1)
+            error = Elveflow.BFS_Get_Temperature(bfs_instr_ID.value, ctypes.byref(temperature))
+            temperature = float(temperature.value)
+            self._check_error(error)
+
+            flow = ctypes.c_double(-1)
+            error = Elveflow.BFS_Get_Flow(bfs_instr_ID.value, ctypes.byref(flow))
+            flow = float(flow.value)
+            self._check_error(error)
+
+        return flow, density, temperature
+
+    def set_PID_values(self, P, I, D):
+        self._P = P
+        self._I = I
+        self._D = D
+
+        self._PID.tunings = (P, I, D)
+    """
+    The code below is for use with the Remote PID control built into the
+    Elveflow API. I found that didn't work well, but leaving it here in case
+    I want to retest it at some point with a new version of the API.
+
+    @property
+    def flow_rate(self):
+        with self.comm_lock:
+            if self._has_sensor and self._ob1.remote:
+                pressure, rate = self._read_remote_channel()
+
+            elif self._has_sensor and not self._ob1.remote:
+                data_sens=ctypes.c_double()
+                error = Elveflow.OB1_Get_Sens_Data(self.instr_ID.value,
+                    self._ob1_chan, 1, ctypes.byref(data_sens))
+
+                self._check_error(error)
+                rate = float(data_sens)
+
+            else:
+                rate = self._flow_rate
+
+        rate = self._convert_flow_rate(rate, self._pump_base_units, self.units)
+
+        return rate
+
+    @flow_rate.setter
+    def flow_rate(self, rate):
+        rate = self._convert_flow_rate(rate, self.units, self._pump_base_units)
+
+        with self.comm_lock:
+            if self._has_flow_meter and self._PID_mode and self._ob1.remote:
+                self._set_remote_target(rate)
+                self._is_flowing = True
+
+            elif self._has_flow_meter and self._ob1.remote:
+                self._start_remote_PID(True)
+                self._set_remote_target(rate)
+                self._is_flowing = True
+
+            elif self._has_flow_meter:
+                self._start_remote()
+                self._start_remote_PID(True)
+                self._set_remote_target(rate)
+                self._is_flowing = True
+            else:
+                logger.error('Failed to set flow rate for %s because there '
+                    'is not a flow meter associated with the device.', self.name)
+
+        if self._is_flowing:
+            self._flow_rate = rate
+
+            if self._flow_rate > 0:
+                self._flow_dir = 1
+            else:
+                self._flow_dir = -1
 
     def _start_remote(self):
         with self.comm_lock:
@@ -2725,6 +2863,7 @@ class OB1Pump(Pump):
             error = Elveflow.PID_Set_Params_Remote(self.instr_ID.value,
                 self._ob1_chan, reset, P, I)
             self._check_error(error)
+    """
 
     def stop(self):
         """Stops all pump flow."""
@@ -5093,17 +5232,31 @@ if __name__ == '__main__':
     #     ]
 
 
-    # Coflow with
-    bfs = fmcon.BFS('outlet_fm', 'COM6')
-    bfs.start_remote()
+    # # Coflow with OB1
+    # bfs = fmcon.BFS('outlet_fm', 'COM6')
+    # bfs.start_remote()
+
+    # ob1_comm_lock = threading.RLock()
+
+    # setup_devices = [
+    #     {'name': 'sheath', 'args': ['VICI M50', 'COM3'],
+    #         'kwargs': {'flow_cal': '627.72', 'backlash_cal': '9.814'},
+    #         'ctrl_args': {'flow_rate': 1}},
+    #     {'name': 'outlet', 'args': ['OB1 Pump', 'COM8'],
+    #         'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
+    #         'min_pressure': -1000, 'max_pressure': 1000, 'P': 5, 'I': 0.00015,
+    #         'D': 0, 'bfs_instr_ID': bfs.instr_ID, 'comm_lock': ob1_comm_lock,
+    #         'calib_path': './resources/ob1_calib.txt'},
+    #         'ctrl_args': {}}
+    #     ]
+
+    # OB1 by itself
+    bfs = fmcon.BFS('outlet_fm', 'COM5')
 
     ob1_comm_lock = threading.RLock()
 
     setup_devices = [
-        {'name': 'sheath', 'args': ['VICI M50', 'COM3'],
-            'kwargs': {'flow_cal': '627.72', 'backlash_cal': '9.814'},
-            'ctrl_args': {'flow_rate': 1}},
-        {'name': 'outlet', 'args': ['OB1 Pump', 'COM8'],
+        {'name': 'outlet', 'args': ['OB1 Pump', 'COM3'],
             'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
             'min_pressure': -1000, 'max_pressure': 1000, 'P': 5, 'I': 0.00015,
             'D': 0, 'bfs_instr_ID': bfs.instr_ID, 'comm_lock': ob1_comm_lock,

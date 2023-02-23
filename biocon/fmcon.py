@@ -172,7 +172,7 @@ class BFS(FlowMeter):
         >>> print(my_bfs.flow_rate)
     """
 
-    def __init__(self, name, device):
+    def __init__(self, name, device, comm_lock=None):
         """
         This makes the initial serial connection, and then sets the MForce
         controller parameters to the correct values.
@@ -185,7 +185,7 @@ class BFS(FlowMeter):
             filter, 0.00001 = maximum filter. Defaults to 0.5
         """
 
-        FlowMeter.__init__(self, name, device, 'uL/min')
+        FlowMeter.__init__(self, name, device, 'uL/min', comm_lock)
 
         logstr = ("Initializing flow meter {} on port {}".format(self.name,
             self.device))
