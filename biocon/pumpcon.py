@@ -2404,7 +2404,7 @@ class OB1Pump(Pump):
 
         self._PID = pid.PID(self._P, self._I, self._D, 0)
         self._PID.sample_time = self._pid_sample_time
-        self._PID.output_limits = (self._min_pressure, self.max_pressure)
+        self._PID.output_limits = (self._min_pressure, self._max_pressure)
 
         self._pid_on_evt = threading.Event()
         self._abort_pid_evt = threading.Event()
@@ -2419,6 +2419,9 @@ class OB1Pump(Pump):
 
             self._PID_mode = True
             self._has_flow_meter = True
+
+            if self._fm_comm_lock is None:
+                self._fm_comm_lock = threading.Lock()
 
 
     def connect(self):
@@ -2600,10 +2603,11 @@ class OB1Pump(Pump):
 
         pressure = self._convert_pressure(pressure, self.pressure_units,
             self._pump_pressure_units)
-
         if self._PID_mode:
+            self._pid_on_evt.clear()
             self._PID.auto_mode = False
             self._PID_mode = False
+            time.sleep(self._pid_sample_time)
 
         self._inner_set_pressure(pressure)
 
@@ -2673,7 +2677,7 @@ class OB1Pump(Pump):
 
                 delta_t = time.time() - start_t
 
-                if dens > 700 and (prev_dens/dens < 1.05 and prev_dens/dens > 0.95):
+                if dens > 700 and (prev_dens/dens < 1.05 and prev_dens/dens > 0.95):                    
                     pressure = self._PID(fr)
                     self._inner_set_pressure(pressure)
 
@@ -2686,19 +2690,19 @@ class OB1Pump(Pump):
                 time.sleep(0.1)
 
     def get_fm_values(self):
-        with self.fm_comm_lock:
+        with self._fm_comm_lock:
             density = ctypes.c_double(-1)
-            error = Elveflow.BFS_Get_Density(bfs_instr_ID.value, ctypes.byref(density))
+            error = Elveflow.BFS_Get_Density(self._bfs_instr_ID.value, ctypes.byref(density))
             density = float(density.value)
             self._check_error(error)
 
             temperature = ctypes.c_double(-1)
-            error = Elveflow.BFS_Get_Temperature(bfs_instr_ID.value, ctypes.byref(temperature))
+            error = Elveflow.BFS_Get_Temperature(self._bfs_instr_ID.value, ctypes.byref(temperature))
             temperature = float(temperature.value)
             self._check_error(error)
 
             flow = ctypes.c_double(-1)
-            error = Elveflow.BFS_Get_Flow(bfs_instr_ID.value, ctypes.byref(flow))
+            error = Elveflow.BFS_Get_Flow(self._bfs_instr_ID.value, ctypes.byref(flow))
             flow = float(flow.value)
             self._check_error(error)
 
@@ -2867,7 +2871,7 @@ class OB1Pump(Pump):
 
     def stop(self):
         """Stops all pump flow."""
-        if self._has_flow_meter and self._PID_mode:
+        if self._has_flow_meter:
             self.flow_rate = 0
 
         else:
@@ -5258,7 +5262,7 @@ if __name__ == '__main__':
     setup_devices = [
         {'name': 'outlet', 'args': ['OB1 Pump', 'COM3'],
             'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
-            'min_pressure': -1000, 'max_pressure': 1000, 'P': 5, 'I': 0.00015,
+            'min_pressure': -1000, 'max_pressure': 1000, 'P': 8, 'I': 2,
             'D': 0, 'bfs_instr_ID': bfs.instr_ID, 'comm_lock': ob1_comm_lock,
             'calib_path': './resources/ob1_calib.txt'},
             'ctrl_args': {}}

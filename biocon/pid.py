@@ -40,6 +40,7 @@ from builtins import object, range, map
 from io import open
 
 import time
+import logging
 
 if __name__ != '__main__':
     logger = logging.getLogger(__name__)
