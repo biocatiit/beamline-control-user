@@ -1500,7 +1500,7 @@ class CoflowPanel(wx.Panel):
 
         if change_pos:
             self.current_sheath_valve_position = int(position)
-            wx.CallAfter(self.sheath_valve_pos.SetValue, int(pos))
+            wx.CallAfter(self.sheath_valve_pos.SetValue, int(position))
             self.coflow_control.set_sheath_valve_position(position)
 
     def check_sheath_valve_pos(self):
