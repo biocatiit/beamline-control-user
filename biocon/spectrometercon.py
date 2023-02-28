@@ -3149,7 +3149,7 @@ class UVPanel(utils.DevicePanel):
             exp_params = exp_panel.current_exposure_values
 
             prefix = exp_params['fprefix']
-            data_dir =  exp_params['data_dir']
+            data_dir =  exp_params['local_data_dir']
             exp_time = exp_params['exp_time']
             exp_period = exp_params['exp_period']
             num_frames = exp_params['num_frames']
@@ -3176,8 +3176,8 @@ class UVPanel(utils.DevicePanel):
                 int_trig_cmd = ['set_int_trig', [self.name, False], {}]
                 self._send_cmd(int_trig_cmd)
 
-                if 'pipeline' in self.settings['components']:
-                    data_dir = os.path.split(data_dir)[0]
+                # if 'pipeline' in self.settings['components']:
+                #     data_dir = os.path.split(data_dir)[0]
 
                 if num_trig > 1:
                     prefix = '{}_{:04}'.format(prefix, trig)
