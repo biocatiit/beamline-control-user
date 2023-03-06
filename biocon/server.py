@@ -372,6 +372,8 @@ if __name__ == '__main__':
     if exp_type == 'coflow':
         # Coflow
 
+        has_uv = False
+
         ip = '164.54.204.53'
         # ip = '164.54.204.24'
 
@@ -665,7 +667,7 @@ if __name__ == '__main__':
         title='Valve Control')
     valve_frame.Show()
 
-    if exp_type == 'coflow':
+    if exp_type == 'coflow' and has_uv:
         # Coflow only
         control_server_uv = ControlServer(ip, port4, name='UVControlServer',
             start_uv=True)
@@ -702,7 +704,7 @@ if __name__ == '__main__':
         control_server_valve.stop()
         control_server_valve.join()
 
-        if exp_type == 'coflow':
+        if exp_type == 'coflow' and has_uv:
             control_server_uv.stop()
             control_server_uv.join()
 
