@@ -372,7 +372,10 @@ if __name__ == '__main__':
     if exp_type == 'coflow':
         # Coflow
 
+        has_uv = False
+
         ip = '164.54.204.53'
+        # ip = '164.54.204.253'
         # ip = '164.54.204.24'
 
         setup_pumps = [
@@ -390,9 +393,9 @@ if __name__ == '__main__':
         #     {'name': 'sheath', 'args': ['VICI M50', 'COM3'],
         #         'kwargs': {'flow_cal': '627.72', 'backlash_cal': '9.814'},
         #         'ctrl_args': {'flow_rate': 1}},
-        #     {'name': 'outlet', 'args': ['OB1 Pump', 'COM8'],
+        #     {'name': 'outlet', 'args': ['OB1 Pump', 'COM10'],
         #         'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
-        #         'min_pressure': -1000, 'max_pressure': 1000, 'P': 5, 'I': 0.00015,
+        #         'min_pressure': -900, 'max_pressure': 1000, 'P': -2, 'I': -0.15,
         #         'D': 0, 'bfs_instr_ID': None, 'comm_lock': ob1_comm_lock,
         #         'calib_path': './resources/ob1_calib.txt'},
         #         'ctrl_args': {}}
@@ -409,10 +412,17 @@ if __name__ == '__main__':
             'trigger_pv_name' : '18ID:LJT4:2:DO12'}},
             ]
 
+        outlet_fm_comm_lock = threading.Lock()
+
         setup_fms = [
             {'name': 'sheath', 'args' : ['BFS', 'COM5'], 'kwargs': {}},
-            {'name': 'outlet', 'args' : ['BFS', 'COM6'], 'kwargs': {}}
+            {'name': 'outlet', 'args' : ['BFS', 'COM6'], 'kwargs': {'comm_lock': outlet_fm_comm_lock}}
             ]
+
+        # setup_fms = [
+        #     # {'name': 'sheath', 'args' : ['BFS', 'COM5'], 'kwargs': {}},
+        #     {'name': 'outlet', 'args' : ['BFS', 'COM5'], 'kwargs': {'comm_lock': outlet_fm_comm_lock}}
+        #     ]
 
         # # Simulated devices for testing
 
@@ -631,14 +641,16 @@ if __name__ == '__main__':
     #     bfs_instr_id = utils.send_cmd(cmd, fm_local_cmd_q, fm_local_ret_q,
     #         threading.Event(), threading.Lock(), False, 'fm', True)
 
-    #     cmd = ['start_remote', [setup_fms[1]['name'],], {}]
+    #     # cmd = ['start_remote', [setup_fms[1]['name'],], {}]
 
-    #     utils.send_cmd(cmd, fm_local_cmd_q, fm_local_ret_q, threading.Event(),
-    #         threading.Lock(), False, 'fm', False)
+    #     # utils.send_cmd(cmd, fm_local_cmd_q, fm_local_ret_q, threading.Event(),
+    #     #     threading.Lock(), False, 'fm', False)
 
     #     fm_comm_thread.remove_communication('local')
 
+    #     # setup_pumps[1]['kwargs']['bfs_instr_ID'] = bfs_instr_id
     #     setup_pumps[1]['kwargs']['bfs_instr_ID'] = bfs_instr_id
+    #     setup_pumps[1]['kwargs']['fm_comm_lock'] = outlet_fm_comm_lock
 
     pump_comm_thread = control_server_pump.get_comm_thread('pump')
 
@@ -665,7 +677,7 @@ if __name__ == '__main__':
         title='Valve Control')
     valve_frame.Show()
 
-    if exp_type == 'coflow':
+    if exp_type == 'coflow' and has_uv:
         # Coflow only
         control_server_uv = ControlServer(ip, port4, name='UVControlServer',
             start_uv=True)
@@ -702,7 +714,7 @@ if __name__ == '__main__':
         control_server_valve.stop()
         control_server_valve.join()
 
-        if exp_type == 'coflow':
+        if exp_type == 'coflow' and has_uv:
             control_server_uv.stop()
             control_server_uv.join()
 
