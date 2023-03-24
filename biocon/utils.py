@@ -703,17 +703,28 @@ class CommManager(threading.Thread):
         cmd = kwargs.pop('cmd', None)
 
         if name not in self._connected_devices:
-            if device is None or device not in self._connected_coms:
-                new_device = self.known_devices[device_type](name, device, **kwargs)
-                new_device.connect()
-                self._connected_devices[name] = new_device
-                self._connected_coms[device] = new_device
-                logger.debug("Device %s connected", name)
-            else:
-                self._connected_devices[name] = self._connected_coms[device]
-                logger.debug("Device already connected on %s", device)
+            # if device is None or device not in self._connected_coms:
+            #     new_device = self.known_devices[device_type](name, device, **kwargs)
+            #     new_device.connect()
+            #     self._connected_devices[name] = new_device
+            #     self._connected_coms[device] = new_device
+            #     logger.debug("Device %s connected", name)
+            # else:
+            #     self._connected_devices[name] = self._connected_coms[device]
+            #     logger.debug("Device already connected on %s", device)
+
+            new_device = self.known_devices[device_type](name, device, **kwargs)
+            new_device.connect()
+            self._connected_devices[name] = new_device
+            self._connected_coms[device] = new_device
+            logger.debug("Device %s connected", name)
+
+            self._additional_connect_device(name, device_type, device, **kwargs)
 
         self._return_value((name, cmd, True), comm_name)
+
+    def _additional_connect_device(self, name, device_type, device, **kwargs):
+        pass # Device specific stuff here if needed
 
     def _disconnect_device(self, name, **kwargs):
         logger.info("Disconnecting device %s", name)
@@ -1144,3 +1155,14 @@ class DeviceFrame(wx.Frame):
             device.close()
 
         self.Destroy()
+
+
+elveflow_errors = {
+    -8000   : 'No digital sensor found',
+    -8001   : 'No pressure sensor compatible with OB1 MK3',
+    -8002   : 'No digital pressure sensor compatible with OB1 MK3+',
+    -8003   : 'No digital flow sensor compatible with OB1 MK3',
+    -8004   : 'No IPA config for this sensor',
+    -8005   : 'Sensor not compatible with AF1',
+    -8006   : 'No instrument with selected ID',
+    }

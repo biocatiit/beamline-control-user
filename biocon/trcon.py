@@ -4935,7 +4935,7 @@ if __name__ == '__main__':
         'simulated'             : False, # VERY IMPORTANT. MAKE SURE THIS IS FALSE FOR EXPERIMENTS
         }
 
-        trsaxs_settings['components'] = ['time resolved']
+    trsaxs_settings['components'] = ['trsaxs_scan', 'trsaxs_flow']
 
     app = wx.App()
 

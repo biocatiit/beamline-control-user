@@ -40,8 +40,6 @@ from six import string_types
 
 import utils
 
-print_lock = threading.RLock()
-
 class SerialComm(object):
     """
     This class impliments a generic serial communication setup. The goal is

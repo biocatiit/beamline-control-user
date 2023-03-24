@@ -36,11 +36,15 @@ if __name__ != '__main__':
 import wx
 import serial.tools.list_ports as list_ports
 
-#NOTE: RIGHT NOW, ONLY WORKS WITH 32bit elveflow stuff. The 64bit stuff seems to be broken.
-sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_03_00\\DLL64\\Elveflow64DLL') #add the path of the library here
-sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_03_00\\python_64')#add the path of the LoadElveflow.py
-sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_03_00\\DLL32\\Elveflow32DLL') #add the path of the library here
-sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_03_00\\python_32')#add the path of the LoadElveflow.py
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_03_00\\DLL64\\Elveflow64DLL') #add the path of the library here
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_03_00\\python_64')#add the path of the LoadElveflow.py
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_03_00\\DLL32\\Elveflow32DLL') #add the path of the library here
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_03_00\\python_32')#add the path of the LoadElveflow.py
+
+sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\DLL64\\DLL64') #add the path of the library here
+sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\python_64')#add the path of the LoadElveflow.py
+sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\DLL32\\DLL32') #add the path of the library here
+sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\python_32')#add the path of the LoadElveflow.py
 
 try:
     import Elveflow64 as Elveflow
@@ -51,9 +55,6 @@ except Exception:
         pass
 
 import utils
-
-print_lock = threading.RLock()
-
 
 class FlowMeter(object):
     """
@@ -171,7 +172,7 @@ class BFS(FlowMeter):
         >>> print(my_bfs.flow_rate)
     """
 
-    def __init__(self, name, device):
+    def __init__(self, name, device, comm_lock=None):
         """
         This makes the initial serial connection, and then sets the MForce
         controller parameters to the correct values.
@@ -184,13 +185,15 @@ class BFS(FlowMeter):
             filter, 0.00001 = maximum filter. Defaults to 0.5
         """
 
-        FlowMeter.__init__(self, name, device, 'uL/min')
+        FlowMeter.__init__(self, name, device, 'uL/min', comm_lock)
 
         logstr = ("Initializing flow meter {} on port {}".format(self.name,
             self.device))
         logger.info(logstr)
 
         self.connect()
+
+        self.remote = False
 
         self.filter = 0.5
 
@@ -203,40 +206,71 @@ class BFS(FlowMeter):
             with self.comm_lock:
                 error = Elveflow.BFS_Initialization(self.api_device,
                     ctypes.byref(self.instr_ID))
-            logger.exception('Initialization error: {}'.format(error))
+
+            self._check_error(error)
 
             self.connected = True
 
     @property
     def flow_rate(self):
-        self.density
+        if not self.remote:
+            self.density
 
-        flow = ctypes.c_double(-1)
-        with self.comm_lock:
-            error = Elveflow.BFS_Get_Flow(self.instr_ID.value, ctypes.byref(flow))
-        flow = float(flow.value)*self._flow_mult
+            flow = ctypes.c_double(-1)
+            with self.comm_lock:
+                error = Elveflow.BFS_Get_Flow(self.instr_ID.value,
+                    ctypes.byref(flow))
+
+            self._check_error(error)
+
+            flow = float(flow.value)
+
+        else:
+            # self._set_remote_params(True, True)
+            flow, density, temp = self._read_remote()
+
+        flow = flow*self._flow_mult
+
         logger.debug('Flow rate ({}): {}'.format(self.units, flow))
 
         return flow
 
     @property
     def density(self):
-        density = ctypes.c_double(-1)
-        with self.comm_lock:
-            error = Elveflow.BFS_Get_Density(self.instr_ID.value,
-                ctypes.byref(density))
-        density = float(density.value)
+        if not self.remote:
+            density = ctypes.c_double(-1)
+            with self.comm_lock:
+                error = Elveflow.BFS_Get_Density(self.instr_ID.value,
+                    ctypes.byref(density))
+
+            self._check_error(error)
+
+            density = float(density.value)
+
+        else:
+            # self._set_remote_params(True, True)
+            flow, density, temp = self._read_remote()
+
         logger.debug('Density: {}'.format(density))
 
         return density
 
     @property
     def temperature(self):
-        temperature = ctypes.c_double(-1)
-        with self.comm_lock:
-            error = Elveflow.BFS_Get_Temperature(self.instr_ID.value,
-                ctypes.byref(temperature))
-        temperature = float(temperature.value)
+        if not self.remote:
+            temperature = ctypes.c_double(-1)
+            with self.comm_lock:
+                error = Elveflow.BFS_Get_Temperature(self.instr_ID.value,
+                    ctypes.byref(temperature))
+
+            self._check_error(error)
+
+            temperature = float(temperature.value)
+
+        else:
+            # self._set_remote_params(True, True)
+            flow, density, temperature = self._read_remote()
+
         logger.debug('Temperature: {}'.format(temperature))
 
         return temperature
@@ -249,9 +283,76 @@ class BFS(FlowMeter):
     def filter(self, bfs_filter):
         self._filter = bfs_filter
 
-        cfilter = ctypes.c_double(self._filter) #convert to c_double
+        if not self.remote:
+            cfilter = ctypes.c_double(self._filter) #convert to c_double
+            with self.comm_lock:
+                error = Elveflow.BFS_Set_Filter(self.instr_ID.value, cfilter)
+
+            self._check_error(error)
+
+        else:
+            self._set_remote_params(True, True)
+
+    def start_remote(self):
         with self.comm_lock:
-            error = Elveflow.BFS_Set_Filter(self.instr_ID.value, cfilter)
+            error = Elveflow.BFS_Start_Remote_Measurement(self.instr_ID.value)
+
+        self._set_remote_params(True, True)
+
+        self._check_error(error)
+
+        self.remote = True
+
+    def stop_remote(self):
+        with self.comm_lock:
+            error = Elveflow.BFS_Stop_Remote_Measurement(self.instr_ID.value)
+
+        self._check_error(error)
+
+        self.remote = False
+
+    def _read_remote(self):
+        data_sens=ctypes.c_double()
+        data_dens=ctypes.c_double()
+        data_temp=ctypes.c_double()
+
+        with self.comm_lock:
+            error = Elveflow.BFS_Get_Remote_Data(self.instr_ID.value,
+                ctypes.byref(data_sens), ctypes.byref(data_dens),
+                ctypes.byref(data_temp))
+
+        self._check_error(error)
+
+        flow = float(data_sens.value)
+        density = float(data_dens.value)
+        temp = float(data_temp.value)
+
+        return flow, density, temp
+
+    def _set_remote_params(self, read_density, read_temp):
+        filt = ctypes.c_double(self.filter)
+
+        if read_temp:
+            m_temp = ctypes.c_int32(1)
+        else:
+            m_temp = ctypes.c_int32(0)
+
+        if read_density:
+            m_density = ctypes.c_int32(1)
+        else:
+            m_density = ctypes.c_int32(0)
+
+        Elveflow.BFS_Set_Remote_Params(self.instr_ID.value, filt, m_temp,
+            m_density)
+
+
+    def _check_error(self, error):
+        error = int(error)
+
+        if error in utils.elveflow_errors:
+            logger.error('%s Error: %s', self.name, utils.elveflow_errors[error])
+        elif error != 0:
+            logger.error('%s Error: LabView Error Code %s', self.name, error)
 
     def stop(self):
         with self.comm_lock:
@@ -333,6 +434,8 @@ class FlowMeterCommThread(utils.CommManager):
             'get_filter'                    : self._get_filter,
             'set_filter'                    : self._set_filter,
             'get_settings'                  : self._get_settings,
+            'get_bfs_instr_id'              : self._get_bfs_instr_id,
+            'start_remote'                  : self._start_remote,
             }
 
         self._connected_devices = OrderedDict()
@@ -599,6 +702,40 @@ class FlowMeterCommThread(utils.CommManager):
         self._return_value((name, cmd, ret_vals), comm_name)
 
         logger.debug("Flow meter %s settings: %s", name, ret_vals)
+
+    def _get_bfs_instr_id(self, name, **kwargs):
+        """
+        This method gets the filter setting for a flow meter.
+
+        :param str name: The unique identifier for a flow meter that was used
+            in the :py:func:`_connect_fm` method.
+        """
+        logger.debug("Getting bfs instr_ID for %s", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        val = device.instr_ID
+
+        self._return_value((name, cmd, val), comm_name)
+
+    def _start_remote(self, name, **kwargs):
+        """
+        This method gets the filter setting for a flow meter.
+
+        :param str name: The unique identifier for a flow meter that was used
+            in the :py:func:`_connect_fm` method.
+        """
+        logger.debug("Starting remote mode for %s", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        device.start_remote()
+
+        self._return_value((name, cmd, True), comm_name)
 
 class FlowMeterPanel(utils.DevicePanel):
     """

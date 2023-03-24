@@ -33,6 +33,8 @@ import sys
 import copy
 import platform
 import datetime
+import ctypes
+import os
 
 if __name__ != '__main__':
     logger = logging.getLogger(__name__)
@@ -42,9 +44,22 @@ import serial.tools.list_ports as list_ports
 import wx
 from six import string_types
 
-import utils
+sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\DLL64\\DLL64') #add the path of the library here
+sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\python_64')#add the path of the LoadElveflow.py
+sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\DLL32\\DLL32') #add the path of the library here
+sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\python_32')#add the path of the LoadElveflow.py
 
-print_lock = threading.RLock()
+try:
+    import Elveflow64 as Elveflow
+except Exception:
+    try:
+        import Elveflow32 as Elveflow
+    except Exception:
+        pass
+
+import fmcon
+import utils
+import pid
 
 class SerialComm(object):
     """
@@ -372,21 +387,34 @@ def convert_flow_accel(accel, u1, u2):
     return accel
 
 def convert_pressure(pressure, u1, u2):
-    if u1.lower() in ['psi', 'mpa', 'bar'] and u2.lower() in ['psi', 'mpa', 'bar']:
-        if u1.lower() != u2.lower():
+    if (u1.lower() in ['psi', 'mpa', 'bar', 'mbar']
+        and u2.lower() in ['psi', 'mpa', 'bar', 'mbar']):
 
+        if u1.lower() != u2.lower():
             if u1.lower() == 'psi' and u2.lower() == 'mpa':
                 pressure = pressure/145.038
             elif u1.lower() == 'psi' and u2.lower() == 'bar':
                 pressure = pressure/14.5038
+            elif u1.lower() == 'psi' and u2.lower() == 'mbar':
+                pressure = 1000*pressure/14.5038
             elif u1.lower() == 'mpa' and u2.lower() == 'psi':
                 pressure = pressure*145.038
             elif u1.lower() == 'mpa' and u2.lower() == 'bar':
                 pressure = pressure*10
+            elif u1.lower() == 'mpa' and u2.lower() == 'mbar':
+                pressure = 1000*pressure*10
             elif u1.lower() == 'bar' and u2.lower() == 'psi':
                 pressure = pressure*14.5038
-            elif u1.lower() == 'bar' and u2.lower() == 'psi':
+            elif u1.lower() == 'bar' and u2.lower() == 'mpa':
                 pressure = pressure/10
+            elif u1.lower() == 'bar' and u2.lower() == 'mbar':
+                pressure = pressure*1000
+            elif u1.lower() == 'mbar' and u2.lower() == 'psi':
+                pressure = pressure*14.5038/1000
+            elif u1.lower() == 'mbar' and u2.lower() == 'mpa':
+                pressure = pressure/10/1000
+            elif u1.lower() == 'mbar' and u2.lower() == 'bar':
+                pressure = pressure/1000
 
     return pressure
 
@@ -1666,7 +1694,7 @@ class SSINextGenPump(Pump):
     def pressure_units(self, units):
         old_units = self._pressure_units
 
-        if units.lower() in ['psi', 'bar', 'mpa']:
+        if units.lower() in ['psi', 'bar', 'mpa', 'mbar']:
             self._pressure_units = units
 
             logger.info("Changed pump %s pressure units from %s to %s", self.name, old_units, units)
@@ -2235,6 +2263,638 @@ class SSINextGenPump(Pump):
         self._is_dispensing = False
         self._accel_stop.set()
 
+class OB1(object):
+    def __init__(self, name, device, comm_lock=None, calib_path=None):
+
+        self.name = name
+        self.device = device
+
+        if comm_lock is None:
+            self.comm_lock = threading.RLock()
+        else:
+            self.comm_lock = comm_lock
+
+        self.connected = False
+
+        self.connect()
+
+        self.calib = None
+
+        if calib_path is not None:
+            self.load_calibration(calib_path)
+
+        else:
+            calib = (ctypes.c_double*1000)()
+            error = Elveflow.Elveflow_Calibration_Default(ctypes.byref(calib),
+                1000)
+
+            self.calib = calib
+
+            self._check_error(error)
+
+        self.remote = False
+
+        self._connected_channels = []
+
+    def connect(self):
+        if not self.connected:
+            self.instr_ID = ctypes.c_int32()
+
+            with self.comm_lock:
+                error = Elveflow.OB1_Initialization(self.device.encode('ascii'),
+                    0, 0, 0, 0, ctypes.byref(self.instr_ID))
+
+                self._check_error(error)
+
+            self.connected = True
+
+    def calibrate(self):
+        calib = (ctypes.c_double*1000)()
+        error = Elveflow.OB1_Calib(self.instr_ID.value, calib, 1000)
+
+        self._check_error(error)
+
+        self.calib = calib
+
+    def save_calibration(self, path):
+        path = os.path.abspath(os.path.expanduser(path))
+        error = Elveflow.Elveflow_Calibration_Save(path.encode('ascii'),
+            ctypes.byref(self.calib), 1000)
+
+        self._check_error(error)
+
+    def load_calibration(self, path):
+        path = os.path.abspath(os.path.expanduser(path))
+        calib = (ctypes.c_double*1000)()
+
+        error = Elveflow.Elveflow_Calibration_Load(path.encode('ascii'),
+            ctypes.byref(calib), 1000)
+
+        self.calib = calib
+        self._check_error(error)
+
+    def _check_error(self, error):
+        error = int(error)
+
+        if error in utils.elveflow_errors:
+            logger.error('%s Error: %s', self.name, utils.elveflow_errors[error])
+        elif error != 0:
+            logger.error('%s Error: LabView Error Code %s', self.name, error)
+
+    def disconnect(self):
+        if self.connected:
+            with self.comm_lock:
+                for channel in self._connected_channels:
+                    channel.connected = False
+
+                error = Elveflow.OB1_Destructor(self.instr_ID.value)
+
+                self._check_error(error)
+
+                self.connected = False
+
+    def stop(self):
+        pass
+
+
+class OB1Pump(Pump):
+    def __init__(self, name, device, channel, min_pressure, max_pressure,
+        ob1_device, P=0, I=0, D=0, pid_sample_time=0.1, bfs_instr_ID=None,
+        comm_lock=None, fm_comm_lock=None, flow_rate_scale=1, flow_rate_offset=0,
+        scale_type='both'):
+        """
+        :param device: The device comport as sent to pyserial
+        :type device: str
+
+        :param name: A unique identifier for the pump
+        :type name: str
+
+        Note: comm_lock needs to be an RLock for this device
+        """
+
+        logstr = ("Initializing pump {} on serial port {}".format(name,
+            device))
+        logger.info(logstr)
+
+        self._ob1 = ob1_device
+
+        Pump.__init__(self, name, device, flow_rate_scale=flow_rate_scale,
+            flow_rate_offset=flow_rate_offset, scale_type=scale_type,
+            comm_lock=comm_lock)
+
+        self._pump_base_units = 'uL/min'
+        self._units = self._pump_base_units
+        self._pump_pressure_units = 'mbar'
+        self._pressure_units = 'mbar'
+        self._target_pressure = 0
+        self._target_flow = 0
+        self._min_pressure = min_pressure
+        self._max_pressure = max_pressure
+
+        self._channel = int(channel)
+        self._ob1_chan = ctypes.c_int32(self._channel)
+
+        self._has_sensor = False #Used for reading flow rate but not necessarily PID
+        self._has_flow_meter = False #Used for PID
+        self._PID_mode = False
+        self._P = P
+        self._I = I
+        self._D = D
+        self._pid_sample_time = pid_sample_time
+
+        self._PID = pid.PID(self._P, self._I, self._D, 0)
+        self._PID.sample_time = self._pid_sample_time
+        self._PID.output_limits = (self._min_pressure, self._max_pressure)
+
+        self._pid_on_evt = threading.Event()
+        self._abort_pid_evt = threading.Event()
+
+        self._bfs_instr_ID = bfs_instr_ID
+        self._fm_comm_lock = fm_comm_lock
+
+        if self._bfs_instr_ID is not None:
+            self.pid_thread = threading.Thread(target=self.run_PID)
+            self.pid_thread.daemon = True
+            self.pid_thread.start()
+
+            self._PID_mode = True
+            self._has_flow_meter = True
+
+            if self._fm_comm_lock is None:
+                self._fm_comm_lock = threading.Lock()
+
+
+    def connect(self):
+        if not self.connected:
+
+            if not self._ob1.connected:
+                self._ob1.connect()
+
+            self.instr_ID = self._ob1.instr_ID
+            self.calib = self._ob1.calib
+
+            self.connected = True
+
+    @property
+    def pressure_units(self):
+        """
+        Sets and returns the pump flow rate units. This can be set to:
+        nL/s, nL/min, uL/s, uL/min, mL/s, mL/min. Changing units keeps the
+        flow rate constant, i.e. if the flow rate was set to 100 uL/min, and
+        the units are changed to mL/min, the flow rate is set to 0.1 mL/min.
+
+        :type: str
+        """
+        return self._pressure_units
+
+    @pressure_units.setter
+    def pressure_units(self, units):
+        old_units = self._pressure_units
+
+        if units.lower() in ['psi', 'bar', 'mpa', 'mbar']:
+            self._pressure_units = units
+
+            logger.info("Changed pump %s pressure units from %s to %s", self.name, old_units, units)
+        else:
+            logger.warning("Failed to change pump %s pressure units, units supplied were invalid: %s", self.name, units)
+
+    @property
+    def flow_rate(self):
+        """
+        Sets and returns the pump flow rate in units specified by ``Pump.units``.
+        Can be set while the pump is moving, and it will update the flow rate
+        appropriately.
+
+        :type: float
+        """
+        with self.comm_lock:
+            if self._has_sensor and self._ob1.remote:
+                pressure, rate = self._read_remote_channel()
+
+            elif self._has_sensor and not self._ob1.remote:
+                data_sens=ctypes.c_double()
+                error = Elveflow.OB1_Get_Sens_Data(self.instr_ID.value,
+                    self._ob1_chan, 1, ctypes.byref(data_sens))
+
+                self._check_error(error)
+                rate = float(data_sens)
+
+            else:
+                rate = self._flow_rate
+
+        rate = self._convert_flow_rate(rate, self._pump_base_units, self.units)
+
+        return rate
+
+    @flow_rate.setter
+    def flow_rate(self, rate):
+        rate = self._convert_flow_rate(rate, self.units, self._pump_base_units)
+
+        with self.comm_lock:
+            if self._has_flow_meter:
+                self._PID.setpoint = rate
+                self._is_flowing = True
+
+                if not self._PID_mode:
+                    pressure = self._inner_get_pressure()
+                    self._PID.set_auto_mode(True, pressure)
+                    self._PID_mode = True
+
+                if not self._pid_on_evt.is_set():
+                    self._pid_on_evt.set()
+
+            else:
+                logger.error('Failed to set flow rate for %s because there '
+                    'is not a flow meter associated with the device.', self.name)
+
+        if self._is_flowing:
+            self._flow_rate = rate
+
+            if self._flow_rate > 0:
+                self._flow_dir = 1
+            else:
+                self._flow_dir = -1
+
+    def is_moving(self):
+        """
+        Queries the pump about whether or not it's moving.
+
+        :returns: True if the pump is moving, False otherwise
+        :rtype: bool
+        """
+        return self._is_flowing
+
+    def start_flow(self):
+        """
+        Starts a continuous flow at the flow rate specified by the
+        ``Pump.flow_rate`` variable.
+
+        Note: for the OB1 there's no clear distinction between setting the
+        target flow rate and starting flow, so this does nothing.
+        """
+        pass
+
+    def dispense(self, vol, units='uL'):
+        """
+        Dispenses a fixed volume.
+
+        :param vol: Volume to dispense
+        :type vol: float
+
+        :param units: Volume units, defaults to uL, also accepts mL or nL
+        :type units: str
+        """
+        vol = self._convert_volume(vol, units, self._pump_base_units.split('/')[0])
+
+        self._dispensing_volume = abs(vol)
+
+        dispense_thread = threading.Thread(target=self._run_dispense)
+        dispense_thread.start()
+
+    def aspirate(self, vol, units='uL'):
+        """
+        Aspirates a fixed volume.
+
+        :param vol: Volume to aspirate
+        :type vol: float
+
+        :param units: Volume units, defaults to uL, also accepts mL or nL
+        :type units: str
+        """
+        vol = self._convert_volume(vol, units, self._pump_base_units.split('/')[0])
+
+        self._dispensing_volume = abs(vol)
+
+        dispense_thread = threading.Thread(target=self._run_dispense)
+        dispense_thread.start()
+
+    def _run_dispense(self):
+        previous_time = time.time()
+        previous_fr = self.flow_rate
+
+        update_time = previous_time
+
+        while self._is_flowing:
+            current_fr = copy.copy(self.flow_rate)
+            current_time = time.time()
+            delta_vol = ((current_fr + previous_fr)/2./60.)*(current_time-previous_time)
+
+            self._dispensing_volume -= abs(delta_vol)
+
+            previous_time = current_time
+            previous_fr = current_fr
+
+            if current_time - update_time > 60:
+                logger.info('Pump %s remaining dispense/aspirate volume is %s uL',
+                    self.name, self._dispensing_volume)
+                update_time = current_time
+
+            if self._dispensing_volume <= 0:
+                self.stop()
+                break
+
+            time.sleep(0.1)
+
+
+        logger.info('Finished dispense/aspirate for pump %s', self.name)
+
+    def set_pressure(self, pressure):
+        self._target_pressure = pressure
+
+        pressure = self._convert_pressure(pressure, self.pressure_units,
+            self._pump_pressure_units)
+        if self._PID_mode:
+            self._pid_on_evt.clear()
+            self._PID.auto_mode = False
+            self._PID_mode = False
+            time.sleep(self._pid_sample_time)
+
+        self._inner_set_pressure(pressure)
+
+
+    def _inner_set_pressure(self, pressure):
+        if pressure > self._max_pressure:
+            logger.warning('Pressure %s is greater than %s max pressure,'
+                'setting pressure to max', pressure, self.name)
+            pressure = self._max_pressure
+
+        if pressure < self._min_pressure:
+            logger.warning('Pressure %s is less than %s min pressure,'
+                'setting pressure to min', pressure, self.name)
+            pressure = self._min_pressure
+
+        with self.comm_lock:
+
+            if not self._ob1.remote:
+                set_pressure = float(pressure) #mbarr
+                set_pressure = ctypes.c_double(set_pressure)#convert to c_double
+
+                error = Elveflow.OB1_Set_Press(self.instr_ID.value, self._ob1_chan,
+                    set_pressure, ctypes.byref(self.calib), 1000)
+
+                self._check_error(error)
+            else:
+                if self._has_flow_meter and self._PID_mode:
+                    self._start_remote_PID(False)
+
+                self._set_remote_target(pressure)
+
+    def get_pressure(self):
+        pressure = self._inner_get_pressure()
+
+        pressure = self._convert_pressure(pressure, self._pump_pressure_units,
+            self.pressure_units)
+
+        return pressure
+
+    def _inner_get_pressure(self):
+        with self.comm_lock:
+            if not self._ob1.remote:
+                get_pressure = ctypes.c_double()
+
+                error = Elveflow.OB1_Get_Press(self.instr_ID.value, self._ob1_chan,
+                    1, ctypes.byref(self.calib), ctypes.byref(get_pressure), 1000)
+
+                self._check_error(error)
+
+                pressure = float(get_pressure.value)
+
+            else:
+                pressure, flow = self._read_remote_channel()
+
+        return pressure
+
+    def run_PID(self):
+        prev_dens = 0
+        while True:
+            if self._abort_pid_evt.is_set():
+                break
+
+            if self._pid_on_evt.is_set():
+                start_t = time.time()
+
+                fr, dens, temp = self.get_fm_values()
+
+                delta_t = time.time() - start_t
+
+                if dens > 700 and (prev_dens/dens < 1.05 and prev_dens/dens > 0.95):
+                    pressure = self._PID(fr)
+                    self._inner_set_pressure(pressure)
+
+                prev_dens = dens
+
+                while time.time() - start_t < self._pid_sample_time - delta_t:
+                    time.sleep(0.01)
+
+            else:
+                time.sleep(0.1)
+
+    def get_fm_values(self):
+        with self._fm_comm_lock:
+            density = ctypes.c_double(-1)
+            error = Elveflow.BFS_Get_Density(self._bfs_instr_ID.value, ctypes.byref(density))
+            density = float(density.value)
+            self._check_error(error)
+
+            temperature = ctypes.c_double(-1)
+            error = Elveflow.BFS_Get_Temperature(self._bfs_instr_ID.value, ctypes.byref(temperature))
+            temperature = float(temperature.value)
+            self._check_error(error)
+
+            flow = ctypes.c_double(-1)
+            error = Elveflow.BFS_Get_Flow(self._bfs_instr_ID.value, ctypes.byref(flow))
+            flow = float(flow.value)
+            self._check_error(error)
+
+        return flow, density, temperature
+
+    def set_PID_values(self, P, I, D):
+        self._P = P
+        self._I = I
+        self._D = D
+
+        self._PID.tunings = (P, I, D)
+    """
+    The code below is for use with the Remote PID control built into the
+    Elveflow API. I found that didn't work well, but leaving it here in case
+    I want to retest it at some point with a new version of the API.
+
+    @property
+    def flow_rate(self):
+        with self.comm_lock:
+            if self._has_sensor and self._ob1.remote:
+                pressure, rate = self._read_remote_channel()
+
+            elif self._has_sensor and not self._ob1.remote:
+                data_sens=ctypes.c_double()
+                error = Elveflow.OB1_Get_Sens_Data(self.instr_ID.value,
+                    self._ob1_chan, 1, ctypes.byref(data_sens))
+
+                self._check_error(error)
+                rate = float(data_sens)
+
+            else:
+                rate = self._flow_rate
+
+        rate = self._convert_flow_rate(rate, self._pump_base_units, self.units)
+
+        return rate
+
+    @flow_rate.setter
+    def flow_rate(self, rate):
+        rate = self._convert_flow_rate(rate, self.units, self._pump_base_units)
+
+        with self.comm_lock:
+            if self._has_flow_meter and self._PID_mode and self._ob1.remote:
+                self._set_remote_target(rate)
+                self._is_flowing = True
+
+            elif self._has_flow_meter and self._ob1.remote:
+                self._start_remote_PID(True)
+                self._set_remote_target(rate)
+                self._is_flowing = True
+
+            elif self._has_flow_meter:
+                self._start_remote()
+                self._start_remote_PID(True)
+                self._set_remote_target(rate)
+                self._is_flowing = True
+            else:
+                logger.error('Failed to set flow rate for %s because there '
+                    'is not a flow meter associated with the device.', self.name)
+
+        if self._is_flowing:
+            self._flow_rate = rate
+
+            if self._flow_rate > 0:
+                self._flow_dir = 1
+            else:
+                self._flow_dir = -1
+
+    def _start_remote(self):
+        with self.comm_lock:
+            error = Elveflow.OB1_Start_Remote_Measurement(self.instr_ID.value,
+                ctypes.byref(self.calib), 1000)
+            self._check_error(error)
+
+            self._ob1.remote = True
+
+    def _stop_remote(self):
+        with self.comm_lock:
+            error = Elveflow.OB1_Stop_Remote_Measurement(self.instr_ID.value)
+            self._check_error(error)
+
+            self._ob1.remote = False
+
+    def _start_remote_PID(self, start_running):
+        if start_running:
+            running = ctypes.c_int32(1)
+        else:
+            running = ctypes.c_int32(0)
+
+        with self.comm_lock:
+            error = Elveflow.PID_Set_Running_Remote(self.instr_ID.value, self._ob1_chan,
+                running)
+            self._check_error(error)
+
+        self._PID_mode = start_running
+
+    def _read_remote_channel(self):
+        data_sens=ctypes.c_double()
+        data_reg=ctypes.c_double()
+
+        with self.comm_lock:
+            error=Elveflow.OB1_Get_Remote_Data(self.instr_ID.value,
+                self._ob1_chan, ctypes.byref(data_reg), ctypes.byref(data_sens))
+
+        pressure = float(data_reg.value)
+        flow = float(data_sens.value)
+
+        return pressure, flow
+
+    def _set_remote_target(self, val):
+        set_target = float(val)
+        set_target = ctypes.c_double(set_target)#convert to c_double
+
+        with self.comm_lock:
+            error = Elveflow.OB1_Set_Remote_Target(self.instr_ID.value,
+                self._ob1_chan, set_target)
+
+            self._check_error(error)
+
+    def initialize_remote_PID(self, P, I, D, bfs_instr_ID, start_running):
+        # Flow meter must already be in remote mode
+        # D not used at the moment for OB1
+        self._P = P
+        self._I = I
+
+        P = float(P)
+        P = ctypes.c_double(P)
+        I = float(I)
+        I = ctypes.c_double(I)
+        sensor_channel = ctypes.c_int32(1) # Shouldn't matter
+
+        if start_running:
+            running = ctypes.c_int32(1)
+        else:
+            running = ctypes.c_int32(0)
+
+        with self.comm_lock:
+            error = Elveflow.PID_Add_Remote(self.instr_ID.value, self._ob1_chan,
+                bfs_instr_ID.value, sensor_channel, P, I, running)
+            self._check_error(error)
+
+        self._has_flow_meter = True
+        self._PID_mode = start_running
+
+
+    def set_PID_values(self, P, I, D, reset_err=True):
+        #D not used at the moment for OB1
+        self._P = P
+        self._I = I
+
+        P = float(P)
+        P = ctypes.c_double(P)
+        I = float(I)
+        I = ctypes.c_double(I)
+
+        if reset_err:
+            reset = ctypes.c_int32(1)
+        else:
+            reset = ctypes.c_int32(0)
+
+        with self.comm_lock:
+            error = Elveflow.PID_Set_Params_Remote(self.instr_ID.value,
+                self._ob1_chan, reset, P, I)
+            self._check_error(error)
+    """
+
+    def stop(self):
+        """Stops all pump flow."""
+        if self._has_flow_meter:
+            self.flow_rate = 0
+
+        else:
+            self.set_pressure(0)
+
+        self._is_flowing = False
+        self._is_dispensing = False
+
+    def _check_error(self, error):
+        error = int(error)
+
+        if error in utils.elveflow_errors:
+            logger.error('%s Error: %s', self.name, utils.elveflow_errors[error])
+        elif error != 0:
+            logger.error('%s Error: LabView Error Code %s', self.name, error)
+
+    def disconnect(self):
+        if self.connected:
+            if self._ob1.connected:
+                self._ob1.disconnect()
+
+            self.connected = False
+
 class SoftPump(Pump):
     """
     This class contains the settings and communication for a generic pump.
@@ -2705,6 +3365,7 @@ class PumpCommThread(utils.CommManager):
             'get_min_pressure'  : self._get_min_pressure,
             'set_min_pressure'  : self._set_min_pressure,
             'get_pressure'      : self._get_pressure,
+            'set_pressure'      : self._set_pressure,
             'get_pressure_units': self._get_pressure_units,
             'set_pressure_units': self._set_pressure_units,
             'get_faults'        : self._get_faults,
@@ -2713,6 +3374,9 @@ class PumpCommThread(utils.CommManager):
             'set_force'         : self._set_force,
             'get_settings'      : self._get_settings,
             'get_flow_dir'      : self._get_flow_dir,
+            'get_pump'          : self._get_pump,
+            'initialize_ob1_pid': self._initialize_ob1_pid,
+            'set_pid'           : self._set_pid,
             }
 
         self.known_devices = {
@@ -2721,6 +3385,8 @@ class PumpCommThread(utils.CommManager):
             'Pico Plus'     : PicoPlusPump,
             'NE 500'        : NE500Pump,
             'SSI Next Gen'  : SSINextGenPump,
+            'OB1'           : OB1,
+            'OB1 Pump'      : OB1Pump,
             'Soft'          : SoftPump,
             'Soft Syringe'  : SoftSyringePump,
             }
@@ -3274,6 +3940,18 @@ class PumpCommThread(utils.CommManager):
         self._return_value((name, cmd, val), comm_name)
         logger.debug("Pump %s pressure is %s", name, val)
 
+    def _set_pressure(self, name, val, **kwargs):
+        logger.info("Setting pump %s pressure to %s", name, val)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        device.set_pressure(val)
+
+        self._return_value((name, cmd, True), comm_name)
+        logger.debug("Pump %s pressure set", name)
+
     def _get_settings(self, name, **kwargs):
         logger.debug("Getting pump %s settings", name)
 
@@ -3332,6 +4010,47 @@ class PumpCommThread(utils.CommManager):
 
         self._return_value((name, cmd, val), comm_name)
         logger.debug("Pump %s flow direction is %s", name, val)
+
+    def _get_pump(self, name, **kwargs):
+        logger.debug("Getting pump %s", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        if name in self._connected_devices:
+            device = self._connected_devices[name]
+        else:
+            device = None
+
+        self._return_value((name, cmd, device), comm_name)
+        logger.debug("Got pump %s", name)
+
+    def _initialize_ob1_pid(self, name, P, I, D, fm_instr_id, start_running,
+        **kwargs):
+        logger.info("Initializing pump %s PID, P: %s, I: %s D: %s", name,
+            P, I, D)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        device.initialize_remote_PID(P, I, D, fm_instr_id, start_running)
+
+        self._return_value((name, cmd, True), comm_name)
+        logger.debug("Initialized pump %s PID", name)
+
+    def _set_pid(self, name, P, I, D, **kwargs):
+        logger.info("Setting pump %s PID, P: %s, I: %s D: %s", name,
+            P, I, D)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        device.set_PID_values(P, I, D)
+
+        self._return_value((name, cmd, True), comm_name)
+        logger.debug("Set pump %s PID", name)
 
     def _send_pump_cmd(self, name, val, get_response=True, **kwargs):
         """
@@ -3592,6 +4311,14 @@ class PumpPanel(utils.DevicePanel):
         button_ctrl_sizer.Add(self.run_button, 0, wx.ALIGN_CENTER_VERTICAL)
         button_ctrl_sizer.Add(self.fr_button, 0, wx.ALIGN_CENTER_VERTICAL|wx.RESERVE_SPACE_EVEN_IF_HIDDEN)
 
+        self.pressure_ctrl = utils.ValueEntry(self._on_set_pressure, self,
+            size=self._FromDIP((60, -1)), validator=utils.CharValidator('float_te'))
+        self.ob1_ctrl_sizer = wx.BoxSizer()
+        self.ob1_ctrl_sizer.Add(wx.StaticText(self, label='Pressure:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        self.ob1_ctrl_sizer.Add(self.pressure_ctrl, border=self._FromDIP(2),
+            flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT)
+
         self.vol_unit_ctrl = wx.Choice(self, choices=['nL', 'uL', 'mL'])
         self.vol_unit_ctrl.SetSelection(2)
         self.time_unit_ctrl = wx.Choice(self, choices=['s', 'min'])
@@ -3673,10 +4400,36 @@ class PumpPanel(utils.DevicePanel):
             flag=wx.ALIGN_CENTER_VERTICAL)
 
 
+        self.feedback_p = utils.ValueEntry(self._on_pid_change, self,
+            size=self._FromDIP((60, -1)), validator=utils.CharValidator('float_te'))
+        self.feedback_i = utils.ValueEntry(self._on_pid_change, self,
+            size=self._FromDIP((60, -1)), validator=utils.CharValidator('float_te'))
+        self.feedback_d = utils.ValueEntry(self._on_pid_change, self,
+            size=self._FromDIP((60, -1)), validator=utils.CharValidator('float_te'))
+
+        self.feedback_p.SafeChangeValue('0')
+        self.feedback_d.SafeChangeValue('0')
+        self.feedback_i.SafeChangeValue('0')
+
+        self.ob1_settings_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(2),
+            hgap=self._FromDIP(2))
+        self.ob1_settings_sizer.Add(wx.StaticText(self, label='P:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        self.ob1_settings_sizer.Add(self.feedback_p, flag=wx.ALIGN_CENTER_VERTICAL)
+        self.ob1_settings_sizer.Add(wx.StaticText(self, label='I:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        self.ob1_settings_sizer.Add(self.feedback_i, flag=wx.ALIGN_CENTER_VERTICAL)
+        self.ob1_settings_sizer.Add(wx.StaticText(self, label='D:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        self.ob1_settings_sizer.Add(self.feedback_d, flag=wx.ALIGN_CENTER_VERTICAL)
+
+
         self.control_box_sizer = wx.StaticBoxSizer(wx.StaticBox(self, label='Controls'),
             wx.VERTICAL)
         self.control_box_sizer.Add(basic_ctrl_sizer, flag=wx.EXPAND)
         self.control_box_sizer.Add(button_ctrl_sizer, flag=wx.ALIGN_CENTER_HORIZONTAL|wx.TOP,
+            border=self._FromDIP(2))
+        self.control_box_sizer.Add(self.ob1_ctrl_sizer, flag=wx.EXPAND|wx.TOP,
             border=self._FromDIP(2))
 
         self.settings_box_sizer = wx.StaticBoxSizer(wx.StaticBox(self, label='Settings'),
@@ -3687,6 +4440,8 @@ class PumpPanel(utils.DevicePanel):
         # self.settings_box_sizer.Add(self.picoplus_settings_sizer,
         #     flag=wx.EXPAND|wx.TOP, border=self._FromDIP(2))
         self.settings_box_sizer.Add(self.ssi_settings_sizer,
+            flag=wx.EXPAND|wx.TOP, border=self._FromDIP(2))
+        self.settings_box_sizer.Add(self.ob1_settings_sizer,
             flag=wx.EXPAND|wx.TOP, border=self._FromDIP(2))
 
         top_sizer = wx.BoxSizer(wx.VERTICAL)
@@ -3701,9 +4456,13 @@ class PumpPanel(utils.DevicePanel):
         self.vol_units_lbl.Hide()
         self.fr_button.Hide()
 
+        self.control_box_sizer.Hide(self.ob1_ctrl_sizer, recursive=True)
+
         self.settings_box_sizer.Hide(self.phd4400_settings_sizer, recursive=True)
         # self.settings_box_sizer.Hide(self.picoplus_settings_sizer, recursive=True)
         self.settings_box_sizer.Hide(self.ssi_settings_sizer, recursive=True)
+        self.settings_box_sizer.Hide(self.ob1_settings_sizer, recursive=True)
+
         self.status_sizer.Hide(self.ssi_status_sizer, recursive=True)
 
         if self.pump_type == 'VICI M50' or self.pump_type == 'Soft':
@@ -3727,6 +4486,13 @@ class PumpPanel(utils.DevicePanel):
 
             self.direction_lbl.Hide()
             self.direction_ctrl.Hide()
+
+            self.pump_mode = 'continuous'
+
+        elif self.pump_type == 'OB1' or self.pump_type == 'OB1 Pump':
+            self.status_sizer.Show(self.ssi_status_sizer, recursive=True)
+            self.control_box_sizer.Show(self.ob1_ctrl_sizer, recursive=True)
+            self.settings_box_sizer.Show(self.ob1_settings_sizer, recursive=True)
 
             self.pump_mode = 'continuous'
 
@@ -3779,6 +4545,35 @@ class PumpPanel(utils.DevicePanel):
 
             if 'dual_syringe' in kwargs:
                 self.dual_syringe.SetStringSelection(kwargs['dual_syringe'])
+
+        if self.pump_type == 'OB1 Pump':
+            ob1_device_name = kwargs.pop('ob1_device_name')
+            calib_path = kwargs.pop('calib_path')
+            get_ob1_cmd = ['get_pump', [ob1_device_name], {}]
+
+            ob1_device = self._send_cmd(get_ob1_cmd, True)
+
+            if ob1_device is None:
+                ob1_args = [ob1_device_name, 'OB1', args[2]]
+                ob1_kwargs = {'comm_lock': kwargs['comm_lock'],
+                    'calib_path': calib_path}
+
+                cmd = ['connect', ob1_args, ob1_kwargs]
+
+                self._send_cmd(cmd, True)
+
+                ob1_device = self._send_cmd(get_ob1_cmd, True)
+
+            kwargs['ob1_device'] = ob1_device
+
+            if 'P' in kwargs:
+                self.feedback_p.SafeChangeValue(str(kwargs['P']))
+
+            if 'I' in kwargs:
+                self.feedback_i.SafeChangeValue(str(kwargs['I']))
+
+            if 'D' in kwargs:
+                self.feedback_d.SafeChangeValue(str(kwargs['D']))
 
         connect_cmd = ['connect', args, kwargs]
 
@@ -4067,6 +4862,23 @@ class PumpPanel(utils.DevicePanel):
 
         self._set_pressure_units_gui(units)
 
+    def _on_set_pressure(self, obj, value):
+        value = float(value)
+        cmd = ['set_pressure', [self.name, value], {}]
+        self._send_cmd(cmd)
+
+    def _on_pid_change(self, obj, value):
+        P = self.feedback_p.GetValue()
+        I = self.feedback_i.GetValue()
+        D = self.feedback_d.GetValue()
+
+        P = float(P)
+        I = float(I)
+        D = float(D)
+
+        cmd = ['set_pid', [self.name, P, I, D], {}]
+        self._send_cmd(cmd)
+
     def _set_pressure_units_gui(self, units):
         self.pressure_units_lbl.SetLabel(units)
         self.max_pressure_units_lbl.SetLabel(units)
@@ -4250,7 +5062,7 @@ class PumpPanel(utils.DevicePanel):
             if val is not None and round(val, 4) != float(self.flow_readback.GetLabel()):
                 self._current_flow_rate = val
 
-                if self._current_flow_dir >= 0:
+                if self.pump_mode =='continuous' or self._current_flow_dir >= 0:
                     wx.CallAfter(self.flow_readback.SetLabel, str(round(val, 4)))
 
         elif cmd == 'get_refill_rate':
@@ -4260,7 +5072,7 @@ class PumpPanel(utils.DevicePanel):
             if val is not None and round(val, 4) != float(self.flow_readback.GetLabel()):
                 self._current_refill_rate = val
 
-                if self._current_flow_dir < 0:
+                if self.pump_mode == 'syringe' and self._current_flow_dir < 0:
                     wx.CallAfter(self.flow_readback.SetLabel, str(round(val, 4)))
 
         elif cmd == 'get_flow_dir':
@@ -4413,7 +5225,7 @@ if __name__ == '__main__':
     # pmp_cmd_q.append(stop_cmd)
     # my_pumpcon.stop()
 
-    # # Coflow pumps
+    # Coflow pumps
     # setup_devices = [
     #     {'name': 'sheath', 'args': ['VICI M50', 'COM3'],
     #         'kwargs': {'flow_cal': '627.72', 'backlash_cal': '9.814'},
@@ -4421,6 +5233,39 @@ if __name__ == '__main__':
     #     {'name': 'outlet', 'args': ['VICI M50', 'COM4'],
     #         'kwargs': {'flow_cal': '628.68', 'backlash_cal': '9.962'},
     #         'ctrl_args': {'flow_rate': 1}},
+    #     ]
+
+
+    # # Coflow with OB1
+    # bfs = fmcon.BFS('outlet_fm', 'COM6')
+    # bfs.start_remote()
+
+    # ob1_comm_lock = threading.RLock()
+
+    # setup_devices = [
+    #     {'name': 'sheath', 'args': ['VICI M50', 'COM3'],
+    #         'kwargs': {'flow_cal': '627.72', 'backlash_cal': '9.814'},
+    #         'ctrl_args': {'flow_rate': 1}},
+    #     {'name': 'outlet', 'args': ['OB1 Pump', 'COM8'],
+    #         'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
+    #         'min_pressure': -1000, 'max_pressure': 1000, 'P': 5, 'I': 0.00015,
+    #         'D': 0, 'bfs_instr_ID': bfs.instr_ID, 'comm_lock': ob1_comm_lock,
+    #         'calib_path': './resources/ob1_calib.txt'},
+    #         'ctrl_args': {}}
+    #     ]
+
+    # # OB1 by itself
+    # bfs = fmcon.BFS('outlet_fm', 'COM5')
+
+    # ob1_comm_lock = threading.RLock()
+
+    # setup_devices = [
+    #     {'name': 'outlet', 'args': ['OB1 Pump', 'COM3'],
+    #         'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
+    #         'min_pressure': -1000, 'max_pressure': 1000, 'P': 8, 'I': 2,
+    #         'D': 0, 'bfs_instr_ID': bfs.instr_ID, 'comm_lock': ob1_comm_lock,
+    #         'calib_path': './resources/ob1_calib.txt'},
+    #         'ctrl_args': {}}
     #     ]
 
     # # TR-SAXS PHD 4400 pumps
@@ -4481,21 +5326,29 @@ if __name__ == '__main__':
             'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
         ]
 
+    # # AKTA pump, Teledyne SSI Reaxus pumps without scaling
+    # setup_devices = [
+    #     {'name': 'Pump 1', 'args': ['SSI Next Gen', 'COM5'],
+    #         'kwargs': {'flow_rate_scale': 1,
+    #         'flow_rate_offset': 0,'scale_type': 'up'},
+    #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
+    #     ]
+
     # TR-SAXS Pico Plus pumps
     # setup_devices = [
     #     {'name': 'Buffer', 'args': ['Pico Plus', 'COM19'],
     #         'kwargs': {'syringe_id': '3 mL, Medline P.C.',
     #         'pump_address': '00', 'dual_syringe': 'False'},
     #         'ctrl_args': {'flow_rate' : '1', 'refill_rate' : '1'}},
-        # {'name': 'Sheath', 'args': ['Pico Plus', 'COM18'],
-        #     'kwargs': {'syringe_id': '3 mL, Medline P.C.',
-        #     'pump_address': '00'}, 'ctrl_args': {'flow_rate' : '0.002',
-        #     'refill_rate' : '1.5'}},
-        # {'name': 'Sample', 'args': ['Pico Plus', 'COM20'],
-        #     'kwargs': {'syringe_id': '3 mL, Medline P.C.',
-        #     'pump_address': '00'}, 'ctrl_args': {'flow_rate' : '0.009',
-        #     'refill_rate' : '1.5'}},
-        #]
+    #     # {'name': 'Sheath', 'args': ['Pico Plus', 'COM18'],
+    #     #     'kwargs': {'syringe_id': '3 mL, Medline P.C.',
+    #     #     'pump_address': '00'}, 'ctrl_args': {'flow_rate' : '0.002',
+    #     #     'refill_rate' : '1.5'}},
+    #     # {'name': 'Sample', 'args': ['Pico Plus', 'COM20'],
+    #     #     'kwargs': {'syringe_id': '3 mL, Medline P.C.',
+    #     #     'pump_address': '00'}, 'ctrl_args': {'flow_rate' : '0.009',
+    #     #     'refill_rate' : '1.5'}},
+    #     ]
 
     # # Simulated pumps
     # setup_devices = [
