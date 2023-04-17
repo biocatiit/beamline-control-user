@@ -93,6 +93,10 @@ class PipelineControl(object):
         """
         self.current_expeirment = exp_name
 
+        if (self.settings['detector'].lower() == 'eiger' 
+            and self.settings['data_source'].lower() == 'file'):
+            fprefix = '{}_data_'.format(fprefix)
+
         if n_sample_exps == 0:
             n_sample_exps = n_exps
 
