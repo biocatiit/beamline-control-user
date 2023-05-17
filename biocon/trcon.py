@@ -763,6 +763,7 @@ class TRScanPanel(wx.Panel):
                         step_speed = float(step_speed)
                         step_acceleration = float(step_acceleration)
                     except ValueError:
+                        # traceback.print_exc()
                         calc = False
                 else:
                     calc = False
@@ -792,12 +793,13 @@ class TRScanPanel(wx.Panel):
                     self.return_time.SetLabel(str(round(return_time, 3)))
                     self.total_scan_time.SetLabel(str(round(total_time, 3)))
                 except Exception:
+                    # traceback.print_exc()
                     pass
 
                 try:
                     return_vals = self._calc_exposure_params()
                 except Exception:
-                    # print(traceback.print_exc())
+                    # traceback.print_exc()
                     return_vals=[['calc_exposure_params_error'],]
 
                 # print(return_vals)
@@ -841,7 +843,6 @@ class TRScanPanel(wx.Panel):
             total_time = (time_per_scan + return_time)*num_scans
 
         else:
-
             if step_axis.lower() == 'x':
                 scan_length = abs(y_end - y_start)
                 step_start = x_start
@@ -873,7 +874,6 @@ class TRScanPanel(wx.Panel):
                 return_time = (total_length-return_accel_dist*2)/return_speed + return_accel_time*2
 
             total_vector_time = (time_per_scan + return_time)
-
 
             if gridpoints is None:
                 if step_start < step_end:
@@ -990,9 +990,6 @@ class TRScanPanel(wx.Panel):
                             pco_end = y_end
                         pco_speed = vect_scan_speed[1]
 
-                    if abs(pco_start-pco_end) % pco_step == 0:
-                        pco_end -= min(encoder_resolution, pco_step)
-
                     if pco_start % encoder_resolution != 0:
                         pco_start = self.round_to(pco_start, encoder_precision,
                             encoder_resolution)
@@ -1000,6 +997,9 @@ class TRScanPanel(wx.Panel):
                     if pco_end % encoder_resolution != 0:
                         pco_end = self.round_to(pco_end, encoder_precision,
                             encoder_resolution)
+
+                    if abs(pco_start-pco_end) % pco_step == 0:
+                        pco_end -= min(encoder_resolution, pco_step)
 
                     if isinstance(pco_step, float):
                         num_images = int(round(float(abs(pco_end-pco_start))/pco_step))
@@ -1964,8 +1964,9 @@ class TRFlowPanel(wx.Panel):
 
     def _init_pumps(self):
         logger.info('Initializing pumps on startup')
-        pump_list = [('sample_pump', self.settings['sample_pump']),
+        pump_list = [
             ('buffer1_pump', self.settings['buffer1_pump']),
+            ('sample_pump', self.settings['sample_pump']),
             ('buffer2_pump', self.settings['buffer2_pump']),
             ]
 
@@ -2510,7 +2511,9 @@ class TRFlowPanel(wx.Panel):
             msg = msg + ('\n\nPlease correct these errors.')
 
             self.total_flow.Unbind(wx.EVT_KILL_FOCUS)
-            self.dilution_ratio.Unbind(wx.EVT_KILL_FOCUS)
+
+            if self.chaotic_mixer:
+                self.dilution_ratio.Unbind(wx.EVT_KILL_FOCUS)
 
             dialog = wx.MessageDialog(self, msg, 'Error in flow parameters',
                 style=wx.OK|wx.ICON_ERROR)
@@ -2518,7 +2521,9 @@ class TRFlowPanel(wx.Panel):
             dialog.Destroy()
 
             self.total_flow.Bind(wx.EVT_KILL_FOCUS, self._on_flow_change)
-            self.dilution_ratio.Bind(wx.EVT_KILL_FOCUS, self._on_flow_change)
+
+            if self.chaotic_mixer:
+                self.dilution_ratio.Bind(wx.EVT_KILL_FOCUS, self._on_flow_change)
 
 
         else:
@@ -3156,7 +3161,7 @@ class TRFlowPanel(wx.Panel):
 
     def _set_pump_status(self, pump_name, status_dict):
         self.set_pump_moving(pump_name, status_dict['is_moving'])
-        self.set_pump_status_direction(pump_name, status_dict['is_dispensing'])
+        self.set_pump_status_direction(pump_name, status_dict['flow_dir'])
         self.set_pump_status_volume(pump_name, status_dict['volume'])
         self.set_pump_status_flow_rate(pump_name, status_dict['flow_rate'])
         self.set_pump_status_refill_rate(pump_name, status_dict['refill_rate'])
@@ -3456,11 +3461,11 @@ class TRFlowPanel(wx.Panel):
 
                 total_fr = total_fr + flow_rate
 
-                if pump_name == self.settings['sample_pump'][0]:
+                if pump_name == self.settings['sample_pump'][0]['name']:
                     sample_fr = flow_rate
-                elif pump_name == self.settings['buffer1_pump'][0]:
+                elif pump_name == self.settings['buffer1_pump'][0]['name']:
                     buffer1_fr = flow_rate
-                elif pump_name == self.settings['buffer2_pump'][0]:
+                elif pump_name == self.settings['buffer2_pump'][0]['name']:
                     buffer2_fr = flow_rate
 
             metadata['Total flow rate [{}]:'.format(flow_units)] = total_fr
@@ -3491,7 +3496,7 @@ class TRFlowPanel(wx.Panel):
                 metadata['Autoinject after scan:'] = int(autoinject_scan)
 
         except Exception:
-            pass
+            traceback.print_exc()
 
         return metadata
 
@@ -4529,7 +4534,12 @@ class TRPumpPanel(wx.Panel):
         self.status.SetLabel(status)
 
     def set_status_direction(self, dispensing):
-        self.set_pump_direction(dispensing)
+        # # self.set_pump_direction(dispensing)
+        # if dispensing:
+        #     wx.CallAfter(self.set_status, 'Dispense')
+        # else:
+        #     wx.CallAfter(self.set_status, 'Aspirate')
+        pass
 
     def set_status_volume(self, vol):
         try:
@@ -4654,12 +4664,13 @@ class TRPumpPanel(wx.Panel):
             self.dual_syringe.GetStringSelection()=='True')
 
     def set_pump_direction(self, dispense):
-        if dispense:
-            self.pump_direction = 'Dispense'
-            ret = wx.CallAfter(self.direction_ctrl.SetStringSelection, 'Dispense')
-        else:
-            self.pump_direction = 'Aspirate'
-            ret = wx.CallAfter(self.direction_ctrl.SetStringSelection, 'Aspirate')
+        if not self.continuous_flow:
+            if dispense:
+                self.pump_direction = 'Dispense'
+                ret = wx.CallAfter(self.direction_ctrl.SetStringSelection, 'Dispense')
+            else:
+                self.pump_direction = 'Aspirate'
+                ret = wx.CallAfter(self.direction_ctrl.SetStringSelection, 'Aspirate')
 
 
     def show_faults_dialog(self, msg):
@@ -4782,60 +4793,63 @@ if __name__ == '__main__':
         'remote_valve_ip'       : '164.54.204.8',
         'remote_valve_port'     : '5558',
         'device_communication'  : 'remote',
-        'injection_valve'       : [{'name': 'Injection', 'args': ['Rheodyne', 'COM6'],  #Chaotic flow
-                                    'kwargs': {'positions' : 2}},],
-        'sample_valve'          : [],
-        'buffer1_valve'         : [],
-        'buffer2_valve'         : [],
-        'sample_pump'           : [{'name': 'Sample', 'args': ['SSI Next Gen', 'COM15'],
-                                    'kwargs': {'flow_rate_scale': 1.0204,
-                                    'flow_rate_offset': 15.346/1000,'scale_type': 'up'},
-                                    'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
-                                    'max_pressure': 1500}}],
-        'buffer1_pump'           : [{'name': 'Buffer 1', 'args': ['SSI Next Gen', 'COM17'],
-                                    'kwargs': {'flow_rate_scale': 1.0478,
-                                    'flow_rate_offset': -72.82/1000,'scale_type': 'up'},
-                                    'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
-                                    'max_pressure': 1800}}],
-        'buffer2_pump'          : [{'name': 'Buffer 2', 'args': ['SSI Next Gen', 'COM18'],
-                                    'kwargs': {'flow_rate_scale': 1.0179,
-                                    'flow_rate_offset': -20.842/10000,'scale_type': 'up'},
-                                    'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
-                                    'max_pressure': 1800}}],
-        'outlet_fm'             : {'name': 'outlet', 'args' : ['BFS', 'COM5'], 'kwargs': {}},
-        'injection_valve_label' : 'Injection',
-        'sample_valve_label'    : 'Sample',
-        'buffer1_valve_label'   : 'Buffer 1',
-        'buffer2_valve_label'   : 'Buffer 2',
-        # 'injection_valve'       : [{'name': 'Injection', 'args': ['Rheodyne', 'COM6'], # Laminar flow
+        # 'injection_valve'       : [{'name': 'Injection', 'args': ['Rheodyne', 'COM6'],  #Chaotic flow
         #                             'kwargs': {'positions' : 2}},],
-        # 'sample_valve'          : [{'name': 'Sample', 'args': ['Rheodyne', 'COM7'],
-        #                             'kwargs': {'positions' : 6}},],
-        # 'buffer1_valve'         : [{'name': 'Buffer 1', 'args': ['Rheodyne', 'COM12'],
-        #                             'kwargs': {'positions' : 6}},
-        #                             {'name': 'Buffer 2', 'args': ['Rheodyne', 'COM14'],
-        #                             'kwargs': {'positions' : 6}},],
-        # 'buffer2_valve'         : [{'name': 'Sheath 1', 'args': ['Rheodyne', 'COM9'],
-        #                             'kwargs': {'positions' : 6}},
-        #                             {'name': 'Sheath 2', 'args': ['Rheodyne', 'COM8'],
-        #                             'kwargs': {'positions' : 6}},],
-        # 'buffer1_pump'           : [{'name': 'Buffer', 'args': ['Pico Plus', 'COM19'],
-        #                             'kwargs': {'syringe_id': '10 mL, Medline P.C.',
-        #                             'pump_address': '00'}, 'ctrl_args':
-        #                             {'flow_rate' : '0.068', 'refill_rate' : '5'}},],
-        # 'buffer2_pump'          : [{'name': 'Sheath', 'args': ['Pico Plus', 'COM18'],
-        #                             'kwargs': {'syringe_id': '3 mL, Medline P.C.',
-        #                             'pump_address': '00'}, 'ctrl_args':
-        #                             {'flow_rate' : '0.002', 'refill_rate' : '1.5'}},],
-        # 'sample_pump'           : [{'name': 'Sample', 'args': ['Pico Plus', 'COM20'],
-        #                             'kwargs': {'syringe_id': '3 mL, Medline P.C.',
-        #                             'pump_address': '00'}, 'ctrl_args':
-        #                             {'flow_rate' : '0.009', 'refill_rate' : '1.5'}}],
-        # 'outlet_fm'             : {'name': 'outlet', 'args' : ['BFS', 'COM13'], 'kwargs': {}},
+        # 'sample_valve'          : [],
+        # 'buffer1_valve'         : [],
+        # 'buffer2_valve'         : [],
+        # 'sample_pump'           : [{'name': 'Sample', 'args': ['SSI Next Gen', 'COM7'],
+        #                             'kwargs': {'flow_rate_scale': 1.0204,
+        #                             'flow_rate_offset': 15.346/1000,'scale_type': 'up'},
+        #                             'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
+        #                             'max_pressure': 1800, 'continuous': True}}],
+        # 'buffer1_pump'           : [{'name': 'Buffer 1', 'args': ['SSI Next Gen', 'COM15'],
+        #                             'kwargs': {'flow_rate_scale': 1.0478,
+        #                             'flow_rate_offset': -72.82/1000,'scale_type': 'up'},
+        #                             'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
+        #                             'max_pressure': 1800, 'continuous': True}}],
+        # 'buffer2_pump'          : [{'name': 'Buffer 2', 'args': ['SSI Next Gen', 'COM9'],
+        #                             'kwargs': {'flow_rate_scale': 1.0179,
+        #                             'flow_rate_offset': -20.842/10000,'scale_type': 'up'},
+        #                             'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
+        #                             'max_pressure': 1800, 'continuous': True}}],
+        # 'outlet_fm'             : {'name': 'outlet', 'args' : ['BFS', 'COM5'], 'kwargs': {}},
         # 'injection_valve_label' : 'Injection',
         # 'sample_valve_label'    : 'Sample',
-        # 'buffer1_valve_label'   : 'Buffer',
-        # 'buffer2_valve_label'   : 'Sheath',
+        # 'buffer1_valve_label'   : 'Buffer 1',
+        # 'buffer2_valve_label'   : 'Buffer 2',
+        'injection_valve'       : [{'name': 'Injection', 'args': ['Rheodyne', 'COM6'], # Laminar flow
+                                    'kwargs': {'positions' : 2}},],
+        'sample_valve'          : [{'name': 'Sample', 'args': ['Rheodyne', 'COM3'],
+                                    'kwargs': {'positions' : 6}},],
+        'buffer1_valve'         : [{'name': 'Buffer 1', 'args': ['Rheodyne', 'COM10'],
+                                    'kwargs': {'positions' : 6}},
+                                    {'name': 'Buffer 2', 'args': ['Rheodyne', 'COM4'],
+                                    'kwargs': {'positions' : 6}},],
+        'buffer2_valve'         : [{'name': 'Sheath 1', 'args': ['Rheodyne', 'COM21'],
+                                    'kwargs': {'positions' : 6}},
+                                    {'name': 'Sheath 2', 'args': ['Rheodyne', 'COM8'],
+                                    'kwargs': {'positions' : 6}},],
+        'buffer1_pump'           : [{'name': 'Buffer', 'args': ['Pico Plus', 'COM11'],
+                                    'kwargs': {'syringe_id': '3 mL, Medline P.C.',
+                                    'pump_address': '00', 'dual_syringe': 'False'},
+                                    'ctrl_args': {'flow_rate' : '0.068', 'refill_rate' : '3',
+                                    'continuous': False}},],
+        'buffer2_pump'          : [{'name': 'Sheath', 'args': ['Pico Plus', 'COM12'],
+                                    'kwargs': {'syringe_id': '1 mL, Medline P.C.',
+                                    'pump_address': '00', 'dual_syringe': 'False'}, 'ctrl_args':
+                                    {'flow_rate' : '0.002', 'refill_rate' : '1',
+                                    'continuous': False}},],
+        'sample_pump'           : [{'name': 'Sample', 'args': ['Pico Plus', 'COM14'],
+                                    'kwargs': {'syringe_id': '1 mL, Medline P.C.',
+                                    'pump_address': '00', 'dual_syringe': 'False'}, 'ctrl_args':
+                                    {'flow_rate' : '0.009', 'refill_rate' : '1',
+                                    'continuous': False}}],
+        'outlet_fm'             : {'name': 'outlet', 'args' : ['BFS', 'COM13'], 'kwargs': {}},
+        'injection_valve_label' : 'Injection',
+        'sample_valve_label'    : 'Sample',
+        'buffer1_valve_label'   : 'Buffer',
+        'buffer2_valve_label'   : 'Sheath',
         # 'device_communication'  : 'remote',                                         # Simulated
         # 'injection_valve'       : [{'name': 'Injection', 'args': ['Soft', None],    # Simulated Chaotic w/syringe pump
         #                             'kwargs': {'positions' : 2}},],
@@ -4909,33 +4923,35 @@ if __name__ == '__main__':
         # 'buffer2_valve_label'   : 'Sheath',
         'flow_units'            : 'mL/min',
         'pressure_units'        : 'psi',
-        # 'total_flow_rate'       : '1.5', # For laminar flow
-        'total_flow_rate'       : '6', # For chaotic flow
+        'total_flow_rate'       : '0.149', # For laminar flow
+        # 'total_flow_rate'       : '6', # For chaotic flow
         'dilution_ratio'        : '10', # For chaotic flow
-        'max_flow'              : 8, # For chaotic flow
         'max_dilution'          : 50, # For chaotic flow
+        'max_flow'              : 2, # For laminar flow
+        # 'max_flow'              : 8, # For chaotic flow
         'auto_set_valves'       : True,
-        'valve_start_positions' : {'sample_valve': 1, 'buffer1_valve': 1,
-                                    'buffer2_valve': 1, 'injection_valve': 1},
-        'valve_refill_positions': {'sample_valve': 2, 'buffer1_valve': 2,
-                                    'buffer2_valve': 2, 'injection_valve': 1},
-        'valve_purge_positions' : {'sample_valve': 3, 'buffer1_valve': 3,
-                                    'buffer2_valve': 3, 'injection_valve': 1},
+        'valve_start_positions' : {'sample_valve': 2, 'buffer1_valve': 2,
+                                    'buffer2_valve': 2, 'injection_valve': 2},
+        'valve_refill_positions': {'sample_valve': 1, 'buffer1_valve': 1,
+                                    'buffer2_valve': 1, 'injection_valve': 2},
+        'valve_purge_positions' : {'sample_valve': 6, 'buffer1_valve': 6,
+                                    'buffer2_valve': 6, 'injection_valve': 2},
         'autostart'             : 'At flow rate',
         'autostart_flow'        : '4.5',
         'autostart_flow_ratio'  : 0.98,
         'autostart_delay'       : '0',
         'autoinject'            : 'After scan',
         'autoinject_scan'       : '5',
-        'autoinject_valve_pos'  : 2,
-        'mixer_type'            : 'chaotic', # laminar or chaotic
-        # 'mixer_type'            : 'laminar', # laminar or chaotic
+        'autoinject_valve_pos'  : 1,
+        # 'mixer_type'            : 'chaotic', # laminar or chaotic
+        'mixer_type'            : 'laminar', # laminar or chaotic
         'sample_ratio'          : '0.066', # For laminar flow
         'sheath_ratio'          : '0.032', # For laminar flow
         'simulated'             : False, # VERY IMPORTANT. MAKE SURE THIS IS FALSE FOR EXPERIMENTS
         }
 
-    trsaxs_settings['components'] = ['trsaxs_scan', 'trsaxs_flow']
+    # trsaxs_settings['components'] = ['trsaxs_scan', 'trsaxs_flow']
+    trsaxs_settings['components'] = ['trsaxs_flow']
 
     app = wx.App()
 

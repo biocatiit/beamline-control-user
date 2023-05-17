@@ -287,7 +287,7 @@ class PicoPlusSerialComm(SerialComm):
     """
 
     def write(self, data, pump_address, get_response=False, send_term_char = '\r\n',
-        term_chars=[':', '>', '<', '*', ':T*']):
+        term_chars=[':', '>', '<', '*', ':T*'], timeout=5):
         """
         This warps the Serial.write() function. It encodes the input
         data if necessary. It can return any expected response from the
@@ -314,6 +314,7 @@ class PicoPlusSerialComm(SerialComm):
         alt_possible_term = ['\n{:02d}{}'.format(pump_address, char) for char in term_chars]
         try:
             with self.ser as s:
+                start_time = time.time()
                 s.write(data)
                 if get_response:
                     got_resp = False
@@ -331,6 +332,10 @@ class PicoPlusSerialComm(SerialComm):
                                 if out.endswith(term):
                                     got_resp = True
                                     break
+
+                        if time.time() - start_time > timeout:
+                            logger.error('Timed out waiting for a response on port %s', self.ser.port)
+                            break
 
                         time.sleep(.001)
         except ValueError:
@@ -2192,6 +2197,8 @@ class SSINextGenPump(Pump):
     def get_faults(self):
         ret = self.send_cmd('RF')
 
+        # print(ret)
+
         if ret.startswith('OK') and ret.endswith('/'):
             vals = ret.rstrip('/').split(',')
 
@@ -2211,6 +2218,8 @@ class SSINextGenPump(Pump):
                 self.lpl_fault = True
 
         ret = self.send_cmd('LS')
+
+        # print(ret)
 
         if ret.startswith('OK') and ret.endswith('/'):
             val = ret.split(':')[-1].strip('/')
@@ -5139,11 +5148,11 @@ class PumpPanel(utils.DevicePanel):
             for fault in fault_list:
                 msg = msg + '\n-{}'.format(fault)
 
-            dialog = wx.MesageDialog(self,
+            dialog = wx.MessageDialog(self,
                 caption='Pump {} Faults'.format(self.name), message=msg,
                 style=wx.OK|wx.CANCEL|wx.OK_DEFAULT|wx.ICON_ERROR)
 
-            dialog.SetOKCancelLabel('Clear faults', 'Proceed without clearing')
+            dialog.SetOKCancelLabels('Clear faults', 'Proceed without clearing')
             ret = dialog.ShowModal()
 
             if ret == wx.ID_OK:
@@ -5170,7 +5179,7 @@ if __name__ == '__main__':
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
     h1 = logging.StreamHandler(sys.stdout)
-    h1.setLevel(logging.DEBUG)
+    # h1.setLevel(logging.DEBUG)
     h1.setLevel(logging.INFO)
     # h1.setLevel(logging.WARNING)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
@@ -5296,17 +5305,17 @@ if __name__ == '__main__':
 
     # # Teledyne SSI Reaxus pumps with scaling
     # setup_devices = [
-    #     {'name': 'Pump 2', 'args': ['SSI Next Gen', 'COM15'],
-    #         'kwargs': {'flow_rate_scale': 1.0478,
-    #         'flow_rate_offset': -72.82/1000,'scale_type': 'up'},
+    #     {'name': 'Pump 4', 'args': ['SSI Next Gen', 'COM9'],
+    #         'kwargs': {'flow_rate_scale': 1.0179,
+    #         'flow_rate_offset': -20.842/10000,'scale_type': 'up'},
     #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
     #     {'name': 'Pump 3', 'args': ['SSI Next Gen', 'COM7'],
     #         'kwargs': {'flow_rate_scale': 1.0204,
     #         'flow_rate_offset': 15.346/1000,'scale_type': 'up'},
     #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-    #     {'name': 'Pump 4', 'args': ['SSI Next Gen', 'COM9'],
-    #         'kwargs': {'flow_rate_scale': 1.0179,
-    #         'flow_rate_offset': -20.842/10000,'scale_type': 'up'},
+    #     {'name': 'Pump 2', 'args': ['SSI Next Gen', 'COM15'],
+    #         'kwargs': {'flow_rate_scale': 1.0478,
+    #         'flow_rate_offset': -72.82/1000,'scale_type': 'up'},
     #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
     #     ]
 
@@ -5334,20 +5343,20 @@ if __name__ == '__main__':
             'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
         ]
 
-    # TR-SAXS Pico Plus pumps
+    # # TR-SAXS Pico Plus pumps
     # setup_devices = [
-    #     {'name': 'Buffer', 'args': ['Pico Plus', 'COM19'],
+    #     {'name': 'Buffer', 'args': ['Pico Plus', 'COM11'],
     #         'kwargs': {'syringe_id': '3 mL, Medline P.C.',
     #         'pump_address': '00', 'dual_syringe': 'False'},
     #         'ctrl_args': {'flow_rate' : '1', 'refill_rate' : '1'}},
-    #     # {'name': 'Sheath', 'args': ['Pico Plus', 'COM18'],
-    #     #     'kwargs': {'syringe_id': '3 mL, Medline P.C.',
-    #     #     'pump_address': '00'}, 'ctrl_args': {'flow_rate' : '0.002',
-    #     #     'refill_rate' : '1.5'}},
-    #     # {'name': 'Sample', 'args': ['Pico Plus', 'COM20'],
-    #     #     'kwargs': {'syringe_id': '3 mL, Medline P.C.',
-    #     #     'pump_address': '00'}, 'ctrl_args': {'flow_rate' : '0.009',
-    #     #     'refill_rate' : '1.5'}},
+    #     {'name': 'Sample', 'args': ['Pico Plus', 'COM14'],
+    #         'kwargs': {'syringe_id': '1 mL, Medline P.C.',
+    #          'pump_address': '00', 'dual_syringe': 'False'},
+    #         'ctrl_args': {'flow_rate' : '1', 'refill_rate' : '1'}},
+    #     {'name': 'Sheath', 'args': ['Pico Plus', 'COM12'],
+    #         'kwargs': {'syringe_id': '1 mL, Medline P.C.',
+    #          'pump_address': '00', 'dual_syringe': 'False'},
+    #         'ctrl_args': {'flow_rate' : '1', 'refill_rate' : '1'}},
     #     ]
 
     # # Simulated pumps

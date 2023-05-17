@@ -985,6 +985,7 @@ def send_cmd(cmd, cmd_q, return_q, timeout_event, return_lock, remote,
         else:
             cmd_q.append(full_cmd)
 
+
     if get_response:
         if result is not None and result[0] == cmd[1][0] and result[1] == cmd[0]:
             ret_val = result[2]
