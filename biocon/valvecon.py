@@ -784,20 +784,28 @@ if __name__ == '__main__':
     #         'kwargs': {'positions': 10}},
     #     ]
 
-    # # TR-SAXS laminar flow
+    # # # TR-SAXS laminar flow
+    # setup_devices = [
+    #     {'name': 'Injection', 'args': ['Rheodyne', 'COM6'],
+    #         'kwargs': {'positions' : 2}},
+    #     # {'name': 'Buffer 1', 'args': ['Rheodyne', 'COM12'],
+    #     #     'kwargs': {'positions' : 6}},
+    #     # {'name': 'Buffer 2', 'args': ['Rheodyne', 'COM14'],
+    #     #     'kwargs': {'positions' : 6}},
+    #     # {'name': 'Sheath 1', 'args': ['Rheodyne', 'COM21'],
+    #     #     'kwargs': {'positions' : 6}},
+    #     # {'name': 'Sheath 2', 'args': ['Rheodyne', 'COM8'],
+    #     #     'kwargs': {'positions' : 6}},
+    #     # {'name': 'Sample', 'args': ['Rheodyne', 'COM17'],
+    #     #     'kwargs': {'positions' : 6}},
+    #     ]
+
+    # New HPLC
     setup_devices = [
-        {'name': 'Injection', 'args': ['Rheodyne', 'COM6'],
+        {'name': 'Selector', 'args': ['Cheminert', 'COM5'],
             'kwargs': {'positions' : 2}},
-        # {'name': 'Buffer 1', 'args': ['Rheodyne', 'COM12'],
-        #     'kwargs': {'positions' : 6}},
-        # {'name': 'Buffer 2', 'args': ['Rheodyne', 'COM14'],
-        #     'kwargs': {'positions' : 6}},
-        # {'name': 'Sheath 1', 'args': ['Rheodyne', 'COM21'],
-        #     'kwargs': {'positions' : 6}},
-        # {'name': 'Sheath 2', 'args': ['Rheodyne', 'COM8'],
-        #     'kwargs': {'positions' : 6}},
-        # {'name': 'Sample', 'args': ['Rheodyne', 'COM17'],
-        #     'kwargs': {'positions' : 6}},
+        {'name': 'Outlet', 'args': ['Cheminert', 'COM4'],
+            'kwargs': {'positions' : 2}},
         ]
 
 
