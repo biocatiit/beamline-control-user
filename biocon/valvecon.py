@@ -370,7 +370,16 @@ class CheminertValve(Valve):
         position = position.strip().lstrip('CP')
 
         try:
+            if self._positions == 2:
+                if position == 'A':
+                    position = 1
+                elif position == 'B':
+                    position = 2
+            else:
+                position = int(position)
+
             position = '{}'.format(int(position))
+
             success = True
         except Exception:
             success = False
@@ -398,7 +407,13 @@ class CheminertValve(Valve):
             success = False
 
         else:
-            position = '{}'.format(position)
+            if self._positions == 2:
+                if position == 1:
+                    position = 'A'
+                elif position == 2:
+                    position = 'B'
+            else:
+                position = '{}'.format(position)
 
             ret, success = self.send_command('GO{}'.format(position))
 
@@ -806,6 +821,7 @@ if __name__ == '__main__':
             'kwargs': {'positions' : 2}},
         {'name': 'Outlet', 'args': ['Cheminert', 'COM4'],
             'kwargs': {'positions' : 2}},
+        ]
 
     # Simulated
     # setup_devices = [
