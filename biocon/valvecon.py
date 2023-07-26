@@ -819,8 +819,12 @@ if __name__ == '__main__':
     setup_devices = [
         {'name': 'Selector', 'args': ['Cheminert', 'COM5'],
             'kwargs': {'positions' : 2}},
-        {'name': 'Outlet', 'args': ['Cheminert', 'COM4'],
+        {'name': 'Outlet', 'args': ['Cheminert', 'COM8'],
             'kwargs': {'positions' : 2}},
+        {'name': 'Purge_B', 'args': ['Cheminert', 'COM6'],
+            'kwargs': {'positions' : 4}},
+        {'name': 'Purge_A', 'args': ['Cheminert', 'COM7'],
+            'kwargs': {'positions' : 4}},
         ]
 
     # Simulated
