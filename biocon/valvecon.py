@@ -473,6 +473,12 @@ class SoftValve(Valve):
 
         return success
 
+known_valves = {
+    'Rheodyne'  : RheodyneValve,
+    'Soft'      : SoftValve,
+    'Cheminert' : CheminertValve,
+    }
+
 class ValveCommThread(utils.CommManager):
     """
     Custom communication thread for valves.
@@ -500,11 +506,7 @@ class ValveCommThread(utils.CommManager):
         self._connected_devices = OrderedDict()
         self._connected_coms = OrderedDict()
 
-        self.known_devices = {
-            'Rheodyne'  : RheodyneValve,
-            'Soft'      : SoftValve,
-            'Cheminert' : CheminertValve,
-            }
+        self.known_devices = known_valves
 
     def _cleanup_devices(self):
         for device in self._connected_devices.values():
@@ -821,9 +823,9 @@ if __name__ == '__main__':
             'kwargs': {'positions' : 2}},
         {'name': 'Outlet', 'args': ['Cheminert', 'COM8'],
             'kwargs': {'positions' : 2}},
-        {'name': 'Purge_B', 'args': ['Cheminert', 'COM6'],
+        {'name': 'Purge 1', 'args': ['Cheminert', 'COM7'],
             'kwargs': {'positions' : 4}},
-        {'name': 'Purge_A', 'args': ['Cheminert', 'COM7'],
+        {'name': 'Purge 2', 'args': ['Cheminert', 'COM6'],
             'kwargs': {'positions' : 4}},
         ]
 
