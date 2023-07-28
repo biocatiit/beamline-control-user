@@ -145,7 +145,15 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
         self._monitor_switch_thread.daemon = True
         self._monitor_switch_thread.start()
 
+        self._submitting_sample = False
 
+        self._monitor_submit_evt = threading.Event()
+        self._terminate_monitor_submit = threading.Event()
+        self._abort_submit = threading.Event()
+        self._monitor_submit_thread = threading.Thread(
+            target=self._monitor_submit)
+        self._monitor_submit_thread.daemon = True
+        self._monitor_submit_thread.start()
 
     def _connect_valves(self, sv_args, ov_args, p1_args, p2_args):
         sv_name = sv_args['name']
@@ -279,7 +287,7 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
         Parameters
         ----------
         flow_path: int
-            The flow path to get the status for. Either 1 or 2.
+            The flow path to get the rate for. Either 1 or 2.
 
         Returns
         -------
@@ -294,6 +302,28 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
             flow_rate = self.get_flow_rate(self._pump2_id)
 
         return flow_rate
+
+    def get_hplc_flow_accel(self, flow_path):
+        """
+        Gets the flow acceleration of the specified flow path
+        Parameters
+        ----------
+        flow_path: int
+            The flow path to get the acceleration for. Either 1 or 2.
+
+        Returns
+        -------
+        flow_accel: float
+            The flow acceleration of the specified flow path.
+        """
+        flow_path = int(flow_path)
+
+        if flow_path == 1:
+            flow_accel = self.get_flow_accel(self._pump1_id)
+        elif flow_path == 2:
+            flow_accel = self.get_flow_accel(self._pump2_id)
+
+        return flow_accel
 
     def get_flow_path_switch_status(self):
         """
@@ -865,11 +895,32 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
             The flow path to stop the purge on. Either 1 or 2.
         """
         flow_path = int(flow_path)
+        flow_rate = float(flow_rate)
 
         if flow_path == 1:
-            self.set_flow_rate(flow_rate, self._pump1_id)
+            pump_id = self._pump1_id
         elif flow_path == 2:
-            self.set_flow_rate(flow_rate, self._pump2_id)
+            pump_id = self._pump2_id
+
+        self.set_flow_rate(flow_rate, pump_id)
+
+        run_queue = self.get_run_queue()
+
+        # all_methods = []
+        # for run in run_queue:
+        #     name = run[0]
+        #     run_data = self.get_run_data(name)
+        #     acq_method_list = run_data['acq_method']
+
+        #     all_methods.extend(acq_method_list)
+
+        # all_methods = list(set(all_methods))
+
+        # for method in all_methods:
+        #     self.load_method(method)
+        #     self.set_pump_method_values({'Flow': flow_rate}, pump_id)
+        #     self.save_current_method()
+
 
     def set_hplc_flow_accel(self, flow_accel, flow_path):
         """
@@ -883,11 +934,181 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
             The flow path to stop the purge on. Either 1 or 2.
         """
         flow_path = int(flow_path)
+        flow_accel = float(flow_accel)
 
         if flow_path == 1:
-            self.set_flow_accel(flow_accel, self._pump1_id)
+            pump_id = self._pump1_id
         elif flow_path == 2:
-            self.set_flow_accel(flow_accel, self._pump2_id)
+            pump_id = self._pump2_id
+
+        self.set_flow_accel(flow_accel, pump_id)
+
+        run_queue = self.get_run_queue()
+
+        # all_methods = []
+        # for run in run_queue:
+        #     name = run[0]
+        #     run_data = self.get_run_data(name)
+        #     acq_method_list = run_data['acq_method']
+
+        #     all_methods.extend(acq_method_list)
+
+        # all_methods = list(set(all_methods))
+
+        # for method in all_methods:
+        #     self.load_method(method)
+        #     self.set_pump_method_values({'MaximumFlowRamp': flow_accel}, pump_id)
+        #     self.save_current_method()
+
+    def submit_hplc_sample(self, name, acq_method, sample_loc, inj_vol,
+        flow_rate, flow_accel, total_elution_vol, high_pressure_lim,
+        result_path=None, sp_method=None, wait_for_flow_ramp=True,
+        settle_time=0.):
+        """
+        Submits a sample to the hplc run queue. Note that due to limitations
+        of the run queue and how it gets method parameters you should only every
+        submit one sample, and don't submit another until it's finished. Doing
+        otherwise could mess up the flow on one or both of the pumps.
+
+        Parameters
+        ----------
+        name: str
+            The name of the sample. Used internally and as the result save name.
+            Must be unique to the hplc sample list (including finished samples).
+        acq_method: str
+            The acquisition method name relative to the top level OpenLab
+            CDS Methods folder.
+        sample_loc: str
+            The sample location in the autosampler (e.g. D1F-A1 being drawer
+            1 front, position A1)
+        inj_vol: float
+            The injection volume.
+        flow_rate: float
+            The elution flow rate
+        flow_accel: float
+            The elution flow acceleration
+        total_elution_vol: float
+            The total elution volume. Used to calculate the method run time
+            based on the provided flow rate.
+        high_pressure_lim: float
+            The high pressure limit for the elution run.
+        result_path: str
+            The path to save the result in, relative to the project base
+            results path. If no path is provided, the base results path will
+            be used.
+        sp_method: str
+            Sample prep method to be used. The path should be relative to the
+            top level Methods folder.
+        wait_for_flow_ramp: bool
+            Whether or not the submission should wait until the flow has ramped
+            up to the elution flow rate.
+        settle_time: float
+            Time in s to wait after the flow has ramped up before submitting
+            the sample.
+
+        """
+        flow_rate = float(flow_rate)
+        flow_accel = float(flow_accel)
+        high_pressure_lim = float(high_pressure_lim)
+        inj_vol = float(inj_vol)
+
+        self.set_hplc_flow_accel(flow_accel, self._active_flow_path)
+        self.set_hplc_flow_rate(flow_rate, self._active_flow_path)
+
+        if self._active_flow_path == 1:
+            active_pump_id = self._pump1_id
+            eq_pump_id = self._pump2_id
+        elif self._active_flow_path == 2:
+            active_pump_id = self._pump2_id
+            eq_pump_id = self._pump1_id
+
+        stop_time = total_elution_vol/flow_rate
+
+        self.get_current_method_from_instrument()
+        eq_pump_method_vals = self.get_pump_method_values(['Flow',
+            'MaximumFlowRamp', 'HighPressureLimit'], eq_pump_id)
+        eq_pump_method_vals['StopTime_Time'] = stop_time
+
+        acq_pump_method_vals = {
+            'Flow': flow_rate,
+            'MaximumFlowRamp': flow_accel,
+            'HighPressureLimit': high_pressure_lim,
+            'StopTime_Time': stop_time,
+            }
+
+        self.load_method(acq_method)
+        self.set_pump_method_values(eq_pump_method_vals, eq_pump_id)
+        self.set_pump_method_values(acq_pump_method_vals, active_pump_id)
+        self.save_current_method()
+
+        sequence_vals = {
+            'acq_method'    : acq_method,
+            'sample_loc'    : sample_loc,
+            'injection_vol' : inj_vol,
+            'result_name'   : '{}-<DS>'.format(name),
+            'sample_name'   : name,
+            'sample_type'   : 'Sample',
+            }
+
+        if sp_method is not None:
+            sequence_vals['sp_method'] = sp_method
+
+        self._submit_args = {
+            'name'                  : name,
+            'sequence_vals'         : sequence_vals,
+            'result_path'           : result_path,
+            'flow_rate'             : flow_rate,
+            'wait_for_flow_ramp'    : wait_for_flow_ramp,
+            'settle_time'           : settle_time,
+            }
+
+        logger.info(('HPLC %s starting to submit sample %s on active flow '
+            'path %s'), self.name, name, self._active_flow_path)
+
+        self._submitting_sample = True
+        self._abort_submit.clear()
+        self._monitor_submit_evt.set()
+
+    def _monitor_submit(self):
+        while not self._terminate_monitor_submit.is_set():
+            self._monitor_submit_evt.wait()
+
+            if (self._abort_submit.is_set()
+                and self._terminate_monitor_submit.is_set()):
+                break
+
+            name = self._submit_args['name']
+            sequence_vals = self._submit_args['sequence_vals']
+            result_path = self._submit_args['result_path']
+            flow_rate = self._submit_args['flow_rate']
+            wait_for_flow_ramp = self._submit_args['wait_for_flow_ramp']
+            settle_time = self._submit_args['settle_time']
+
+            if self._active_flow_path == 1:
+                pump_id = self._pump1_id
+            elif self._active_flow_path == 2:
+                pump_id = self._pump2_id
+
+            initial_flow1 = self.get_flow_rate(self._pump1_id)
+
+            if wait_for_flow_ramp:
+                while float(self.get_flow_rate(pump_id)) != flow_rate:
+                    if self._abort_submit.is_set():
+                        break
+                    time.sleep(0.1)
+
+                start = time.time()
+
+                while time.time() - start < settle_time:
+                    if self._abort_submit.is_set():
+                        break
+                    time.sleep(0.1)
+
+            if not self._abort_submit.is_set():
+                self.submit_sequence(name, [sequence_vals], result_path, name)
+
+            self._submitting_sample = False
+            self._monitor_submit_evt.clear()
 
     def stop_purge(self, flow_path):
         """
@@ -912,8 +1133,18 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
         """
         Stops switching active flow path
         """
-        self._abort_switch.set()
-        logger.info('HPLC %s stoping switching of active flow path', self.name)
+        if self._switching_flow_path:
+            self._abort_switch.set()
+            logger.info('HPLC %s stoping switching of active flow path', self.name)
+
+    def stop_submit_sample(self):
+        """
+        Stops urrent sample submission (will not abort the sample run if it's
+        already submitted).
+        """
+        if self._submitting_sample:
+            self._abort_submit.set()
+            logger.info('HPLC %s aborted sample submission', self.name)
 
     def disconnect_all(self):
         """
@@ -931,6 +1162,11 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
         self._terminate_monitor_switch.set()
         self._monitor_switch_evt.set()
         self._monitor_switch_thread.join()
+
+        self._abort_submit.set()
+        self._terminate_monitor_submit.set()
+        self._monitor_submit_evt.set()
+        self._monitor_submit_thread.join()
 
         self.disconnect()
 
@@ -983,3 +1219,29 @@ if __name__ == '__main__':
         purge1_valve_args=purge1_valve_args,
         purge2_valve_args=purge2_valve_args, pump1_id='quat. pump 1#1c#1',
         pump2_id='quat. pump 2#1c#2')
+
+    print('waiting to connect')
+    while not my_hplc.get_connected():
+        time.sleep(0.1)
+
+    time.sleep(1)
+
+    #SEC-SAXS
+    # seq_sample1 = {
+    #     'acq_method'    : 'SECSAXS_test',
+    #     'sample_loc'    : 'D2F-A1',
+    #     'injection_vol' : 10.0,
+    #     'sample_name'   : 'test1',
+    #     'sample_descrip': 'test',
+    #     'sample_type'   : 'Sample',
+    #     }
+
+    # sample_list = [seq_sample1]
+    # result_path = 'api_test'
+    # result_name = '<D>-api_test_seq'
+
+    # my_hplc.submit_sequence('test_seq', sample_list, result_path, result_name)
+
+
+    my_hplc.submit_hplc_sample('test', 'SECSAXS_test', 'D2F-A1', 10.0,
+        0.05, 0.1, 0.1, 60.0, result_path='api_test', )
