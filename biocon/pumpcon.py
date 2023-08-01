@@ -3841,7 +3841,7 @@ class PumpCommThread(utils.CommManager):
 
         return status
 
-    def _get_max_pressure(self, nam, **kwargs):
+    def _get_max_pressure(self, name, **kwargs):
         logger.debug("Getting pump %s max pressure", name)
 
         comm_name = kwargs.pop('comm_name', None)

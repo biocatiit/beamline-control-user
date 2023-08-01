@@ -1575,6 +1575,7 @@ class HPLCCommThread(utils.CommManager):
                         'connect'           : self._connect_device,
                         'disconnect'        : self._disconnect_device,
                         'get_valve_position': self._get_valve_position,
+                        'set_valve_position': self._set_valve_position,
                         }
 
         self._connected_devices = OrderedDict()
@@ -1588,18 +1589,31 @@ class HPLCCommThread(utils.CommManager):
     def _additional_new_comm(self, name):
         pass
 
-    def _get_valve_position(self, name, **kwargs):
-        logger.debug("Getting valve %s position", name)
+    def _get_valve_position(self, name, vid, **kwargs):
+        logger.debug("Getting valve %s position", vid)
 
         comm_name = kwargs.pop('comm_name', None)
         cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
-        val = device.get_position(**kwargs)
+        val = device.get_valve_position(vid, **kwargs)
 
         self._return_value((name, cmd, val), comm_name)
 
-        logger.debug("Valve %s position: %s", name, val)
+        logger.debug("Valve %s position: %s", vid, val)
+
+    def _set_valve_position(self, name, vid, val, **kwargs):
+        logger.debug("Setting valve %s position", vid)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        success = device.set_valve_position(vid, val **kwargs)
+
+        self._return_value((name, cmd, success), comm_name)
+
+        logger.debug("Valve %s position set: %s", vid, val)
 
 if __name__ == '__main__':
     logger = logging.getLogger()
