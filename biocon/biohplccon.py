@@ -48,6 +48,126 @@ if agilent_path not in os.sys.path:
 
 import agilentcon.hplccon as hplccon
 
+class BufferMonitor(object):
+    """
+    Class for monitoring buffer levels. This is designed as an addon for an
+    hplc class, and requires methods for getting the flow rate to be defined
+    elsewhere.
+    """
+    def __init__(self, flow_rate_getter):
+        """
+        Initializes the buffer monitor class
+
+        Parameters
+        ----------
+        flow_rate_getter: func
+            A function that returns the flow rate of interest for monitoring.
+        """
+        self._get_buffer_flow_rate = flow_rate_getter
+
+        self._active_buffer_position = None
+        self._previous_flow_rate = None
+        self._buffers = {}
+
+        self._buffer_lock = threading.Lock()
+        self._terminate_buffer_monitor = threading.Event()
+        self._buffer_monitor_thread = threading.Thread(target=self._buffer_monitor)
+        self._buffer_monitor_thread.daemon = True
+        self._buffer_monitor_thread.start()
+
+    def _buffer_monitor(self):
+        while not self._terminate_buffer_monitor.is_set():
+            with self._buffer_lock:
+                if self._active_buffer_position is not None:
+                    if self._previous_flow_rate is None:
+                        self._previous_flow_rate = self._get_buffer_flow_rate()
+                        previous_time = time.time()
+
+                    current_flow = self._get_buffer_flow_rate()
+                    current_time = time.time()
+
+                    delta_vol = (((current_flow + self._previous_flow_rate)/2./60.)
+                        *(current_time-previous_time))
+
+                    if self._active_buffer_position in self._buffers:
+                        self._buffers[self._active_buffer_position]['vol'] -= delta_vol
+
+                    self._previous_flow_rate = current_flow
+                    previous_time = current_time
+
+            time.sleep(0.1)
+
+    def get_buffer_info(self, position):
+        """
+        Gets the buffer info including the current volume
+
+        Parameters
+        ----------
+        position: str
+            The buffer position to get the info for.
+
+        Returns
+        -------
+        vol: float
+            The volume remaining
+        descrip: str
+            The buffer description (e.g. contents)
+        """
+        with self._buffer_lock:
+            position = str(position)
+            vals = self._buffers[position]
+            vol = vals['vol']
+            descrip = vals['descrip']
+
+        return vol, descrip
+
+    def get_all_buffer_info(self):
+        """
+        Gets information on all buffers
+
+        Returns
+        -------
+        buffers: dict
+            A dictionary where the keys are the buffer positions and
+            the values are dictionarys with keys for volume ('vol') and
+            description ('descrip').
+        """
+        with self._buffer_lock:
+            return copy.copy(self._buffers)
+
+    def set_buffer_info(self, position, volume, descrip):
+        """
+        Sets the buffer info for a given buffer position
+
+        Parameters
+        ----------
+        position: str
+            The buffer position (e.g. 1 or A or etc)
+        volume: float
+            The current buffer volume
+        descrip: str
+            Buffer description (e.g. contents)
+        """
+        with self._buffer_lock:
+            position = str(position)
+            self._buffers[position] = {'vol': float(volume), 'descrip': descrip}
+
+    def set_active_buffer_position(self, position):
+        """
+        Sets the active buffer position
+
+        Parameters
+        ----------
+        position: str
+            The buffer position (e.g. 1 or A)
+        """
+        with self._buffer_lock:
+            self._active_buffer_position = str(position)
+            self._previous_flow_rate = None
+
+    def stop_monitor(self):
+        self._terminate_buffer_monitor.set()
+        self._buffer_monitor_thread.join()
 
 class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
     """
@@ -56,7 +176,7 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
 
     def __init__(self, name, device, hplc_args={}, selector_valve_args={},
         outlet_valve_args={}, purge1_valve_args={}, purge2_valve_args={},
-        pump1_id='', pump2_id=''):
+        buffer1_valve_args={}, buffer2_valve_args={}, pump1_id='', pump2_id=''):
         """
         Initializes the HPLC plus valves
 
@@ -76,9 +196,21 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
             Dictionary of the input arguments for the flowpath 1 purge valve
         purge2_valve_args: dict
             Dictionary of the input arguments for the flowpath 2 purge valve
+        buffer1_valve_args: dict
+            Dictionary of the input arguments for the flowpath 1 buffer valve
+        buffer2_valve_args: dict
+            Dictionary of the input arguments for the flowpath 2 buffer valve
+        pump1_id: str
+            The Agilent hashkey for pump 1
+        pump2_id: str
+            The Agilent hashkey for pump 2
         """
-
         self._active_flow_path = None
+        self._purging_flow1 = False
+        self._purging_flow2 = False
+
+        self._buffer_monitor1 = BufferMonitor(self._get_flow_rate1)
+        self._buffer_monitor2 = BufferMonitor(self._get_flow_rate2)
 
         # Defines valve positions for various states
         self._flow_path_positions = {
@@ -98,9 +230,13 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
 
         # Connect valves
         self._connect_valves(selector_valve_args, outlet_valve_args,
-            purge1_valve_args, purge2_valve_args)
+            purge1_valve_args, purge2_valve_args, buffer1_valve_args,
+            buffer2_valve_args)
 
         # Connect HPLC
+        self._pump1_id = pump1_id
+        self._pump2_id = pump2_id
+
         hplc_device_type = hplc_args['args'][0]
         hplc_device = hplc_args['args'][1]
         hplc_kwargs = hplc_args['kwargs']
@@ -108,17 +244,12 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
         hplccon.AgilentHPLC.__init__(self, name, hplc_device, **hplc_kwargs)
 
         # Other definitions
-        self._pump1_id = pump1_id
-        self._pump2_id = pump2_id
-
         self._default_purge_rate = 5.0 #mL/min
         self._default_purge_accel = 10.0 #mL/min
         self._pre_purge_flow1 = None
         self._pre_purge_flow2 = None
         self._pre_purge_flow_accel1 = None
         self._pre_purge_flow_accel2 = None
-        self._purging_flow1 = False
-        self._purging_flow2 = False
         self._remaining_purge1_vol = None
         self._remaining_purge2_vol = None
         self._target_purge_flow1 = 0.0
@@ -155,7 +286,12 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
         self._monitor_submit_thread.daemon = True
         self._monitor_submit_thread.start()
 
-    def _connect_valves(self, sv_args, ov_args, p1_args, p2_args):
+
+        self.set_active_buffer_position(self.get_valve_position('buffer1'), 1)
+        self.set_active_buffer_position(self.get_valve_position('buffer2'), 2)
+
+    def _connect_valves(self, sv_args, ov_args, p1_args, p2_args, b1_args,
+        b2_args):
         sv_name = sv_args['name']
         sv_arg_list = sv_args['args']
         sv_kwarg_list = sv_args['kwargs']
@@ -196,11 +332,33 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
             p2_comm, **p2_kwarg_list)
         self._purge2_valve.connect()
 
+        b1_name = b1_args['name']
+        b1_arg_list = b1_args['args']
+        b1_kwarg_list = b1_args['kwargs']
+        b1_device_type = b1_arg_list[0]
+        b1_comm = b1_arg_list[1]
+
+        self._buffer1_valve = valvecon.known_valves[b1_device_type](b1_name,
+            b1_comm, **b1_kwarg_list)
+        self._buffer1_valve.connect()
+
+        b2_name = b2_args['name']
+        b2_arg_list = b2_args['args']
+        b2_kwarg_list = b2_args['kwargs']
+        b2_device_type = b2_arg_list[0]
+        b2_comm = b2_arg_list[1]
+
+        self._buffer2_valve = valvecon.known_valves[b2_device_type](b2_name,
+            b2_comm, **b2_kwarg_list)
+        self._buffer2_valve.connect()
+
         self._valves = {
             'selector'  : self._selector_valve,
             'outlet'    : self._outlet_valve,
             'purge1'    : self._purge1_valve,
             'purge2'    : self._purge2_valve,
+            'buffer1'   : self._buffer1_valve,
+            'buffer2'   : self._buffer2_valve,
             }
 
         for flow_path in self._flow_path_positions:
@@ -216,6 +374,22 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
             if active_flow_path:
                 self._active_flow_path = flow_path
                 break
+
+        for flow_path in self._purge_positions:
+            purging = True
+
+            for valve, fp_pos in self._purge_positions[flow_path].items():
+                current_pos = self.get_valve_position(valve)
+
+                if int(fp_pos) != int(current_pos):
+                    purging = False
+                    break
+
+            if purging:
+                if flow_path == 1:
+                    self._purging_flow1 = True
+                elif flow_path == 2:
+                    self._purging_flow2 = True
 
     def get_valve_position(self, valve_id):
         """
@@ -325,6 +499,12 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
 
         return flow_accel
 
+    def _get_flow_rate1(self):
+        return self.get_hplc_flow_rate(1)
+
+    def _get_flow_rate2(self):
+        return self.get_hplc_flow_rate(2)
+
     def get_flow_path_switch_status(self):
         """
         Gets whether or not the HPLC is currently switching flow paths.
@@ -335,6 +515,58 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
             True if switching, otherwise False.
         """
         return copy.copy(self._switching_flow_path)
+
+    def get_buffer_info(self, position, flow_path):
+        """
+        Gets the buffer info including the current volume
+
+        Parameters
+        ----------
+        position: str
+            The buffer position to get the info for.
+        flow_path: int
+            The flow path to get the info for. Either 1 or 2.
+
+        Returns
+        -------
+        vol: float
+            The volume remaining
+        descrip: str
+            The buffer description (e.g. contents)
+        """
+        flow_path = int(flow_path)
+
+        if flow_path == 1:
+            vol, descrip = self._buffer_monitor1.get_buffer_info(position)
+        elif flow_path == 2:
+            vol, descrip = self._buffer_monitor2.get_buffer_info(position)
+
+        return vol, descrip
+
+    def get_all_buffer_info(self, flow_path):
+        """
+        Gets information on all buffers
+
+        Parameters
+        ----------
+        flow_path: int
+            The flow path to get the info for. Either 1 or 2.
+
+        Returns
+        -------
+        buffers: dict
+            A dictionary where the keys are the buffer positions and
+            the values are dictionarys with keys for volume ('vol') and
+            description ('descrip').
+        """
+        flow_path = int(flow_path)
+
+        if flow_path == 1:
+            buffers = self._buffer_monitor1.get_all_buffer_info()
+        elif flow_path == 2:
+            buffers = self._buffer_monitor2.get_all_buffer_info()
+
+        return buffers
 
     def purge_flow_path(self, flow_path, purge_volume, purge_rate=None,
         purge_accel=None, restore_flow_after_purge=True,
@@ -475,6 +707,9 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
 
         while not self._terminate_monitor_purge.is_set():
             self._monitor_purge_evt.wait()
+
+            if self._terminate_monitor_purge.is_set():
+                break
 
             if (self._purging_flow1 and not monitoring_flow1
                 and not stopping_flow1 and not stopping_initial_flow1):
@@ -704,6 +939,18 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
         """
         valve = self._valves[valve_id]
         success = valve.set_position(position)
+
+        if valve_id == 'buffer1':
+            self.set_active_buffer_position(position, 1)
+        elif valve_id == 'buffer2':
+            self.set_active_buffer_position(position, 2)
+        elif valve_id == 'purge1':
+            if position == self._purge_positions[1]['purge1']:
+                self._purging_flow1 = False
+        elif valve_id == 'purge2':
+            if position == self._purge_positions[2]['purge2']:
+                self._purging_flow2 = False
+
         return success
 
     def set_active_flow_path(self, flow_path, stop_flow1=False,
@@ -960,6 +1207,47 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
         #     self.set_pump_method_values({'MaximumFlowRamp': flow_accel}, pump_id)
         #     self.save_current_method()
 
+    def set_buffer_info(self, position, volume, descrip, flow_path):
+        """
+        Sets the buffer info for a given buffer position
+
+        Parameters
+        ----------
+        position: str
+            The buffer position (e.g. 1 or A or etc)
+        volume: float
+            The current buffer volume
+        descrip: str
+            Buffer description (e.g. contents)
+        flow_path: int
+            The flow path to set the info for. Either 1 or 2.
+        """
+        flow_path = int(flow_path)
+
+        if flow_path == 1:
+            buffers = self._buffer_monitor1.set_buffer_info(position, volume,
+                descrip)
+        elif flow_path == 2:
+            buffers = self._buffer_monitor2.set_buffer_info(position, volume,
+                descrip)
+
+    def set_active_buffer_position(self, position, flow_path):
+        """
+        Sets the active buffer position
+
+        Parameters
+        ----------
+        position: str
+            The buffer position (e.g. 1 or A)
+        flow_path: int
+            The flow path to set the info for. Either 1 or 2.
+        """
+        flow_path = int(flow_path)
+        if flow_path == 1:
+            self._buffer_monitor1.set_active_buffer_position(position)
+        elif flow_path == 2:
+            self._buffer_monitor2.set_active_buffer_position(position)
+
     def submit_hplc_sample(self, name, acq_method, sample_loc, inj_vol,
         flow_rate, flow_accel, total_elution_vol, high_pressure_lim,
         result_path=None, sp_method=None, wait_for_flow_ramp=True,
@@ -1139,18 +1427,113 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
 
     def stop_submit_sample(self):
         """
-        Stops urrent sample submission (will not abort the sample run if it's
+        Stops current sample submission (will not abort the sample run if it's
         already submitted).
         """
         if self._submitting_sample:
             self._abort_submit.set()
             logger.info('HPLC %s aborted sample submission', self.name)
 
+    def stop_all(self):
+        """
+        Stops all current actions, including purging, switching, submitting a
+        sample. Pauses the run queue and aborts the current run.
+        """
+        self.stop_purge(1)
+        self.stop_purge(2)
+        self.stop_switch()
+        self.stop_submit_sample()
+        self.pause_run_queue()
+        try:
+            self.abort_current_run()
+        except Exception:
+            pass
+        self.set_hplc_flow_rate(0, 1)
+        self.set_hplc_flow_rate(0, 2)
+
+    def stop_all_immediately(self):
+        """
+        Stops all current actions, including purging, switching, submitting a
+        sample. Pauses the run queue and aborts the current run. Sets the flow
+        acceleration to max to stop the pumps as quickly as possible.
+        """
+        flow_accel1 = self.get_hplc_flow_accel(1)
+        flow_accel2 = self.get_hplc_flow_accel(2)
+
+        self.stop_all()
+
+        self.set_hplc_flow_accel(100, 1)
+        self.set_hplc_flow_accel(100, 2)
+
+        pump1_stopped = False
+        pump2_stopped = False
+        while not pump1_stopped or not pump2_stopped:
+            if float(self.get_hplc_flow_rate(1)) == 0:
+                pump1_stopped = True
+            if float(self.get_hplc_flow_rate(2)) == 0:
+                pump2_stopped = True
+
+        self.set_hplc_flow_accel(flow_accel1, 1)
+        self.set_hplc_flow_accel(flow_accel2, 2)
+
+    def stop_pump1(self):
+        """
+        Stops pump 1.
+        """
+        self.stop_purge(1)
+        self.set_hplc_flow_rate(0, 1)
+
+    def stop_pump2(self):
+        """
+        Stops pump 2.
+        """
+        self.stop_purge(2)
+        self.set_hplc_flow_rate(0, 2)
+
+    def stop_pump1_immediately(self):
+        """
+        Stops pump 1 as quickly as possible by setting flow acceleration
+        to max.
+        """
+        flow_accel1 = self.get_hplc_flow_accel(1)
+
+        self.stop_pump1()
+
+        self.set_hplc_flow_accel(100, 1)
+
+        pump1_stopped = False
+        while not pump1_stopped:
+            if float(self.get_hplc_flow_rate(1)) == 0:
+                pump1_stopped = True
+
+        self.set_hplc_flow_accel(flow_accel1, 1)
+
+    def stop_pump2_immediately(self):
+        """
+        Stops pump 2 as quickly as possible by setting flow acceleration
+        to max.
+        """
+        flow_accel2 = self.get_hplc_flow_accel(2)
+
+        self.stop_pump2()
+
+        self.set_hplc_flow_accel(100, 2)
+
+        pump1_stopped = False
+        while not pump1_stopped:
+            if float(self.get_hplc_flow_rate(2)) == 0:
+                pump1_stopped = True
+
+        self.set_hplc_flow_accel(flow_accel2, 2)
+
     def disconnect_all(self):
         """
         Use this method instead of disconnect to disconnect from both the
         valves and the HPLC.
         """
+        self._buffer_monitor1.stop_monitor()
+        self._buffer_monitor2.stop_monitor()
+
         for valve in self._valves.values():
             valve.disconnect()
 
@@ -1170,7 +1553,53 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
 
         self.disconnect()
 
+known_hplcs = {
+    'Agilent2Pump'  : AgilentHPLC2Pumps,
+    }
 
+class HPLCCommThread(utils.CommManager):
+    """
+    Custom communication thread for HPLCs.
+    """
+
+    def __init__(self, name):
+        """
+        Initializes the custom thread. Important parameters here are the
+        list of known commands ``_commands`` and known valves.
+        """
+        utils.CommManager.__init__(self, name)
+
+        logger.info("Starting valve control thread: %s", self.name)
+
+        self._commands = {
+                        'connect'           : self._connect_device,
+                        'disconnect'        : self._disconnect_device,
+                        'get_valve_position': self._get_valve_position,
+                        }
+
+        self._connected_devices = OrderedDict()
+        self._connected_coms = OrderedDict()
+
+        self.known_devices = known_hplcs
+
+    def _cleanup_devices(self):
+        pass
+
+    def _additional_new_comm(self, name):
+        pass
+
+    def _get_valve_position(self, name, **kwargs):
+        logger.debug("Getting valve %s position", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        val = device.get_position(**kwargs)
+
+        self._return_value((name, cmd, val), comm_name)
+
+        logger.debug("Valve %s position: %s", name, val)
 
 if __name__ == '__main__':
     logger = logging.getLogger()
@@ -1213,11 +1642,26 @@ if __name__ == '__main__':
         'kwargs': {'positions' : 4}
         }
 
+    buffer1_valve_args = {
+        'name'  : 'Buffer 1',
+        'args'  : ['Cheminert', 'COM3'],
+        'kwargs': {'positions' : 10}
+        }
+
+    buffer2_valve_args = {
+        'name'  : 'Buffer 2',
+        'args'  : ['Cheminert', 'COM4'],
+        'kwargs': {'positions' : 10}
+        }
+
     my_hplc = AgilentHPLC2Pumps(hplc_args['name'], None, hplc_args=hplc_args,
         selector_valve_args=selector_valve_args,
         outlet_valve_args=outlet_valve_args,
         purge1_valve_args=purge1_valve_args,
-        purge2_valve_args=purge2_valve_args, pump1_id='quat. pump 1#1c#1',
+        purge2_valve_args=purge2_valve_args,
+        buffer1_valve_args=buffer1_valve_args,
+        buffer2_valve_args=buffer2_valve_args,
+        pump1_id='quat. pump 1#1c#1',
         pump2_id='quat. pump 2#1c#2')
 
     print('waiting to connect')
@@ -1243,5 +1687,5 @@ if __name__ == '__main__':
     # my_hplc.submit_sequence('test_seq', sample_list, result_path, result_name)
 
 
-    my_hplc.submit_hplc_sample('test', 'SECSAXS_test', 'D2F-A1', 10.0,
-        0.05, 0.1, 0.1, 60.0, result_path='api_test', )
+    # my_hplc.submit_hplc_sample('test', 'SECSAXS_test', 'D2F-A1', 10.0,
+    #     0.05, 0.1, 0.1, 60.0, result_path='api_test', )

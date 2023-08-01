@@ -29,6 +29,7 @@ import logging
 import sys
 import ctypes
 import copy
+import traceback
 
 if __name__ != '__main__':
     logger = logging.getLogger(__name__)
@@ -367,7 +368,14 @@ class CheminertValve(Valve):
 
     def get_position(self):
         position = self.send_command('CP')[0]
-        position = position.strip().lstrip('CP')
+
+        if 'position' in position.lower():
+            if '=' in position.lower():
+                position = position.split('=')[-1].strip()
+            else:
+                position = position.lower().split('is')[-1].strip('"').strip()
+        else:
+            position = position.strip().lstrip('CP')
 
         try:
             if self._positions == 2:
@@ -827,6 +835,10 @@ if __name__ == '__main__':
             'kwargs': {'positions' : 4}},
         {'name': 'Purge 2', 'args': ['Cheminert', 'COM6'],
             'kwargs': {'positions' : 4}},
+        {'name': 'Buffer 1', 'args': ['Cheminert', 'COM3'],
+            'kwargs': {'positions' : 10}},
+        {'name': 'Buffer 2', 'args': ['Cheminert', 'COM4'],
+            'kwargs': {'positions' : 10}},
         ]
 
     # Simulated
