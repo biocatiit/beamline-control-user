@@ -458,6 +458,7 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
     def get_hplc_flow_rate(self, flow_path):
         """
         Gets the flow rate of the specified flow path
+
         Parameters
         ----------
         flow_path: int
@@ -477,9 +478,33 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
 
         return flow_rate
 
+    def get_hplc_target_flow_rate(self, flow_path):
+        """
+        Gets the target flow rate of the specified flow path
+
+        Parameters
+        ----------
+        flow_path: int
+            The flow path to get the rate for. Either 1 or 2.
+
+        Returns
+        -------
+        target_flow_rate: float
+            The flow rate of the specified flow path.
+        """
+        flow_path = int(flow_path)
+
+        if flow_path == 1:
+            target_flow_rate = self.get_target_flow_rate(self._pump1_id)
+        elif flow_path == 2:
+            target_flow_rate = self.get_target_flow_rate(self._pump2_id)
+
+        return target_flow_rate
+
     def get_hplc_flow_accel(self, flow_path):
         """
         Gets the flow acceleration of the specified flow path
+
         Parameters
         ----------
         flow_path: int
@@ -498,6 +523,54 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
             flow_accel = self.get_flow_accel(self._pump2_id)
 
         return flow_accel
+
+    def get_hplc_pressure(self, flow_path):
+        """
+        Gets the pump pressure of the specified flow path
+
+        Parameters
+        ----------
+        flow_path: int
+            The flow path to get the pressure for. Either 1 or 2.
+
+        Returns
+        -------
+        pressure: float
+            The pump pressure of the specified flow path.
+        """
+        flow_path = int(flow_path)
+
+        if flow_path == 1:
+            pressure = self.get_pressure(self._pump1_id)
+        elif flow_path == 2:
+            pressure = self.get_pressure(self._pump2_id)
+
+        return pressure
+
+    def get_hplc_pump_power_status(self, flow_path):
+        """
+        Gets the pump power status of the specified flow path
+
+        Parameters
+        ----------
+        flow_path: int
+            The flow path to get the pump power status for. Either 1 or 2.
+
+        Returns
+        -------
+        pump_power_status: float
+            The pump power status of the specified flow path. Either 'On',
+            'Off', or 'Standby'. Returns an empty string if status cannot
+            be acquired.
+        """
+        flow_path = int(flow_path)
+
+        if flow_path == 1:
+            pump_power_status = self.get_pump_power_status(self._pump1_id)
+        elif flow_path == 2:
+            pump_power_status = self.get_pump_power_status(self._pump2_id)
+
+        return pump_power_status
 
     def _get_flow_rate1(self):
         return self.get_hplc_flow_rate(1)
@@ -611,6 +684,7 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
             (flow_path == 2 and self._purging_flow2)):
             logger.error('HPLC %s flow path %s is already purging, so a new '
                 'purge cannot be started', self.name, flow_path)
+            success = False
 
         else:
             do_purge = self._check_purge_sample_status(flow_path,
@@ -620,6 +694,13 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
                 self._start_purge(flow_path, purge_volume, purge_rate,
                     purge_accel, restore_flow_after_purge, stop_before_purge,
                     stop_after_purge)
+
+                success =  True
+
+            else:
+                success = False
+
+        return success
 
     def _start_purge(self, flow_path, purge_volume, purge_rate, purge_accel,
             restore_flow_after_purge, stop_before_purge, stop_after_purge):
@@ -997,18 +1078,23 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
         """
         flow_path = int(flow_path)
 
+        success = True
+
         if self._active_flow_path == flow_path:
             logger.info('HPLC %s already set to active flow path %s',
                 self.name, flow_path)
+            success = False
         elif self._switching_flow_path:
             logger.error('HPLC %s cannot switch flow paths because a switch '
                 'is already underway.', self.name)
+            success = False
         else:
             samples_being_run = self._check_samples_being_run()
 
             if samples_being_run and not switch_with_sample:
                 logger.error(('HPLC %s cannot switch active flow path because '
                     'samples are being run'), self.name)
+                success = False
 
             else:
                 if ((self._purging_flow1 and flow_path == 1) or
@@ -1019,6 +1105,7 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
                             flow_path)
 
                         purge_active = False
+
 
                 self._switch_args = {
                     'flow_path': flow_path,
@@ -1038,6 +1125,8 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
 
                 logger.info(('HPLC %s starting to switch active flow '
                     'path to %s'), self.name, flow_path)
+
+        return success
 
     def _monitor_switch(self):
         while not self._terminate_monitor_switch.is_set():
@@ -1140,6 +1229,11 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
             The flow rate to set
         flow_path: int
             The flow path to stop the purge on. Either 1 or 2.
+
+        Returns
+        -------
+        success: bool
+            True if successful.
         """
         flow_path = int(flow_path)
         flow_rate = float(flow_rate)
@@ -1149,9 +1243,9 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
         elif flow_path == 2:
             pump_id = self._pump2_id
 
-        self.set_flow_rate(flow_rate, pump_id)
+        success = self.set_flow_rate(flow_rate, pump_id)
 
-        run_queue = self.get_run_queue()
+        # run_queue = self.get_run_queue()
 
         # all_methods = []
         # for run in run_queue:
@@ -1168,6 +1262,8 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
         #     self.set_pump_method_values({'Flow': flow_rate}, pump_id)
         #     self.save_current_method()
 
+        return success
+
 
     def set_hplc_flow_accel(self, flow_accel, flow_path):
         """
@@ -1179,6 +1275,11 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
             The flow acceleration to set
         flow_path: int
             The flow path to stop the purge on. Either 1 or 2.
+
+        Returns
+        -------
+        success: bool
+            True if successful.
         """
         flow_path = int(flow_path)
         flow_accel = float(flow_accel)
@@ -1188,9 +1289,9 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
         elif flow_path == 2:
             pump_id = self._pump2_id
 
-        self.set_flow_accel(flow_accel, pump_id)
+        success = self.set_flow_accel(flow_accel, pump_id)
 
-        run_queue = self.get_run_queue()
+        # run_queue = self.get_run_queue()
 
         # all_methods = []
         # for run in run_queue:
@@ -1207,6 +1308,58 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
         #     self.set_pump_method_values({'MaximumFlowRamp': flow_accel}, pump_id)
         #     self.save_current_method()
 
+        return success
+
+    def set_hplc_pump_on(self, flow_path):
+        """
+        Turns on the pump on the specified flow path.
+
+        Parameters
+        ----------
+        flow_path: int
+            The flow path to turn on the pump on. Either 1 or 2.
+
+        Returns
+        -------
+        success: bool
+            True if successful.
+        """
+        flow_path = int(flow_path)
+
+        if flow_path == 1:
+            pump_id = self._pump1_id
+        elif flow_path == 2:
+            pump_id = self._pump2_id
+
+        success = self.set_pump_on(pump_id)
+
+        return success
+
+    def set_hplc_pump_standby(self, flow_path):
+        """
+        Turns the pump on the specified flow path to standby.
+
+        Parameters
+        ----------
+        flow_path: int
+            The flow path to set the pump to standby on. Either 1 or 2.
+
+        Returns
+        -------
+        success: bool
+            True if successful.
+        """
+        flow_path = int(flow_path)
+
+        if flow_path == 1:
+            pump_id = self._pump1_id
+        elif flow_path == 2:
+            pump_id = self._pump2_id
+
+        success = self.set_pump_standby(pump_id)
+
+        return success
+
     def set_buffer_info(self, position, volume, descrip, flow_path):
         """
         Sets the buffer info for a given buffer position
@@ -1221,15 +1374,22 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
             Buffer description (e.g. contents)
         flow_path: int
             The flow path to set the info for. Either 1 or 2.
+
+        Returns
+        -------
+        success: bool
+            True if successful.
         """
         flow_path = int(flow_path)
 
         if flow_path == 1:
-            buffers = self._buffer_monitor1.set_buffer_info(position, volume,
+            self._buffer_monitor1.set_buffer_info(position, volume,
                 descrip)
         elif flow_path == 2:
-            buffers = self._buffer_monitor2.set_buffer_info(position, volume,
+            self._buffer_monitor2.set_buffer_info(position, volume,
                 descrip)
+
+        return True
 
     def set_active_buffer_position(self, position, flow_path):
         """
@@ -1294,6 +1454,10 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
             Time in s to wait after the flow has ramped up before submitting
             the sample.
 
+        Returns
+        -------
+        success: bool
+            True if successful
         """
         flow_rate = float(flow_rate)
         flow_accel = float(flow_accel)
@@ -1356,6 +1520,8 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
         self._submitting_sample = True
         self._abort_submit.clear()
         self._monitor_submit_evt.set()
+
+        return True
 
     def _monitor_submit(self):
         while not self._terminate_monitor_submit.is_set():
@@ -1572,11 +1738,31 @@ class HPLCCommThread(utils.CommManager):
         logger.info("Starting valve control thread: %s", self.name)
 
         self._commands = {
-                        'connect'           : self._connect_device,
-                        'disconnect'        : self._disconnect_device,
-                        'get_valve_position': self._get_valve_position,
-                        'set_valve_position': self._set_valve_position,
-                        }
+            'connect'                   : self._connect_device,
+            'disconnect'                : self._disconnect_device,
+            'get_valve_position'        : self._get_valve_position,
+            'get_methods'               : self._get_methods,
+            'get_sample_prep_methods'   : self._get_sample_prep_methods,
+            'get_run_status'            : self._get_run_status,
+            'set_valve_position'        : self._set_valve_position,
+            'purge_flow_path'           : self._purge_flow_path,
+            'set_active_flow_path'      : self._set_active_flow_path,
+            'set_flow_rate'             : self._set_flow_rate,
+            'set_flow_accel'            : self._set_flow_accel,
+            'set_pump_on'               : self._set_pump_on,
+            'set_pump_standby'          : self._set_pump_standby,
+            'set_autosampler_on'        : self._set_autosampler_on,
+            'set_uv_on'                 : self._set_uv_on,
+            'submit_sample'             : self._submit_sample,
+            'stop_purge'                : self._stop_purge,
+            'stop_sample_submission'    : self._stop_sample_submission,
+            'stop_all'                  : self._stop_all,
+            'stop_all_immediately'      : self._stop_all_immediately,
+            'stop_pump1'                : self._stop_pump1,
+            'stop_pump1_immediately'    : self._stop_pump1_immediately,
+            'stop_pump2'                : self._stop_pump2,
+            'stop_pump2_immediately'    : self._stop_pump2_immediately,
+            }
 
         self._connected_devices = OrderedDict()
         self._connected_coms = OrderedDict()
@@ -1590,7 +1776,7 @@ class HPLCCommThread(utils.CommManager):
         pass
 
     def _get_valve_position(self, name, vid, **kwargs):
-        logger.debug("Getting valve %s position", vid)
+        logger.debug("Getting %s valve %s position", name, vid)
 
         comm_name = kwargs.pop('comm_name', None)
         cmd = kwargs.pop('cmd', None)
@@ -1600,10 +1786,49 @@ class HPLCCommThread(utils.CommManager):
 
         self._return_value((name, cmd, val), comm_name)
 
-        logger.debug("Valve %s position: %s", vid, val)
+        logger.debug("%s valve %s position: %s", name, vid, val)
+
+    def _get_methods(self, name, **kwargs):
+        logger.debug("Getting %s acquisition methods", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        val = device.get_methods(**kwargs)
+
+        self._return_value((name, cmd, val), comm_name)
+
+        logger.debug("%s methods: %s", name, val)
+
+    def _get_sample_prep_methods(self, name, **kwargs):
+        logger.debug("Getting %s sample prep methods", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        val = device.get_sample_prep_methods(**kwargs)
+
+        self._return_value((name, cmd, val), comm_name)
+
+        logger.debug("%s sample prep methods: %s", name, val)
+
+    def _get_run_status(self, name, run_name, **kwargs):
+        logger.debug("Getting %s run %s status", name, run_name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        val = device.get_run_status(run_name, **kwargs)
+
+        self._return_value((name, cmd, val), comm_name)
+
+        logger.debug("%s run %s status: %s", name, run_name, val)
 
     def _set_valve_position(self, name, vid, val, **kwargs):
-        logger.debug("Setting valve %s position", vid)
+        logger.debug("Setting %s valve %s position", name, vid)
 
         comm_name = kwargs.pop('comm_name', None)
         cmd = kwargs.pop('cmd', None)
@@ -1613,7 +1838,269 @@ class HPLCCommThread(utils.CommManager):
 
         self._return_value((name, cmd, success), comm_name)
 
-        logger.debug("Valve %s position set: %s", vid, val)
+        logger.debug("%s valve %s position set: %s", name, vid, success)
+
+    def _purge_flow_path(self, name, flow_path, purge_volume, **kwargs):
+        logger.debug("Purging %s flow path %s", name, flow_path)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        success = device.purge_flow_path(flow_path, purge_volume, **kwargs)
+
+        self._return_value((name, cmd, success), comm_name)
+
+        logger.debug("%s flow path %s purge started: %s", name, flow_path,
+            success)
+
+    def _set_active_flow_path(self, name, flow_path, **kwargs):
+        logger.debug("Setting %s active flow path %s", name, flow_path)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        success = device.set_active_flow_path(flow_path, **kwargs)
+
+        self._return_value((name, cmd, success), comm_name)
+
+        logger.debug("%s active flow path %s started: %s", name, flow_path,
+            success)
+
+    def _set_flow_rate(self, name, val, flow_path, **kwargs):
+        logger.debug("Setting %s flow path %s flow rate %s ", name, flow_path,
+            val)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        success = device.set_hplc_flow_rate(val, flow_path, **kwargs)
+
+        self._return_value((name, cmd, success), comm_name)
+
+        logger.debug("Set %s flow path %s flow rate %s: %s", name, flow_path,
+            val, success)
+
+    def _set_flow_accel(self, name, val, flow_path, **kwargs):
+        logger.debug("Setting %s flow path %s flow accel %s ", name, flow_path,
+            val)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        success = device.set_hplc_flow_accel(val, flow_path, **kwargs)
+
+        self._return_value((name, cmd, success), comm_name)
+
+        logger.debug("Set %s flow path %s flow accel %s: %s", name, flow_path,
+            val, success)
+
+    def _set_buffer_info(self, name, position, volume, descrip, flow_path,
+        **kwargs):
+        logger.debug("Setting %s flow path %s buffer info %s: %s, %s", name,
+            flow_path, position, volume, descrip)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        success = device.set_buffer_info(position, volume, descrip, flow_path,
+            **kwargs)
+
+        self._return_value((name, cmd, success), comm_name)
+
+        logger.debug("Set %s flow path %s buffer info %s", name, flow_path,
+            position)
+
+    def _set_pump_on(self, name, flow_path, **kwargs):
+        logger.debug("Setting %s flow path %s pump on", name, flow_path)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        success = device.set_hplc_pump_on(flow_path, **kwargs)
+
+        self._return_value((name, cmd, success), comm_name)
+
+        logger.debug("Set %s flow path %s pump on: %s", name, flow_path,
+            success)
+
+    def _set_pump_standby(self, name, flow_path, **kwargs):
+        logger.debug("Setting %s flow path %s pump standby", name, flow_path)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        success = device.set_hplc_pump_standby(flow_path, **kwargs)
+
+        self._return_value((name, cmd, success), comm_name)
+
+        logger.debug("Set %s flow path %s pump standby: %s", name, flow_path,
+            success)
+
+    def _set_autosampler_on(self, name, **kwargs):
+        logger.debug("Setting %s autosampler on", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        success = device.set_autosampler_on(**kwargs)
+
+        self._return_value((name, cmd, success), comm_name)
+
+        logger.debug("Set %s autosampler on: %s", name, success)
+
+    def _set_uv_on(self, name, **kwargs):
+        logger.debug("Setting %s uv on", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        success = device.set_uv_on(**kwargs)
+
+        self._return_value((name, cmd, success), comm_name)
+
+        logger.debug("Set %s uv on: %s", name, success)
+
+    def _submit_sample(self, name, sample_name, acq_method, sample_loc, inj_vol,
+        flow_rate, flow_accel, total_elution_vol, high_pressure_lim, **kwargs):
+        logger.debug("Submiting sample %s to %s", sample_name, name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        success = device.submit_hplc_sample(sample_name, acq_method,
+            sample_loc, inj_vol, flow_rate, flow_accel, total_elution_vol,
+            high_pressure_lim, **kwargs)
+
+        self._return_value((name, cmd, success), comm_name)
+
+        logger.debug("Submitted sample %s to %s", sample_name, name)
+
+    def _stop_purge(self, name, flow_path, **kwargs):
+        logger.debug("Stopping %s purge on flow path %s", name, flow_path)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        device.stop_purge(flow_path, **kwargs)
+
+        self._return_value((name, cmd, True), comm_name)
+
+        logger.debug("Stopped %s purge on flow path %s", name, flow_path)
+
+    def _stop_switch(self, name, **kwargs):
+        logger.debug("Stopping %s active flow path switching", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        device.stop_switch(**kwargs)
+
+        self._return_value((name, cmd, True), comm_name)
+
+        logger.debug("Stopped %s active flow path switching", name)
+
+    def _stop_sample_submission(self, name, **kwargs):
+        logger.debug("Stopping %s sample submission", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        device.stop_submit_sample(**kwargs)
+
+        self._return_value((name, cmd, True), comm_name)
+
+        logger.debug("Stopped %s sample submission", name)
+
+    def _stop_all(self, name, **kwargs):
+        logger.debug("Stopping %s all actions", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        device.stop_all(**kwargs)
+
+        self._return_value((name, cmd, True), comm_name)
+
+        logger.debug("Stopped %s all actions", name)
+
+    def _stop_all_immediately(self, name, **kwargs):
+        logger.debug("Stopping %s all actions immediately", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        device.stop_all_immediately(**kwargs)
+
+        self._return_value((name, cmd, True), comm_name)
+
+        logger.debug("Stopped %s all actions immeidately", name)
+
+    def _stop_pump1(self, name, **kwargs):
+        logger.debug("Stopping %s pump1 actions", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        device.stop_pump1(**kwargs)
+
+        self._return_value((name, cmd, True), comm_name)
+
+        logger.debug("Stopped %s pump1 actions", name)
+
+    def _stop_pump1_immediately(self, name, **kwargs):
+        logger.debug("Stopping %s pump1 actions immediately", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        device.stop_pump1_immediately(**kwargs)
+
+        self._return_value((name, cmd, True), comm_name)
+
+        logger.debug("Stopped %s pump1 actions immeidately", name)
+
+    def _stop_pump2(self, name, **kwargs):
+        logger.debug("Stopping %s pump2 actions", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        device.stop_pump2(**kwargs)
+
+        self._return_value((name, cmd, True), comm_name)
+
+        logger.debug("Stopped %s pump2 actions", name)
+
+    def _stop_pump2_immediately(self, name, **kwargs):
+        logger.debug("Stopping %s pump2 actions immediately", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        device.stop_pump2_immediately(**kwargs)
+
+        self._return_value((name, cmd, True), comm_name)
+
+        logger.debug("Stopped %s pump2 actions immeidately", name)
 
 if __name__ == '__main__':
     logger = logging.getLogger()
