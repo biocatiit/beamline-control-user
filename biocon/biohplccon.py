@@ -133,7 +133,8 @@ class BufferMonitor(object):
             description ('descrip').
         """
         with self._buffer_lock:
-            return copy.copy(self._buffers)
+            buffers = copy.copy(self._buffers)
+        return buffers
 
     def set_buffer_info(self, position, volume, descrip):
         """
@@ -243,6 +244,9 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
 
         hplccon.AgilentHPLC.__init__(self, name, hplc_device, **hplc_kwargs)
 
+        while not self.get_connected():
+            time.sleep(0.1)
+
         # Other definitions
         self._default_purge_rate = 5.0 #mL/min
         self._default_purge_accel = 10.0 #mL/min
@@ -288,7 +292,7 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
 
 
         self.set_active_buffer_position(self.get_valve_position('buffer1'), 1)
-        self.set_active_buffer_position(self.get_valve_position('buffer2'), 2)
+        # self.set_active_buffer_position(self.get_valve_position('buffer2'), 2)
 
     def  connect(self):
         """
@@ -426,7 +430,8 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
         active_flow_path: int
             The active flow path, either 1 or 2.
         """
-        return copy.copy(self._active_flow_path)
+        flow_path = copy.copy(self._active_flow_path)
+        return flow_path
 
     def get_purge_status(self, flow_path):
         """
@@ -478,13 +483,13 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
         flow_path = int(flow_path)
 
         if flow_path == 1:
-            flow_rate = self.get_flow_rate(self._pump1_id)
+            flow_rate = self.get_data_trace('Quat. Pump 1: Flow (mL/min)')[1][-1]
         elif flow_path == 2:
-            flow_rate = self.get_flow_rate(self._pump2_id)
+            flow_rate = self.get_data_trace('Quat. Pump 2: Flow (mL/min)')[1][-1]
 
-        return flow_rate
+        return float(flow_rate)
 
-    def get_hplc_target_flow_rate(self, flow_path):
+    def get_hplc_target_flow_rate(self, flow_path, update_method=True):
         """
         Gets the target flow rate of the specified flow path
 
@@ -492,6 +497,10 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
         ----------
         flow_path: int
             The flow path to get the rate for. Either 1 or 2.
+        update_method: bool
+            If true, get the current method from instrument. If doing multiple
+            things that use the current method status in a row, it can be useful
+            to set this to false for some cases, may be faster.
 
         Returns
         -------
@@ -501,13 +510,15 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
         flow_path = int(flow_path)
 
         if flow_path == 1:
-            target_flow_rate = self.get_target_flow_rate(self._pump1_id)
+            target_flow_rate = self.get_target_flow_rate(self._pump1_id,
+                update_method)
         elif flow_path == 2:
-            target_flow_rate = self.get_target_flow_rate(self._pump2_id)
+            target_flow_rate = self.get_target_flow_rate(self._pump2_id,
+                update_method)
 
         return target_flow_rate
 
-    def get_hplc_flow_accel(self, flow_path):
+    def get_hplc_flow_accel(self, flow_path, update_method=True):
         """
         Gets the flow acceleration of the specified flow path
 
@@ -515,6 +526,10 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
         ----------
         flow_path: int
             The flow path to get the acceleration for. Either 1 or 2.
+        update_method: bool
+            If true, get the current method from instrument. If doing multiple
+            things that use the current method status in a row, it can be useful
+            to set this to false for some cases, may be faster.
 
         Returns
         -------
@@ -524,9 +539,9 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
         flow_path = int(flow_path)
 
         if flow_path == 1:
-            flow_accel = self.get_flow_accel(self._pump1_id)
+            flow_accel = self.get_flow_accel(self._pump1_id, update_method)
         elif flow_path == 2:
-            flow_accel = self.get_flow_accel(self._pump2_id)
+            flow_accel = self.get_flow_accel(self._pump2_id, update_method)
 
         return flow_accel
 
@@ -547,9 +562,9 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
         flow_path = int(flow_path)
 
         if flow_path == 1:
-            pressure = self.get_pressure(self._pump1_id)
+            pressure = self.get_data_trace('Quat. Pump 1: Pressure (bar)')[1][-1]
         elif flow_path == 2:
-            pressure = self.get_pressure(self._pump2_id)
+            pressure = self.get_data_trace('Quat. Pump 2: Pressure (bar)')[1][-1]
 
         return pressure
 
@@ -578,6 +593,18 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
 
         return pump_power_status
 
+    def get_hplc_autosampler_temperature(self):
+        """
+        Gets the autosampler temperature
+
+        Returns
+        -------
+        temperature: float
+            The autosampler temperature
+        """
+        temperature = self.get_data_trace('Multisampler: Temperature (°C)')[1][-1]
+        return float(temperature)
+
     def _get_flow_rate1(self):
         return self.get_hplc_flow_rate(1)
 
@@ -593,7 +620,8 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
         is_switching: bool
             True if switching, otherwise False.
         """
-        return copy.copy(self._switching_flow_path)
+        switching = copy.copy(self._switching_flow_path)
+        return switching
 
     def get_submitting_sample_status(self):
         """
@@ -604,7 +632,8 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
         is_submitting: bool
             True if submitting, otherwise False
         """
-        return copy.copy(self._submitting_sample)
+        submitting = copy.copy(self._submitting_sample)
+        return submitting
 
     def get_buffer_info(self, position, flow_path):
         """
@@ -728,7 +757,7 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
 
         if flow_path == 1:
             if restore_flow_after_purge:
-                self._pre_purge_flow1 = self.get_flow_rate(self._pump1_id)
+                self._pre_purge_flow1 = self.get_hplc_flow_rate(1)
             else:
                 self._pre_purge_flow1 = None
 
@@ -742,7 +771,7 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
 
         elif flow_path == 2:
             if restore_flow_after_purge:
-                self._pre_purge_flow2 = self.get_flow_rate(self._pump2_id)
+                self._pre_purge_flow2 = self.get_hplc_flow_rate(2)
             else:
                 self._pre_purge_flow2 = None
 
@@ -829,7 +858,7 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
 
             if stopping_initial_flow1:
                 if self._stop_before_purging1:
-                    current_flow1 = self.get_flow_rate(self._pump1_id)
+                    current_flow1 = self.get_hplc_flow_rate(1)
 
                     if current_flow1 == 0:
                         ready_to_purge = True
@@ -849,7 +878,7 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
                         self._pump1_id)
 
                     flow_accel1 = self.get_flow_accel(self._pump1_id)
-                    previous_flow1 = self.get_flow_rate(self._pump1_id)
+                    previous_flow1 = self.get_hplc_flow_rate(1)
                     previous_time1 = time.time()
                     update_time1 = previous_time1
 
@@ -860,7 +889,7 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
 
             if stopping_initial_flow2:
                 if self._stop_before_purging2:
-                    current_flow2 = self.get_flow_rate(self._pump2_id)
+                    current_flow2 = self.get_hplc_flow_rate(2)
 
                     if current_flow2 == 0:
                         ready_to_purge = True
@@ -880,7 +909,7 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
                         self._pump2_id)
 
                     flow_accel2 = self.get_flow_accel(self._pump2_id)
-                    previous_flow2 = self.get_flow_rate(self._pump2_id)
+                    previous_flow2 = self.get_hplc_flow_rate(2)
                     previous_time2 = time.time()
                     update_time2 = previous_time2
 
@@ -890,7 +919,7 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
                     monitoring_flow2 = True
 
             if monitoring_flow1:
-                current_flow1 = self.get_flow_rate(self._pump1_id)
+                current_flow1 = self.get_hplc_flow_rate(1)
                 current_time1 = time.time()
                 delta_vol1 = (((current_flow1 + previous_flow1)/2./60.)
                     *(current_time1-previous_time1))
@@ -924,7 +953,7 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
                     update_time1 = current_time1
 
             if monitoring_flow2:
-                current_flow2 = self.get_flow_rate(self._pump2_id)
+                current_flow2 = self.get_hplc_flow_rate(2)
                 current_time2 = time.time()
                 delta_vol2 = (((current_flow2 + previous_flow2)/2./60.)
                     *(current_time2-previous_time2))
@@ -958,7 +987,7 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
 
 
             if stopping_flow1:
-                current_flow1 = self.get_flow_rate(self._pump1_id)
+                current_flow1 = self.get_hplc_flow_rate(1)
                 current_time1 = time.time()
 
                 if ((self._stop_after_purging1 and current_flow1 == 0)
@@ -986,7 +1015,7 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
                     update_time1 = current_time1
 
             if stopping_flow2:
-                current_flow2 = self.get_flow_rate(self._pump2_id)
+                current_flow2 = self.get_hplc_flow_rate(2)
                 current_time2 = time.time()
 
                 if ((self._stop_after_purging2 and current_flow2 == 0)
@@ -1163,8 +1192,8 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
             purge_accel = self._switch_args['purge_accel']
             switch_with_sample = self._switch_args['switch_with_sample']
 
-            initial_flow1 = self.get_flow_rate(self._pump1_id)
-            initial_flow2 = self.get_flow_rate(self._pump2_id)
+            initial_flow1 = self.get_hplc_flow_rate(1)
+            initial_flow2 = self.get_hplc_flow_rate(2)
 
             if not self._abort_switch.is_set():
                 if stop_flow1:
@@ -1182,13 +1211,13 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
                         break
 
                     if not stopped1:
-                        flow_rate1 = self.get_flow_rate(self._pump1_id)
+                        flow_rate1 = self.get_hplc_flow_rate(1)
 
                         if float(flow_rate1) == 0:
                             stopped1 = True
 
                     if not stopped2:
-                        flow_rate2 = self.get_flow_rate(self._pump2_id)
+                        flow_rate2 = self.get_hplc_flow_rate(2)
 
                         if float(flow_rate2) == 0:
                             stopped2 = True
@@ -1555,15 +1584,8 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
             wait_for_flow_ramp = self._submit_args['wait_for_flow_ramp']
             settle_time = self._submit_args['settle_time']
 
-            if self._active_flow_path == 1:
-                pump_id = self._pump1_id
-            elif self._active_flow_path == 2:
-                pump_id = self._pump2_id
-
-            initial_flow1 = self.get_flow_rate(self._pump1_id)
-
             if wait_for_flow_ramp:
-                while float(self.get_flow_rate(pump_id)) != flow_rate:
+                while self.get_hplc_flow_rate(self._active_flow_path) != flow_rate:
                     if self._abort_submit.is_set():
                         break
                     time.sleep(0.1)
@@ -1761,7 +1783,9 @@ class HPLCCommThread(utils.CommManager):
             'get_methods'               : self._get_methods,
             'get_sample_prep_methods'   : self._get_sample_prep_methods,
             'get_run_status'            : self._get_run_status,
-            'get_full_status'           : self._get_full_status,
+            'get_fast_hplc_status'      : self._get_fast_hplc_status,
+            'get_slow_hplc_status'      : self._get_slow_hplc_status,
+            'get_valve_status'          : self._get_valve_status,
             'set_valve_position'        : self._set_valve_position,
             'purge_flow_path'           : self._purge_flow_path,
             'set_active_flow_path'      : self._set_active_flow_path,
@@ -1848,14 +1872,15 @@ class HPLCCommThread(utils.CommManager):
 
         logger.debug("%s run %s status: %s", name, run_name, val)
 
-    def _get_full_status(self, name, run_name, **kwargs):
-        logger.debug("Getting %s run %s status", name, run_name)
+    def _get_fast_hplc_status(self, name, **kwargs):
+        logger.debug("Getting %s fast status", name)
 
         comm_name = kwargs.pop('comm_name', None)
         cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
 
+        a = time.time()
         instrument_status = {
             'status'            : device.get_instrument_status(),
             'connected'         : device.get_connected(),
@@ -1867,27 +1892,55 @@ class HPLCCommThread(utils.CommManager):
         pump_status = {
             'purging_pump1'     : device.get_purge_status(1),
             'flow1'             : device.get_hplc_flow_rate(1),
-            'target_flow1'      : device.get_hplc_target_flow_rate(1),
-            'flow_accel1'       : device.get_hplc_flow_accel_rate(1),
             'pressure1'         : device.get_hplc_pressure(1),
-            'power_status1'     : device.get_hplc_pump_power_status(1),
             'all_buffer_info1'  : device.get_all_buffer_info(1),
             }
 
         if isinstance(device, AgilentHPLC2Pumps):
-            pump_status['active_flow_path'] = device.get_active_flow_path(),
-            pump_status['purging_pump2']  = device.get_purge_status(2),
-            pump_status['flow2'] = device.get_hplc_flow_rate(2),
-            pump_status['target_flow2'] = device.get_hplc_target_flow_rate(2),
-            pump_status['flow_accel2'] = device.get_hplc_flow_accel_rate(2),
-            pump_status['pressure2'] = device.get_hplc_pressure(2),
-            pump_status['power_status2'] = device.get_hplc_pump_power_status(2),
-            pump_status['switching_flow_path'] = device.get_flow_path_switch_status(),
-            pump_status['all_buffer_info2'] = device.get_all_buffer_info(2),
+            pump_status['active_flow_path'] = device.get_active_flow_path()
+            pump_status['purging_pump2']  = device.get_purge_status(2)
+            pump_status['flow2'] = device.get_hplc_flow_rate(2)
+            pump_status['pressure2'] = device.get_hplc_pressure(2)
+            pump_status['switching_flow_path'] = device.get_flow_path_switch_status()
+            pump_status['all_buffer_info2'] = device.get_all_buffer_info(2)
 
         autosampler_status = {
             'submitting_sample'         : device.get_submitting_sample_status(),
-            'temperature'               : device.get_autosampler_temperature(),
+            'temperature'               : device.get_hplc_autosampler_temperature(),
+            }
+
+        val = {
+            'instrument_status' : instrument_status,
+            'pump_status'       : pump_status,
+            'autosampler_status': autosampler_status,
+        }
+
+        self._return_value((name, cmd, val), comm_name)
+
+        logger.debug("%s fast status: %s", name, val)
+
+    def _get_slow_hplc_status(self, name, **kwargs):
+        logger.debug("Getting %s slow status", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+
+        a = time.time()
+
+        pump_status = {
+            'target_flow1'      : device.get_hplc_target_flow_rate(1),
+            'flow_accel1'       : device.get_hplc_flow_accel(1, False),
+            'power_status1'     : device.get_hplc_pump_power_status(1),
+            }
+
+        if isinstance(device, AgilentHPLC2Pumps):
+            pump_status['target_flow2'] = device.get_hplc_target_flow_rate(2, False)
+            pump_status['flow_accel2'] = device.get_hplc_flow_accel(2, False)
+            pump_status['power_status2'] = device.get_hplc_pump_power_status(2)
+
+        autosampler_status = {
             'thermostat_power_status'   : device.get_autosampler_thermostat_power_status(),
             }
 
@@ -1895,13 +1948,34 @@ class HPLCCommThread(utils.CommManager):
             uv_status = {
                 'uv_lamp_status'    : device.get_uv_lamp_power_status(),
                 'vis_lamp_status'   : device.get_vis_lamp_power_status(),
-
                 }
 
         else:
             uv_status = {}
 
-        valve_status - {
+        logger.debug(time.time()-a)
+
+        val = {
+            'pump_status'       : pump_status,
+            'autosampler_status': autosampler_status,
+            'uv_status'         : uv_status,
+        }
+
+        self._return_value((name, cmd, val), comm_name)
+
+        logger.debug("%s slow status: %s", name, val)
+
+    def _get_valve_status(self, name, **kwargs):
+        logger.debug("Getting %s valve status", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+
+        a = time.time()
+
+        valve_status = {
             'buffer1'   : device.get_valve_position('buffer1'),
             }
 
@@ -1912,17 +1986,11 @@ class HPLCCommThread(utils.CommManager):
             valve_status['selector'] = device.get_valve_position('selector')
             valve_status['outlet'] = device.get_valve_position('outlet')
 
-        val = {
-            'instrument_status' : instrument_status,
-            'pump_status'       : pump_status,
-            'autosampler_status': autosampler_status,
-            'uv_status'         : uv_status,
-            'valve_status'      : valve_status,
-        }
+        logger.debug(time.time()-a)
 
-        self._return_value((name, cmd, val), comm_name)
+        self._return_value((name, cmd, valve_status), comm_name)
 
-        logger.debug("%s run %s status: %s", name, run_name, val)
+        logger.debug("%s valve status: %s", name, valve_status)
 
     def _set_valve_position(self, name, vid, val, **kwargs):
         logger.debug("Setting %s valve %s position", name, vid)
@@ -2279,20 +2347,36 @@ class HPLCPanel(utils.DevicePanel):
         :param int panel_id: wx ID for the panel.
 
         """
+        self._device_type = settings['device_data']['args'][0]
+
+        self._inst_connected = ''
+        self._inst_status = ''
+        self._inst_run_queue_status = ''
+        self._inst_err_status = ''
+        self._inst_errs = ''
+
+        self._flow_path = ''
+        self._flow_path_status = ''
+        self._pump1_power = ''
+        self._pump1_flow = ''
+        self._pump1_flow_accel = ''
+        self._pump1_pressure = ''
+        self._pump1_purge = ''
+        self._pump1_flow_target = ''
 
         super(HPLCPanel, self).__init__(parent, panel_id, settings,
             *args, **kwargs)
-
-        self._connected = False
 
 
     def _create_layout(self):
         """Creates the layout for the panel."""
 
         inst_sizer = self._create_inst_ctrls()
+        flow_sizer = self._create_flow_ctrls()
 
         top_sizer = wx.BoxSizer(wx.VERTICAL)
-        top_sizer.Add(inst_ctrls, flag=wx.EXPAND, proportion=1)
+        top_sizer.Add(inst_sizer, flag=wx.EXPAND, proportion=1)
+        top_sizer.Add(flow_sizer, flag=wx.EXPAND)
 
         self.Refresh()
 
@@ -2301,25 +2385,25 @@ class HPLCPanel(utils.DevicePanel):
     def _create_inst_ctrls(self):
         inst_box = wx.StaticBox(self, label='Instrument')
 
-        self._inst_connected = wx.StaticText(inst_box, size=self._FromDIP((40,-1)),
-            style=wx.ST_NO_AUTORESIZE)
-        self._inst_status = wx.StaticText(inst_box, size=self._FromDIP((60,-1)),
-            style=wx.ST_NO_AUTORESIZE)
-        self._inst_run_queue_status = wx.StaticText(inst_box, size=self._FromDIP((60,-1)),
-            style=wx.ST_NO_AUTORESIZE)
-        self._inst_err_status = wx.StaticText(inst_box, size=self._FromDIP((60,-1)),
-            style=wx.ST_NO_AUTORESIZE)
+        self._inst_connected_ctrl = wx.StaticText(inst_box,
+            size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
+        self._inst_status_ctrl = wx.StaticText(inst_box,
+            size=self._FromDIP((60,-1)), style=wx.ST_NO_AUTORESIZE)
+        self._inst_run_queue_status_ctrl = wx.StaticText(inst_box,
+            size=self._FromDIP((60,-1)), style=wx.ST_NO_AUTORESIZE)
+        self._inst_err_status_ctrl = wx.StaticText(inst_box,
+            size=self._FromDIP((60,-1)), style=wx.ST_NO_AUTORESIZE)
 
         err_pane = wx.CollapsiblePane(inst_box, label="Errors",
             style=wx.CP_NO_TLW_RESIZE)
         err_pane.Bind(wx.EVT_COLLAPSIBLEPANE_CHANGED, self._on_error_collapse)
         err_win = err_pane.GetPane()
 
-        self._inst_errs = wx.TextCtrl(err_win, size=self._FromDIP((60, 60))
+        self._inst_errs_ctrl = wx.TextCtrl(err_win, size=self._FromDIP((60, 60)),
             style=wx.TE_MULTILINE|wx.TE_READONLY|wx.TE_BESTWRAP)
 
         err_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        err_sizer.Add(self._inst_errs, flag=wx.EXPAND, proportion=1)
+        err_sizer.Add(self._inst_errs_ctrl, flag=wx.EXPAND, proportion=1)
 
         err_win.SetSizer(err_sizer)
 
@@ -2327,23 +2411,161 @@ class HPLCPanel(utils.DevicePanel):
         inst_sizer = wx.GridBagSizer(vgap=self._FromDIP(5), hgap=self._FromDIP(5))
         inst_sizer.Add(wx.StaticText(inst_box, label='Connected:'),
             (0,0), flag=wx.ALIGN_CENTER_VERTICAL)
-        inst_sizer.Add(self._inst_connected, (0,1), flag=wx.ALIGN_CENTER_VERTICAL)
+        inst_sizer.Add(self._inst_connected_ctrl, (0,1), flag=wx.ALIGN_CENTER_VERTICAL)
         inst_sizer.Add(wx.StaticText(inst_box, label='Status:'),
             (1,0), flag=wx.ALIGN_CENTER_VERTICAL)
-        inst_sizer.Add(self._inst_status, (1,1), flag=wx.ALIGN_CENTER_VERTICAL)
+        inst_sizer.Add(self._inst_status_ctrl, (1,1), flag=wx.ALIGN_CENTER_VERTICAL)
         inst_sizer.Add(wx.StaticText(inst_box, label='Run queue status:'),
-            (2,0), flag=wx.ALIGN_CENTER_VERTICAL)
-        inst_sizer.Add(self._inst_run_queue_status, (2,1),
-            flag=wx.ALIGN_CENTER_VERTICAL)
+            (2,0), flag=wx.ALIGN_TOP)
+        inst_sizer.Add(self._inst_run_queue_status_ctrl, (2,1),
+            flag=wx.ALIGN_TOP)
         inst_sizer.Add(wx.StaticText(inst_box, label='Error:'),
             (0,2), flag=wx.ALIGN_CENTER_VERTICAL)
-        inst_sizer.Add(self._inst_err_status, (0,3), flag=wx.ALIGN_CENTER_VERTICAL)
-        inst_sizer.Add(err_pane, (1,2), flag=wx.ALIGN_CENTER_VERTICAL,
-            span=(2,2))
+        inst_sizer.Add(self._inst_err_status_ctrl, (0,3), flag=wx.ALIGN_CENTER_VERTICAL)
+        inst_sizer.Add(err_pane, (1,2), flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND,
+            span=(2,3))
+        inst_sizer.AddGrowableCol(4)
+        inst_sizer.AddGrowableRow(2)
 
 
         top_sizer = wx.StaticBoxSizer(inst_box, wx.VERTICAL)
-        top_sizer.Add(inst_sizer, flag=wx.EXPAND, proportion=1)
+        top_sizer.Add(inst_sizer, flag=wx.EXPAND|wx.ALL, proportion=1,
+            border=self._FromDIP(5))
+
+        return top_sizer
+
+    def _create_flow_ctrls(self):
+        flow_box = wx.StaticBox(self, label='Flow')
+
+        pump1_box = wx.StaticBox(flow_box, label='Pump 1')
+        self._pump1_power_ctrl = wx.StaticText(pump1_box,
+            size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
+        self._pump1_flow_ctrl = wx.StaticText(pump1_box,
+            size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
+        self._pump1_flow_accel_ctrl = wx.StaticText(pump1_box,
+            size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
+        self._pump1_pressure_ctrl = wx.StaticText(pump1_box,
+            size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
+        self._pump1_purge_ctrl = wx.StaticText(pump1_box,
+            size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
+        self._pump1_flow_target_ctrl = wx.StaticText(pump1_box,
+            size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
+
+        pump1_status_sizer = wx.GridBagSizer(vgap=self._FromDIP(5),
+                hgap=self._FromDIP(5))
+        pump1_status_sizer.Add(wx.StaticText(pump1_box, label='Power:'),
+            (0,0), flag=wx.ALIGN_CENTER_VERTICAL)
+        pump1_status_sizer.Add(self._pump1_power_ctrl, (0,1),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        pump1_status_sizer.Add(wx.StaticText(pump1_box, label='Purging:'),
+            (0,2), flag=wx.ALIGN_CENTER_VERTICAL)
+        pump1_status_sizer.Add(self._pump1_purge_ctrl, (0,3),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        pump1_status_sizer.Add(wx.StaticText(pump1_box, label='Flow (ml/min):'),
+            (1,0), flag=wx.ALIGN_CENTER_VERTICAL)
+        pump1_status_sizer.Add(self._pump1_flow_ctrl, (1,1),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        pump1_status_sizer.Add(wx.StaticText(pump1_box, label='Flow setpoint:'),
+            (1,2), flag=wx.ALIGN_CENTER_VERTICAL)
+        pump1_status_sizer.Add(self._pump1_flow_target_ctrl, (1,3),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        pump1_status_sizer.Add(wx.StaticText(pump1_box, label='Flow accel.:'),
+            (2,0), flag=wx.ALIGN_CENTER_VERTICAL)
+        pump1_status_sizer.Add(self._pump1_flow_accel_ctrl, (2,1),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        pump1_status_sizer.Add(wx.StaticText(pump1_box, label='Pressure (bar):'),
+            (2,2), flag=wx.ALIGN_CENTER_VERTICAL)
+        pump1_status_sizer.Add(self._pump1_pressure_ctrl, (2,3),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+
+        self._set_pump1_flow_rate_ctrl = wx.TextCtrl(pump1_box,
+            size=self._FromDIP((40,-1)), validator=utils.CharValidator('float'))
+        self._set_pump1_flow_accel_ctrl = wx.TextCtrl(pump1_box,
+            size=self._FromDIP((40,-1)), validator=utils.CharValidator('float'))
+
+        self._set_pump1_flow_rate_btn = wx.Button(pump1_box, label='Set')
+        self._set_pump1_flow_accel_btn = wx.Button(pump1_box, label='Set')
+        self._pump1_stop_btn = wx.Button(pump1_box, label='Stop Flow')
+        self._pump1_stop_now_btn = wx.Button(pump1_box, label='Stop Flow NOW')
+        self._pump1_purge_btn = wx.Button(pump1_box, label='Purge')
+        self._pump1_stop_purge_btn = wx.Button(pump1_box, label='Stop Purge')
+
+        pump1_ctrl_sizer1 = wx.FlexGridSizer(vgap=self._FromDIP(5),
+            hgap=self._FromDIP(5), cols=3)
+        pump1_ctrl_sizer1.Add(wx.StaticText(pump1_box, label='Set flow rate:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        pump1_ctrl_sizer1.Add(self._set_pump1_flow_rate_ctrl,
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        pump1_ctrl_sizer1.Add(self._set_pump1_flow_rate_btn,
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        pump1_ctrl_sizer1.Add(wx.StaticText(pump1_box, label='Set flow accel.:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        pump1_ctrl_sizer1.Add(self._set_pump1_flow_accel_ctrl,
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        pump1_ctrl_sizer1.Add(self._set_pump1_flow_accel_btn,
+            flag=wx.ALIGN_CENTER_VERTICAL)
+
+        pump1_ctrl_sizer2 = wx.FlexGridSizer(vgap=self._FromDIP(5),
+            hgap=self._FromDIP(5), cols=2)
+        pump1_ctrl_sizer2.Add(self._pump1_purge_btn,
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        pump1_ctrl_sizer2.Add(self._pump1_stop_purge_btn,
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        pump1_ctrl_sizer2.Add(self._pump1_stop_btn,
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        pump1_ctrl_sizer2.Add(self._pump1_stop_now_btn,
+            flag=wx.ALIGN_CENTER_VERTICAL)
+
+        pump1_sizer = wx.StaticBoxSizer(pump1_box, wx.VERTICAL)
+        pump1_sizer.Add(pump1_status_sizer, flag=wx.ALL, border=self._FromDIP(5))
+        pump1_sizer.Add(pump1_ctrl_sizer1, flag=wx.LEFT|wx.RIGHT|wx.BOTTOM,
+            border=self._FromDIP(5))
+        pump1_sizer.Add(pump1_ctrl_sizer2, flag=wx.LEFT|wx.RIGHT|wx.BOTTOM,
+            border=self._FromDIP(5))
+
+        # Need to connect up buttons. Should I show remaining purge volume somwhere?
+
+
+        if self._device_type == 'AgilentHPLC2Pumps':
+            flow_path_box = wx.StaticBox(flow_box, label='Flow Path')
+            self._flow_path_ctrl = wx.StaticText(flow_path_box,
+                size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
+            self._flow_path_status_ctrl = wx.StaticText(flow_path_box,
+                size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
+
+            self._set_path1_btn = wx.Button(flow_path_box, label='Set Path 1')
+            self._set_path2_btn = wx.Button(flow_path_box, label='Set Path 2')
+            self._set_path1_btn.Bind(wx.EVT_BUTTON, self._on_set_flow_path)
+            self._set_path2_btn.Bind(wx.EVT_BUTTON, self._on_set_flow_path)
+
+            fp_status_sizer = wx.FlexGridSizer(vgap=self._FromDIP(5),
+                hgap=self._FromDIP(5), cols=2)
+            fp_status_sizer.Add(wx.StaticText(flow_path_box,
+                label='Active flow path:'), flag=wx.ALIGN_CENTER_VERTICAL)
+            fp_status_sizer.Add(self._flow_path_ctrl, flag=wx.ALIGN_CENTER_VERTICAL)
+            fp_status_sizer.Add(wx.StaticText(flow_path_box,
+                label='Changing flow path:'), flag=wx.ALIGN_CENTER_VERTICAL)
+            fp_status_sizer.Add(self._flow_path_status_ctrl,
+                flag=wx.ALIGN_CENTER_VERTICAL)
+
+            fp_button_sizer = wx.BoxSizer(wx.HORIZONTAL)
+            fp_button_sizer.Add(self._set_path1_btn, border=self._FromDIP(5),
+                flag=wx.RIGHT|wx.ALIGN_CENTER_VERTICAL)
+            fp_button_sizer.Add(self._set_path2_btn, border=self._FromDIP(5),
+                flag=wx.RIGHT|wx.ALIGN_CENTER_VERTICAL)
+
+            fp_sizer = wx.StaticBoxSizer(flow_path_box, wx.VERTICAL)
+            fp_sizer.Add(fp_status_sizer, flag=wx.ALL, border=self._FromDIP(5))
+            fp_sizer.Add(fp_button_sizer, flag=wx.LEFT|wx.RIGHT|wx.BOTTOM,
+                border=self._FromDIP(5))
+
+        flow_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        if self._device_type == 'AgilentHPLC2Pumps':
+            flow_sizer.Add(fp_sizer)
+        flow_sizer.Add(pump1_sizer)
+
+        top_sizer = wx.StaticBoxSizer(flow_box, wx.VERTICAL)
+        top_sizer.Add(flow_sizer, flag=wx.EXPAND, proportion=1)
 
         return top_sizer
 
@@ -2359,28 +2581,49 @@ class HPLCPanel(utils.DevicePanel):
 
         connect_cmd = ['connect', args, kwargs]
 
-        self._connected = self._send_cmd(connect_cmd, True)
+        connected = self._send_cmd(connect_cmd, True)
 
-        if self._connected:
-            get_all_status_cmd = ['get_all_status', [self.name,], {}]
-            self._update_status_cmd(get_all_status_cmd, 1)
+        if connected:
+            get_fast_hplc_status_cmd = ['get_fast_hplc_status', [self.name,], {}]
+            self._update_status_cmd(get_fast_hplc_status_cmd, 1)
+
+            get_slow_hplc_status_cmd = ['get_slow_hplc_status', [self.name,], {}]
+            self._update_status_cmd(get_slow_hplc_status_cmd, 30)
+
+            get_valve_status_cmd = ['get_valve_status', [self.name,], {}]
+            self._update_status_cmd(get_valve_status_cmd, 15)
 
         logger.info('Initialized HPLC %s on startup', self.name)
 
-    def _on_error_collapse(self):
+    def _on_error_collapse(self, evt):
         self.Layout()
         self.Refresh()
         self.SendSizeEvent()
 
+    def _on_set_flow_path(self, evt):
+        pass
+
     def _set_status(self, cmd, val):
-        if cmd == 'get_all_status':
+        if cmd == 'get_fast_hplc_status':
             inst_status = val['instrument_status']
-            if inst_status['connected'] != self._inst_connected.GetLabel():
-                wx.CallAfter(self._inst_connected.SetLabel, inst_status['connected'])
-            if inst_status['status'] != self._inst_status.GetLabel():
-                wx.CallAfter(self._inst_status.SetLabel, inst_status['status'])
-            if inst_status['run_queue_status'] != self._inst_run_queue_status.GetLabel():
-                wx.CallAfter(self._inst_run_queue_status.SetLabel, inst_status['run_queue_status'])
+            connected = str(inst_status['connected'])
+            status = str(inst_status['status'])
+            run_queue_status = str(inst_status['run_queue_status'])
+
+            if connected != self._inst_connected:
+                wx.CallAfter(self._inst_connected_ctrl.SetLabel,
+                    connected)
+                self._inst_connected = connected
+
+            if status != self._inst_status:
+                wx.CallAfter(self._inst_status_ctrl.SetLabel,
+                    status)
+                self._inst_status =  status
+
+            if (run_queue_status != self._inst_run_queue_status):
+                wx.CallAfter(self._inst_run_queue_status_ctrl.SetLabel,
+                    run_queue_status)
+                self._inst_run_queue_status = run_queue_status
 
             errors = inst_status['errors']
             if len(errors) == 0:
@@ -2388,15 +2631,70 @@ class HPLCPanel(utils.DevicePanel):
             else:
                 error_status = 'Error'
 
-            if error_status != self._inst_err_status.GetLabel():
-                wx.CallAfter(self._inst_err_status.SetLabel, error_status)
+            if error_status != self._inst_err_status:
+                wx.CallAfter(self._inst_err_status_ctrl.SetLabel, error_status)
+                self._inst_err_status = error_status
 
             err_string = ''
             for key, value in errors.items():
                 err_string += '{}\n{}\n\n'.format(key, value)
 
-            if err_string != self._inst_errs.GetValue():
-                wx.CallAfter(self._inst_errs.SetValue, err_string)
+            if err_string != self._inst_errs:
+                wx.CallAfter(self._inst_errs_ctrl.SetValue, err_string)
+                self._inst_errs = err_string
+
+
+            pump_status = val['pump_status']
+            pump1_purge = str(pump_status['purging_pump1'][0])
+            pump1_flow = str(round(float(pump_status['flow1']),3))
+            pump1_pressure = str(round(float(pump_status['pressure1']),3))
+
+            if pump1_purge != self._pump1_purge:
+                wx.CallAfter(self._pump1_purge_ctrl.SetLabel, pump1_purge)
+                self._pump1_purge = pump1_purge
+
+            if pump1_flow != self._pump1_flow:
+                wx.CallAfter(self._pump1_flow_ctrl.SetLabel, pump1_flow)
+                self._pump1_flow = pump1_flow
+
+            if pump1_pressure != self._pump1_pressure:
+                wx.CallAfter(self._pump1_pressure_ctrl.SetLabel, pump1_pressure)
+                self._pump1_pressure = pump1_pressure
+
+            if self._device_type == 'AgilentHPLC2Pumps':
+                flow_path = str(pump_status['active_flow_path'])
+                flow_path_status = str(pump_status['switching_flow_path'])
+
+                if flow_path != self._flow_path:
+                    wx.CallAfter(self._flow_path_ctrl.SetLabel, flow_path)
+                    self._flow_path = flow_path
+
+                if flow_path_status != self._flow_path_status:
+                    wx.CallAfter(self._flow_path_status_ctrl.SetLabel,
+                        flow_path_status)
+                    self._flow_path_status = flow_path_status
+
+        elif cmd == 'get_slow_hplc_status':
+            pump_status = val['pump_status']
+            pump1_flow_target = str(round(float(pump_status['target_flow1']),3))
+            pump1_flow_accel = str(round(float(pump_status['flow_accel1']),3))
+            pump1_power = str(pump_status['power_status1'])
+
+            if pump1_flow_target != self._pump1_flow_target:
+                wx.CallAfter(self._pump1_flow_target_ctrl.SetLabel,
+                    pump1_flow_target)
+                self._pump1_flow_target = pump1_flow_target
+
+            if pump1_flow_accel != self._pump1_flow_accel:
+                wx.CallAfter(self._pump1_flow_accel_ctrl.SetLabel,
+                    pump1_flow_accel)
+                self._pump1_flow_accel = pump1_flow_accel
+
+            if pump1_power != self._pump1_power:
+                wx.CallAfter(self._pump1_power_ctrl.SetLabel, pump1_power)
+                self._pump1_power = pump1_power
+
+
 
 class HPLCFrame(utils.DeviceFrame):
     """
@@ -2508,7 +2806,7 @@ if __name__ == '__main__':
 
 
     setup_devices = [
-        {'name': 'Selector', 'args': ['AgilentHPLC2Pumps'],
+        {'name': 'SEC-SAXS', 'args': ['AgilentHPLC2Pumps', None],
             'kwargs': {'hplc_args' : hplc_args,
             'selector_valve_args' : selector_valve_args,
             'outlet_valve_args' : outlet_valve_args,
@@ -2522,7 +2820,7 @@ if __name__ == '__main__':
         ]
 
     # Local
-    com_thread = HPLCCommThread('ValveComm')
+    com_thread = HPLCCommThread('HPLCComm')
     com_thread.start()
 
     # # Remote

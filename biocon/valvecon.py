@@ -136,6 +136,7 @@ class SerialComm(object):
             data = data.encode()
 
         out = ''
+
         try:
             with self.ser as s:
                 s.write(data)
@@ -150,8 +151,8 @@ class SerialComm(object):
         except ValueError:
             logger.exception("Failed to write '%s' to serial device on port %s", data, self.ser.port)
 
-        logger.debug("Recived '%s' after writing to serial device on port %s", out, self.ser.port)
-
+        # logger.debug("Recived '%s' after writing to serial device on port %s", out, self.ser.port)
+        logger.debug('Received response from serial device on port %s', self.ser.port)
         return out
 
 
@@ -343,9 +344,11 @@ class CheminertValve(Valve):
     A VICI cheminert valve with universal actuator and serial control.
     """
 
-    def __init__(self, name, device, positions, comm_lock=None):
+    def __init__(self, name, device, positions, comm_lock=None, baud=9600):
         """
         """
+        self._baud = baud
+
         Valve.__init__(self, name, device, comm_lock=comm_lock)
 
         logstr = ("Initializing valve {} on port {}".format(self.name,
@@ -362,7 +365,7 @@ class CheminertValve(Valve):
     def connect(self):
         if not self.connected:
             with self.comm_lock:
-                self.valve_comm = SerialComm(self.device, 9600)
+                self.valve_comm = SerialComm(self.device, self._baud)
 
             self.connected = True
 
@@ -757,6 +760,12 @@ if __name__ == '__main__':
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
     h1.setFormatter(formatter)
     logger.addHandler(h1)
+
+    # valve_args = {'name': 'Buffer 1', 'args': ['Cheminert', 'COM3'],
+    #         'kwargs': {'positions' : 10}}
+
+    # my_valve = CheminertValve(valve_args['name'], valve_args['args'][1],
+    #     valve_args['kwargs']['positions'], baud=9600)
 
     # my_rv67 = RheodyneValve('/dev/cu.usbserial-AC01UZ8O', '6p7_1', 6)
     # my_rv67.get_position()
