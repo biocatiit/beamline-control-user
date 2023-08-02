@@ -815,7 +815,7 @@ class DevicePanel(wx.Panel):
 
         wx.Panel.__init__(self, parent, panel_id, *args, **kwargs)
 
-        logger.debug('Initializing UVPanel for device %s', self.name)
+        logger.debug('Initializing DevicePanel for device %s', self.name)
 
         self.connected = False
 

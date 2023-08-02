@@ -290,6 +290,12 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
         self.set_active_buffer_position(self.get_valve_position('buffer1'), 1)
         self.set_active_buffer_position(self.get_valve_position('buffer2'), 2)
 
+    def  connect(self):
+        """
+        Expected by the thread, but connection is don on init, so this does nothing
+        """
+        pass
+
     def _connect_valves(self, sv_args, ov_args, p1_args, p2_args, b1_args,
         b2_args):
         sv_name = sv_args['name']
@@ -398,7 +404,7 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
         Parameters
         ----------
         valve_id: str
-            Valve name. Can be selector, outlet, purge1, purge2
+            Valve name. Can be selector, outlet, purge1, purge2, buffer1, buffer2
 
         Returns
         -------
@@ -588,6 +594,17 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
             True if switching, otherwise False.
         """
         return copy.copy(self._switching_flow_path)
+
+    def get_submitting_sample_status(self):
+        """
+        Gets whether or not the HPLC is submitting a sample.
+
+        Returns
+        -------
+        is_submitting: bool
+            True if submitting, otherwise False
+        """
+        return copy.copy(self._submitting_sample)
 
     def get_buffer_info(self, position, flow_path):
         """
@@ -1720,7 +1737,7 @@ class AgilentHPLC2Pumps(hplccon.AgilentHPLC):
         self.disconnect()
 
 known_hplcs = {
-    'Agilent2Pump'  : AgilentHPLC2Pumps,
+    'AgilentHPLC2Pumps'  : AgilentHPLC2Pumps,
     }
 
 class HPLCCommThread(utils.CommManager):
@@ -1744,6 +1761,7 @@ class HPLCCommThread(utils.CommManager):
             'get_methods'               : self._get_methods,
             'get_sample_prep_methods'   : self._get_sample_prep_methods,
             'get_run_status'            : self._get_run_status,
+            'get_full_status'           : self._get_full_status,
             'set_valve_position'        : self._set_valve_position,
             'purge_flow_path'           : self._purge_flow_path,
             'set_active_flow_path'      : self._set_active_flow_path,
@@ -1762,6 +1780,9 @@ class HPLCCommThread(utils.CommManager):
             'stop_pump1_immediately'    : self._stop_pump1_immediately,
             'stop_pump2'                : self._stop_pump2,
             'stop_pump2_immediately'    : self._stop_pump2_immediately,
+            'abort_current_run'         : self._abort_current_run,
+            'pause_run_queue'           : self._pause_run_queue,
+            'resume_run_queue'          : self._resume_run_queue,
             }
 
         self._connected_devices = OrderedDict()
@@ -1822,6 +1843,82 @@ class HPLCCommThread(utils.CommManager):
 
         device = self._connected_devices[name]
         val = device.get_run_status(run_name, **kwargs)
+
+        self._return_value((name, cmd, val), comm_name)
+
+        logger.debug("%s run %s status: %s", name, run_name, val)
+
+    def _get_full_status(self, name, run_name, **kwargs):
+        logger.debug("Getting %s run %s status", name, run_name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+
+        instrument_status = {
+            'status'            : device.get_instrument_status(),
+            'connected'         : device.get_connected(),
+            'errors'            : device.get_instrument_errors(),
+            'run_queue_status'  : device.get_run_queue_status(),
+            'run_queue'         : device.get_run_queue(),
+            }
+
+        pump_status = {
+            'purging_pump1'     : device.get_purge_status(1),
+            'flow1'             : device.get_hplc_flow_rate(1),
+            'target_flow1'      : device.get_hplc_target_flow_rate(1),
+            'flow_accel1'       : device.get_hplc_flow_accel_rate(1),
+            'pressure1'         : device.get_hplc_pressure(1),
+            'power_status1'     : device.get_hplc_pump_power_status(1),
+            'all_buffer_info1'  : device.get_all_buffer_info(1),
+            }
+
+        if isinstance(device, AgilentHPLC2Pumps):
+            pump_status['active_flow_path'] = device.get_active_flow_path(),
+            pump_status['purging_pump2']  = device.get_purge_status(2),
+            pump_status['flow2'] = device.get_hplc_flow_rate(2),
+            pump_status['target_flow2'] = device.get_hplc_target_flow_rate(2),
+            pump_status['flow_accel2'] = device.get_hplc_flow_accel_rate(2),
+            pump_status['pressure2'] = device.get_hplc_pressure(2),
+            pump_status['power_status2'] = device.get_hplc_pump_power_status(2),
+            pump_status['switching_flow_path'] = device.get_flow_path_switch_status(),
+            pump_status['all_buffer_info2'] = device.get_all_buffer_info(2),
+
+        autosampler_status = {
+            'submitting_sample'         : device.get_submitting_sample_status(),
+            'temperature'               : device.get_autosampler_temperature(),
+            'thermostat_power_status'   : device.get_autosampler_thermostat_power_status(),
+            }
+
+        if len(device.get_uv_ids()) > 0:
+            uv_status = {
+                'uv_lamp_status'    : device.get_uv_lamp_power_status(),
+                'vis_lamp_status'   : device.get_vis_lamp_power_status(),
+
+                }
+
+        else:
+            uv_status = {}
+
+        valve_status - {
+            'buffer1'   : device.get_valve_position('buffer1'),
+            }
+
+        if isinstance(device, AgilentHPLC2Pumps):
+            valve_status['buffer2'] = device.get_valve_position('buffer2')
+            valve_status['purge1'] = device.get_valve_position('purge1')
+            valve_status['purge2'] = device.get_valve_position('purge2')
+            valve_status['selector'] = device.get_valve_position('selector')
+            valve_status['outlet'] = device.get_valve_position('outlet')
+
+        val = {
+            'instrument_status' : instrument_status,
+            'pump_status'       : pump_status,
+            'autosampler_status': autosampler_status,
+            'uv_status'         : uv_status,
+            'valve_status'      : valve_status,
+        }
 
         self._return_value((name, cmd, val), comm_name)
 
@@ -2035,7 +2132,7 @@ class HPLCCommThread(utils.CommManager):
 
         self._return_value((name, cmd, True), comm_name)
 
-        logger.debug("Stopped %s all actions", name)
+        logger.info("Stopped %s all actions", name)
 
     def _stop_all_immediately(self, name, **kwargs):
         logger.debug("Stopping %s all actions immediately", name)
@@ -2048,7 +2145,7 @@ class HPLCCommThread(utils.CommManager):
 
         self._return_value((name, cmd, True), comm_name)
 
-        logger.debug("Stopped %s all actions immeidately", name)
+        logger.info("Stopped %s all actions immeidately", name)
 
     def _stop_pump1(self, name, **kwargs):
         logger.debug("Stopping %s pump1 actions", name)
@@ -2061,7 +2158,7 @@ class HPLCCommThread(utils.CommManager):
 
         self._return_value((name, cmd, True), comm_name)
 
-        logger.debug("Stopped %s pump1 actions", name)
+        logger.info("Stopped %s pump1 actions", name)
 
     def _stop_pump1_immediately(self, name, **kwargs):
         logger.debug("Stopping %s pump1 actions immediately", name)
@@ -2074,7 +2171,7 @@ class HPLCCommThread(utils.CommManager):
 
         self._return_value((name, cmd, True), comm_name)
 
-        logger.debug("Stopped %s pump1 actions immeidately", name)
+        logger.info("Stopped %s pump1 actions immeidately", name)
 
     def _stop_pump2(self, name, **kwargs):
         logger.debug("Stopping %s pump2 actions", name)
@@ -2087,7 +2184,7 @@ class HPLCCommThread(utils.CommManager):
 
         self._return_value((name, cmd, True), comm_name)
 
-        logger.debug("Stopped %s pump2 actions", name)
+        logger.info("Stopped %s pump2 actions", name)
 
     def _stop_pump2_immediately(self, name, **kwargs):
         logger.debug("Stopping %s pump2 actions immediately", name)
@@ -2100,7 +2197,225 @@ class HPLCCommThread(utils.CommManager):
 
         self._return_value((name, cmd, True), comm_name)
 
-        logger.debug("Stopped %s pump2 actions immeidately", name)
+        logger.info("Stopped %s pump2 actions immeidately", name)
+
+    def _abort_current_run(self, name, **kwargs):
+        logger.debug("Aborting %s current run", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        device.abort_current_run(**kwargs)
+
+        self._return_value((name, cmd, True), comm_name)
+
+        logger.info("Aborted %s current run", name)
+
+    def _pause_run_queue(self, name, **kwargs):
+        logger.debug("Pausing %s run queue", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        device.pause_run_queue(**kwargs)
+
+        self._return_value((name, cmd, True), comm_name)
+
+        logger.info("Paused %s run queue", name)
+
+    def _resume_run_queue(self, name, **kwargs):
+        logger.debug("Resuming %s run queue", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        device.resume_run_queue(**kwargs)
+
+        self._return_value((name, cmd, True), comm_name)
+
+        logger.info("Resumed %s run queue", name)
+
+    def _reconnect(self, name, **kwargs):
+        logger.debug("Reconnecting to %s", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        device.reconnect(**kwargs)
+
+        self._return_value((name, cmd, True), comm_name)
+
+        logger.info("Reconnected to %s", name)
+
+    def _disconnect_device(self, name, **kwargs):
+        # Override default because have to use disconnect_all
+        logger.info("Disconnecting device %s", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices.pop(name, None)
+        if device is not None:
+            device.disconnect_all()
+
+        self._return_value((name, cmd, True), comm_name)
+
+        logger.debug("Device %s disconnected", name)
+
+
+class HPLCPanel(utils.DevicePanel):
+    """
+    """
+    def __init__(self, parent, panel_id, settings, *args, **kwargs):
+        """
+        HPLC control GUI panel, can be instance multiple times for multiple valves
+
+        :param wx.Window parent: Parent class for the panel.
+
+        :param int panel_id: wx ID for the panel.
+
+        """
+
+        super(HPLCPanel, self).__init__(parent, panel_id, settings,
+            *args, **kwargs)
+
+        self._connected = False
+
+
+    def _create_layout(self):
+        """Creates the layout for the panel."""
+
+        inst_sizer = self._create_inst_ctrls()
+
+        top_sizer = wx.BoxSizer(wx.VERTICAL)
+        top_sizer.Add(inst_ctrls, flag=wx.EXPAND, proportion=1)
+
+        self.Refresh()
+
+        self.SetSizer(top_sizer)
+
+    def _create_inst_ctrls(self):
+        inst_box = wx.StaticBox(self, label='Instrument')
+
+        self._inst_connected = wx.StaticText(inst_box, size=self._FromDIP((40,-1)),
+            style=wx.ST_NO_AUTORESIZE)
+        self._inst_status = wx.StaticText(inst_box, size=self._FromDIP((60,-1)),
+            style=wx.ST_NO_AUTORESIZE)
+        self._inst_run_queue_status = wx.StaticText(inst_box, size=self._FromDIP((60,-1)),
+            style=wx.ST_NO_AUTORESIZE)
+        self._inst_err_status = wx.StaticText(inst_box, size=self._FromDIP((60,-1)),
+            style=wx.ST_NO_AUTORESIZE)
+
+        err_pane = wx.CollapsiblePane(inst_box, label="Errors",
+            style=wx.CP_NO_TLW_RESIZE)
+        err_pane.Bind(wx.EVT_COLLAPSIBLEPANE_CHANGED, self._on_error_collapse)
+        err_win = err_pane.GetPane()
+
+        self._inst_errs = wx.TextCtrl(err_win, size=self._FromDIP((60, 60))
+            style=wx.TE_MULTILINE|wx.TE_READONLY|wx.TE_BESTWRAP)
+
+        err_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        err_sizer.Add(self._inst_errs, flag=wx.EXPAND, proportion=1)
+
+        err_win.SetSizer(err_sizer)
+
+
+        inst_sizer = wx.GridBagSizer(vgap=self._FromDIP(5), hgap=self._FromDIP(5))
+        inst_sizer.Add(wx.StaticText(inst_box, label='Connected:'),
+            (0,0), flag=wx.ALIGN_CENTER_VERTICAL)
+        inst_sizer.Add(self._inst_connected, (0,1), flag=wx.ALIGN_CENTER_VERTICAL)
+        inst_sizer.Add(wx.StaticText(inst_box, label='Status:'),
+            (1,0), flag=wx.ALIGN_CENTER_VERTICAL)
+        inst_sizer.Add(self._inst_status, (1,1), flag=wx.ALIGN_CENTER_VERTICAL)
+        inst_sizer.Add(wx.StaticText(inst_box, label='Run queue status:'),
+            (2,0), flag=wx.ALIGN_CENTER_VERTICAL)
+        inst_sizer.Add(self._inst_run_queue_status, (2,1),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        inst_sizer.Add(wx.StaticText(inst_box, label='Error:'),
+            (0,2), flag=wx.ALIGN_CENTER_VERTICAL)
+        inst_sizer.Add(self._inst_err_status, (0,3), flag=wx.ALIGN_CENTER_VERTICAL)
+        inst_sizer.Add(err_pane, (1,2), flag=wx.ALIGN_CENTER_VERTICAL,
+            span=(2,2))
+
+
+        top_sizer = wx.StaticBoxSizer(inst_box, wx.VERTICAL)
+        top_sizer.Add(inst_sizer, flag=wx.EXPAND, proportion=1)
+
+        return top_sizer
+
+    def _init_device(self, settings):
+        """
+        Initializes the valve.
+        """
+        device_data = settings['device_data']
+        args = device_data['args']
+        kwargs = device_data['kwargs']
+
+        args.insert(0, self.name)
+
+        connect_cmd = ['connect', args, kwargs]
+
+        self._connected = self._send_cmd(connect_cmd, True)
+
+        if self._connected:
+            get_all_status_cmd = ['get_all_status', [self.name,], {}]
+            self._update_status_cmd(get_all_status_cmd, 1)
+
+        logger.info('Initialized HPLC %s on startup', self.name)
+
+    def _on_error_collapse(self):
+        self.Layout()
+        self.Refresh()
+        self.SendSizeEvent()
+
+    def _set_status(self, cmd, val):
+        if cmd == 'get_all_status':
+            inst_status = val['instrument_status']
+            if inst_status['connected'] != self._inst_connected.GetLabel():
+                wx.CallAfter(self._inst_connected.SetLabel, inst_status['connected'])
+            if inst_status['status'] != self._inst_status.GetLabel():
+                wx.CallAfter(self._inst_status.SetLabel, inst_status['status'])
+            if inst_status['run_queue_status'] != self._inst_run_queue_status.GetLabel():
+                wx.CallAfter(self._inst_run_queue_status.SetLabel, inst_status['run_queue_status'])
+
+            errors = inst_status['errors']
+            if len(errors) == 0:
+                error_status = 'None'
+            else:
+                error_status = 'Error'
+
+            if error_status != self._inst_err_status.GetLabel():
+                wx.CallAfter(self._inst_err_status.SetLabel, error_status)
+
+            err_string = ''
+            for key, value in errors.items():
+                err_string += '{}\n{}\n\n'.format(key, value)
+
+            if err_string != self._inst_errs.GetValue():
+                wx.CallAfter(self._inst_errs.SetValue, err_string)
+
+class HPLCFrame(utils.DeviceFrame):
+    """
+    A lightweight frame allowing one to work with arbitrary number of HPLCs.
+    Only meant to be used when the hplccon module is run directly,
+    rather than when it is imported into another program.
+    """
+    def __init__(self, name, settings, *args, **kwargs):
+        """
+        Initializes the HPLC frame. Takes args and kwargs for the wx.Frame class.
+        """
+        super(HPLCFrame, self).__init__(name, settings, HPLCPanel,
+            *args, **kwargs)
+
+        # Enable these to init devices on startup
+        self.setup_devices = self.settings.pop('device_init', None)
+
+        self._init_devices()
+
 
 if __name__ == '__main__':
     logger = logging.getLogger()
@@ -2155,21 +2470,21 @@ if __name__ == '__main__':
         'kwargs': {'positions' : 10}
         }
 
-    my_hplc = AgilentHPLC2Pumps(hplc_args['name'], None, hplc_args=hplc_args,
-        selector_valve_args=selector_valve_args,
-        outlet_valve_args=outlet_valve_args,
-        purge1_valve_args=purge1_valve_args,
-        purge2_valve_args=purge2_valve_args,
-        buffer1_valve_args=buffer1_valve_args,
-        buffer2_valve_args=buffer2_valve_args,
-        pump1_id='quat. pump 1#1c#1',
-        pump2_id='quat. pump 2#1c#2')
+    # my_hplc = AgilentHPLC2Pumps(hplc_args['name'], None, hplc_args=hplc_args,
+    #     selector_valve_args=selector_valve_args,
+    #     outlet_valve_args=outlet_valve_args,
+    #     purge1_valve_args=purge1_valve_args,
+    #     purge2_valve_args=purge2_valve_args,
+    #     buffer1_valve_args=buffer1_valve_args,
+    #     buffer2_valve_args=buffer2_valve_args,
+    #     pump1_id='quat. pump 1#1c#1',
+    #     pump2_id='quat. pump 2#1c#2')
 
-    print('waiting to connect')
-    while not my_hplc.get_connected():
-        time.sleep(0.1)
+    # print('waiting to connect')
+    # while not my_hplc.get_connected():
+    #     time.sleep(0.1)
 
-    time.sleep(1)
+    # time.sleep(1)
 
     #SEC-SAXS
     # seq_sample1 = {
@@ -2190,3 +2505,44 @@ if __name__ == '__main__':
 
     # my_hplc.submit_hplc_sample('test', 'SECSAXS_test', 'D2F-A1', 10.0,
     #     0.05, 0.1, 0.1, 60.0, result_path='api_test', )
+
+
+    setup_devices = [
+        {'name': 'Selector', 'args': ['AgilentHPLC2Pumps'],
+            'kwargs': {'hplc_args' : hplc_args,
+            'selector_valve_args' : selector_valve_args,
+            'outlet_valve_args' : outlet_valve_args,
+            'purge1_valve_args' : purge1_valve_args,
+            'purge2_valve_args' : purge2_valve_args,
+            'buffer1_valve_args' : buffer1_valve_args,
+            'buffer2_valve_args' : buffer2_valve_args,
+            'pump1_id' : 'quat. pump 1#1c#1',
+            'pump2_id' : 'quat. pump 2#1c#2'},
+        }
+        ]
+
+    # Local
+    com_thread = HPLCCommThread('ValveComm')
+    com_thread.start()
+
+    # # Remote
+    # com_thread = None
+
+    settings = {
+        'remote'        : False,
+        'remote_device' : 'hplc',
+        'device_init'   : setup_devices,
+        'remote_ip'     : '192.168.1.16',
+        'remote_port'   : '5558',
+        'com_thread'    : com_thread
+        }
+
+    app = wx.App()
+    logger.debug('Setting up wx app')
+    frame = HPLCFrame('HPLCFrame', settings, parent=None, title='HPLC Control')
+    frame.Show()
+    app.MainLoop()
+
+    if com_thread is not None:
+        com_thread.stop()
+        com_thread.join()
