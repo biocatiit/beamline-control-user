@@ -850,15 +850,16 @@ class AgilentHPLC2Pumps(AgilentHPLC):
     def _monitor_equil(self):
         start_purge1 = False
         start_purge2 = False
-        monitor_purge1 = True
-        monitor_purge2 = True
+        monitor_purge1 = False
+        monitor_purge2 = False
         run_flow1 = False
         run_flow2 = False
 
         while not self._terminate_monitor_equil.is_set():
             self._monitor_equil_evt.wait()
 
-            if (self._equil_flow1 and not start_purge1 and not run_flow1):
+            if (self._equil_flow1 and not start_purge1 and not monitor_purge1
+                and not  run_flow1):
                 start_purge1 = True
                 monitor_purge1 = False
                 run_flow1 = False
@@ -901,8 +902,8 @@ class AgilentHPLC2Pumps(AgilentHPLC):
 
                 self._remaining_equil1_vol -= delta_vol1
 
-                if flow_accel1 > 0:
-                    stop_vol1 = (current_flow1/flow_accel1)*(current_flow1/2.)
+                if equil_accel1 > 0 and stop_after_equil1:
+                    stop_vol1 = (current_flow1/equil_accel1)*(current_flow1/2.)
                 else:
                     stop_vol1 = 0
 
@@ -912,13 +913,14 @@ class AgilentHPLC2Pumps(AgilentHPLC):
                 if self._remaining_equil1_vol - stop_vol1 <= 0:
                     run_flow1 = False
 
-                    if self._pre_purge_flow1 is None:
-                        final_flow1 = 0
-                    else:
-                        final_flow1 = self._pre_purge_flow1
-
                     if stop_after_equil1:
                         self.set_hplc_flow_rate(0, 1)
+
+                    self._equil_flow1 = False
+                    run_flow1 = False
+
+                    logger.info(('HPLC %s finished equilibrating flow path 1'),
+                        self.name)
 
             if not self._equil_flow1 and not self._equil_flow2:
                 self._monitor_equil_evt.clear()
@@ -1094,6 +1096,7 @@ class AgilentHPLC2Pumps(AgilentHPLC):
                 if self._stop_before_purging2:
                     self.set_flow_rate(0, self._pump2_id)
 
+
             if stopping_initial_flow1:
                 if self._stop_before_purging1:
                     current_flow1 = self.get_hplc_flow_rate(1)
@@ -1124,6 +1127,11 @@ class AgilentHPLC2Pumps(AgilentHPLC):
 
                     stopping_initial_flow1 = False
                     monitoring_flow1 = True
+
+                    if self._pre_purge_flow1 is None:
+                        final_flow1 = 0
+                    else:
+                        final_flow1 = self._pre_purge_flow1
 
             if stopping_initial_flow2:
                 if self._stop_before_purging2:
@@ -1156,6 +1164,12 @@ class AgilentHPLC2Pumps(AgilentHPLC):
                     stopping_initial_flow2 = False
                     monitoring_flow2 = True
 
+                    if self._pre_purge_flow2 is None:
+                        final_flow2 = 0
+                    else:
+                        final_flow2 = self._pre_purge_flow2
+
+
             if monitoring_flow1:
                 current_flow1 = self.get_hplc_flow_rate(1)
                 current_time1 = time.time()
@@ -1165,7 +1179,10 @@ class AgilentHPLC2Pumps(AgilentHPLC):
                 self._remaining_purge1_vol -= delta_vol1
 
                 if flow_accel1 > 0:
-                    stop_vol1 = (current_flow1/flow_accel1)*(current_flow1/2.)
+                    if self._stop_after_purging1:
+                        stop_vol1 = ((current_flow1)/flow_accel1)*(current_flow1/2.)
+                    else:
+                        stop_vol1 = abs((current_flow1-final_flow1)/flow_accel1)*(current_flow1/2.)
                 else:
                     stop_vol1 = 0
 
@@ -1176,16 +1193,10 @@ class AgilentHPLC2Pumps(AgilentHPLC):
                     monitoring_flow1 = False
                     stopping_flow1 = True
 
-                    if self._pre_purge_flow1 is None:
-                        final_flow1 = 0
-                    else:
-                        final_flow1 = self._pre_purge_flow1
-
                     if self._stop_after_purging1:
                         self.set_flow_rate(0, self._pump1_id)
                     else:
                         self.set_flow_rate(final_flow1, self._pump1_id)
-
 
                 if current_time1 - update_time1 > 15:
                     update_time1 = current_time1
@@ -1199,7 +1210,10 @@ class AgilentHPLC2Pumps(AgilentHPLC):
                 self._remaining_purge2_vol -= delta_vol2
 
                 if flow_accel2 > 0:
-                    stop_vol2 = (current_flow2/flow_accel2)*(current_flow2/2.)
+                    if self._stop_after_purging2:
+                        stop_vol2 = ((current_flow2)/flow_accel2)*(current_flow2/2.)
+                    else:
+                        stop_vol2 = abs((current_flow2-final_flow2)/flow_accel2)*(current_flow2/2.)
                 else:
                     stop_vol2 = 0
 
@@ -1209,11 +1223,6 @@ class AgilentHPLC2Pumps(AgilentHPLC):
                 if self._remaining_purge2_vol - stop_vol2 <= 0:
                     monitoring_flow2 = False
                     stopping_flow2 = True
-
-                    if self._pre_purge_flow2 is None:
-                        final_flow2 = 0
-                    else:
-                        final_flow2 = self._pre_purge_flow2
 
                     if self._stop_after_purging2:
                         self.set_flow_rate(0, self._pump2_id)
@@ -1234,9 +1243,6 @@ class AgilentHPLC2Pumps(AgilentHPLC):
                     self.set_flow_accel(self._pre_purge_flow_accel1,
                         self._pump1_id)
 
-                    stopping_flow1 = False
-                    self._purging_flow1 = False
-
                     for name, pos in self._column_positions[1].items():
                         current_pos = int(self.get_valve_position(name))
 
@@ -1245,6 +1251,9 @@ class AgilentHPLC2Pumps(AgilentHPLC):
 
                     if self._stop_after_purging1:
                         self.set_flow_rate(final_flow1, self._pump1_id)
+
+                    stopping_flow1 = False
+                    self._purging_flow1 = False
 
                     logger.info(('HPLC %s finished purging flow path 1. '
                         'Flow rate set to %s'), self.name, final_flow1)
@@ -1262,9 +1271,6 @@ class AgilentHPLC2Pumps(AgilentHPLC):
                     self.set_flow_accel(self._pre_purge_flow_accel2,
                         self._pump2_id)
 
-                    stopping_flow2 = False
-                    self._purging_flow2 = False
-
                     for name, pos in self._column_positions[2].items():
                         current_pos = int(self.get_valve_position(name))
 
@@ -1273,6 +1279,9 @@ class AgilentHPLC2Pumps(AgilentHPLC):
 
                     if self._stop_after_purging2:
                         self.set_flow_rate(final_flow2, self._pump2_id)
+
+                    stopping_flow2 = False
+                    self._purging_flow2 = False
 
                     logger.info(('HPLC %s finished purging flow path 2. '
                         'Flow rate set to %s'), self.name, final_flow2)
@@ -1311,9 +1320,13 @@ class AgilentHPLC2Pumps(AgilentHPLC):
             self.set_active_buffer_position(position, 2)
         elif valve_id == 'purge1':
             if position == self._purge_positions[1]['purge1']:
+                self._purging_flow1 = True
+            else:
                 self._purging_flow1 = False
         elif valve_id == 'purge2':
             if position == self._purge_positions[2]['purge2']:
+                self._purging_flow2 = True
+            else:
                 self._purging_flow2 = False
 
         return success
@@ -3317,19 +3330,19 @@ if __name__ == '__main__':
         'kwargs': {'positions' : 10}
         }
 
-    # my_hplc = AgilentHPLC2Pumps(hplc_args['name'], None, hplc_args=hplc_args,
-    #     selector_valve_args=selector_valve_args,
-    #     outlet_valve_args=outlet_valve_args,
-    #     purge1_valve_args=purge1_valve_args,
-    #     purge2_valve_args=purge2_valve_args,
-    #     buffer1_valve_args=buffer1_valve_args,
-    #     buffer2_valve_args=buffer2_valve_args,
-    #     pump1_id='quat. pump 1#1c#1',
-    #     pump2_id='quat. pump 2#1c#2')
+    my_hplc = AgilentHPLC2Pumps(hplc_args['name'], None, hplc_args=hplc_args,
+        selector_valve_args=selector_valve_args,
+        outlet_valve_args=outlet_valve_args,
+        purge1_valve_args=purge1_valve_args,
+        purge2_valve_args=purge2_valve_args,
+        buffer1_valve_args=buffer1_valve_args,
+        buffer2_valve_args=buffer2_valve_args,
+        pump1_id='quat. pump 1#1c#1',
+        pump2_id='quat. pump 2#1c#2')
 
-    # print('waiting to connect')
-    # while not my_hplc.get_connected():
-    #     time.sleep(0.1)
+    print('waiting to connect')
+    while not my_hplc.get_connected():
+        time.sleep(0.1)
 
     # time.sleep(1)
 
@@ -3354,42 +3367,42 @@ if __name__ == '__main__':
     #     0.05, 0.1, 0.1, 60.0, result_path='api_test', )
 
 
-    setup_devices = [
-        {'name': 'SEC-SAXS', 'args': ['AgilentHPLC2Pumps', None],
-            'kwargs': {'hplc_args' : hplc_args,
-            'selector_valve_args' : selector_valve_args,
-            'outlet_valve_args' : outlet_valve_args,
-            'purge1_valve_args' : purge1_valve_args,
-            'purge2_valve_args' : purge2_valve_args,
-            'buffer1_valve_args' : buffer1_valve_args,
-            'buffer2_valve_args' : buffer2_valve_args,
-            'pump1_id' : 'quat. pump 1#1c#1',
-            'pump2_id' : 'quat. pump 2#1c#2'},
-        }
-        ]
+    # setup_devices = [
+    #     {'name': 'SEC-SAXS', 'args': ['AgilentHPLC2Pumps', None],
+    #         'kwargs': {'hplc_args' : hplc_args,
+    #         'selector_valve_args' : selector_valve_args,
+    #         'outlet_valve_args' : outlet_valve_args,
+    #         'purge1_valve_args' : purge1_valve_args,
+    #         'purge2_valve_args' : purge2_valve_args,
+    #         'buffer1_valve_args' : buffer1_valve_args,
+    #         'buffer2_valve_args' : buffer2_valve_args,
+    #         'pump1_id' : 'quat. pump 1#1c#1',
+    #         'pump2_id' : 'quat. pump 2#1c#2'},
+    #     }
+    #     ]
 
-    # Local
-    com_thread = HPLCCommThread('HPLCComm')
-    com_thread.start()
+    # # Local
+    # com_thread = HPLCCommThread('HPLCComm')
+    # com_thread.start()
 
-    # # Remote
-    # com_thread = None
+    # # # Remote
+    # # com_thread = None
 
-    settings = {
-        'remote'        : False,
-        'remote_device' : 'hplc',
-        'device_init'   : setup_devices,
-        'remote_ip'     : '192.168.1.16',
-        'remote_port'   : '5558',
-        'com_thread'    : com_thread
-        }
+    # settings = {
+    #     'remote'        : False,
+    #     'remote_device' : 'hplc',
+    #     'device_init'   : setup_devices,
+    #     'remote_ip'     : '192.168.1.16',
+    #     'remote_port'   : '5558',
+    #     'com_thread'    : com_thread
+    #     }
 
-    app = wx.App()
-    logger.debug('Setting up wx app')
-    frame = HPLCFrame('HPLCFrame', settings, parent=None, title='HPLC Control')
-    frame.Show()
-    app.MainLoop()
+    # app = wx.App()
+    # logger.debug('Setting up wx app')
+    # frame = HPLCFrame('HPLCFrame', settings, parent=None, title='HPLC Control')
+    # frame.Show()
+    # app.MainLoop()
 
-    if com_thread is not None:
-        com_thread.stop()
-        com_thread.join()
+    # if com_thread is not None:
+    #     com_thread.stop()
+    #     com_thread.join()
