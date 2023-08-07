@@ -712,7 +712,7 @@ class ValvePanel(utils.DevicePanel):
     def _set_gui_position(self, position):
         try:
             position = int(position)
-            self.valve_position.SetValue(position)
+            self.valve_position.SafeChangeValue(position)
         except Exception:
             pass
 
@@ -730,7 +730,7 @@ class ValvePanel(utils.DevicePanel):
         if cmd == 'get_position':
             if val is not None and int(val) != self.current_position:
                 self._set_gui_position(val)
-                self.current_position = val
+                self.current_position = int(val)
 
 class ValveFrame(utils.DeviceFrame):
     """
@@ -838,16 +838,16 @@ if __name__ == '__main__':
     setup_devices = [
         {'name': 'Selector', 'args': ['Cheminert', 'COM5'],
             'kwargs': {'positions' : 2}},
-        {'name': 'Outlet', 'args': ['Cheminert', 'COM8'],
-            'kwargs': {'positions' : 2}},
-        {'name': 'Purge 1', 'args': ['Cheminert', 'COM7'],
-            'kwargs': {'positions' : 4}},
-        {'name': 'Purge 2', 'args': ['Cheminert', 'COM6'],
-            'kwargs': {'positions' : 4}},
-        {'name': 'Buffer 1', 'args': ['Cheminert', 'COM3'],
-            'kwargs': {'positions' : 10}},
-        {'name': 'Buffer 2', 'args': ['Cheminert', 'COM4'],
-            'kwargs': {'positions' : 10}},
+        # {'name': 'Outlet', 'args': ['Cheminert', 'COM8'],
+        #     'kwargs': {'positions' : 2}},
+        # {'name': 'Purge 1', 'args': ['Cheminert', 'COM7'],
+        #     'kwargs': {'positions' : 4}},
+        # {'name': 'Purge 2', 'args': ['Cheminert', 'COM6'],
+        #     'kwargs': {'positions' : 4}},
+        # {'name': 'Buffer 1', 'args': ['Cheminert', 'COM3'],
+        #     'kwargs': {'positions' : 10}},
+        # {'name': 'Buffer 2', 'args': ['Cheminert', 'COM4'],
+        #     'kwargs': {'positions' : 10}},
         ]
 
     # Simulated

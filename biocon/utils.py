@@ -270,29 +270,36 @@ EVT_MY_SPIN = wx.PyEventBinder(myEVT_MY_SPIN, 1)
 
 class IntSpinCtrl(wx.Panel):
 
-    def __init__(self, parent, id=wx.ID_ANY, min = None, max = None, TextLength = 40, **kwargs):
+    def __init__(self, parent, my_id=wx.ID_ANY, my_min=None, my_max=None,
+        TextLength=40, **kwargs):
 
-        wx.Panel.__init__(self, parent, id, **kwargs)
+        wx.Panel.__init__(self, parent, my_id, **kwargs)
 
         if platform.system() != 'Windows':
-            self.ScalerButton = wx.SpinButton(self, -1, style = wx.SP_VERTICAL)
+            self.ScalerButton = wx.SpinButton(self, style=wx.SP_VERTICAL)
         else:
-            self.ScalerButton = wx.SpinButton(self, -1, size=(-1,22), style = wx.SP_VERTICAL)
+            self.ScalerButton = wx.SpinButton(self, size=self._FromDIP((-1,22)),
+                style=wx.SP_VERTICAL)
 
         self.ScalerButton.Bind(wx.EVT_SET_FOCUS, self.OnScaleChange)
         self.ScalerButton.Bind(wx.EVT_SPIN_UP, self.OnSpinUpScale)
         self.ScalerButton.Bind(wx.EVT_SPIN_DOWN, self.OnSpinDownScale)
         self.ScalerButton.SetRange(-99999, 99999)
-        self.max = max
-        self.min = min
+        self.max = my_max
+        self.min = my_min
 
         if platform.system() != 'Windows':
-            self.Scale = wx.TextCtrl(self, -1, str(min), size = (TextLength,-1), style = wx.TE_PROCESS_ENTER)
+            self.Scale = wx.TextCtrl(self, value=str(my_min),
+                size=self._FromDIP((TextLength,-1)), styl=wx.TE_PROCESS_ENTER,
+                validator=CharValidator('int'))
         else:
-            self.Scale = wx.TextCtrl(self, -1, str(min), size = (TextLength,22), style = wx.TE_PROCESS_ENTER)
+            self.Scale = wx.TextCtrl(self, value=str(my_min),
+                size=self._FromDIP((TextLength,22)), style=wx.TE_PROCESS_ENTER,
+                validator=CharValidator('int'))
 
         self.Scale.Bind(wx.EVT_KILL_FOCUS, self.OnScaleChange)
         self.Scale.Bind(wx.EVT_TEXT_ENTER, self.OnScaleChange)
+        self.Scale.Bind(wx.EVT_TEXT, self.OnText)
 
         sizer = wx.BoxSizer()
 
@@ -305,10 +312,28 @@ class IntSpinCtrl(wx.Panel):
 
         self.ScalerButton.SetValue(0)
 
+        self.Scale.SetBackgroundColour(wx.NullColour)
+        self.Scale.SetModified(False)
+
+    def _FromDIP(self, size):
+        # This is a hack to provide easy back compatibility with wxpython < 4.1
+        try:
+            return self.FromDIP(size)
+        except Exception:
+            return size
+
     def CastFloatSpinEvent(self):
         event = FloatSpinEvent(myEVT_MY_SPIN, self.GetId(), self)
-        event.SetValue( self.Scale.GetValue() )
+        event.SetValue(self.Scale.GetValue())
         self.GetEventHandler().ProcessEvent(event)
+
+    def OnText(self, event):
+        """
+        Called when text is changed in the box. Changes the background
+        color of the text box to indicate there are unset changes.
+        """
+        self.Scale.SetBackgroundColour("yellow")
+        self.Scale.SetModified(True)
 
     def OnScaleChange(self, event):
         self.ScalerButton.SetValue(0) # Resit spinbutton position for button to work in linux
@@ -322,16 +347,19 @@ class IntSpinCtrl(wx.Panel):
 
         if self.max is not None:
             if float(val) > self.max:
-                self.Scale.SetValue(str(self.max))
+                self.Scale.ChangeValue(str(self.max))
         if self.min is not None:
             if float(val) < self.min:
-                self.Scale.SetValue(str(self.min))
+                self.Scale.ChangeValue(str(self.min))
 
         #if val != self.oldValue:
         self.oldValue = val
         self.CastFloatSpinEvent()
 
         event.Skip()
+
+        self.Scale.SetBackgroundColour(wx.NullColour)
+        self.Scale.SetModified(False)
 
     def OnSpinUpScale(self, event):
         self.ScalerButton.SetFocus()    # Just to remove focus from the bgscaler to throw kill_focus event and update
@@ -353,18 +381,19 @@ class IntSpinCtrl(wx.Panel):
         if self.ScalerButton.GetValue() > 90000:
             self.ScalerButton.SetValue(0)
 
-        #print self.min, self.max, val, self.ScalerButton.GetMax(), self.ScalerButton.GetValue()
-
         if self.max is not None:
             if newval > self.max:
-                self.Scale.SetValue(str(self.max))
+                self.Scale.ChangeValue(str(self.max))
             else:
-                self.Scale.SetValue(str(newval))
+                self.Scale.ChangeValue(str(newval))
         else:
-            self.Scale.SetValue(str(newval))
+            self.Scale.ChangeValue(str(newval))
 
         self.oldValue = newval
         wx.CallAfter(self.CastFloatSpinEvent)
+
+        self.Scale.SetBackgroundColour(wx.NullColour)
+        self.Scale.SetModified(False)
 
     def OnSpinDownScale(self, event):
         #self.ScalerButton.SetValue(80)   # This breaks the spinbutton on Linux
@@ -390,15 +419,17 @@ class IntSpinCtrl(wx.Panel):
 
         if self.min is not None:
             if newval < self.min:
-                self.Scale.SetValue(str(self.min))
+                self.Scale.ChangeValue(str(self.min))
             else:
-                self.Scale.SetValue(str(newval))
+                self.Scale.ChangeValue(str(newval))
         else:
-            self.Scale.SetValue(str(newval))
+            self.Scale.ChangeValue(str(newval))
 
         self.oldValue = newval
         wx.CallAfter(self.CastFloatSpinEvent)
 
+        self.Scale.SetBackgroundColour(wx.NullColour)
+        self.Scale.SetModified(False)
 
     def GetValue(self):
         value = self.Scale.GetValue()
@@ -411,6 +442,9 @@ class IntSpinCtrl(wx.Panel):
     def SetValue(self, value):
         self.Scale.SetValue(str(value))
 
+    def ChangeValue(self, value):
+        self.Scale.ChangeValue(str(value))
+
     def SetRange(self, minmax):
         self.max = minmax[1]
         self.min = minmax[0]
@@ -419,10 +453,18 @@ class IntSpinCtrl(wx.Panel):
         return (self.min, self.max)
 
     def SetMin(self, value):
-        self.min = value
+        self.min = int(value)
 
     def SetMax(self, value):
-        self.max = value
+        self.max = int(value)
+
+    def SafeSetValue(self, val):
+        if not self.Scale.IsModified():
+            self.SetValue(val)
+
+    def SafeChangeValue(self, val):
+        if not self.Scale.IsModified():
+            self.ChangeValue(val)
 
 class WarningMessage(wx.Frame):
     def __init__(self, parent, msg, title, callback, *args, **kwargs):
@@ -743,8 +785,10 @@ class CommManager(threading.Thread):
     def _return_value(self, val, comm_name):
         if comm_name == 'status':
             return_queue_list = self._status_queues.values()
-        else:
+        elif comm_name is not None:
             return_queue_list = [self._return_queues[comm_name]]
+        else:
+            return_queue_list = []
 
         for ret_q in return_queue_list:
             ret_q.append(val)

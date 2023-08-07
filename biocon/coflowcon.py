@@ -893,8 +893,8 @@ class CoflowPanel(wx.Panel):
         valve_box = wx.StaticBox(adv_win, label='Valves')
         valve_box_sizer = wx.StaticBoxSizer(valve_box, wx.HORIZONTAL)
 
-        self.sheath_valve_pos = utils.IntSpinCtrl(valve_box, min=1,
-            max=self.settings['sheath_valve']['kwargs']['positions'])
+        self.sheath_valve_pos = utils.IntSpinCtrl(valve_box, my_min=1,
+            my_max=self.settings['sheath_valve']['kwargs']['positions'])
         self.sheath_valve_pos.Bind(utils.EVT_MY_SPIN, self._on_sheath_valve_position_change)
 
         valve_sizer = wx.FlexGridSizer(cols=2, hgap=self._FromDIP(5),
@@ -1500,14 +1500,14 @@ class CoflowPanel(wx.Panel):
 
         if change_pos:
             self.current_sheath_valve_position = int(position)
-            wx.CallAfter(self.sheath_valve_pos.SetValue, int(position))
+            wx.CallAfter(self.sheath_valve_pos.SafeChangeValue, int(position))
             self.coflow_control.set_sheath_valve_position(position)
 
     def check_sheath_valve_pos(self):
         pos = self.get_sheath_valve_position()
 
         if self.current_sheath_valve_position != int(pos):
-            wx.CallAfter(self.sheath_valve_pos.SetValue, int(pos))
+            wx.CallAfter(self.sheath_valve_pos.SaveChangeValue, int(pos))
             self.current_sheath_valve_position = int(pos)
 
     def _get_flow_rates(self):
