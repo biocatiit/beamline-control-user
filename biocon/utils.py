@@ -686,8 +686,7 @@ class CommManager(threading.Thread):
                 ', '.join(['{}:{}'.format(kw, item) for kw, item in kwargs.items()])))
             logger.exception(msg)
 
-            if command == 'connect' or command == 'disconnect':
-                self._return_value((command, False), kwargs['comm_name'])
+            self._return_value((command, False), kwargs['comm_name'])
 
     def add_new_communication(self, name, command_queue, return_queue, status_queue):
         logger.info('Adding new communication device to thread: %s', name)
@@ -965,7 +964,10 @@ class DevicePanel(wx.Panel):
                 new_status = None
 
             if new_status is not None:
-                device, cmd, val = new_status
+                try:
+                    device, cmd, val = new_status
+                except Exception:
+                    device = None
 
                 if device == self.name:
                     wx.CallAfter(self._set_status, cmd, val)

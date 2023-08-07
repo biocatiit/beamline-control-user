@@ -34,6 +34,7 @@ if __name__ != '__main__':
     logger = logging.getLogger(__name__)
 
 import wx
+import wx.lib.mixins.listctrl
 import serial
 import serial.tools.list_ports as list_ports
 from six import string_types
@@ -137,8 +138,26 @@ class BufferMonitor(object):
             description ('descrip').
         """
         with self._buffer_lock:
-            buffers = copy.copy(self._buffers)
+            buffers = copy.deepcopy(self._buffers)
         return buffers
+
+    def remove_buffer(self, position):
+        """
+        Removes the buffer. If the buffer is the active buffer, active buffer
+        position is set to None.
+
+        Parameters
+        position: str
+            The buffer position (e.g. 1 or A or etc)
+        """
+        with self._buffer_lock:
+            position = str(position)
+            if position in self._buffers:
+                del self._buffers[position]
+
+            if position == self._active_buffer_position:
+                self._active_buffer_position = None
+                self._previous_flow_rate = None
 
     def set_buffer_info(self, position, volume, descrip):
         """
@@ -290,6 +309,7 @@ class AgilentHPLC2Pumps(AgilentHPLC):
         self._monitor_switch_thread.start()
 
         self._submitting_sample = False
+        self._submit_queue = deque()
 
         self._monitor_submit_evt = threading.Event()
         self._terminate_monitor_submit = threading.Event()
@@ -313,7 +333,7 @@ class AgilentHPLC2Pumps(AgilentHPLC):
 
 
         self.set_active_buffer_position(self.get_valve_position('buffer1'), 1)
-        # self.set_active_buffer_position(self.get_valve_position('buffer2'), 2)
+        self.set_active_buffer_position(self.get_valve_position('buffer2'), 2)
 
     def  connect(self):
         """
@@ -1376,7 +1396,7 @@ class AgilentHPLC2Pumps(AgilentHPLC):
 
                 if ((self._stop_after_purging1 and current_flow1 == 0)
                     or (not self._stop_after_purging1
-                    and current_flow1 == final_flow1)):
+                    and round(current_flow1, 3) == round(final_flow1, 3))):
                     self.set_flow_accel(self._pre_purge_flow_accel1,
                         self._pump1_id)
 
@@ -1405,7 +1425,7 @@ class AgilentHPLC2Pumps(AgilentHPLC):
 
                 if ((self._stop_after_purging2 and current_flow2 == 0)
                     or (not self._stop_after_purging2
-                    and current_flow2 == final_flow2)):
+                    and round(current_flow2, 3) == round(final_flow2, 3))):
                     self.set_flow_accel(self._pre_purge_flow_accel2,
                         self._pump2_id)
 
@@ -1865,13 +1885,34 @@ class AgilentHPLC2Pumps(AgilentHPLC):
         position: str
             The buffer position (e.g. 1 or A)
         flow_path: int
-            The flow path to set the info for. Either 1 or 2.
+            The flow path to set the active buffer for. Either 1 or 2.
         """
         flow_path = int(flow_path)
         if flow_path == 1:
             self._buffer_monitor1.set_active_buffer_position(position)
         elif flow_path == 2:
             self._buffer_monitor2.set_active_buffer_position(position)
+
+        return True
+
+    def remove_buffer(self, position, flow_path):
+        """
+        Removes the buffer at the given position.
+
+        Parameters
+        ----------
+        position: str
+            The buffer position (e.g. 1 or A)
+        flow_path: int
+            The flow path to remove the buffer for. Either 1 or 2.
+        """
+        flow_path = int(flow_path)
+        if flow_path == 1:
+            self._buffer_monitor1.remove_buffer(position)
+        elif flow_path == 2:
+            self._buffer_monitor2.remove_buffer(position)
+
+        return True
 
     def submit_hplc_sample(self, name, acq_method, sample_loc, inj_vol,
         flow_rate, flow_accel, total_elution_vol, high_pressure_lim,
@@ -1929,8 +1970,12 @@ class AgilentHPLC2Pumps(AgilentHPLC):
         high_pressure_lim = float(high_pressure_lim)
         inj_vol = float(inj_vol)
 
-        self.set_hplc_flow_accel(flow_accel, self._active_flow_path)
-        self.set_hplc_flow_rate(flow_rate, self._active_flow_path)
+        inst_status = self.get_instrument_status()
+        if (inst_status == 'Offline' or inst_status == 'Unknown'
+            or inst_status == 'Error' or inst_status == 'Idle' or
+            inst_status == 'NotReady' or inst_status == 'Standby'):
+            self.set_hplc_flow_accel(flow_accel, self._active_flow_path)
+            self.set_hplc_flow_rate(flow_rate, self._active_flow_path)
 
         if self._active_flow_path == 1:
             active_pump_id = self._pump1_id
@@ -1970,7 +2015,7 @@ class AgilentHPLC2Pumps(AgilentHPLC):
         if sp_method is not None:
             sequence_vals['sp_method'] = sp_method
 
-        self._submit_args = {
+        submit_args = {
             'name'                  : name,
             'sequence_vals'         : sequence_vals,
             'result_path'           : result_path,
@@ -1978,6 +2023,8 @@ class AgilentHPLC2Pumps(AgilentHPLC):
             'wait_for_flow_ramp'    : wait_for_flow_ramp,
             'settle_time'           : settle_time,
             }
+
+        self._submit_queue.append(submit_args)
 
         logger.info(('HPLC %s starting to submit sample %s on active flow '
             'path %s'), self.name, name, self._active_flow_path)
@@ -1996,15 +2043,17 @@ class AgilentHPLC2Pumps(AgilentHPLC):
                 and self._terminate_monitor_submit.is_set()):
                 break
 
-            name = self._submit_args['name']
-            sequence_vals = self._submit_args['sequence_vals']
-            result_path = self._submit_args['result_path']
-            flow_rate = self._submit_args['flow_rate']
-            wait_for_flow_ramp = self._submit_args['wait_for_flow_ramp']
-            settle_time = self._submit_args['settle_time']
+            submit_args = self._submit_queue.popleft()
+            name = submit_args['name']
+            sequence_vals = submit_args['sequence_vals']
+            result_path = submit_args['result_path']
+            flow_rate = round(submit_args['flow_rate'], 3)
+            wait_for_flow_ramp = submit_args['wait_for_flow_ramp']
+            settle_time = submit_args['settle_time']
 
             if wait_for_flow_ramp:
-                while self.get_hplc_flow_rate(self._active_flow_path) != flow_rate:
+                while (round(self.get_hplc_flow_rate(self._active_flow_path), 3)
+                    != flow_rate):
                     if self._abort_submit.is_set():
                         break
                     time.sleep(0.1)
@@ -2019,8 +2068,9 @@ class AgilentHPLC2Pumps(AgilentHPLC):
             if not self._abort_submit.is_set():
                 self.submit_sequence(name, [sequence_vals], result_path, name)
 
-            self._submitting_sample = False
-            self._monitor_submit_evt.clear()
+            if len(self._submit_queue) == 0:
+                self._submitting_sample = False
+                self._monitor_submit_evt.clear()
 
     def stop_equilibration(self, flow_path):
         """
@@ -2082,6 +2132,7 @@ class AgilentHPLC2Pumps(AgilentHPLC):
         already submitted).
         """
         if self._submitting_sample:
+            self._submit_queue.clear()
             self._abort_submit.set()
             logger.info('HPLC %s aborted sample submission', self.name)
 
@@ -2243,6 +2294,8 @@ class HPLCCommThread(utils.CommManager):
             'set_pump_standby'          : self._set_pump_standby,
             'set_autosampler_on'        : self._set_autosampler_on,
             'set_uv_on'                 : self._set_uv_on,
+            'set_buffer_info'           : self._set_buffer_info,
+            'remove_buffer'             : self._remove_buffer,
             'submit_sample'             : self._submit_sample,
             'stop_purge'                : self._stop_purge,
             'stop_equil'                : self._stop_equil,
@@ -2265,7 +2318,7 @@ class HPLCCommThread(utils.CommManager):
         self.known_devices = known_hplcs
 
     def _cleanup_devices(self):
-        device_names = copy.copy(list(self._connected_devices.keys()))
+        device_names = copy.deepcopy(list(self._connected_devices.keys()))
         for name in device_names:
             self._disconnect_device(name)
 
@@ -2568,6 +2621,21 @@ class HPLCCommThread(utils.CommManager):
         logger.debug("Set %s flow path %s buffer info %s", name, flow_path,
             position)
 
+    def _remove_buffer(self, name, position, flow_path, **kwargs):
+        logger.debug("Removing %s flow path %s buffer %s", name, flow_path,
+            position)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        success = device.remove_buffer(position, flow_path, **kwargs)
+
+        self._return_value((name, cmd, success), comm_name)
+
+        logger.debug("Removed %s flow path %s buffer %s", name, flow_path,
+            position)
+
     def _set_pump_on(self, name, flow_path, **kwargs):
         logger.debug("Setting %s flow path %s pump on", name, flow_path)
 
@@ -2855,6 +2923,7 @@ class HPLCPanel(utils.DevicePanel):
         self._inst_run_queue_status = ''
         self._inst_err_status = ''
         self._inst_errs = ''
+        self._inst_run_queue = []
 
         self._flow_path = ''
         self._flow_path_status = ''
@@ -2879,6 +2948,9 @@ class HPLCPanel(utils.DevicePanel):
         self._pump2_eq_vol = ''
         self._pump2_flow_target = ''
 
+        self._buffer1_info = {}
+        self._buffer2_info = {}
+
         self._buffer1_valve = 0
         self._purge1_valve = 0
         self._buffer2_valve = 0
@@ -2893,7 +2965,6 @@ class HPLCPanel(utils.DevicePanel):
         super(HPLCPanel, self).__init__(parent, panel_id, settings,
             *args, **kwargs)
 
-
     def _create_layout(self):
         """Creates the layout for the panel."""
 
@@ -2905,16 +2976,17 @@ class HPLCPanel(utils.DevicePanel):
         sub_sizer1 = wx.BoxSizer(wx.HORIZONTAL)
         sub_sizer1.Add(sampler_sizer)
         sub_sizer1.Add(buffer_sizer, flag=wx.LEFT|wx.EXPAND,
-            border=self._FromDIP(5))
+            border=self._FromDIP(5), proportion=1)
 
         top_sizer = wx.BoxSizer(wx.VERTICAL)
         top_sizer.Add(inst_sizer, flag=wx.EXPAND, proportion=1)
         top_sizer.Add(flow_sizer, flag=wx.EXPAND)
         top_sizer.Add(sub_sizer1, flag=wx.EXPAND, proportion=1)
 
-        self.Refresh()
-
         self.SetSizer(top_sizer)
+
+        self.Layout()
+        self.Refresh()
 
     def _create_inst_ctrls(self):
         inst_box = wx.StaticBox(self, label='Instrument')
@@ -2927,33 +2999,73 @@ class HPLCPanel(utils.DevicePanel):
             size=self._FromDIP((60,-1)), style=wx.ST_NO_AUTORESIZE)
         self._inst_err_status_ctrl = wx.StaticText(inst_box,
             size=self._FromDIP((60,-1)), style=wx.ST_NO_AUTORESIZE)
-        self._inst_errs_ctrl = wx.TextCtrl(inst_box, size=self._FromDIP((60, 60)),
+        self._inst_errs_ctrl = wx.TextCtrl(inst_box,
+            size=self._FromDIP((-1, 40)),
             style=wx.TE_MULTILINE|wx.TE_READONLY|wx.TE_BESTWRAP)
+        self._abort_current_run_btn = wx.Button(inst_box,
+            label='Abort Current Run')
+
+        self._abort_current_run_btn.Bind(wx.EVT_BUTTON, self._on_abort_current_run)
 
 
-        inst_sizer = wx.GridBagSizer(vgap=self._FromDIP(5), hgap=self._FromDIP(5))
+        inst_sizer = wx.GridBagSizer(vgap=self._FromDIP(5),
+            hgap=self._FromDIP(5))
         inst_sizer.Add(wx.StaticText(inst_box, label='Connected:'),
             (0,0), flag=wx.ALIGN_CENTER_VERTICAL)
-        inst_sizer.Add(self._inst_connected_ctrl, (0,1), flag=wx.ALIGN_CENTER_VERTICAL)
+        inst_sizer.Add(self._inst_connected_ctrl, (0,1),
+            flag=wx.ALIGN_CENTER_VERTICAL)
         inst_sizer.Add(wx.StaticText(inst_box, label='Status:'),
             (1,0), flag=wx.ALIGN_CENTER_VERTICAL)
-        inst_sizer.Add(self._inst_status_ctrl, (1,1), flag=wx.ALIGN_CENTER_VERTICAL)
+        inst_sizer.Add(self._inst_status_ctrl, (1,1),
+            flag=wx.ALIGN_CENTER_VERTICAL)
         inst_sizer.Add(wx.StaticText(inst_box, label='Run queue status:'),
             (2,0), flag=wx.ALIGN_TOP)
         inst_sizer.Add(self._inst_run_queue_status_ctrl, (2,1),
             flag=wx.ALIGN_TOP)
-        inst_sizer.Add(wx.StaticText(inst_box, label='Error:'),
-            (0,2), flag=wx.ALIGN_CENTER_VERTICAL)
-        inst_sizer.Add(self._inst_err_status_ctrl, (0,3), flag=wx.ALIGN_CENTER_VERTICAL)
-        inst_sizer.Add(self._inst_errs_ctrl, (1,2), flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND,
-            span=(2,3))
-        inst_sizer.AddGrowableCol(4)
-        inst_sizer.AddGrowableRow(2)
+        inst_sizer.Add(self._abort_current_run_btn, (3,0), span=(1,2),
+            flag=wx.ALIGN_TOP)
 
 
-        top_sizer = wx.StaticBoxSizer(inst_box, wx.VERTICAL)
-        top_sizer.Add(inst_sizer, flag=wx.EXPAND|wx.ALL, proportion=1,
+        err_status_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        err_status_sizer.Add(wx.StaticText(inst_box, label='Error:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        err_status_sizer.Add(self._inst_err_status_ctrl,
+            flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT, border=self._FromDIP(5))
+
+        err_sizer = wx.BoxSizer(wx.VERTICAL)
+        err_sizer.Add(err_status_sizer, flag=wx.BOTTOM, border=self._FromDIP(5))
+        err_sizer.Add(self._inst_errs_ctrl, flag=wx.EXPAND, proportion=1)
+
+        status_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        status_sizer.Add(inst_sizer, flag=wx.RIGHT, border=self._FromDIP(5))
+        status_sizer.Add(err_sizer, flag=wx.EXPAND, proportion=1)
+
+        self._run_queue_ctrl = RunList(inst_box, size=self._FromDIP((-1, 40)),
+            style=wx.LC_REPORT|wx.BORDER_SUNKEN)
+        self._pause_run_queue_btn = wx.Button(inst_box, label='Pause Queue')
+        self._resume_run_queue_btn = wx.Button(inst_box, label='Resume Queue')
+
+        self._pause_run_queue_btn.Bind(wx.EVT_BUTTON, self._on_pause_run_queue)
+        self._resume_run_queue_btn.Bind(wx.EVT_BUTTON, self._on_resume_run_queue)
+
+        run_queue_btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        run_queue_btn_sizer.Add(self._pause_run_queue_btn)
+        run_queue_btn_sizer.Add(self._resume_run_queue_btn, flag=wx.LEFT,
             border=self._FromDIP(5))
+
+        run_queue_sizer = wx.BoxSizer(wx.VERTICAL)
+        run_queue_sizer.Add(wx.StaticText(inst_box, label='Run Queue'))
+        run_queue_sizer.Add(self._run_queue_ctrl, flag=wx.EXPAND|wx.TOP,
+            border=self._FromDIP(5), proportion=1)
+        run_queue_sizer.Add(run_queue_btn_sizer, flag=wx.TOP,
+            border=self._FromDIP(5))
+
+
+        top_sizer = wx.StaticBoxSizer(inst_box, wx.HORIZONTAL)
+        top_sizer.Add(status_sizer, flag=wx.EXPAND|wx.ALL, proportion=3,
+            border=self._FromDIP(5))
+        top_sizer.Add(run_queue_sizer, flag=wx.TOP|wx.BOTTOM|wx.RIGHT|wx.EXPAND,
+            proportion=2, border=self._FromDIP(5))
 
         return top_sizer
 
@@ -3441,20 +3553,59 @@ class HPLCPanel(utils.DevicePanel):
 
         buffer1_box = wx.StaticBox(self, label='Buffer 1')
 
-        self._buffer1_list = wx.ListCtrl(buffer1_box,
+        self._buffer1_list = BufferList(buffer1_box,
             size=self._FromDIP((-1, 100)),style=wx.LC_REPORT|wx.BORDER_SUNKEN)
 
-        self._buffer1_list.InsertColumn(0, 'Port')
-        self._buffer1_list.InsertColumn(1, 'Vol. (L)')
-        self._buffer1_list.InsertColumn(2, 'Buffer')
+        self._add_edit_buffer1_btn = wx.Button(buffer1_box, label='Add/Edit Buffer')
+        self._remove_buffer1_btn = wx.Button(buffer1_box, label='Remove Buffer')
+
+        self._add_edit_buffer1_btn.Bind(wx.EVT_BUTTON, self._on_add_edit_buffer)
+        self._remove_buffer1_btn.Bind(wx.EVT_BUTTON, self._on_remove_buffer)
+
+        button1_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        button1_sizer.Add(self._add_edit_buffer1_btn, flag=wx.RIGHT,
+            border=self._FromDIP(5))
+        button1_sizer.Add(self._remove_buffer1_btn)
 
         buffer1_sizer = wx.StaticBoxSizer(buffer1_box, wx.VERTICAL)
         buffer1_sizer.Add(self._buffer1_list, flag=wx.EXPAND|wx.ALL,
             proportion=1, border=self._FromDIP(5))
+        buffer1_sizer.Add(button1_sizer, flag=wx.LEFT|wx.RIGHT|wx.BOTTOM,
+            border=self._FromDIP(5))
+
+        if self._device_type == 'AgilentHPLC2Pumps':
+            buffer2_box = wx.StaticBox(self, label='Buffer 2')
+
+            self._buffer2_list = BufferList(buffer2_box,
+                size=self._FromDIP((-1, 100)),style=wx.LC_REPORT|wx.BORDER_SUNKEN)
+
+            self._add_edit_buffer2_btn = wx.Button(buffer2_box,
+                label='Add/Edit Buffer')
+            self._remove_buffer2_btn = wx.Button(buffer2_box,
+                label='Remove Buffer')
+
+            self._add_edit_buffer2_btn.Bind(wx.EVT_BUTTON,
+                self._on_add_edit_buffer)
+            self._remove_buffer2_btn.Bind(wx.EVT_BUTTON,
+                self._on_remove_buffer)
+
+            button2_sizer = wx.BoxSizer(wx.HORIZONTAL)
+            button2_sizer.Add(self._add_edit_buffer2_btn, flag=wx.RIGHT,
+                border=self._FromDIP(5))
+            button2_sizer.Add(self._remove_buffer2_btn)
+
+            buffer2_sizer = wx.StaticBoxSizer(buffer2_box, wx.VERTICAL)
+            buffer2_sizer.Add(self._buffer2_list, flag=wx.EXPAND|wx.ALL,
+                proportion=1, border=self._FromDIP(5))
+            buffer2_sizer.Add(button2_sizer, flag=wx.LEFT|wx.RIGHT|wx.BOTTOM,
+                border=self._FromDIP(5))
 
         top_sizer = wx.StaticBoxSizer(buffer_box, wx.HORIZONTAL)
         top_sizer.Add(buffer1_sizer, flag=wx.EXPAND|wx.ALL, proportion=1,
             border=self._FromDIP(5))
+        if self._device_type == 'AgilentHPLC2Pumps':
+            top_sizer.Add(buffer2_sizer, flag=wx.EXPAND|wx.ALL, proportion=1,
+                border=self._FromDIP(5))
 
         return top_sizer
 
@@ -3507,6 +3658,11 @@ class HPLCPanel(utils.DevicePanel):
         self.Layout()
         self.Refresh()
         self.SendSizeEvent()
+
+    def _on_abort_current_run(self, evt):
+        if len(self._inst_run_queue) > 0:
+            cmd = ['abort_current_run', [self.name,], {}]
+            self._send_cmd(cmd, False)
 
     def _on_set_flow_path(self, evt):
         evt_obj = evt.GetEventObject()
@@ -3820,12 +3976,88 @@ class HPLCPanel(utils.DevicePanel):
         cmd = ['set_autosampler_on', [self.name,], {}]
         self._send_cmd(cmd, False)
 
+    def _on_add_edit_buffer(self, evt):
+        evt_obj = evt.GetEventObject()
+
+        if self._add_edit_buffer1_btn == evt_obj:
+            flow_path = 1
+            buffer_info = self._buffer1_info
+        elif self._add_edit_buffer2_btn == evt_obj:
+            buffer_info = self._buffer2_info
+            flow_path = 2
+
+        buffer_entry_dlg = BufferEntryDialog(self, buffer_info,
+            title='Add/Edit pump {} buffer'.format(flow_path))
+        result = buffer_entry_dlg.ShowModal()
+
+        if result == wx.ID_OK:
+            pos, vol, descrip = buffer_entry_dlg.get_settings()
+        else:
+            vol = None
+
+        buffer_entry_dlg.Destroy()
+
+        try:
+            vol = float(vol)
+        except Exception:
+            vol = None
+
+        if vol is not None:
+            vol = vol*1000
+            cmd = ['set_buffer_info', [self.name, pos, vol, descrip, flow_path],
+                {}]
+            self._send_cmd(cmd, False)
+
+    def _on_remove_buffer(self, evt):
+        evt_obj = evt.GetEventObject()
+
+        if self._remove_buffer1_btn == evt_obj:
+            flow_path = 1
+            buffer_info = self._buffer1_info
+        elif self._remove_buffer1_btn == evt_obj:
+            buffer_info = self._buffer2_info
+            flow_path = 2
+
+        choices = ['{} - {}'.format(key, buffer_info[key]['descrip'])
+            for key in buffer_info]
+        choice_pos = [key for key in buffer_info]
+
+        choice_dlg = wx.MultiChoiceDialog(self,
+            'Select pump {} buffer(s) to remove'.format(flow_path),
+            'Remove Buffer', choices)
+        result = choice_dlg.ShowModal()
+
+        if result == wx.ID_OK:
+            sel_items = choice_dlg.GetSelections()
+        else:
+            sel_items = None
+
+        choice_dlg.Destroy()
+
+        if sel_items is not None:
+            remove_pos = [choice_pos[i] for i in sel_items]
+
+            for pos in remove_pos:
+                cmd = ['remove_buffer', [self.name, pos, flow_path], {}]
+                self._send_cmd(cmd, True)
+
+                self._remove_buffer_from_list(flow_path, pos)
+
+    def _on_pause_run_queue(self, evt):
+        cmd = ['pause_run_queue', [self.name,], {}]
+        self._send_cmd(cmd, False)
+
+    def _on_resume_run_queue(self, evt):
+        cmd = ['resume_run_queue', [self.name,], {}]
+        self._send_cmd(cmd, False)
+
     def _set_status(self, cmd, val):
         if cmd == 'get_fast_hplc_status':
             inst_status = val['instrument_status']
             connected = str(inst_status['connected'])
             status = str(inst_status['status'])
             run_queue_status = str(inst_status['run_queue_status'])
+            run_queue = inst_status['run_queue']
 
             if connected != self._inst_connected:
                 wx.CallAfter(self._inst_connected_ctrl.SetLabel,
@@ -3860,6 +4092,10 @@ class HPLCPanel(utils.DevicePanel):
                 wx.CallAfter(self._inst_errs_ctrl.SetValue, err_string)
                 self._inst_errs = err_string
 
+            if run_queue != self._inst_run_queue:
+                self._update_run_queue(run_queue)
+                self._inst_run_queue = run_queue
+
 
             pump_status = val['pump_status']
             pump1_purge = str(pump_status['purging_pump1'][0])
@@ -3868,6 +4104,7 @@ class HPLCPanel(utils.DevicePanel):
             pump1_eq_vol = str(round(float(pump_status['equilibrate_pump1'][1]),3))
             pump1_flow = str(round(float(pump_status['flow1']),3))
             pump1_pressure = str(round(float(pump_status['pressure1']),3))
+            buffers1 = pump_status['all_buffer_info1']
 
             if pump1_purge != self._pump1_purge:
                 wx.CallAfter(self._pump1_purge_ctrl.SetLabel, pump1_purge)
@@ -3899,6 +4136,15 @@ class HPLCPanel(utils.DevicePanel):
                 wx.CallAfter(self._pump1_pressure_ctrl.SetLabel, pump1_pressure)
                 self._pump1_pressure = pump1_pressure
 
+            for key, value in buffers1.items():
+                pos = key
+                vol = value['vol']
+                descrip = value['descrip']
+
+                self._update_buffer_list(1, pos, vol, descrip)
+
+            self._buffer1_info = buffers1
+
             if self._device_type == 'AgilentHPLC2Pumps':
                 flow_path = str(pump_status['active_flow_path'])
                 flow_path_status = str(pump_status['switching_flow_path'])
@@ -3918,6 +4164,7 @@ class HPLCPanel(utils.DevicePanel):
                 pump2_eq_vol = str(round(float(pump_status['equilibrate_pump2'][1]),3))
                 pump2_flow = str(round(float(pump_status['flow2']),3))
                 pump2_pressure = str(round(float(pump_status['pressure2']),3))
+                buffers2 = pump_status['all_buffer_info2']
 
                 if pump2_purge != self._pump2_purge:
                     wx.CallAfter(self._pump2_purge_ctrl.SetLabel, pump2_purge)
@@ -3948,6 +4195,15 @@ class HPLCPanel(utils.DevicePanel):
                 if pump2_pressure != self._pump2_pressure:
                     wx.CallAfter(self._pump2_pressure_ctrl.SetLabel, pump2_pressure)
                     self._pump2_pressure = pump2_pressure
+
+                for key, value in buffers2.items():
+                    pos = key
+                    vol = value['vol']
+                    descrip = value['descrip']
+
+                    self._update_buffer_list(2, pos, vol, descrip)
+
+                self._buffer2_info = buffers2
 
 
             sampler_status = val['autosampler_status']
@@ -4062,6 +4318,189 @@ class HPLCPanel(utils.DevicePanel):
                     wx.CallAfter(self._outlet_valve_ctrl.SafeChangeValue,
                         outlet)
                     self._outlet_valve = outlet
+
+    def _update_buffer_list(self, flow_path, pos, vol, descrip):
+        if flow_path == 1:
+            buffer_list = self._buffer1_list
+            buffer_info = self._buffer1_info
+        elif flow_path == 2:
+            buffer_list = self._buffer2_list
+            buffer_info = self._buffer2_info
+
+        vol = round(vol,1)
+
+        update = True
+        new_item = False
+        if pos in buffer_info:
+            cur_vol = buffer_info[pos]['vol']
+            cur_descrip = buffer_info[pos]['descrip']
+
+            if round(cur_vol,1) == vol and cur_descrip == descrip:
+                update = False
+
+        else:
+            new_item = True
+
+        vol = round(vol/1000., 4)
+
+        if update:
+            new_insert_pos = -1
+
+            for i in range(buffer_list.GetItemCount()):
+                item = buffer_list.GetItem(i)
+                item_pos = buffer_list.GetItemData(i)
+
+                if new_item and item_pos > int(pos):
+                    new_insert_pos = i
+                    break
+
+                elif not new_item and item_pos == int(pos):
+                    modif_pos = i
+                    break
+
+            if new_item:
+                if new_insert_pos == -1:
+                    new_insert_pos = buffer_list.GetItemCount()
+
+                buffer_list.InsertItem(new_insert_pos, str(pos))
+                buffer_list.SetItem(new_insert_pos, 1, str(vol))
+                buffer_list.SetItem(new_insert_pos, 2, descrip)
+                buffer_list.SetItemData(new_insert_pos, int(pos))
+            else:
+                buffer_list.SetItem(modif_pos, 1, str(vol))
+                buffer_list.SetItem(modif_pos, 2, descrip)
+
+    def _remove_buffer_from_list(self, flow_path, pos):
+        if flow_path == 1:
+            buffer_list = self._buffer1_list
+        elif flow_path == 2:
+            buffer_list = self._buffer2_list
+
+        for i in range(buffer_list.GetItemCount()):
+            item = buffer_list.GetItem(i)
+            item_pos = buffer_list.GetItemData(i)
+
+            if item_pos == int(pos):
+                buffer_list.DeleteItem(i)
+                break
+
+    def _update_run_queue(self, run_queue):
+        self._run_queue_ctrl.Freeze()
+
+        while self._run_queue_ctrl.GetItemCount() > len(run_queue):
+            self._run_queue_ctrl.DeleteItem(self._run_queue_ctrl.GetItemCount()-1)
+
+
+        for i, run_data in enumerate(run_queue):
+            if i < self._run_queue_ctrl.GetItemCount():
+                self._run_queue_ctrl.SetItem(i, 0, run_data[1])
+                self._run_queue_ctrl.SetItem(i, 1, run_data[0])
+            else:
+                self._run_queue_ctrl.InsertItem(i, run_data[1])
+                self._run_queue_ctrl.SetItem(i, 1, run_data[0])
+
+        self._run_queue_ctrl.Thaw()
+
+class BufferEntryDialog(wx.Dialog):
+    """
+    Allows addition/editing of the buffer info in the buffer list
+    """
+    def __init__(self, parent, buffer_settings, *args, **kwargs):
+        wx.Dialog.__init__(self, parent, *args,
+            style=wx.RESIZE_BORDER|wx.CAPTION|wx.CLOSE_BOX, **kwargs)
+
+        self.SetSize(self._FromDIP((400, 200)))
+
+        self._buffer_settings = buffer_settings
+
+        self._create_layout()
+
+        self.CenterOnParent()
+
+    def _FromDIP(self, size):
+        # This is a hack to provide easy back compatibility with wxpython < 4.1
+        try:
+            return self.FromDIP(size)
+        except Exception:
+            return size
+
+    def _create_layout(self):
+        parent = self
+        self._buffer_ctrl = wx.Choice(parent, choices=[str(x) for x in range(1,11)])
+        self._buffer_ctrl.SetSelection(0)
+        self._buffer_ctrl.Bind(wx.EVT_CHOICE, self._on_buffer_choice)
+
+        self._buffer_volume = wx.TextCtrl(parent, size=self._FromDIP((100,-1)),
+            validator=utils.CharValidator('float'))
+        self._buffer_contents = wx.TextCtrl(parent,
+            style=wx.TE_MULTILINE|wx.TE_BESTWRAP)
+
+        buffer_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(5),
+            hgap=self._FromDIP(5))
+        buffer_sizer.Add(wx.StaticText(parent, label='Buffer position:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        buffer_sizer.Add(self._buffer_ctrl)
+        buffer_sizer.Add(wx.StaticText(parent, label='Buffer volume (L):'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        buffer_sizer.Add(self._buffer_volume)
+        buffer_sizer.Add(wx.StaticText(parent, label='Buffer contents:'),
+            flag=wx.ALIGN_TOP)
+        buffer_sizer.Add(self._buffer_contents, flag=wx.EXPAND)
+
+        buffer_sizer.AddGrowableRow(2)
+        buffer_sizer.AddGrowableCol(1)
+
+
+        button_sizer = self.CreateButtonSizer(wx.OK | wx.CANCEL)
+
+        top_sizer=wx.BoxSizer(wx.VERTICAL)
+        top_sizer.Add(buffer_sizer, proportion=1, flag=wx.ALL|wx.EXPAND,
+            border=self._FromDIP(5))
+        top_sizer.Add(button_sizer ,flag=wx.BOTTOM|wx.RIGHT|wx.LEFT|wx.ALIGN_RIGHT,
+            border=self._FromDIP(10))
+
+        self.SetSizer(top_sizer)
+
+        self._on_buffer_choice(None)
+
+    def _on_buffer_choice(self, evt):
+        pos = self._buffer_ctrl.GetStringSelection()
+
+        if pos in self._buffer_settings:
+            vol = self._buffer_settings[pos]['vol']
+            descrip = self._buffer_settings[pos]['descrip']
+
+            vol = round(vol/1000., 4)
+
+            self._buffer_volume.SetValue(str(vol))
+            self._buffer_contents.SetValue(descrip)
+
+    def get_settings(self):
+        pos = self._buffer_ctrl.GetStringSelection()
+        vol = self._buffer_volume.GetValue()
+        descrip = self._buffer_contents.GetValue()
+
+        return pos, vol, descrip
+
+class BufferList(wx.ListCtrl, wx.lib.mixins.listctrl.ListCtrlAutoWidthMixin):
+
+    def __init__(self, *args, **kwargs):
+        wx.ListCtrl.__init__(self, *args, **kwargs)
+        self.InsertColumn(0, 'Port')
+        self.InsertColumn(1, 'Vol. (L)')
+        self.InsertColumn(2, 'Buffer')
+
+        wx.lib.mixins.listctrl.ListCtrlAutoWidthMixin.__init__(self)
+
+class RunList(wx.ListCtrl, wx.lib.mixins.listctrl.ListCtrlAutoWidthMixin):
+
+    def __init__(self, *args, **kwargs):
+        wx.ListCtrl.__init__(self, *args, **kwargs)
+        self.InsertColumn(0, 'Status')
+        self.InsertColumn(1, 'Name')
+
+        wx.lib.mixins.listctrl.ListCtrlAutoWidthMixin.__init__(self)
+
 
 class HPLCFrame(utils.DeviceFrame):
     """
@@ -4206,6 +4645,21 @@ if __name__ == '__main__':
     logger.debug('Setting up wx app')
     frame = HPLCFrame('HPLCFrame', settings, parent=None, title='HPLC Control')
     frame.Show()
+
+
+    # hplc_cmd_q = deque()
+    # hplc_return_q = deque()
+    # hplc_status_q = deque()
+    # com_thread.add_new_communication('hplc_test', hplc_cmd_q,
+    #     hplc_return_q, hplc_status_q)
+    # cmd = ['submit_sample', ['SEC-SAXS', 'test', 'SECSAXS_test', 'D2F-A1', 10.0,
+    #     0.05, 0.1, 0.1, 60.0], {'result_path':'api_test'}]
+    # cmd2 = ['submit_sample', ['SEC-SAXS', 'test2', 'SECSAXS_test', 'D2F-A1', 10.0,
+    #     0.05, 0.1, 0.1, 60.0], {'result_path':'api_test'}]
+    # hplc_cmd_q.append(cmd)
+    # # time.sleep(1)
+    # hplc_cmd_q.append(cmd2)
+
     app.MainLoop()
 
     if com_thread is not None:
