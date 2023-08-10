@@ -1264,7 +1264,8 @@ class AgilentHPLC2Pumps(AgilentHPLC):
                 break
 
             if (self._purging_flow1 and not monitoring_flow1
-                and not stopping_flow1 and not stopping_initial_flow1):
+                and not stopping_flow1 and not stopping_initial_flow1
+                and self._purge1_ongoing.is_set()):
                 stopping_initial_flow1 = True
                 monitoring_flow1 = False
                 stopping_flow1 = False
@@ -1273,7 +1274,8 @@ class AgilentHPLC2Pumps(AgilentHPLC):
                     self.set_hplc_flow_rate(0, 1)
 
             if (self._purging_flow2 and not monitoring_flow2
-                and not stopping_flow2 and not stopping_initial_flow2):
+                and not stopping_flow2 and not stopping_initial_flow2
+                and self._purge2_ongoing.is_set()):
                 stopping_initial_flow2 = True
                 monitoring_flow2 = False
                 stopping_flow2 = False
@@ -1481,8 +1483,17 @@ class AgilentHPLC2Pumps(AgilentHPLC):
                     update_time2 = current_time2
 
 
-            if not self._purging_flow1 and not self._purging_flow2:
+            if (not self._purge1_ongoing.is_set()
+                and not self._purge2_ongoing.is_set()):
                 self._monitor_purge_evt.clear()
+                monitoring_flow1 = False
+                monitoring_flow2 = False
+                stopping_flow1 = False
+                stopping_flow2 = False
+                stopping_initial_flow1 = False
+                stopping_initial_flow2 = False
+                self._remaining_purge1_vol = 0
+                self._remaining_purge2_vol = 0
             else:
                 time.sleep(0.1)
 
