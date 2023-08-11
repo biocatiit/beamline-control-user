@@ -193,14 +193,13 @@ class BufferMonitor(object):
         self._terminate_buffer_monitor.set()
         self._buffer_monitor_thread.join()
 
-class AgilentHPLC2Pumps(AgilentHPLC):
+class AgilentHPLCStandard(AgilentHPLC):
     """
-    Specific control for the SEC-SAXS Agilent HPLC with dual pumps
+    Specific control for a standard Agilent stack with one pump
     """
 
-    def __init__(self, name, device, hplc_args={}, selector_valve_args={},
-        outlet_valve_args={}, purge1_valve_args={}, purge2_valve_args={},
-        buffer1_valve_args={}, buffer2_valve_args={}, pump1_id='', pump2_id=''):
+    def __init__(self, name, device, hplc_args={}, purge1_valve_args={},
+        buffer1_valve_args={}, pump1_id='', connect_valves=True):
         """
         Initializes the HPLC plus valves
 
@@ -236,32 +235,22 @@ class AgilentHPLC2Pumps(AgilentHPLC):
         self._equil_flow2 = False
 
         self._buffer_monitor1 = BufferMonitor(self._get_flow_rate1)
-        self._buffer_monitor2 = BufferMonitor(self._get_flow_rate2)
-
-        # Defines valve positions for various states
-        self._flow_path_positions = {
-            1   : {'selector': 1, 'outlet': 1},
-            2   : {'selector': 2, 'outlet': 2},
-            }
-
-        self._purge_positions = {
-            1   : {'purge1': 2},
-            2   : {'purge2': 2},
-            }
-
-        self._column_positions = {
-            1   : {'purge1': 1},
-            2   : {'purge2': 1},
-            }
 
         # Connect valves
-        self._connect_valves(selector_valve_args, outlet_valve_args,
-            purge1_valve_args, purge2_valve_args, buffer1_valve_args,
-            buffer2_valve_args)
+        if connect_valves:
+            # Defines valve positions for various states
+            self._purge_positions = {
+                1   : {'purge1': 2},
+                }
+
+            self._column_positions = {
+                1   : {'purge1': 1},
+                }
+
+            self._connect_valves(purge1_valve_args, buffer1_valve_args)
 
         # Connect HPLC
         self._pump1_id = pump1_id
-        self._pump2_id = pump2_id
 
         hplc_device_type = hplc_args['args'][0]
         hplc_device = hplc_args['args'][1]
@@ -303,16 +292,6 @@ class AgilentHPLC2Pumps(AgilentHPLC):
         self._monitor_purge_thread.daemon = True
         self._monitor_purge_thread.start()
 
-        self._switching_flow_path = False
-
-        self._monitor_switch_evt = threading.Event()
-        self._terminate_monitor_switch = threading.Event()
-        self._abort_switch = threading.Event()
-        self._monitor_switch_thread = threading.Thread(
-            target=self._monitor_switch)
-        self._monitor_switch_thread.daemon = True
-        self._monitor_switch_thread.start()
-
         self._submitting_sample = False
         self._submit_queue = deque()
 
@@ -338,7 +317,6 @@ class AgilentHPLC2Pumps(AgilentHPLC):
 
 
         self.set_active_buffer_position(self.get_valve_position('buffer1'), 1)
-        self.set_active_buffer_position(self.get_valve_position('buffer2'), 2)
 
     def  connect(self):
         """
@@ -346,27 +324,7 @@ class AgilentHPLC2Pumps(AgilentHPLC):
         """
         pass
 
-    def _connect_valves(self, sv_args, ov_args, p1_args, p2_args, b1_args,
-        b2_args):
-        sv_name = sv_args['name']
-        sv_arg_list = sv_args['args']
-        sv_kwarg_list = sv_args['kwargs']
-        sv_device_type = sv_arg_list[0]
-        sv_comm = sv_arg_list[1]
-
-        self._selector_valve = valvecon.known_valves[sv_device_type](sv_name,
-            sv_comm, **sv_kwarg_list)
-        self._selector_valve.connect()
-
-        ov_name = ov_args['name']
-        ov_arg_list = ov_args['args']
-        ov_kwarg_list = ov_args['kwargs']
-        ov_device_type = ov_arg_list[0]
-        ov_comm = ov_arg_list[1]
-
-        self._outlet_valve = valvecon.known_valves[ov_device_type](ov_name,
-            ov_comm, **ov_kwarg_list)
-        self._outlet_valve.connect()
+    def _connect_valves(self, p1_args, b1_args):
 
         p1_name = p1_args['name']
         p1_arg_list = p1_args['args']
@@ -378,16 +336,6 @@ class AgilentHPLC2Pumps(AgilentHPLC):
             p1_comm, **p1_kwarg_list)
         self._purge1_valve.connect()
 
-        p2_name = p2_args['name']
-        p2_arg_list = p2_args['args']
-        p2_kwarg_list = p2_args['kwargs']
-        p2_device_type = p2_arg_list[0]
-        p2_comm = p2_arg_list[1]
-
-        self._purge2_valve = valvecon.known_valves[p2_device_type](p2_name,
-            p2_comm, **p2_kwarg_list)
-        self._purge2_valve.connect()
-
         b1_name = b1_args['name']
         b1_arg_list = b1_args['args']
         b1_kwarg_list = b1_args['kwargs']
@@ -398,38 +346,12 @@ class AgilentHPLC2Pumps(AgilentHPLC):
             b1_comm, **b1_kwarg_list)
         self._buffer1_valve.connect()
 
-        b2_name = b2_args['name']
-        b2_arg_list = b2_args['args']
-        b2_kwarg_list = b2_args['kwargs']
-        b2_device_type = b2_arg_list[0]
-        b2_comm = b2_arg_list[1]
-
-        self._buffer2_valve = valvecon.known_valves[b2_device_type](b2_name,
-            b2_comm, **b2_kwarg_list)
-        self._buffer2_valve.connect()
-
         self._valves = {
-            'selector'  : self._selector_valve,
-            'outlet'    : self._outlet_valve,
             'purge1'    : self._purge1_valve,
-            'purge2'    : self._purge2_valve,
             'buffer1'   : self._buffer1_valve,
-            'buffer2'   : self._buffer2_valve,
             }
 
-        for flow_path in self._flow_path_positions:
-            active_flow_path = True
-
-            for valve, fp_pos in self._flow_path_positions[flow_path].items():
-                current_pos = self.get_valve_position(valve)
-
-                if int(fp_pos) != int(current_pos):
-                    active_flow_path = False
-                    break
-
-            if active_flow_path:
-                self._active_flow_path = flow_path
-                break
+        self._active_flow_path = 1
 
         for flow_path in self._purge_positions:
             purging = True
@@ -554,12 +476,7 @@ class AgilentHPLC2Pumps(AgilentHPLC):
         flow_rate: float
             The flow rate of the specified flow path.
         """
-        flow_path = int(flow_path)
-
-        if flow_path == 1:
-            flow_rate = self.get_data_trace('Quat. Pump 1: Flow (mL/min)')[1][-1]
-        elif flow_path == 2:
-            flow_rate = self.get_data_trace('Quat. Pump 2: Flow (mL/min)')[1][-1]
+        flow_rate = self.get_data_trace('Quat. Pump: Flow (mL/min)')[1][-1]
 
         return float(flow_rate)
 
@@ -635,10 +552,7 @@ class AgilentHPLC2Pumps(AgilentHPLC):
         """
         flow_path = int(flow_path)
 
-        if flow_path == 1:
-            pressure = self.get_data_trace('Quat. Pump 1: Pressure (bar)')[1][-1]
-        elif flow_path == 2:
-            pressure = self.get_data_trace('Quat. Pump 2: Pressure (bar)')[1][-1]
+        pressure = self.get_data_trace('Quat. Pump: Pressure (bar)')[1][-1]
 
         return pressure
 
@@ -1533,200 +1447,6 @@ class AgilentHPLC2Pumps(AgilentHPLC):
 
         return success
 
-    def set_active_flow_path(self, flow_path, stop_flow1=False,
-        stop_flow2=False, restore_flow_after_switch=True, purge_active=True,
-        purge_volume=1.0, purge_rate=None, purge_accel=None,
-        switch_with_sample=False, purge_max_pressure=None):
-        """
-        Sets the active flow path (i.e. which one is connected to the
-        multisampler and the active port on the outlet).
-
-        Parameters
-        ----------
-        flow_path: int
-            The active flow path to set. Either 1 or 2.
-        stop_flow1: bool
-            Whether flow from pump 1 should be stopped while the
-            flow path is switched.
-        stop_flow2: bool
-            Whether flow from pump 2 should be stopped while the
-            flow path is switched.
-        restore_flow_after_switch: bool
-            Whether the flow rate should be restored to the current flow rate
-            after switching is done. Note that this is only needed if either
-            stop_flow is True. If False, any flow that is stopped will not
-            be resumed after switching.
-        purge_active: bool
-            If true, this will do a purge of the active flow path after
-            switching. Commonly used to purge the multisampler flow path on
-            switching. Note that if the active flow path (after switching)
-            is currently purging then no additional purge will be done.
-        purge_volume: float
-            Volume in mL to be purged if purge_active is True.
-        purge_rate: float
-            Flow rate to use for purging. If no rate supplied, the device's
-            default purge rate is used.
-        purge_accel: float
-            Flow acceleration to use for purging. If no rate is supplied, the
-            device's default purge rate is used.
-        switch_with_sample: bool
-            Checks whether there are samples in the run queue. If there are,
-            and the run queue is not paused you must pass True for this
-            value to switch the active flow path. Otherwise the flow path
-            will not switch.
-        purge_max_pressure: float
-            Maximum pressure during purging. If no pressure is supplied, the
-            device's default purge max pressure is used.
-        """
-        flow_path = int(flow_path)
-
-        success = True
-
-        if self._active_flow_path == flow_path:
-            logger.info('HPLC %s already set to active flow path %s',
-                self.name, flow_path)
-            success = False
-        elif self._switching_flow_path:
-            logger.error('HPLC %s cannot switch flow paths because a switch '
-                'is already underway.', self.name)
-            success = False
-        else:
-            samples_being_run = self._check_samples_being_run()
-
-            if samples_being_run and not switch_with_sample:
-                logger.error(('HPLC %s cannot switch active flow path because '
-                    'samples are being run'), self.name)
-                success = False
-
-            else:
-                if ((self._purging_flow1 and flow_path == 1) or
-                    (self._purging_flow2 and flow_path == 2)):
-                    if purge_active:
-                        logger.info(('HPLC %s flow path %s is already purging '
-                            'no additional purge will be done'), self.name,
-                            flow_path)
-
-                        purge_active = False
-
-
-                self._switch_args = {
-                    'flow_path': flow_path,
-                    'stop_flow1': stop_flow1,
-                    'stop_flow2': stop_flow2,
-                    'restore_flow_after_switch': restore_flow_after_switch,
-                    'purge_active': purge_active,
-                    'purge_volume': purge_volume,
-                    'purge_rate': purge_rate,
-                    'purge_accel': purge_accel,
-                    'purge_max_pressure': purge_max_pressure,
-                    'switch_with_sample': switch_with_sample,
-                    }
-
-                self._abort_switch.clear()
-                self._switching_flow_path = True
-                self._monitor_switch_evt.set()
-
-                logger.info(('HPLC %s starting to switch active flow '
-                    'path to %s'), self.name, flow_path)
-
-        return success
-
-    def _monitor_switch(self):
-        while not self._terminate_monitor_switch.is_set():
-            self._monitor_switch_evt.wait()
-
-            if (self._abort_switch.is_set()
-                and self._terminate_monitor_switch.is_set()):
-                break
-
-            flow_path = self._switch_args['flow_path']
-            stop_flow1 = self._switch_args['stop_flow1']
-            stop_flow2 = self._switch_args['stop_flow2']
-            restore_flow_after_switch = self._switch_args['restore_flow_after_switch']
-            purge_active = self._switch_args['purge_active']
-            purge_volume = self._switch_args['purge_volume']
-            purge_rate = self._switch_args['purge_rate']
-            purge_accel = self._switch_args['purge_accel']
-            purge_max_pressure = self._switch_args['purge_max_pressure']
-            switch_with_sample = self._switch_args['switch_with_sample']
-
-            initial_flow1 = self.get_hplc_flow_rate(1)
-            initial_flow2 = self.get_hplc_flow_rate(2)
-
-            if not self._abort_switch.is_set():
-                if stop_flow1:
-                    self.set_hplc_flow_rate(0, 1)
-
-                if stop_flow2:
-                    self.set_hplc_flow_rate(0, 2)
-
-            if stop_flow1 or stop_flow2:
-                stopped1 = not stop_flow1
-                stopped2 = not stop_flow2
-
-                while not stopped1 or not stopped2:
-                    if self._abort_switch.is_set():
-                        break
-
-                    if not stopped1:
-                        flow_rate1 = self.get_hplc_flow_rate(1)
-
-                        if float(flow_rate1) == 0:
-                            stopped1 = True
-
-                    if not stopped2:
-                        flow_rate2 = self.get_hplc_flow_rate(2)
-
-                        if float(flow_rate2) == 0:
-                            stopped2 = True
-
-                    time.sleep(0.1)
-
-            if not self._abort_switch.is_set():
-                for name, pos in self._flow_path_positions[flow_path].items():
-                    current_pos = int(self.get_valve_position(name))
-
-                    if current_pos != pos:
-                        self.set_valve_position(name, pos)
-
-                    self._active_flow_path = flow_path
-
-
-                logger.info(('HPLC %s switched active flow path to %s'),
-                    self.name, flow_path)
-
-                if purge_active:
-                    if flow_path == 1:
-                        stop_before_purge = stop_flow1
-                        stop_after_purge = stop_flow1
-                    elif flow_path == 2:
-                        stop_before_purge = stop_flow2
-                        stop_after_purge = stop_flow2
-
-                    self.purge_flow_path(flow_path, purge_volume, purge_rate,
-                        purge_accel, True, switch_with_sample, stop_before_purge,
-                        stop_after_purge, purge_max_pressure=purge_max_pressure)
-
-                    if restore_flow_after_switch:
-                        if flow_path == 1:
-                            self._pre_purge_flow1 = initial_flow1
-                            self.set_hplc_flow_rate(initial_flow2, 2)
-
-                        elif flow_path == 2:
-                            self._pre_purge_flow2 = initial_flow2
-                            self.set_hplc_flow_rate(initial_flow1, 1)
-
-                elif restore_flow_after_switch:
-                    self.set_hplc_flow_rate(initial_flow1, 1)
-                    self.set_hplc_flow_rate(initial_flow2, 2)
-
-            elif self._abort_switch.is_set() and restore_flow_after_switch:
-                self.set_hplc_flow_rate(initial_flow1, 1)
-                self.set_hplc_flow_rate(initial_flow2, 2)
-
-            self._switching_flow_path = False
-            self._monitor_switch_evt.clear()
-
     def set_hplc_flow_rate(self, flow_rate, flow_path):
         """
         Sets the flow rate on the specified flow path.
@@ -1754,21 +1474,6 @@ class AgilentHPLC2Pumps(AgilentHPLC):
         success = self.set_flow_rate(flow_rate, pump_id)
 
         # run_queue = self.get_run_queue()
-
-        # all_methods = []
-        # for run in run_queue:
-        #     name = run[0]
-        #     run_data = self.get_run_data(name)
-        #     acq_method_list = run_data['acq_method']
-
-        #     all_methods.extend(acq_method_list)
-
-        # all_methods = list(set(all_methods))
-
-        # for method in all_methods:
-        #     self.load_method(method)
-        #     self.set_pump_method_values({'Flow': flow_rate}, pump_id)
-        #     self.save_current_method()
 
         return success
 
@@ -1798,23 +1503,6 @@ class AgilentHPLC2Pumps(AgilentHPLC):
             pump_id = self._pump2_id
 
         success = self.set_flow_accel(flow_accel, pump_id)
-
-        # run_queue = self.get_run_queue()
-
-        # all_methods = []
-        # for run in run_queue:
-        #     name = run[0]
-        #     run_data = self.get_run_data(name)
-        #     acq_method_list = run_data['acq_method']
-
-        #     all_methods.extend(acq_method_list)
-
-        # all_methods = list(set(all_methods))
-
-        # for method in all_methods:
-        #     self.load_method(method)
-        #     self.set_pump_method_values({'MaximumFlowRamp': flow_accel}, pump_id)
-        #     self.save_current_method()
 
         return success
 
@@ -2031,17 +1719,10 @@ class AgilentHPLC2Pumps(AgilentHPLC):
 
         if self._active_flow_path == 1:
             active_pump_id = self._pump1_id
-            eq_pump_id = self._pump2_id
-        elif self._active_flow_path == 2:
-            active_pump_id = self._pump2_id
-            eq_pump_id = self._pump1_id
 
         stop_time = total_elution_vol/flow_rate
 
         self.get_current_method_from_instrument()
-        eq_pump_method_vals = self.get_pump_method_values(['Flow',
-            'MaximumFlowRamp', 'HighPressureLimit'], eq_pump_id)
-        eq_pump_method_vals['StopTime_Time'] = stop_time
 
         acq_pump_method_vals = {
             'Flow': flow_rate,
@@ -2051,7 +1732,6 @@ class AgilentHPLC2Pumps(AgilentHPLC):
             }
 
         self.load_method(acq_method)
-        self.set_pump_method_values(eq_pump_method_vals, eq_pump_id)
         self.set_pump_method_values(acq_pump_method_vals, active_pump_id)
         self.save_current_method()
 
@@ -2194,6 +1874,637 @@ class AgilentHPLC2Pumps(AgilentHPLC):
         sample. Pauses the run queue and aborts the current run.
         """
         self.stop_purge(1)
+        self.stop_submit_sample()
+        self.pause_run_queue()
+        try:
+            self.abort_current_run()
+        except Exception:
+            pass
+        self.set_hplc_flow_rate(0, 1)
+
+    def stop_all_immediately(self):
+        """
+        Stops all current actions, including purging, switching, submitting a
+        sample. Pauses the run queue and aborts the current run. Sets the flow
+        acceleration to max to stop the pumps as quickly as possible.
+        """
+        flow_accel1 = self.get_hplc_flow_accel(1)
+
+        self.stop_all()
+
+        self.set_hplc_flow_accel(100, 1)
+
+        pump1_stopped = False
+        while not pump1_stopped:
+            if float(self.get_hplc_flow_rate(1)) == 0:
+                pump1_stopped = True
+
+        self.set_hplc_flow_accel(flow_accel1, 1)
+
+    def stop_pump1(self):
+        """
+        Stops pump 1.
+        """
+        self.stop_purge(1)
+        self.set_hplc_flow_rate(0, 1)
+
+    def stop_pump1_immediately(self):
+        """
+        Stops pump 1 as quickly as possible by setting flow acceleration
+        to max.
+        """
+        flow_accel1 = self.get_hplc_flow_accel(1)
+
+        self.stop_pump1()
+
+        self.set_hplc_flow_accel(100, 1)
+
+        pump1_stopped = False
+        while not pump1_stopped:
+            if float(self.get_hplc_flow_rate(1)) == 0:
+                pump1_stopped = True
+
+        self.set_hplc_flow_accel(flow_accel1, 1)
+
+    def disconnect_all(self):
+        """
+        Use this method instead of disconnect to disconnect from both the
+        valves and the HPLC.
+        """
+        self._buffer_monitor1.stop_monitor()
+
+        for valve in self._valves.values():
+            valve.disconnect()
+
+        self._terminate_monitor_purge.set()
+        self._monitor_purge_evt.set()
+        self._monitor_purge_thread.join()
+
+        self._abort_submit.set()
+        self._terminate_monitor_submit.set()
+        self._monitor_submit_evt.set()
+        self._monitor_submit_thread.join()
+
+        self.disconnect()
+
+class AgilentHPLC2Pumps(AgilentHPLCStandard):
+    """
+    Specific control for the SEC-SAXS Agilent HPLC with dual pumps
+    """
+
+    def __init__(self, name, device, hplc_args={}, selector_valve_args={},
+        outlet_valve_args={}, purge1_valve_args={}, purge2_valve_args={},
+        buffer1_valve_args={}, buffer2_valve_args={}, pump1_id='', pump2_id=''):
+        """
+        Initializes the HPLC plus valves
+
+        Parameters
+        ----------
+        name: str
+            Device name
+        device: str
+            Ignored. Dummy argument so the format is consistent with other devices.
+        hplc_args: dict
+            Dictionary of input arguments for the Agilent HPLC
+        selector_valve_args: dict
+            Dictionary of input arguments for the selector valve
+        outlet_valve_args: dict
+            Dictionary of input arguments for the outlet valve
+        purge1_valve_args: dict
+            Dictionary of the input arguments for the flowpath 1 purge valve
+        purge2_valve_args: dict
+            Dictionary of the input arguments for the flowpath 2 purge valve
+        buffer1_valve_args: dict
+            Dictionary of the input arguments for the flowpath 1 buffer valve
+        buffer2_valve_args: dict
+            Dictionary of the input arguments for the flowpath 2 buffer valve
+        pump1_id: str
+            The Agilent hashkey for pump 1
+        pump2_id: str
+            The Agilent hashkey for pump 2
+        """
+
+        self._buffer_monitor2 = BufferMonitor(self._get_flow_rate2)
+
+        # Defines valve positions for various states
+        self._flow_path_positions = {
+            1   : {'selector': 1, 'outlet': 1},
+            2   : {'selector': 2, 'outlet': 2},
+            }
+
+        self._purge_positions = {
+            1   : {'purge1': 2},
+            2   : {'purge2': 2},
+            }
+
+        self._column_positions = {
+            1   : {'purge1': 1},
+            2   : {'purge2': 1},
+            }
+
+        # Connect valves
+        self._connect_valves(selector_valve_args, outlet_valve_args,
+            purge1_valve_args, purge2_valve_args, buffer1_valve_args,
+            buffer2_valve_args)
+
+        AgilentHPLCStandard.__init__(self, name, device, hplc_args=hplc_args,
+            purge1_valve_args=purge1_valve_args,
+            buffer1_valve_args=buffer1_valve_args, pump1_id=pump1_id,
+            connect_valves=False)
+
+        # Connect HPLC
+        self._pump2_id = pump2_id
+
+
+        self._switching_flow_path = False
+
+        self._monitor_switch_evt = threading.Event()
+        self._terminate_monitor_switch = threading.Event()
+        self._abort_switch = threading.Event()
+        self._monitor_switch_thread = threading.Thread(
+            target=self._monitor_switch)
+        self._monitor_switch_thread.daemon = True
+        self._monitor_switch_thread.start()
+
+
+        self.set_active_buffer_position(self.get_valve_position('buffer2'), 2)
+
+    def _connect_valves(self, sv_args, ov_args, p1_args, p2_args, b1_args,
+        b2_args):
+        sv_name = sv_args['name']
+        sv_arg_list = sv_args['args']
+        sv_kwarg_list = sv_args['kwargs']
+        sv_device_type = sv_arg_list[0]
+        sv_comm = sv_arg_list[1]
+
+        self._selector_valve = valvecon.known_valves[sv_device_type](sv_name,
+            sv_comm, **sv_kwarg_list)
+        self._selector_valve.connect()
+
+        ov_name = ov_args['name']
+        ov_arg_list = ov_args['args']
+        ov_kwarg_list = ov_args['kwargs']
+        ov_device_type = ov_arg_list[0]
+        ov_comm = ov_arg_list[1]
+
+        self._outlet_valve = valvecon.known_valves[ov_device_type](ov_name,
+            ov_comm, **ov_kwarg_list)
+        self._outlet_valve.connect()
+
+        p1_name = p1_args['name']
+        p1_arg_list = p1_args['args']
+        p1_kwarg_list = p1_args['kwargs']
+        p1_device_type = p1_arg_list[0]
+        p1_comm = p1_arg_list[1]
+
+        self._purge1_valve = valvecon.known_valves[p1_device_type](p1_name,
+            p1_comm, **p1_kwarg_list)
+        self._purge1_valve.connect()
+
+        p2_name = p2_args['name']
+        p2_arg_list = p2_args['args']
+        p2_kwarg_list = p2_args['kwargs']
+        p2_device_type = p2_arg_list[0]
+        p2_comm = p2_arg_list[1]
+
+        self._purge2_valve = valvecon.known_valves[p2_device_type](p2_name,
+            p2_comm, **p2_kwarg_list)
+        self._purge2_valve.connect()
+
+        b1_name = b1_args['name']
+        b1_arg_list = b1_args['args']
+        b1_kwarg_list = b1_args['kwargs']
+        b1_device_type = b1_arg_list[0]
+        b1_comm = b1_arg_list[1]
+
+        self._buffer1_valve = valvecon.known_valves[b1_device_type](b1_name,
+            b1_comm, **b1_kwarg_list)
+        self._buffer1_valve.connect()
+
+        b2_name = b2_args['name']
+        b2_arg_list = b2_args['args']
+        b2_kwarg_list = b2_args['kwargs']
+        b2_device_type = b2_arg_list[0]
+        b2_comm = b2_arg_list[1]
+
+        self._buffer2_valve = valvecon.known_valves[b2_device_type](b2_name,
+            b2_comm, **b2_kwarg_list)
+        self._buffer2_valve.connect()
+
+        self._valves = {
+            'selector'  : self._selector_valve,
+            'outlet'    : self._outlet_valve,
+            'purge1'    : self._purge1_valve,
+            'purge2'    : self._purge2_valve,
+            'buffer1'   : self._buffer1_valve,
+            'buffer2'   : self._buffer2_valve,
+            }
+
+        for flow_path in self._flow_path_positions:
+            active_flow_path = True
+
+            for valve, fp_pos in self._flow_path_positions[flow_path].items():
+                current_pos = self.get_valve_position(valve)
+
+                if int(fp_pos) != int(current_pos):
+                    active_flow_path = False
+                    break
+
+            if active_flow_path:
+                self._active_flow_path = flow_path
+                break
+
+        for flow_path in self._purge_positions:
+            purging = True
+
+            for valve, fp_pos in self._purge_positions[flow_path].items():
+                current_pos = self.get_valve_position(valve)
+
+                if int(fp_pos) != int(current_pos):
+                    purging = False
+                    break
+
+            if purging:
+                if flow_path == 1:
+                    self._purging_flow1 = True
+                elif flow_path == 2:
+                    self._purging_flow2 = True
+
+    def get_hplc_flow_rate(self, flow_path):
+        """
+        Gets the flow rate of the specified flow path
+
+        Parameters
+        ----------
+        flow_path: int
+            The flow path to get the rate for. Either 1 or 2.
+
+        Returns
+        -------
+        flow_rate: float
+            The flow rate of the specified flow path.
+        """
+        flow_path = int(flow_path)
+
+        if flow_path == 1:
+            flow_rate = self.get_data_trace('Quat. Pump 1: Flow (mL/min)')[1][-1]
+        elif flow_path == 2:
+            flow_rate = self.get_data_trace('Quat. Pump 2: Flow (mL/min)')[1][-1]
+
+        return float(flow_rate)
+
+    def get_hplc_pressure(self, flow_path):
+        """
+        Gets the pump pressure of the specified flow path
+
+        Parameters
+        ----------
+        flow_path: int
+            The flow path to get the pressure for. Either 1 or 2.
+
+        Returns
+        -------
+        pressure: float
+            The pump pressure of the specified flow path.
+        """
+        flow_path = int(flow_path)
+
+        if flow_path == 1:
+            pressure = self.get_data_trace('Quat. Pump 1: Pressure (bar)')[1][-1]
+        elif flow_path == 2:
+            pressure = self.get_data_trace('Quat. Pump 2: Pressure (bar)')[1][-1]
+
+        return pressure
+
+    def set_active_flow_path(self, flow_path, stop_flow1=False,
+        stop_flow2=False, restore_flow_after_switch=True, purge_active=True,
+        purge_volume=1.0, purge_rate=None, purge_accel=None,
+        switch_with_sample=False, purge_max_pressure=None):
+        """
+        Sets the active flow path (i.e. which one is connected to the
+        multisampler and the active port on the outlet).
+
+        Parameters
+        ----------
+        flow_path: int
+            The active flow path to set. Either 1 or 2.
+        stop_flow1: bool
+            Whether flow from pump 1 should be stopped while the
+            flow path is switched.
+        stop_flow2: bool
+            Whether flow from pump 2 should be stopped while the
+            flow path is switched.
+        restore_flow_after_switch: bool
+            Whether the flow rate should be restored to the current flow rate
+            after switching is done. Note that this is only needed if either
+            stop_flow is True. If False, any flow that is stopped will not
+            be resumed after switching.
+        purge_active: bool
+            If true, this will do a purge of the active flow path after
+            switching. Commonly used to purge the multisampler flow path on
+            switching. Note that if the active flow path (after switching)
+            is currently purging then no additional purge will be done.
+        purge_volume: float
+            Volume in mL to be purged if purge_active is True.
+        purge_rate: float
+            Flow rate to use for purging. If no rate supplied, the device's
+            default purge rate is used.
+        purge_accel: float
+            Flow acceleration to use for purging. If no rate is supplied, the
+            device's default purge rate is used.
+        switch_with_sample: bool
+            Checks whether there are samples in the run queue. If there are,
+            and the run queue is not paused you must pass True for this
+            value to switch the active flow path. Otherwise the flow path
+            will not switch.
+        purge_max_pressure: float
+            Maximum pressure during purging. If no pressure is supplied, the
+            device's default purge max pressure is used.
+        """
+        flow_path = int(flow_path)
+
+        success = True
+
+        if self._active_flow_path == flow_path:
+            logger.info('HPLC %s already set to active flow path %s',
+                self.name, flow_path)
+            success = False
+        elif self._switching_flow_path:
+            logger.error('HPLC %s cannot switch flow paths because a switch '
+                'is already underway.', self.name)
+            success = False
+        else:
+            samples_being_run = self._check_samples_being_run()
+
+            if samples_being_run and not switch_with_sample:
+                logger.error(('HPLC %s cannot switch active flow path because '
+                    'samples are being run'), self.name)
+                success = False
+
+            else:
+                if ((self._purging_flow1 and flow_path == 1) or
+                    (self._purging_flow2 and flow_path == 2)):
+                    if purge_active:
+                        logger.info(('HPLC %s flow path %s is already purging '
+                            'no additional purge will be done'), self.name,
+                            flow_path)
+
+                        purge_active = False
+
+
+                self._switch_args = {
+                    'flow_path': flow_path,
+                    'stop_flow1': stop_flow1,
+                    'stop_flow2': stop_flow2,
+                    'restore_flow_after_switch': restore_flow_after_switch,
+                    'purge_active': purge_active,
+                    'purge_volume': purge_volume,
+                    'purge_rate': purge_rate,
+                    'purge_accel': purge_accel,
+                    'purge_max_pressure': purge_max_pressure,
+                    'switch_with_sample': switch_with_sample,
+                    }
+
+                self._abort_switch.clear()
+                self._switching_flow_path = True
+                self._monitor_switch_evt.set()
+
+                logger.info(('HPLC %s starting to switch active flow '
+                    'path to %s'), self.name, flow_path)
+
+        return success
+
+    def _monitor_switch(self):
+        while not self._terminate_monitor_switch.is_set():
+            self._monitor_switch_evt.wait()
+
+            if (self._abort_switch.is_set()
+                and self._terminate_monitor_switch.is_set()):
+                break
+
+            flow_path = self._switch_args['flow_path']
+            stop_flow1 = self._switch_args['stop_flow1']
+            stop_flow2 = self._switch_args['stop_flow2']
+            restore_flow_after_switch = self._switch_args['restore_flow_after_switch']
+            purge_active = self._switch_args['purge_active']
+            purge_volume = self._switch_args['purge_volume']
+            purge_rate = self._switch_args['purge_rate']
+            purge_accel = self._switch_args['purge_accel']
+            purge_max_pressure = self._switch_args['purge_max_pressure']
+            switch_with_sample = self._switch_args['switch_with_sample']
+
+            initial_flow1 = self.get_hplc_flow_rate(1)
+            initial_flow2 = self.get_hplc_flow_rate(2)
+
+            if not self._abort_switch.is_set():
+                if stop_flow1:
+                    self.set_hplc_flow_rate(0, 1)
+
+                if stop_flow2:
+                    self.set_hplc_flow_rate(0, 2)
+
+            if stop_flow1 or stop_flow2:
+                stopped1 = not stop_flow1
+                stopped2 = not stop_flow2
+
+                while not stopped1 or not stopped2:
+                    if self._abort_switch.is_set():
+                        break
+
+                    if not stopped1:
+                        flow_rate1 = self.get_hplc_flow_rate(1)
+
+                        if float(flow_rate1) == 0:
+                            stopped1 = True
+
+                    if not stopped2:
+                        flow_rate2 = self.get_hplc_flow_rate(2)
+
+                        if float(flow_rate2) == 0:
+                            stopped2 = True
+
+                    time.sleep(0.1)
+
+            if not self._abort_switch.is_set():
+                for name, pos in self._flow_path_positions[flow_path].items():
+                    current_pos = int(self.get_valve_position(name))
+
+                    if current_pos != pos:
+                        self.set_valve_position(name, pos)
+
+                    self._active_flow_path = flow_path
+
+
+                logger.info(('HPLC %s switched active flow path to %s'),
+                    self.name, flow_path)
+
+                if purge_active:
+                    if flow_path == 1:
+                        stop_before_purge = stop_flow1
+                        stop_after_purge = stop_flow1
+                    elif flow_path == 2:
+                        stop_before_purge = stop_flow2
+                        stop_after_purge = stop_flow2
+
+                    self.purge_flow_path(flow_path, purge_volume, purge_rate,
+                        purge_accel, True, switch_with_sample, stop_before_purge,
+                        stop_after_purge, purge_max_pressure=purge_max_pressure)
+
+                    if restore_flow_after_switch:
+                        if flow_path == 1:
+                            self._pre_purge_flow1 = initial_flow1
+                            self.set_hplc_flow_rate(initial_flow2, 2)
+
+                        elif flow_path == 2:
+                            self._pre_purge_flow2 = initial_flow2
+                            self.set_hplc_flow_rate(initial_flow1, 1)
+
+                elif restore_flow_after_switch:
+                    self.set_hplc_flow_rate(initial_flow1, 1)
+                    self.set_hplc_flow_rate(initial_flow2, 2)
+
+            elif self._abort_switch.is_set() and restore_flow_after_switch:
+                self.set_hplc_flow_rate(initial_flow1, 1)
+                self.set_hplc_flow_rate(initial_flow2, 2)
+
+            self._switching_flow_path = False
+            self._monitor_switch_evt.clear()
+
+    def submit_hplc_sample(self, name, acq_method, sample_loc, inj_vol,
+        flow_rate, flow_accel, total_elution_vol, high_pressure_lim,
+        result_path=None, sp_method=None, wait_for_flow_ramp=True,
+        settle_time=0.):
+        """
+        Submits a sample to the hplc run queue. Note that due to limitations
+        of the run queue and how it gets method parameters you should only every
+        submit one sample, and don't submit another until it's finished. Doing
+        otherwise could mess up the flow on one or both of the pumps.
+
+        Parameters
+        ----------
+        name: str
+            The name of the sample. Used internally and as the result save name.
+            Must be unique to the hplc sample list (including finished samples).
+        acq_method: str
+            The acquisition method name relative to the top level OpenLab
+            CDS Methods folder.
+        sample_loc: str
+            The sample location in the autosampler (e.g. D1F-A1 being drawer
+            1 front, position A1)
+        inj_vol: float
+            The injection volume.
+        flow_rate: float
+            The elution flow rate
+        flow_accel: float
+            The elution flow acceleration
+        total_elution_vol: float
+            The total elution volume. Used to calculate the method run time
+            based on the provided flow rate.
+        high_pressure_lim: float
+            The high pressure limit for the elution run.
+        result_path: str
+            The path to save the result in, relative to the project base
+            results path. If no path is provided, the base results path will
+            be used.
+        sp_method: str
+            Sample prep method to be used. The path should be relative to the
+            top level Methods folder.
+        wait_for_flow_ramp: bool
+            Whether or not the submission should wait until the flow has ramped
+            up to the elution flow rate.
+        settle_time: float
+            Time in s to wait after the flow has ramped up before submitting
+            the sample.
+
+        Returns
+        -------
+        success: bool
+            True if successful
+        """
+        flow_rate = float(flow_rate)
+        flow_accel = float(flow_accel)
+        high_pressure_lim = float(high_pressure_lim)
+        inj_vol = float(inj_vol)
+
+        inst_status = self.get_instrument_status()
+        if (inst_status == 'Offline' or inst_status == 'Unknown'
+            or inst_status == 'Error' or inst_status == 'Idle' or
+            inst_status == 'NotReady' or inst_status == 'Standby'):
+            self.set_hplc_flow_accel(flow_accel, self._active_flow_path)
+            self.set_hplc_flow_rate(flow_rate, self._active_flow_path)
+
+        if self._active_flow_path == 1:
+            active_pump_id = self._pump1_id
+            eq_pump_id = self._pump2_id
+        elif self._active_flow_path == 2:
+            active_pump_id = self._pump2_id
+            eq_pump_id = self._pump1_id
+
+        stop_time = total_elution_vol/flow_rate
+
+        self.get_current_method_from_instrument()
+        eq_pump_method_vals = self.get_pump_method_values(['Flow',
+            'MaximumFlowRamp', 'HighPressureLimit'], eq_pump_id)
+        eq_pump_method_vals['StopTime_Time'] = stop_time
+
+        acq_pump_method_vals = {
+            'Flow': flow_rate,
+            'MaximumFlowRamp': flow_accel,
+            'HighPressureLimit': high_pressure_lim,
+            'StopTime_Time': stop_time,
+            }
+
+        self.load_method(acq_method)
+        self.set_pump_method_values(eq_pump_method_vals, eq_pump_id)
+        self.set_pump_method_values(acq_pump_method_vals, active_pump_id)
+        self.save_current_method()
+
+        sequence_vals = {
+            'acq_method'    : acq_method,
+            'sample_loc'    : sample_loc,
+            'injection_vol' : inj_vol,
+            'result_name'   : '{}-<DS>'.format(name),
+            'sample_name'   : name,
+            'sample_type'   : 'Sample',
+            }
+
+        if sp_method is not None:
+            sequence_vals['sp_method'] = sp_method
+
+        submit_args = {
+            'name'                  : name,
+            'sequence_vals'         : sequence_vals,
+            'result_path'           : result_path,
+            'flow_rate'             : flow_rate,
+            'wait_for_flow_ramp'    : wait_for_flow_ramp,
+            'settle_time'           : settle_time,
+            }
+
+        self._submit_queue.append(submit_args)
+
+        logger.info(('HPLC %s starting to submit sample %s on active flow '
+            'path %s'), self.name, name, self._active_flow_path)
+
+        self._submitting_sample = True
+        self._abort_submit.clear()
+        self._monitor_submit_evt.set()
+
+        return True
+
+    def stop_switch(self):
+        """
+        Stops switching active flow path
+        """
+        if self._switching_flow_path:
+            self._abort_switch.set()
+            logger.info('HPLC %s stoping switching of active flow path', self.name)
+
+    def stop_all(self):
+        """
+        Stops all current actions, including purging, switching, submitting a
+        sample. Pauses the run queue and aborts the current run.
+        """
+        self.stop_purge(1)
         self.stop_purge(2)
         self.stop_switch()
         self.stop_submit_sample()
@@ -2230,37 +2541,12 @@ class AgilentHPLC2Pumps(AgilentHPLC):
         self.set_hplc_flow_accel(flow_accel1, 1)
         self.set_hplc_flow_accel(flow_accel2, 2)
 
-    def stop_pump1(self):
-        """
-        Stops pump 1.
-        """
-        self.stop_purge(1)
-        self.set_hplc_flow_rate(0, 1)
-
     def stop_pump2(self):
         """
         Stops pump 2.
         """
         self.stop_purge(2)
         self.set_hplc_flow_rate(0, 2)
-
-    def stop_pump1_immediately(self):
-        """
-        Stops pump 1 as quickly as possible by setting flow acceleration
-        to max.
-        """
-        flow_accel1 = self.get_hplc_flow_accel(1)
-
-        self.stop_pump1()
-
-        self.set_hplc_flow_accel(100, 1)
-
-        pump1_stopped = False
-        while not pump1_stopped:
-            if float(self.get_hplc_flow_rate(1)) == 0:
-                pump1_stopped = True
-
-        self.set_hplc_flow_accel(flow_accel1, 1)
 
     def stop_pump2_immediately(self):
         """
@@ -2308,7 +2594,8 @@ class AgilentHPLC2Pumps(AgilentHPLC):
         self.disconnect()
 
 known_hplcs = {
-    'AgilentHPLC2Pumps'  : AgilentHPLC2Pumps,
+    'AgilentHPLCStandard'   : AgilentHPLCStandard,
+    'AgilentHPLC2Pumps'     : AgilentHPLC2Pumps,
     }
 
 class HPLCCommThread(utils.CommManager):
@@ -2486,8 +2773,6 @@ class HPLCCommThread(utils.CommManager):
 
         device = self._connected_devices[name]
 
-        a = time.time()
-
         pump_status = {
             'target_flow1'      : device.get_hplc_target_flow_rate(1),
             'flow_accel1'       : device.get_hplc_flow_accel(1, False),
@@ -2515,8 +2800,6 @@ class HPLCCommThread(utils.CommManager):
         else:
             uv_status = {}
 
-        logger.debug(time.time()-a)
-
         val = {
             'pump_status'       : pump_status,
             'autosampler_status': autosampler_status,
@@ -2535,20 +2818,16 @@ class HPLCCommThread(utils.CommManager):
 
         device = self._connected_devices[name]
 
-        a = time.time()
-
         valve_status = {
             'buffer1'   : device.get_valve_position('buffer1'),
+            'purge1'    : device.get_valve_position('purge1'),
             }
 
         if isinstance(device, AgilentHPLC2Pumps):
             valve_status['buffer2'] = device.get_valve_position('buffer2')
-            valve_status['purge1'] = device.get_valve_position('purge1')
             valve_status['purge2'] = device.get_valve_position('purge2')
             valve_status['selector'] = device.get_valve_position('selector')
             valve_status['outlet'] = device.get_valve_position('outlet')
-
-        logger.debug(time.time()-a)
 
         self._return_value((name, cmd, valve_status), comm_name)
 
@@ -3265,6 +3544,7 @@ class HPLCPanel(utils.DevicePanel):
         pump1_sizer.Add(pump1_btn_sizer, flag=wx.LEFT|wx.RIGHT|wx.BOTTOM,
             border=self._FromDIP(5))
 
+        mid_sizer = wx.BoxSizer(wx.VERTICAL)
 
         if self._device_type == 'AgilentHPLC2Pumps':
             flow_path_box = wx.StaticBox(flow_box, label='Flow Path')
@@ -3322,7 +3602,6 @@ class HPLCPanel(utils.DevicePanel):
             stop_all_sizer.Add(self._stop_all_now_btn,
                 flag=wx.ALIGN_CENTER_VERTICAL)
 
-            mid_sizer = wx.BoxSizer(wx.VERTICAL)
             mid_sizer.Add(stop_all_sizer, flag=wx.ALIGN_CENTER_HORIZONTAL)
             mid_sizer.Add(fp_sizer, flag=wx.TOP|wx.EXPAND, border=self._FromDIP(5))
 
@@ -3476,8 +3755,7 @@ class HPLCPanel(utils.DevicePanel):
 
         flow_sizer = wx.BoxSizer(wx.HORIZONTAL)
 
-        if self._device_type == 'AgilentHPLC2Pumps':
-            flow_sizer.Add(mid_sizer, flag=wx.ALL, border=self._FromDIP(5))
+        flow_sizer.Add(mid_sizer, flag=wx.ALL, border=self._FromDIP(5))
 
         flow_sizer.Add(pump1_sizer, flag=wx.TOP|wx.RIGHT|wx.BOTTOM,
             border=self._FromDIP(5))
@@ -5039,9 +5317,9 @@ class SampleDialog(wx.Dialog):
         self._sample_loc_ctrl = wx.TextCtrl(parent, size=self._FromDIP((60, -1)))
         self._inj_vol_ctrl = wx.TextCtrl(parent, size=self._FromDIP((60, -1)),
             validator=utils.CharValidator('float'))
-        self._rate_ctrl = wx.TextCtrl(parent, size=self._FromDIP((60, -1)),
-            validator=utils.CharValidator('float'))
         self._elution_vol_ctrl = wx.TextCtrl(parent, size=self._FromDIP((60, -1)),
+            validator=utils.CharValidator('float'))
+        self._rate_ctrl = wx.TextCtrl(parent, size=self._FromDIP((60, -1)),
             validator=utils.CharValidator('float'))
         self._accel_ctrl = wx.TextCtrl(parent, size=self._FromDIP((60, -1)),
             validator=utils.CharValidator('float'))
@@ -5232,46 +5510,68 @@ if __name__ == '__main__':
     h1.setFormatter(formatter)
     logger.addHandler(h1)
 
+    # # SEC-SAXS 2 pump
+    # hplc_args = {
+    #     'name'  : 'SEC-SAXS',
+    #     'args'  : ['AgilentHPLC', 'net.pipe://localhost/Agilent/OpenLAB/'],
+    #     'kwargs': {'instrument_name': 'SEC-SAXS', 'project_name': 'Demo',
+    #                 'get_inst_method_on_start': True}
+    #     }
+
+    # selector_valve_args = {
+    #     'name'  : 'Selector',
+    #     'args'  : ['Cheminert', 'COM5'],
+    #     'kwargs': {'positions' : 2}
+    #     }
+
+    # outlet_valve_args = {
+    #     'name'  : 'Outlet',
+    #     'args'  : ['Cheminert', 'COM8'],
+    #     'kwargs': {'positions' : 2}
+    #     }
+
+    # purge1_valve_args = {
+    #     'name'  : 'Purge 1',
+    #     'args'  : ['Cheminert', 'COM7'],
+    #     'kwargs': {'positions' : 4}
+    #     }
+
+    # purge2_valve_args = {
+    #     'name'  : 'Purge 2',
+    #     'args'  : ['Cheminert', 'COM6'],
+    #     'kwargs': {'positions' : 4}
+    #     }
+
+    # buffer1_valve_args = {
+    #     'name'  : 'Buffer 1',
+    #     'args'  : ['Cheminert', 'COM3'],
+    #     'kwargs': {'positions' : 10}
+    #     }
+
+    # buffer2_valve_args = {
+    #     'name'  : 'Buffer 2',
+    #     'args'  : ['Cheminert', 'COM4'],
+    #     'kwargs': {'positions' : 10}
+    #     }
+
+
+    # SEC-MALS HPLC-1
     hplc_args = {
-        'name'  : 'SEC-SAXS',
+        'name'  : 'HPLC-1',
         'args'  : ['AgilentHPLC', 'net.pipe://localhost/Agilent/OpenLAB/'],
-        'kwargs': {'instrument_name': 'SEC-SAXS', 'project_name': 'Demo',
+        'kwargs': {'instrument_name': 'HPLC-1', 'project_name': 'Demo',
                     'get_inst_method_on_start': True}
-        }
-
-    selector_valve_args = {
-        'name'  : 'Selector',
-        'args'  : ['Cheminert', 'COM5'],
-        'kwargs': {'positions' : 2}
-        }
-
-    outlet_valve_args = {
-        'name'  : 'Outlet',
-        'args'  : ['Cheminert', 'COM8'],
-        'kwargs': {'positions' : 2}
         }
 
     purge1_valve_args = {
         'name'  : 'Purge 1',
-        'args'  : ['Cheminert', 'COM7'],
-        'kwargs': {'positions' : 4}
-        }
-
-    purge2_valve_args = {
-        'name'  : 'Purge 2',
-        'args'  : ['Cheminert', 'COM6'],
-        'kwargs': {'positions' : 4}
+        'args'  :['Rheodyne', 'COM5'],
+        'kwargs': {'positions' : 6}
         }
 
     buffer1_valve_args = {
         'name'  : 'Buffer 1',
         'args'  : ['Cheminert', 'COM3'],
-        'kwargs': {'positions' : 10}
-        }
-
-    buffer2_valve_args = {
-        'name'  : 'Buffer 2',
-        'args'  : ['Cheminert', 'COM4'],
         'kwargs': {'positions' : 10}
         }
 
@@ -5312,17 +5612,29 @@ if __name__ == '__main__':
     #     0.05, 0.1, 0.1, 60.0, result_path='api_test', )
 
 
+    # # 2 pump HPLC for SEC-SAXS
+    # setup_devices = [
+    #     {'name': 'SEC-SAXS', 'args': ['AgilentHPLC2Pumps', None],
+    #         'kwargs': {'hplc_args' : hplc_args,
+    #         'selector_valve_args' : selector_valve_args,
+    #         'outlet_valve_args' : outlet_valve_args,
+    #         'purge1_valve_args' : purge1_valve_args,
+    #         'purge2_valve_args' : purge2_valve_args,
+    #         'buffer1_valve_args' : buffer1_valve_args,
+    #         'buffer2_valve_args' : buffer2_valve_args,
+    #         'pump1_id' : 'quat. pump 1#1c#1',
+    #         'pump2_id' : 'quat. pump 2#1c#2'},
+    #     }
+    #     ]
+
+    # Standard stack for SEC-MALS
     setup_devices = [
-        {'name': 'SEC-SAXS', 'args': ['AgilentHPLC2Pumps', None],
+        {'name': 'SEC-SAXS', 'args': ['AgilentHPLCStandard', None],
             'kwargs': {'hplc_args' : hplc_args,
-            'selector_valve_args' : selector_valve_args,
-            'outlet_valve_args' : outlet_valve_args,
             'purge1_valve_args' : purge1_valve_args,
-            'purge2_valve_args' : purge2_valve_args,
             'buffer1_valve_args' : buffer1_valve_args,
-            'buffer2_valve_args' : buffer2_valve_args,
-            'pump1_id' : 'quat. pump 1#1c#1',
-            'pump2_id' : 'quat. pump 2#1c#2'},
+            'pump1_id' : 'quat. pump#1c#1',
+            },
         }
         ]
 

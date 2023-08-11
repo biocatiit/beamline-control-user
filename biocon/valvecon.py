@@ -255,7 +255,7 @@ class RheodyneValve(Valve):
             with self.comm_lock:
                 self.valve_comm = SerialComm(self.device, 19200)
 
-            self.send_command('M', False) #Homes valve
+            # self.send_command('M', False) #Homes valve
 
             self.connected = True
 
@@ -834,20 +834,30 @@ if __name__ == '__main__':
     #         'kwargs': {'positions' : 6}},
     #     ]
 
-    # New HPLC
+    # # New HPLC
+    # setup_devices = [
+    #     {'name': 'Selector', 'args': ['Cheminert', 'COM5'],
+    #         'kwargs': {'positions' : 2}},
+    #     # {'name': 'Outlet', 'args': ['Cheminert', 'COM8'],
+    #     #     'kwargs': {'positions' : 2}},
+    #     # {'name': 'Purge 1', 'args': ['Cheminert', 'COM7'],
+    #     #     'kwargs': {'positions' : 4}},
+    #     # {'name': 'Purge 2', 'args': ['Cheminert', 'COM6'],
+    #     #     'kwargs': {'positions' : 4}},
+    #     # {'name': 'Buffer 1', 'args': ['Cheminert', 'COM3'],
+    #     #     'kwargs': {'positions' : 10}},
+    #     # {'name': 'Buffer 2', 'args': ['Cheminert', 'COM4'],
+    #     #     'kwargs': {'positions' : 10}},
+    #     ]
+
+     # SEC-MALS
     setup_devices = [
-        {'name': 'Selector', 'args': ['Cheminert', 'COM5'],
-            'kwargs': {'positions' : 2}},
-        # {'name': 'Outlet', 'args': ['Cheminert', 'COM8'],
-        #     'kwargs': {'positions' : 2}},
-        # {'name': 'Purge 1', 'args': ['Cheminert', 'COM7'],
-        #     'kwargs': {'positions' : 4}},
-        # {'name': 'Purge 2', 'args': ['Cheminert', 'COM6'],
-        #     'kwargs': {'positions' : 4}},
-        # {'name': 'Buffer 1', 'args': ['Cheminert', 'COM3'],
-        #     'kwargs': {'positions' : 10}},
-        # {'name': 'Buffer 2', 'args': ['Cheminert', 'COM4'],
-        #     'kwargs': {'positions' : 10}},
+        {'name': 'Buffer 1', 'args': ['Cheminert', 'COM3'],
+            'kwargs': {'positions' : 10}},
+        {'name': 'Buffer 2', 'args': ['Cheminert', 'COM4'],
+            'kwargs': {'positions' : 10}},
+        {'name': 'Purge 1', 'args': ['Rheodyne', 'COM5'],
+            'kwargs': {'positions' : 6}},
         ]
 
     # Simulated
