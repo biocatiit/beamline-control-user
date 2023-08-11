@@ -316,8 +316,19 @@ class AgilentHPLCStandard(AgilentHPLC):
         self._monitor_equil_thread.daemon = True
         self._monitor_equil_thread.start()
 
-
         self.set_active_buffer_position(self.get_valve_position('buffer1'), 1)
+
+        self._uv_abs_traces = {}
+        traces = self.get_available_data_traces()
+
+        for trace in traces:
+            if trace.startswith('MWD: Signal'):
+                wav = trace.split('=')[1].strip()
+
+                if wav.lower() != 'off':
+                    wav = wav.split(' ')[0]
+                    wav = float(wav)
+                    self._uv_abs_traces[wav] = trace
 
     def  connect(self):
         """
@@ -622,6 +633,29 @@ class AgilentHPLCStandard(AgilentHPLC):
         """
         temperature = self.get_data_trace('Multisampler: Temperature (°C)')[1][-1]
         return float(temperature)
+
+    def get_hplc_uv_abs(self, wav):
+        """
+        Gets the uv absorbance at the specified wavelength, if available)
+
+        Parameters
+        ----------
+        wav: float
+            The wavelength to the the absorbance for.
+
+        Returns
+        -------
+        uv_abs: float
+            The uv absorbance. Returns None if wavelength is not available.
+        """
+        wav = float(wav)
+        if wav in self._uv_abs_traces:
+            trace = self._uv_abs_traces[wav]
+            uv_abs = float(self.get_data_trace(trace)[1][-1])
+        else:
+            uv_abs = None
+
+        return uv_abs
 
     def _get_flow_rate1(self):
         return self.get_hplc_flow_rate(1)
@@ -2675,7 +2709,7 @@ class HPLCCommThread(utils.CommManager):
             'set_pump_on'               : self._set_pump_on,
             'set_pump_standby'          : self._set_pump_standby,
             'set_autosampler_on'        : self._set_autosampler_on,
-            'set_uv_on'                 : self._set_uv_on,
+            'set_mwd_on'                 : self._set_mwd_on,
             'set_buffer_info'           : self._set_buffer_info,
             'remove_buffer'             : self._remove_buffer,
             'submit_sample'             : self._submit_sample,
@@ -2798,10 +2832,21 @@ class HPLCCommThread(utils.CommManager):
             'temperature'               : device.get_hplc_autosampler_temperature(),
             }
 
+        if (isinstance(device, AgilentHPLCStandard)
+            and not isinstance(device, AgilentHPLC2Pumps)):
+            uv_status = {
+                'uv_280_abs'    : device.get_hplc_uv_abs(280.0),
+                'uv_260_abs'    : device.get_hplc_uv_abs(260.0),
+                }
+
+        else:
+            uv_status = {}
+
         val = {
             'instrument_status' : instrument_status,
             'pump_status'       : pump_status,
             'autosampler_status': autosampler_status,
+            'uv_status'         : uv_status,
         }
 
         self._return_value((name, cmd, val), comm_name)
@@ -2834,7 +2879,8 @@ class HPLCCommThread(utils.CommManager):
             'thermostat_power_status'   : device.get_autosampler_thermostat_power_status(),
             }
 
-        if len(device.get_uv_ids()) > 0:
+        if (isinstance(device, AgilentHPLCStandard)
+            and not isinstance(device, AgilentHPLC2Pumps)):
             uv_status = {
                 'uv_lamp_status'    : device.get_uv_lamp_power_status(),
                 'vis_lamp_status'   : device.get_vis_lamp_power_status(),
@@ -3051,7 +3097,7 @@ class HPLCCommThread(utils.CommManager):
 
         logger.debug("Set %s autosampler on: %s", name, success)
 
-    def _set_uv_on(self, name, **kwargs):
+    def _set_mwd_on(self, name, **kwargs):
         logger.debug("Setting %s uv on", name)
 
         comm_name = kwargs.pop('comm_name', None)
@@ -3336,6 +3382,11 @@ class HPLCPanel(utils.DevicePanel):
         self._sampler_submitting = ''
         self._sampler_temp = ''
 
+        self._uv_lamp_status = ''
+        self._uv_vis_lamp_status = ''
+        self._uv_280_abs = ''
+        self._uv_260_abs = ''
+
         super(HPLCPanel, self).__init__(parent, panel_id, settings,
             *args, **kwargs)
 
@@ -3347,8 +3398,15 @@ class HPLCPanel(utils.DevicePanel):
         sampler_sizer = self._create_sampler_ctrls()
         buffer_sizer = self._create_buffer_ctrls()
 
+        as_uv_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        as_uv_sizer.Add(sampler_sizer)
+
+        if self._device_type == 'AgilentHPLCStandard':
+            uv_sizer = self._create_uv_ctrls()
+            as_uv_sizer.Add(uv_sizer, flag=wx.LEFT, border=self._FromDIP(5))
+
         sub_sizer1 = wx.BoxSizer(wx.HORIZONTAL)
-        sub_sizer1.Add(sampler_sizer)
+        sub_sizer1.Add(as_uv_sizer)
         sub_sizer1.Add(buffer_sizer, flag=wx.LEFT|wx.EXPAND,
             border=self._FromDIP(5), proportion=1)
 
@@ -3921,6 +3979,50 @@ class HPLCPanel(utils.DevicePanel):
         top_sizer.Add(sampler_sizer, flag=wx.ALL|wx.EXPAND,
             border=self._FromDIP(5))
         top_sizer.Add(sampler_btn_sizer, flag=wx.LEFT|wx.RIGHT|wx.BOTTOM,
+            border=self._FromDIP(5))
+
+        return top_sizer
+
+    def _create_uv_ctrls(self):
+        uv_box = wx.StaticBox(self, label='MWD')
+
+        self._uv_lamp_status_ctrl = wx.StaticText(uv_box,
+            size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
+        self._uv_vis_lamp_status_ctrl = wx.StaticText(uv_box,
+            size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
+        self._uv_280_abs_ctrl = wx.StaticText(uv_box,
+            size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
+        self._uv_260_abs_ctrl = wx.StaticText(uv_box,
+            size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
+
+        uv_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(5),
+            hgap=self._FromDIP(5))
+        uv_sizer.Add(wx.StaticText(uv_box, label='UV Lamp:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        uv_sizer.Add(self._uv_lamp_status_ctrl,
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        uv_sizer.Add(wx.StaticText(uv_box, label='Vis Lamp:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        uv_sizer.Add(self._uv_vis_lamp_status_ctrl,
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        uv_sizer.Add(wx.StaticText(uv_box, label='280 nm abs (mAU):'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        uv_sizer.Add(self._uv_280_abs_ctrl, flag=wx.ALIGN_CENTER_VERTICAL)
+        uv_sizer.Add(wx.StaticText(uv_box, label='260 nm abs (mAU):'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        uv_sizer.Add(self._uv_260_abs_ctrl, flag=wx.ALIGN_CENTER_VERTICAL)
+
+        self._mwd_power_on_btn = wx.Button(uv_box, label='MWD On')
+
+        self._mwd_power_on_btn.Bind(wx.EVT_BUTTON, self._on_mwd_power_on)
+
+        uv_btn_sizer = wx.BoxSizer(wx.VERTICAL)
+        uv_btn_sizer.Add(self._mwd_power_on_btn)
+
+        top_sizer = wx.StaticBoxSizer(uv_box, wx.VERTICAL)
+        top_sizer.Add(uv_sizer, flag=wx.ALL|wx.EXPAND,
+            border=self._FromDIP(5))
+        top_sizer.Add(uv_btn_sizer, flag=wx.LEFT|wx.RIGHT|wx.BOTTOM,
             border=self._FromDIP(5))
 
         return top_sizer
@@ -4560,6 +4662,10 @@ class HPLCPanel(utils.DevicePanel):
         cmd = ['resume_run_queue', [self.name,], {}]
         self._send_cmd(cmd, False)
 
+    def _on_mwd_power_on(self, evt):
+        cmd = ['set_mwd_on', [self.name,], {}]
+        self._send_cmd(cmd, False)
+
     def _set_status(self, cmd, val):
         if cmd == 'get_fast_hplc_status':
             inst_status = val['instrument_status']
@@ -4729,6 +4835,27 @@ class HPLCPanel(utils.DevicePanel):
                     temperature)
                 self._sampler_temp = temperature
 
+            if self._device_type == 'AgilentHPLCStandard':
+                uv_status = val['uv_status']
+                uv_280_abs = uv_status['uv_280_abs']
+                uv_260_abs = uv_status['uv_260_abs']
+
+                if uv_280_abs is not None:
+                    uv_280_abs = str(round(uv_280_abs, 2))
+
+                if uv_260_abs is not None:
+                    uv_260_abs = str(round(uv_260_abs, 2))
+
+                if uv_280_abs != self._uv_280_abs:
+                    wx.CallAfter(self._uv_280_abs_ctrl.SetLabel,
+                        uv_280_abs)
+                    self._uv_280_abs = uv_280_abs
+
+                if uv_260_abs != self._uv_260_abs:
+                    wx.CallAfter(self._uv_260_abs_ctrl.SetLabel,
+                        uv_260_abs)
+                    self._uv_260_abs = uv_260_abs
+
 
         elif cmd == 'get_slow_hplc_status':
             pump_status = val['pump_status']
@@ -4788,6 +4915,22 @@ class HPLCPanel(utils.DevicePanel):
                 wx.CallAfter(self._sampler_thermostat_power_ctrl.SetLabel,
                     thermostat_power)
                 self._sampler_thermostat_power = thermostat_power
+
+            if self._device_type == 'AgilentHPLCStandard':
+                uv_status = val['uv_status']
+                uv_lamp_status = uv_status['uv_lamp_status']
+                vis_lamp_status = uv_status['vis_lamp_status']
+
+                if uv_lamp_status != self._uv_lamp_status:
+                    wx.CallAfter(self._uv_lamp_status_ctrl.SetLabel,
+                        uv_lamp_status)
+                    self._uv_lamp_status = uv_lamp_status
+
+                if vis_lamp_status != self._uv_vis_lamp_status:
+                    wx.CallAfter(self._uv_vis_lamp_status_ctrl.SetLabel,
+                        vis_lamp_status)
+                    self._uv_vis_lamp_status = vis_lamp_status
+
 
 
         elif cmd == 'get_valve_status':
@@ -5553,63 +5696,36 @@ if __name__ == '__main__':
     h1.setFormatter(formatter)
     logger.addHandler(h1)
 
-    # SEC-SAXS 2 pump
-    hplc_args = {
-        'name'  : 'SEC-SAXS',
-        'args'  : ['AgilentHPLC', 'net.pipe://localhost/Agilent/OpenLAB/'],
-        'kwargs': {'instrument_name': 'SEC-SAXS', 'project_name': 'Demo',
-                    'get_inst_method_on_start': True}
-        }
-
-    selector_valve_args = {
-        'name'  : 'Selector',
-        'args'  : ['Cheminert', 'COM5'],
-        'kwargs': {'positions' : 2}
-        }
-
-    outlet_valve_args = {
-        'name'  : 'Outlet',
-        'args'  : ['Cheminert', 'COM8'],
-        'kwargs': {'positions' : 2}
-        }
-
-    purge1_valve_args = {
-        'name'  : 'Purge 1',
-        'args'  : ['Cheminert', 'COM7'],
-        'kwargs': {'positions' : 4}
-        }
-
-    purge2_valve_args = {
-        'name'  : 'Purge 2',
-        'args'  : ['Cheminert', 'COM6'],
-        'kwargs': {'positions' : 4}
-        }
-
-    buffer1_valve_args = {
-        'name'  : 'Buffer 1',
-        'args'  : ['Cheminert', 'COM3'],
-        'kwargs': {'positions' : 10}
-        }
-
-    buffer2_valve_args = {
-        'name'  : 'Buffer 2',
-        'args'  : ['Cheminert', 'COM4'],
-        'kwargs': {'positions' : 10}
-        }
-
-
-    # # SEC-MALS HPLC-1
+    # # SEC-SAXS 2 pump
     # hplc_args = {
-    #     'name'  : 'HPLC-1',
+    #     'name'  : 'SEC-SAXS',
     #     'args'  : ['AgilentHPLC', 'net.pipe://localhost/Agilent/OpenLAB/'],
-    #     'kwargs': {'instrument_name': 'HPLC-1', 'project_name': 'Demo',
+    #     'kwargs': {'instrument_name': 'SEC-SAXS', 'project_name': 'Demo',
     #                 'get_inst_method_on_start': True}
+    #     }
+
+    # selector_valve_args = {
+    #     'name'  : 'Selector',
+    #     'args'  : ['Cheminert', 'COM5'],
+    #     'kwargs': {'positions' : 2}
+    #     }
+
+    # outlet_valve_args = {
+    #     'name'  : 'Outlet',
+    #     'args'  : ['Cheminert', 'COM8'],
+    #     'kwargs': {'positions' : 2}
     #     }
 
     # purge1_valve_args = {
     #     'name'  : 'Purge 1',
-    #     'args'  :['Rheodyne', 'COM5'],
-    #     'kwargs': {'positions' : 6}
+    #     'args'  : ['Cheminert', 'COM7'],
+    #     'kwargs': {'positions' : 4}
+    #     }
+
+    # purge2_valve_args = {
+    #     'name'  : 'Purge 2',
+    #     'args'  : ['Cheminert', 'COM6'],
+    #     'kwargs': {'positions' : 4}
     #     }
 
     # buffer1_valve_args = {
@@ -5617,6 +5733,33 @@ if __name__ == '__main__':
     #     'args'  : ['Cheminert', 'COM3'],
     #     'kwargs': {'positions' : 10}
     #     }
+
+    # buffer2_valve_args = {
+    #     'name'  : 'Buffer 2',
+    #     'args'  : ['Cheminert', 'COM4'],
+    #     'kwargs': {'positions' : 10}
+    #     }
+
+
+    # SEC-MALS HPLC-1
+    hplc_args = {
+        'name'  : 'HPLC-1',
+        'args'  : ['AgilentHPLC', 'net.pipe://localhost/Agilent/OpenLAB/'],
+        'kwargs': {'instrument_name': 'HPLC-1', 'project_name': 'Demo',
+                    'get_inst_method_on_start': True}
+        }
+
+    purge1_valve_args = {
+        'name'  : 'Purge 1',
+        'args'  :['Rheodyne', 'COM5'],
+        'kwargs': {'positions' : 6}
+        }
+
+    buffer1_valve_args = {
+        'name'  : 'Buffer 1',
+        'args'  : ['Cheminert', 'COM3'],
+        'kwargs': {'positions' : 10}
+        }
 
     # my_hplc = AgilentHPLC2Pumps(hplc_args['name'], None, hplc_args=hplc_args,
     #     selector_valve_args=selector_valve_args,
@@ -5655,31 +5798,31 @@ if __name__ == '__main__':
     #     0.05, 0.1, 0.1, 60.0, result_path='api_test', )
 
 
-    # 2 pump HPLC for SEC-SAXS
-    setup_devices = [
-        {'name': 'SEC-SAXS', 'args': ['AgilentHPLC2Pumps', None],
-            'kwargs': {'hplc_args' : hplc_args,
-            'selector_valve_args' : selector_valve_args,
-            'outlet_valve_args' : outlet_valve_args,
-            'purge1_valve_args' : purge1_valve_args,
-            'purge2_valve_args' : purge2_valve_args,
-            'buffer1_valve_args' : buffer1_valve_args,
-            'buffer2_valve_args' : buffer2_valve_args,
-            'pump1_id' : 'quat. pump 1#1c#1',
-            'pump2_id' : 'quat. pump 2#1c#2'},
-            }
-        ]
-
-    # # Standard stack for SEC-MALS
+    # # 2 pump HPLC for SEC-SAXS
     # setup_devices = [
-    #     {'name': 'HPLC-1', 'args': ['AgilentHPLCStandard', None],
+    #     {'name': 'SEC-SAXS', 'args': ['AgilentHPLC2Pumps', None],
     #         'kwargs': {'hplc_args' : hplc_args,
+    #         'selector_valve_args' : selector_valve_args,
+    #         'outlet_valve_args' : outlet_valve_args,
     #         'purge1_valve_args' : purge1_valve_args,
+    #         'purge2_valve_args' : purge2_valve_args,
     #         'buffer1_valve_args' : buffer1_valve_args,
-    #         'pump1_id' : 'quat. pump#1c#1',
-    #         },
-    #     }
+    #         'buffer2_valve_args' : buffer2_valve_args,
+    #         'pump1_id' : 'quat. pump 1#1c#1',
+    #         'pump2_id' : 'quat. pump 2#1c#2'},
+    #         }
     #     ]
+
+    # Standard stack for SEC-MALS
+    setup_devices = [
+        {'name': 'HPLC-1', 'args': ['AgilentHPLCStandard', None],
+            'kwargs': {'hplc_args' : hplc_args,
+            'purge1_valve_args' : purge1_valve_args,
+            'buffer1_valve_args' : buffer1_valve_args,
+            'pump1_id' : 'quat. pump#1c#1',
+            },
+        }
+        ]
 
     # Local
     com_thread = HPLCCommThread('HPLCComm')
@@ -5719,7 +5862,8 @@ if __name__ == '__main__':
         'switch_stop_flow1'         : True,
         'switch_stop_flow2'         : True,
         'restore_flow_after_switch' : True,
-        'acq_method'                : 'SECSAXS_test',
+        # 'acq_method'                : 'SECSAXS_test',
+        'acq_method'                : 'SEC-MALS',
         'sample_loc'                : 'D2F-A1',
         'inj_vol'                   : 10.0,
         'flow_rate'                 : 0.6,
