@@ -228,7 +228,6 @@ class AgilentHPLCStandard(AgilentHPLC):
         pump2_id: str
             The Agilent hashkey for pump 2
         """
-        self._purging_flow1 = False
         self._equil_flow1 = False
 
         self._buffer_monitor1 = BufferMonitor(self._get_flow_rate1)
@@ -245,6 +244,7 @@ class AgilentHPLCStandard(AgilentHPLC):
                 }
 
             self._active_flow_path = None
+            self._purging_flow1 = False
             self._purging_flow2 = False
             self._equil_flow2 = False
 
@@ -2076,6 +2076,7 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
             }
 
         self._active_flow_path = None
+        self._purging_flow1 = False
         self._purging_flow2 = False
         self._equil_flow2 = False
 
@@ -4725,6 +4726,14 @@ class HPLCPanel(utils.DevicePanel):
                 wx.CallAfter(self._pump1_purge_ctrl.SetLabel, pump1_purge)
                 self._pump1_purge = pump1_purge
 
+                if pump1_purge.lower() == 'true':
+                    wx.CallAfter(self._pump1_purge_btn.Disable)
+                    wx.CallAfter(self._pump1_eq_btn.Disable)
+                else:
+                    if pump1_eq.lower() == 'false':
+                        wx.CallAfter(self._pump1_purge_btn.Enable)
+                        wx.CallAfter(self._pump1_eq_btn.Enable)
+
             if pump1_purge.lower() == 'false':
                 pump1_purge_vol = '0.0'
 
@@ -4735,6 +4744,14 @@ class HPLCPanel(utils.DevicePanel):
             if pump1_eq != self._pump1_eq:
                 wx.CallAfter(self._pump1_eq_ctrl.SetLabel, pump1_eq)
                 self._pump1_eq = pump1_eq
+
+                if pump1_eq.lower() == 'true':
+                    wx.CallAfter(self._pump1_eq_btn.Disable)
+                    wx.CallAfter(self._pump1_purge_btn.Disable)
+                else:
+                    if pump1_purge.lower() == 'false':
+                        wx.CallAfter(self._pump1_eq_btn.Enable)
+                        wx.CallAfter(self._pump1_purge_btn.Enable)
 
             if pump1_eq.lower() == 'false':
                 pump1_eq_vol = '0.0'
@@ -4785,6 +4802,14 @@ class HPLCPanel(utils.DevicePanel):
                     wx.CallAfter(self._pump2_purge_ctrl.SetLabel, pump2_purge)
                     self._pump2_purge = pump2_purge
 
+                    if pump2_purge.lower() == 'true':
+                        wx.CallAfter(self._pump2_purge_btn.Disable)
+                        wx.CallAfter(self._pump2_eq_btn.Disable)
+                    else:
+                        if pump2_eq.lower() == 'false':
+                            wx.CallAfter(self._pump2_purge_btn.Enable)
+                            wx.CallAfter(self._pump2_eq_btn.Enable)
+
                 if pump2_purge.lower() == 'false':
                     pump2_purge_vol = '0.0'
 
@@ -4795,6 +4820,14 @@ class HPLCPanel(utils.DevicePanel):
                 if pump2_eq != self._pump2_eq:
                     wx.CallAfter(self._pump2_eq_ctrl.SetLabel, pump2_eq)
                     self._pump2_eq = pump2_eq
+
+                    if pump2_eq.lower() == 'true':
+                        wx.CallAfter(self._pump2_eq_btn.Disable)
+                        wx.CallAfter(self._pump2_purge_btn.Disable)
+                    else:
+                        if pump2_purge.lower() == 'false':
+                            wx.CallAfter(self._pump2_eq_btn.Enable)
+                            wx.CallAfter(self._pump2_purge_btn.Enable)
 
                 if pump2_eq.lower() == 'false':
                     pump2_eq_vol = '0.0'
@@ -5696,63 +5729,36 @@ if __name__ == '__main__':
     h1.setFormatter(formatter)
     logger.addHandler(h1)
 
-    # # SEC-SAXS 2 pump
-    # hplc_args = {
-    #     'name'  : 'SEC-SAXS',
-    #     'args'  : ['AgilentHPLC', 'net.pipe://localhost/Agilent/OpenLAB/'],
-    #     'kwargs': {'instrument_name': 'SEC-SAXS', 'project_name': 'Demo',
-    #                 'get_inst_method_on_start': True}
-    #     }
-
-    # selector_valve_args = {
-    #     'name'  : 'Selector',
-    #     'args'  : ['Cheminert', 'COM5'],
-    #     'kwargs': {'positions' : 2}
-    #     }
-
-    # outlet_valve_args = {
-    #     'name'  : 'Outlet',
-    #     'args'  : ['Cheminert', 'COM8'],
-    #     'kwargs': {'positions' : 2}
-    #     }
-
-    # purge1_valve_args = {
-    #     'name'  : 'Purge 1',
-    #     'args'  : ['Cheminert', 'COM7'],
-    #     'kwargs': {'positions' : 4}
-    #     }
-
-    # purge2_valve_args = {
-    #     'name'  : 'Purge 2',
-    #     'args'  : ['Cheminert', 'COM6'],
-    #     'kwargs': {'positions' : 4}
-    #     }
-
-    # buffer1_valve_args = {
-    #     'name'  : 'Buffer 1',
-    #     'args'  : ['Cheminert', 'COM3'],
-    #     'kwargs': {'positions' : 10}
-    #     }
-
-    # buffer2_valve_args = {
-    #     'name'  : 'Buffer 2',
-    #     'args'  : ['Cheminert', 'COM4'],
-    #     'kwargs': {'positions' : 10}
-    #     }
-
-
-    # SEC-MALS HPLC-1
+    # SEC-SAXS 2 pump
     hplc_args = {
-        'name'  : 'HPLC-1',
+        'name'  : 'SEC-SAXS',
         'args'  : ['AgilentHPLC', 'net.pipe://localhost/Agilent/OpenLAB/'],
-        'kwargs': {'instrument_name': 'HPLC-1', 'project_name': 'Demo',
+        'kwargs': {'instrument_name': 'SEC-SAXS', 'project_name': 'Demo',
                     'get_inst_method_on_start': True}
+        }
+
+    selector_valve_args = {
+        'name'  : 'Selector',
+        'args'  : ['Cheminert', 'COM5'],
+        'kwargs': {'positions' : 2}
+        }
+
+    outlet_valve_args = {
+        'name'  : 'Outlet',
+        'args'  : ['Cheminert', 'COM8'],
+        'kwargs': {'positions' : 2}
         }
 
     purge1_valve_args = {
         'name'  : 'Purge 1',
-        'args'  :['Rheodyne', 'COM5'],
-        'kwargs': {'positions' : 6}
+        'args'  : ['Cheminert', 'COM7'],
+        'kwargs': {'positions' : 4}
+        }
+
+    purge2_valve_args = {
+        'name'  : 'Purge 2',
+        'args'  : ['Cheminert', 'COM6'],
+        'kwargs': {'positions' : 4}
         }
 
     buffer1_valve_args = {
@@ -5760,6 +5766,33 @@ if __name__ == '__main__':
         'args'  : ['Cheminert', 'COM3'],
         'kwargs': {'positions' : 10}
         }
+
+    buffer2_valve_args = {
+        'name'  : 'Buffer 2',
+        'args'  : ['Cheminert', 'COM4'],
+        'kwargs': {'positions' : 10}
+        }
+
+
+    # # SEC-MALS HPLC-1
+    # hplc_args = {
+    #     'name'  : 'HPLC-1',
+    #     'args'  : ['AgilentHPLC', 'net.pipe://localhost/Agilent/OpenLAB/'],
+    #     'kwargs': {'instrument_name': 'HPLC-1', 'project_name': 'Demo',
+    #                 'get_inst_method_on_start': True}
+    #     }
+
+    # purge1_valve_args = {
+    #     'name'  : 'Purge 1',
+    #     'args'  :['Rheodyne', 'COM5'],
+    #     'kwargs': {'positions' : 6}
+    #     }
+
+    # buffer1_valve_args = {
+    #     'name'  : 'Buffer 1',
+    #     'args'  : ['Cheminert', 'COM3'],
+    #     'kwargs': {'positions' : 10}
+    #     }
 
     # my_hplc = AgilentHPLC2Pumps(hplc_args['name'], None, hplc_args=hplc_args,
     #     selector_valve_args=selector_valve_args,
@@ -5798,31 +5831,31 @@ if __name__ == '__main__':
     #     0.05, 0.1, 0.1, 60.0, result_path='api_test', )
 
 
-    # # 2 pump HPLC for SEC-SAXS
-    # setup_devices = [
-    #     {'name': 'SEC-SAXS', 'args': ['AgilentHPLC2Pumps', None],
-    #         'kwargs': {'hplc_args' : hplc_args,
-    #         'selector_valve_args' : selector_valve_args,
-    #         'outlet_valve_args' : outlet_valve_args,
-    #         'purge1_valve_args' : purge1_valve_args,
-    #         'purge2_valve_args' : purge2_valve_args,
-    #         'buffer1_valve_args' : buffer1_valve_args,
-    #         'buffer2_valve_args' : buffer2_valve_args,
-    #         'pump1_id' : 'quat. pump 1#1c#1',
-    #         'pump2_id' : 'quat. pump 2#1c#2'},
-    #         }
-    #     ]
-
-    # Standard stack for SEC-MALS
+    # 2 pump HPLC for SEC-SAXS
     setup_devices = [
-        {'name': 'HPLC-1', 'args': ['AgilentHPLCStandard', None],
+        {'name': 'SEC-SAXS', 'args': ['AgilentHPLC2Pumps', None],
             'kwargs': {'hplc_args' : hplc_args,
+            'selector_valve_args' : selector_valve_args,
+            'outlet_valve_args' : outlet_valve_args,
             'purge1_valve_args' : purge1_valve_args,
+            'purge2_valve_args' : purge2_valve_args,
             'buffer1_valve_args' : buffer1_valve_args,
-            'pump1_id' : 'quat. pump#1c#1',
-            },
-        }
+            'buffer2_valve_args' : buffer2_valve_args,
+            'pump1_id' : 'quat. pump 1#1c#1',
+            'pump2_id' : 'quat. pump 2#1c#2'},
+            }
         ]
+
+    # # Standard stack for SEC-MALS
+    # setup_devices = [
+    #     {'name': 'HPLC-1', 'args': ['AgilentHPLCStandard', None],
+    #         'kwargs': {'hplc_args' : hplc_args,
+    #         'purge1_valve_args' : purge1_valve_args,
+    #         'buffer1_valve_args' : buffer1_valve_args,
+    #         'pump1_id' : 'quat. pump#1c#1',
+    #         },
+    #     }
+    #     ]
 
     # Local
     com_thread = HPLCCommThread('HPLCComm')
