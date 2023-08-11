@@ -228,11 +228,8 @@ class AgilentHPLCStandard(AgilentHPLC):
         pump2_id: str
             The Agilent hashkey for pump 2
         """
-        self._active_flow_path = None
         self._purging_flow1 = False
-        self._purging_flow2 = False
         self._equil_flow1 = False
-        self._equil_flow2 = False
 
         self._buffer_monitor1 = BufferMonitor(self._get_flow_rate1)
 
@@ -246,6 +243,10 @@ class AgilentHPLCStandard(AgilentHPLC):
             self._column_positions = {
                 1   : {'purge1': 1},
                 }
+
+            self._active_flow_path = None
+            self._purging_flow2 = False
+            self._equil_flow2 = False
 
             self._connect_valves(purge1_valve_args, buffer1_valve_args)
 
@@ -1187,6 +1188,11 @@ class AgilentHPLCStandard(AgilentHPLC):
                 if self._stop_before_purging1:
                     self.set_hplc_flow_rate(0, 1)
 
+                if self._pre_purge_flow1 is None:
+                    final_flow1 = 0
+                else:
+                    final_flow1 = self._pre_purge_flow1
+
             if (self._purging_flow2 and not monitoring_flow2
                 and not stopping_flow2 and not stopping_initial_flow2
                 and self._purge2_ongoing.is_set()):
@@ -1196,6 +1202,11 @@ class AgilentHPLCStandard(AgilentHPLC):
 
                 if self._stop_before_purging2:
                     self.set_hplc_flow_rate(0, 2)
+
+                if self._pre_purge_flow2 is None:
+                        final_flow2 = 0
+                else:
+                    final_flow2 = self._pre_purge_flow2
 
 
             if stopping_initial_flow1:
@@ -1230,10 +1241,14 @@ class AgilentHPLCStandard(AgilentHPLC):
                     stopping_initial_flow1 = False
                     monitoring_flow1 = True
 
-                    if self._pre_purge_flow1 is None:
-                        final_flow1 = 0
-                    else:
-                        final_flow1 = self._pre_purge_flow1
+                elif self._remaining_purge1_vol <= 0:
+                    #Aborted
+                    stopping_initial_flow1 = False
+                    monitoring_flow1 = True
+                    flow_accel1 = 0
+                    previous_flow1 = 0
+                    previous_time1 = time.time()
+                    update_time1 = previous_time1
 
             if stopping_initial_flow2:
                 if self._stop_before_purging2:
@@ -1267,10 +1282,14 @@ class AgilentHPLCStandard(AgilentHPLC):
                     stopping_initial_flow2 = False
                     monitoring_flow2 = True
 
-                    if self._pre_purge_flow2 is None:
-                        final_flow2 = 0
-                    else:
-                        final_flow2 = self._pre_purge_flow2
+                elif self._remaining_purge2_vol <= 0:
+                    #Aborted
+                    stopping_initial_flow2 = False
+                    monitoring_flow2 = True
+                    flow_accel2 = 0
+                    previous_flow2 = 0
+                    previous_time2 = time.time()
+                    update_time2 = previous_time1
 
 
             if monitoring_flow1:
@@ -1340,9 +1359,19 @@ class AgilentHPLCStandard(AgilentHPLC):
                 current_flow1 = self.get_hplc_flow_rate(1)
                 current_time1 = time.time()
 
+                purge_not_started1 = True
+
+                for name, pos in self._column_positions[1].items():
+                    current_pos = int(self.get_valve_position(name))
+
+                    if current_pos != pos:
+                        purge_not_started1 = False
+                        break
+
                 if ((self._stop_after_purging1 and current_flow1 == 0)
                     or (not self._stop_after_purging1
-                    and round(current_flow1, 3) == round(final_flow1, 3))):
+                    and round(current_flow1, 3) == round(final_flow1, 3))
+                    or purge_not_started1):
                     self.set_hplc_flow_accel(self._pre_purge_flow_accel1, 1)
                     self.set_hplc_high_pressure_limit(
                         self._pre_purge_max_pressure1, 1)
@@ -1370,9 +1399,19 @@ class AgilentHPLCStandard(AgilentHPLC):
                 current_flow2 = self.get_hplc_flow_rate(2)
                 current_time2 = time.time()
 
+                purge_not_started2 = True
+
+                for name, pos in self._column_positions[2].items():
+                    current_pos = int(self.get_valve_position(name))
+
+                    if current_pos != pos:
+                        purge_not_started2 = False
+                        break
+
                 if ((self._stop_after_purging2 and current_flow2 == 0)
                     or (not self._stop_after_purging2
-                    and round(current_flow2, 3) == round(final_flow2, 3))):
+                    and round(current_flow2, 3) == round(final_flow2, 3))
+                    or purge_not_started2):
                     self.set_hplc_flow_accel(self._pre_purge_flow_accel2, 2)
                     self.set_hplc_high_pressure_limit(
                         self._pre_purge_max_pressure2, 2)
@@ -2001,6 +2040,10 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
             1   : {'purge1': 1},
             2   : {'purge2': 1},
             }
+
+        self._active_flow_path = None
+        self._purging_flow2 = False
+        self._equil_flow2 = False
 
         # Connect valves
         self._connect_valves(selector_valve_args, outlet_valve_args,
@@ -5510,63 +5553,36 @@ if __name__ == '__main__':
     h1.setFormatter(formatter)
     logger.addHandler(h1)
 
-    # # SEC-SAXS 2 pump
-    # hplc_args = {
-    #     'name'  : 'SEC-SAXS',
-    #     'args'  : ['AgilentHPLC', 'net.pipe://localhost/Agilent/OpenLAB/'],
-    #     'kwargs': {'instrument_name': 'SEC-SAXS', 'project_name': 'Demo',
-    #                 'get_inst_method_on_start': True}
-    #     }
-
-    # selector_valve_args = {
-    #     'name'  : 'Selector',
-    #     'args'  : ['Cheminert', 'COM5'],
-    #     'kwargs': {'positions' : 2}
-    #     }
-
-    # outlet_valve_args = {
-    #     'name'  : 'Outlet',
-    #     'args'  : ['Cheminert', 'COM8'],
-    #     'kwargs': {'positions' : 2}
-    #     }
-
-    # purge1_valve_args = {
-    #     'name'  : 'Purge 1',
-    #     'args'  : ['Cheminert', 'COM7'],
-    #     'kwargs': {'positions' : 4}
-    #     }
-
-    # purge2_valve_args = {
-    #     'name'  : 'Purge 2',
-    #     'args'  : ['Cheminert', 'COM6'],
-    #     'kwargs': {'positions' : 4}
-    #     }
-
-    # buffer1_valve_args = {
-    #     'name'  : 'Buffer 1',
-    #     'args'  : ['Cheminert', 'COM3'],
-    #     'kwargs': {'positions' : 10}
-    #     }
-
-    # buffer2_valve_args = {
-    #     'name'  : 'Buffer 2',
-    #     'args'  : ['Cheminert', 'COM4'],
-    #     'kwargs': {'positions' : 10}
-    #     }
-
-
-    # SEC-MALS HPLC-1
+    # SEC-SAXS 2 pump
     hplc_args = {
-        'name'  : 'HPLC-1',
+        'name'  : 'SEC-SAXS',
         'args'  : ['AgilentHPLC', 'net.pipe://localhost/Agilent/OpenLAB/'],
-        'kwargs': {'instrument_name': 'HPLC-1', 'project_name': 'Demo',
+        'kwargs': {'instrument_name': 'SEC-SAXS', 'project_name': 'Demo',
                     'get_inst_method_on_start': True}
+        }
+
+    selector_valve_args = {
+        'name'  : 'Selector',
+        'args'  : ['Cheminert', 'COM5'],
+        'kwargs': {'positions' : 2}
+        }
+
+    outlet_valve_args = {
+        'name'  : 'Outlet',
+        'args'  : ['Cheminert', 'COM8'],
+        'kwargs': {'positions' : 2}
         }
 
     purge1_valve_args = {
         'name'  : 'Purge 1',
-        'args'  :['Rheodyne', 'COM5'],
-        'kwargs': {'positions' : 6}
+        'args'  : ['Cheminert', 'COM7'],
+        'kwargs': {'positions' : 4}
+        }
+
+    purge2_valve_args = {
+        'name'  : 'Purge 2',
+        'args'  : ['Cheminert', 'COM6'],
+        'kwargs': {'positions' : 4}
         }
 
     buffer1_valve_args = {
@@ -5574,6 +5590,33 @@ if __name__ == '__main__':
         'args'  : ['Cheminert', 'COM3'],
         'kwargs': {'positions' : 10}
         }
+
+    buffer2_valve_args = {
+        'name'  : 'Buffer 2',
+        'args'  : ['Cheminert', 'COM4'],
+        'kwargs': {'positions' : 10}
+        }
+
+
+    # # SEC-MALS HPLC-1
+    # hplc_args = {
+    #     'name'  : 'HPLC-1',
+    #     'args'  : ['AgilentHPLC', 'net.pipe://localhost/Agilent/OpenLAB/'],
+    #     'kwargs': {'instrument_name': 'HPLC-1', 'project_name': 'Demo',
+    #                 'get_inst_method_on_start': True}
+    #     }
+
+    # purge1_valve_args = {
+    #     'name'  : 'Purge 1',
+    #     'args'  :['Rheodyne', 'COM5'],
+    #     'kwargs': {'positions' : 6}
+    #     }
+
+    # buffer1_valve_args = {
+    #     'name'  : 'Buffer 1',
+    #     'args'  : ['Cheminert', 'COM3'],
+    #     'kwargs': {'positions' : 10}
+    #     }
 
     # my_hplc = AgilentHPLC2Pumps(hplc_args['name'], None, hplc_args=hplc_args,
     #     selector_valve_args=selector_valve_args,
@@ -5612,31 +5655,31 @@ if __name__ == '__main__':
     #     0.05, 0.1, 0.1, 60.0, result_path='api_test', )
 
 
-    # # 2 pump HPLC for SEC-SAXS
+    # 2 pump HPLC for SEC-SAXS
+    setup_devices = [
+        {'name': 'SEC-SAXS', 'args': ['AgilentHPLC2Pumps', None],
+            'kwargs': {'hplc_args' : hplc_args,
+            'selector_valve_args' : selector_valve_args,
+            'outlet_valve_args' : outlet_valve_args,
+            'purge1_valve_args' : purge1_valve_args,
+            'purge2_valve_args' : purge2_valve_args,
+            'buffer1_valve_args' : buffer1_valve_args,
+            'buffer2_valve_args' : buffer2_valve_args,
+            'pump1_id' : 'quat. pump 1#1c#1',
+            'pump2_id' : 'quat. pump 2#1c#2'},
+            }
+        ]
+
+    # # Standard stack for SEC-MALS
     # setup_devices = [
-    #     {'name': 'SEC-SAXS', 'args': ['AgilentHPLC2Pumps', None],
+    #     {'name': 'HPLC-1', 'args': ['AgilentHPLCStandard', None],
     #         'kwargs': {'hplc_args' : hplc_args,
-    #         'selector_valve_args' : selector_valve_args,
-    #         'outlet_valve_args' : outlet_valve_args,
     #         'purge1_valve_args' : purge1_valve_args,
-    #         'purge2_valve_args' : purge2_valve_args,
     #         'buffer1_valve_args' : buffer1_valve_args,
-    #         'buffer2_valve_args' : buffer2_valve_args,
-    #         'pump1_id' : 'quat. pump 1#1c#1',
-    #         'pump2_id' : 'quat. pump 2#1c#2'},
+    #         'pump1_id' : 'quat. pump#1c#1',
+    #         },
     #     }
     #     ]
-
-    # Standard stack for SEC-MALS
-    setup_devices = [
-        {'name': 'SEC-SAXS', 'args': ['AgilentHPLCStandard', None],
-            'kwargs': {'hplc_args' : hplc_args,
-            'purge1_valve_args' : purge1_valve_args,
-            'buffer1_valve_args' : buffer1_valve_args,
-            'pump1_id' : 'quat. pump#1c#1',
-            },
-        }
-        ]
 
     # Local
     com_thread = HPLCCommThread('HPLCComm')
