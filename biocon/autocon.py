@@ -107,7 +107,27 @@ class Automator(threading.Thread):
         logger.info("Quitting automator thread: %s", self.name)
 
     def _check_status(self, name):
-        pass
+        with self._auto_con_lock:
+            controls = self._auto_cons[name]
+
+            with controls['cmd_lock']:
+                cmd_func = controls['cmd_func']
+
+
+                cmd_name = 'status'
+                cmd_args = []
+                cmd_kwargs = {}
+
+                state = cmd_func(cmd_name, cmd_args, cmd_kwargs)
+
+                if state is not None:
+                    controls['status']['state'] = state
+
+                num_cmds = len(controls['cmd_queue'])
+
+            if state == 'idle' and num_cmds > 0:
+                self._run_next_cmd(name)
+
 
     def _check_wait(self, name):
         with self._auto_con_lock:
@@ -142,7 +162,7 @@ class Automator(threading.Thread):
                 if wait_done:
                     controls['status'] = {'state': 'idle'}
 
-            num_cmds = len(controls['cmd_queue'])
+                num_cmds = len(controls['cmd_queue'])
 
             if wait_done and num_cmds > 0:
                 self._run_next_cmd(name)
