@@ -35,6 +35,8 @@ if __name__ != '__main__':
 
 import wx
 
+import utils
+
 
 class Automator(threading.Thread):
     def __init__(self, name=None):
@@ -335,6 +337,287 @@ class Automator(threading.Thread):
         self._stop_event.set()
 
 
+class AutoPanel(wx.Panel):
+    """
+    This creates the metadata panel.
+    """
+    def __init__(self, settings, *args, **kwargs):
+        """
+        Initializes the metadata panel. Accepts the usual wx.Panel arguments plus
+        the following.
+        """
+        wx.Panel.__init__(self, *args, **kwargs)
+
+        self.settings = settings
+
+        self.automator = settings['automator_thread']
+
+        self._create_layout()
+        self._init_values()
+
+        self.SetMinSize(self._FromDIP((1000, 400)))
+
+    def _FromDIP(self, size):
+        # This is a hack to provide easy back compatibility with wxpython < 4.1
+        try:
+            return self.FromDIP(size)
+        except Exception:
+            return size
+
+    def _init_values(self):
+        pass
+
+    def _create_layout(self):
+
+        ctrl_parent = self
+
+        self.status_panel = wx.Panel(ctrl_parent)
+        self.auto_list_panel = AutoListPanel(self.settings, ctrl_parent)
+
+        self.top_sizer = wx.BoxSizer(wx.VERTICAL)
+        self.top_sizer.Add(self.status_panel, proportion=1,
+            border=self._FromDIP(5), flag=wx.EXPAND|wx.ALL)
+        self.top_sizer.Add(self.auto_list_panel, proportion=1,
+            border=self._FromDIP(5), flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM)
+
+        self.SetSizer(self.top_sizer)
+
+
+class AutoListPanel(wx.Panel):
+    def __init__(self, settings, *args, **kwargs):
+        wx.Panel.__init__(self, *args, **kwargs)
+
+        self.settings = settings
+
+        self.automator = settings['automator_thread']
+
+        self._create_layout()
+        self._init_values()
+
+    def _FromDIP(self, size):
+        # This is a hack to provide easy back compatibility with wxpython < 4.1
+        try:
+            return self.FromDIP(size)
+        except Exception:
+            return size
+
+    def _init_values(self):
+        # Initialize automator controls
+        pass
+
+    def _create_layout(self):
+        self.top_list_ctrl = self._create_list_layout()
+        self.top_settings_ctrl = self._create_settings_layout()
+
+        self.top_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        self.top_sizer.Add(self.top_list_ctrl, proportion=1,
+            flag=wx.RIGHT|wx.EXPAND, border=self._FromDIP(5))
+        self.top_sizer.Add(self.top_settings_ctrl, proportion=1,
+            flag=wx.EXPAND)
+
+        self.SetSizer(self.top_sizer)
+
+    def _create_list_layout(self):
+        self.auto_list = AutoList(self._on_add_item_callback, self)
+
+        return self.auto_list
+
+    def _create_settings_layout(self):
+        return wx.Panel(self)
+
+    def _on_add_item_callback(self, item_info):
+        item_type == item_info['item_type']
+
+        if item_type == 'sample':
+            """
+            Check various things, inclucing:
+                *   Is there enough buffer to do the run
+                *   Do we need to add an instrument switch or an equlibration
+                    (should this be checked in the auto list, so that it can add
+                    an equilibraiton item or switch item above this?)
+            """
+            # Something like this. Arguments need refining, needs testing
+            self.add_cmd('exp', 'wait', [], {'condition': 'status',
+                'inst_conds': [['hplc', 'wait'], ['exp', 'wait']]})
+            self.add_cmd('exp', 'expose', [], item_info)
+            self.add_cmd('hplc', 'wait', [], {'condition': 'status',
+                'inst_conds': [['hplc', 'wait'], ['exp', 'run']]})
+            self.add_cmd('hplc', 'inject', [], item_info)
+
+
+    def _on_remove_item_callback(self, cmd_list):
+        self.automator.set_automator_state('pause')
+
+        for cmd in cmd_list:
+            self.automator.remove_cmd(cmd[0], cmd[1])
+
+        self.automator.set_automator_state('run')
+
+
+class AutoList(utils.ItemList):
+    def __init__(self, on_add_item_callback, on_remove_item_callback, *args,
+        **kwargs):
+        utils.ItemList.__init__(self, *args)
+
+        self._on_add_item_callback = on_add_item_callback
+        self._on_remove_item_callback = on_remove_item_callback
+
+    def _create_buttons(self):
+        button_parent = self
+
+        add_item_btn = wx.Button(button_parent, label='Add Action')
+        add_item_btn.Bind(wx.EVT_BUTTON, self._on_add_item)
+
+        remove_item_btn = wx.Button(button_parent, label='Remove Action')
+        remove_item_btn.Bind(wx.EVT_BUTTON, self._on_removeitem)
+
+        button_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        button_sizer.Add(add_item_btn, border=self._FromDIP(5), flag=wx.LEFT)
+        button_sizer.Add(remove_item_btn, border=self._FromDIP(5), flag=wx.LEFT)
+
+        return button_sizer
+
+    def _on_add_item(self, evt):
+        # Call a dialog to get item information
+        item_info = {
+            'item_type' : 'sample',
+            'descrip'   : 'Test sample',
+            'conc'      : '1',
+            'buf'       : 'Test buffer'
+            }
+
+        # self._on_add_item_callback(item_info)
+
+        item_type = item_info['item_type']
+
+        new_item = AutoListItem(self, item_type, 'test', 0)
+
+        if item_type == 'sample':
+            descrip = item_info['descrip']
+            conc = item_info['conc']
+            buf = item_info['buf']
+            new_item.set_description(descrip)
+            new_item.set_concentration(conc)
+            new_item.set_buffer(buf)
+
+        self.add_items([new_item])
+
+    def _on_remove_item(self, evt):
+        sel_items = self.get_selected_items()
+
+        item_list = [item.automator_name, item.automator_id for item in sel_items]
+
+        # self._on_remove_item_callback(item_list)
+
+        self.remove_selected_items()
+
+
+
+class AutoListItem(utils.ListItem):
+    def __init__(self, item_list, item_type, auto_name, auto_id, *args, **kwargs):
+        self.item_type = item_type
+
+        utils.ListItem.__init__(self, item_list, *args, **kwargs)
+
+        self.automator_name = auto_name
+        self.automator_id = auto_id
+
+    def _create_layout(self):
+        item_parent = self
+
+        type_label = wx.StaticText(item_parent, label=self.item_type.capitalize(),
+            size=self._FromDIP((70, -1)), style=wx.ST_NO_AUTORESIZE)
+
+        fsize = self.GetFont().GetPointSize()
+        font = wx.Font(fsize, wx.DEFAULT, wx.NORMAL, wx.BOLD)
+        type_label.SetFont(font)
+
+        self.text_list.append(type_label)
+
+        if self.item_type == 'sample':
+
+            desc_label = wx.StaticText(item_parent, label='Descripton:')
+            self.desc_ctrl = wx.StaticText(item_parent, label='')
+
+            conc_label = wx.StaticText(item_parent, label='Conc. (mg/ml):')
+            self.conc_ctrl = wx.StaticText(item_parent, label='')
+
+            buffer_label = wx.StaticText(item_parent, label='Buffer:')
+            self.buffer_ctrl = wx.StaticText(item_parent, label='')
+
+            top_sizer = wx.BoxSizer(wx.HORIZONTAL)
+            top_sizer.Add(type_label, flag=wx.RIGHT, border=self._FromDIP(5))
+            top_sizer.Add(desc_label, flag=wx.RIGHT, border=self._FromDIP(3))
+            top_sizer.Add(self.desc_ctrl, flag=wx.RIGHT, border=self._FromDIP(3))
+            top_sizer.Add(conc_label, flag=wx.RIGHT, border=self._FromDIP(3))
+            top_sizer.Add(self.conc_ctrl, flag=wx.RIGHT, border=self._FromDIP(3))
+            top_sizer.Add(buffer_label, flag=wx.RIGHT, border=self._FromDIP(3))
+            top_sizer.Add(self.buffer_ctrl, flag=wx.RIGHT, border=self._FromDIP(3))
+
+            self.text_list.extend([desc_label, self.desc_ctrl,
+                conc_label, self.conc_ctrl, buffer_label, self.buffer_ctrl])
+
+        self.SetSizer(top_sizer)
+
+
+    def set_description(self, descrip):
+        self.desc_ctrl.SetLabel(descrip)
+
+    def set_concentration(self, concentration):
+        self.conc_ctrl.SetLabel('{}'.format(concentration))
+
+    def set_buffer(self, buffer_info):
+        self.buffer_ctrl.SetLabel(buffer_info)
+
+
+
+class AutoFrame(wx.Frame):
+    """
+    A lightweight automator frame that holds the :mod:`ParamPanel`.
+    """
+    def __init__(self, name, settings, *args, **kwargs):
+        """
+        Initializes the automator frame. Takes all the usual wx.Frame arguments
+        """
+        wx.Frame.__init__(self, *args, **kwargs)
+
+        self.name = name
+
+        self._create_layout(settings)
+
+        self.Layout()
+        self.Fit()
+        self.Layout()
+
+        self.Bind(wx.EVT_CLOSE, self._on_close)
+
+    def _FromDIP(self, size):
+        # This is a hack to provide easy back compatibility with wxpython < 4.1
+        try:
+            return self.FromDIP(size)
+        except Exception:
+            return size
+
+    def _create_layout(self, settings):
+        """
+        Creates the layout
+        """
+        self.panel = AutoPanel(settings, parent=self)
+
+        top_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        top_sizer.Add(self.panel, 1, wx.EXPAND)
+
+        self.panel.Layout()
+        self.panel.Fit()
+        self.panel.Layout()
+
+        self.SetSizer(top_sizer)
+
+    def _on_close(self, evt):
+        self.Destroy()
+
+
+
 def test_cmd_func(name, args, kwargs):
     print(name)
     print(args)
@@ -357,13 +640,30 @@ if __name__ == '__main__':
     automator = Automator()
     automator.start()
 
-    automator.add_control('test', 'test1', test_cmd_func)
-    automator.add_control('test2', 'test1', test_cmd_func)
-    automator.add_cmd('test', 'test1cmd', ['testargs'], {'arg1:' 'testkwargs'})
-    automator.add_cmd('test', 'wait', [], {'condition' : 'time', 't_wait': 15})
-    automator.add_cmd('test', 'test1cmd2', ['testargs2'], {'arg1:' 'testkwargs2'})
+    # automator.add_control('test', 'test1', test_cmd_func)
+    # automator.add_control('test2', 'test1', test_cmd_func)
+    # automator.add_cmd('test', 'test1cmd', ['testargs'], {'arg1:' 'testkwargs'})
+    # automator.add_cmd('test', 'wait', [], {'condition' : 'time', 't_wait': 15})
+    # automator.add_cmd('test', 'test1cmd2', ['testargs2'], {'arg1:' 'testkwargs2'})
 
-    automator.add_cmd('test2', 'wait', [], {'condition' : 'time', 't_wait': 30})
-    automator.add_cmd('test', 'wait', [], {'condition' : 'status', 'inst_conds': [['test2', ['idle']], ]})
-    automator.add_cmd('test2', 'test2cmd', ['testargs'], {'arg1:' 'testkwargs'})
-    automator.add_cmd('test', 'test1cmd3', ['testargs3'], {'arg1:' 'testkwargs3'})
+    # automator.add_cmd('test2', 'wait', [], {'condition' : 'time', 't_wait': 30})
+    # automator.add_cmd('test', 'wait', [], {'condition' : 'status', 'inst_conds': [['test2', ['idle']], ]})
+    # automator.add_cmd('test2', 'test2cmd', ['testargs'], {'arg1:' 'testkwargs'})
+    # automator.add_cmd('test', 'test1cmd3', ['testargs3'], {'arg1:' 'testkwargs3'})
+
+    automator_settings = {
+        'automator_thread'  : automator,
+        }
+
+
+    app = wx.App()
+    logger.debug('Setting up wx app')
+    frame = AutoFrame('AutoFrame', automator_settings, parent=None,
+        title='Automator Control')
+    frame.Show()
+    app.MainLoop()
+
+    if automator is not None:
+        automator.stop()
+        automator.join()
+
