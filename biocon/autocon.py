@@ -87,7 +87,7 @@ class Automator(threading.Thread):
                         if state == 'run' or state == 'equil':
                             self._check_status(name)
 
-                        elif state == 'wait':
+                        elif state.startswith('wait'):
                             self._check_wait(name)
 
                         elif state == 'idle':
@@ -191,7 +191,7 @@ class Automator(threading.Thread):
 
                 else:
                     status = cmd_kwargs
-                    status['state'] = 'wait'
+                    status['state'] = cmd_name
 
                     if status['condition'] == 'time':
                         status['t_start'] = time.time()
@@ -350,8 +350,6 @@ class AutoPanel(wx.Panel):
 
         self.settings = settings
 
-        self.automator = settings['automator_thread']
-
         self._create_layout()
         self._init_values()
 
@@ -389,8 +387,6 @@ class AutoListPanel(wx.Panel):
 
         self.settings = settings
 
-        self.automator = settings['automator_thread']
-
         self._create_layout()
         self._init_values()
 
@@ -403,7 +399,23 @@ class AutoListPanel(wx.Panel):
 
     def _init_values(self):
         # Initialize automator controls
-        pass
+        self._sample_wait_id = 0
+        self._switch_wait_id = 0
+
+        self.automator = self.settings['automator_thread']
+
+        self.inst_list = []
+
+        for inst, inst_settings in self.settings['instruments'].items():
+            if inst.startswith('hplc'):
+                num_paths = inst_settings['num_paths']
+
+                for i in range(num_paths):
+                    name = '{}_pump{}'.format(inst, i+1)
+                    self.automator.add_control(name, name,
+                        inst_settings['automator_callback'])
+
+                    self.inst_list.append(name)
 
     def _create_layout(self):
         self.top_list_ctrl = self._create_list_layout()
@@ -418,7 +430,8 @@ class AutoListPanel(wx.Panel):
         self.SetSizer(self.top_sizer)
 
     def _create_list_layout(self):
-        self.auto_list = AutoList(self._on_add_item_callback, self)
+        self.auto_list = AutoList(self._on_add_item_callback,
+            self._on_remove_item_callback, self, self)
 
         return self.auto_list
 
@@ -428,7 +441,7 @@ class AutoListPanel(wx.Panel):
     def _on_add_item_callback(self, item_info):
         item_type == item_info['item_type']
 
-        if item_type == 'sample':
+        if item_type == 'sec_sample':
             """
             Check various things, inclucing:
                 *   Is there enough buffer to do the run
@@ -437,27 +450,74 @@ class AutoListPanel(wx.Panel):
                     an equilibraiton item or switch item above this?)
             """
             # Something like this. Arguments need refining, needs testing
-            self.add_cmd('exp', 'wait', [], {'condition': 'status',
-                'inst_conds': [['hplc', 'wait'], ['exp', 'wait']]})
+            hplc_inst = item_info['inst']
+
+            sample_wait_cmd = 'wait_sample_{}'.format(self._sample_wait_id)
+            self.add_cmd('exp', sample_wait_cmd, [], {'condition': 'status',
+                'inst_conds': [[hplc_inst, sample_wait_cmd], ['exp', sample_wait_cmd]]})
             self.add_cmd('exp', 'expose', [], item_info)
-            self.add_cmd('hplc', 'wait', [], {'condition': 'status',
-                'inst_conds': [['hplc', 'wait'], ['exp', 'run']]})
-            self.add_cmd('hplc', 'inject', [], item_info)
+
+            inj_settings = {
+                'sample_name'   : item_info['sample_name'],
+                'acq_method'    : item_info['acq_method'],
+                'sample_loc'    : item_info['sample_loc'],
+                'inj_vol'       : item_info['inj_vol'],
+                'flow_rate'     : item_info['flow_rate'],
+                'elution_vol'   : item_info['elution_vol'],
+                'flow_accel'    : item_info['flow_accel'],
+                'pressure_lim'  : item_info['pressure_lim'],
+                'result_path'   : item_info['result_path'],
+                'sp_method'     : item_info['sp_method'],
+                'wait_for_flow_ramp'    : item_info['wait_for_flow_ramp'],
+                'settle_time'   : item_info['settle_time'],
+                }
+
+            self.add_cmd(hplc_inst, sample_wait_cmd, [], {'condition': 'status',
+                'inst_conds': [[hplc_inst, sample_wait_cmd], ['exp', 'run']]})
+            self.add_cmd(hplc_inst, 'inject', [], inj_settings)
+
+            self._sample_wait_id += 1
+
+        elif item_type == 'equilibrate':
+            hplc_inst = item_info['inst']
+
+            equil_settings = {
+                'equil_rate'    : item_info['equil_rate'],
+                'equil_vol'     : item_info['equil_vol'],
+                'equil_accel'   : item_info['equil_accel'],
+                'purge'         : item_info['purge'],
+                'purge_rate'    : item_info['purge_rate'],
+                'purge_volume'  : item_info['purge_volume'],
+                'purge_accel'   : item_info['purge_accel'],
+                'equil_with_sample' : item_info['equil_with_sample'],
+                'stop_after_equil'  : item_info['stop_after_equil'],
+                'flow_path'     : item_info['flow_path'],
+                }
+
+            self.add_cmd(hplc_inst, 'equilibrate', [], equil_settings)
+
+        elif item_type == 'switch_pumps':
+            pass
 
 
     def _on_remove_item_callback(self, cmd_list):
         self.automator.set_automator_state('pause')
 
-        for cmd in cmd_list:
-            self.automator.remove_cmd(cmd[0], cmd[1])
+        for cmds in cmd_list:
+            for i in range(len(cmds[0])):
+                cmd_name =  cmd[0][i]
+                cmd_id = cmd[1][i]
+                self.automator.remove_cmd(cmd_name, cmd_id)
 
         self.automator.set_automator_state('run')
 
 
 class AutoList(utils.ItemList):
-    def __init__(self, on_add_item_callback, on_remove_item_callback, *args,
-        **kwargs):
+    def __init__(self, on_add_item_callback, on_remove_item_callback,
+        auto_panel, *args, **kwargs):
         utils.ItemList.__init__(self, *args)
+
+        self.auto_panel = auto_panel
 
         self._on_add_item_callback = on_add_item_callback
         self._on_remove_item_callback = on_remove_item_callback
@@ -469,7 +529,7 @@ class AutoList(utils.ItemList):
         add_item_btn.Bind(wx.EVT_BUTTON, self._on_add_item)
 
         remove_item_btn = wx.Button(button_parent, label='Remove Action')
-        remove_item_btn.Bind(wx.EVT_BUTTON, self._on_removeitem)
+        remove_item_btn.Bind(wx.EVT_BUTTON, self._on_remove_item)
 
         button_sizer = wx.BoxSizer(wx.HORIZONTAL)
         button_sizer.Add(add_item_btn, border=self._FromDIP(5), flag=wx.LEFT)
@@ -479,33 +539,139 @@ class AutoList(utils.ItemList):
 
     def _on_add_item(self, evt):
         # Call a dialog to get item information
-        item_info = {
-            'item_type' : 'sample',
-            'descrip'   : 'Test sample',
-            'conc'      : '1',
-            'buf'       : 'Test buffer'
-            }
+        # Stand in:
+        dialog = wx.SingleChoiceDialog(self, 'Pick an action to add',
+            'Pick an action to add to the queue',
+            ['Run SEC-SAXS sample', 'Equilibrate column',
+            'Switch pumps'])
 
-        # self._on_add_item_callback(item_info)
+        res = dialog.ShowModal()
+
+        if res == wx.ID_OK:
+            choice = dialog.GetStringSelection()
+
+        else:
+            choice = None
+
+        dialog.Destroy()
+
+        if choice is not None:
+            # Stands in for getting info from the
+
+            if choice == 'Run SEC-SAXS sample':
+
+                item_info = {
+                    # General parameters
+                    'item_type'     : 'sec_sample',
+                    'descrip'       : 'Test sample',
+                    'conc'          : '1',
+                    'buf'           : 'Test buffer',
+                    'inst'          : 'hplc1_pump1',
+                    'sample_name'   : 'test',
+
+                    # Injection parameters
+                    'acq_method'    : 'SECSAXS_test',
+                    'sample_loc'    : 'DF2-A1',
+                    'inj_vol'       : 10.0,
+                    'flow_rate'     : 0.1,
+                    'elution_vol'   : 0.2,
+                    'flow_accel'    : 0.1,
+                    'pressure_lim'  : 60,
+                    'result_path'   : 'api_test',
+                    'sp_method'     : '',
+                    'wait_for_flow_ramp'    : True,
+                    'settle_time'   : 0.0,
+                    'flow_path'     : 1,
+
+                    # Exposure parameters
+                    'data_dir'      : '',
+                    'exp_time'      : 0.5,
+                    'exp_period'    : 1,
+                    'exp_num'       : 2,
+                    }
+
+                num_flow_paths = self.auto_panel.settings['instruments'][item_info['inst'].split('_')[0]]['num_paths']
+
+                item_info['num_flow_paths'] = num_flow_paths
+
+            elif choice == 'Equilibrate column':
+                item_info = {
+                    # General aprameters
+                    'item_type' : 'equilibrate',
+                    'buf'       : 'Test buffer',
+                    'inst'      : 'hplc1_pump1',
+
+                    # Equilibrate parameters
+                    'equil_rate'    : 0.1,
+                    'equil_vol'     : 0.1,
+                    'equil_accel'   : 0.1,
+                    'purge'         : True,
+                    'purge_rate'    : 0.2,
+                    'purge_volume'  : 0.2,
+                    'purge_accel'   : 0.2,
+                    'equil_with_sample' : False,
+                    'stop_after_equil'  : False,
+                    'flow_path'     : 1,
+                }
+
+                num_flow_paths = self.auto_panel.settings['instruments'][item_info['inst'].split('_')[0]]['num_paths']
+
+                item_info['num_flow_paths'] = num_flow_paths
+
+            elif choice == 'Switch pumps':
+
+                item_info = {
+                    'item_type' : 'switch_pumps',
+                    'inst'      : 'hplc1',
+
+                    #Switch parameters
+                    'purge_rate'    : 0.1,
+                    'purge_volume'  : 0.1,
+                    'purge_accel'   : 0.1,
+                    'restore_flow_after_switch' : True,
+                    'switch_with_sample'    : False,
+                    'stop_flow1'    : True,
+                    'stop_flow2'    : True,
+                    'purge_active'  : True,
+                    }
+
+                num_flow_paths = self.auto_panel.settings['instruments'][item_info['inst'].split('_')[0]]['num_paths']
+
+                item_info['num_flow_paths'] = num_flow_paths
+
+            self._add_item(item_info)
+
+    def _add_item(self, item_info):
+
+        # auto_names, auto_ids = self._on_add_item_callback(item_info)
+        auto_names = ['test']
+        auto_ids = [0]
 
         item_type = item_info['item_type']
 
-        new_item = AutoListItem(self, item_type, 'test', 0)
+        new_item = AutoListItem(self, item_type, auto_names, auto_ids, item_info)
 
-        if item_type == 'sample':
+        if item_type == 'sec_sample':
+            name = item_info['sample_name']
             descrip = item_info['descrip']
             conc = item_info['conc']
             buf = item_info['buf']
+            new_item.set_name(name)
             new_item.set_description(descrip)
             new_item.set_concentration(conc)
             new_item.set_buffer(buf)
 
+        elif item_type == 'equilibrate':
+            buf = item_info['buf']
+            new_item.set_buffer(buf)
+
         self.add_items([new_item])
+
 
     def _on_remove_item(self, evt):
         sel_items = self.get_selected_items()
 
-        item_list = [item.automator_name, item.automator_id for item in sel_items]
+        item_list = [[item.automator_names, item.automator_ids] for item in sel_items]
 
         # self._on_remove_item_callback(item_list)
 
@@ -514,19 +680,35 @@ class AutoList(utils.ItemList):
 
 
 class AutoListItem(utils.ListItem):
-    def __init__(self, item_list, item_type, auto_name, auto_id, *args, **kwargs):
+    def __init__(self, item_list, item_type, auto_names, auto_ids, item_info,
+        *args, **kwargs):
         self.item_type = item_type
+        self.item_info = item_info
 
         utils.ListItem.__init__(self, item_list, *args, **kwargs)
 
-        self.automator_name = auto_name
-        self.automator_id = auto_id
+        self.automator_names = auto_names
+        self.automator_ids = auto_ids
 
     def _create_layout(self):
         item_parent = self
 
-        type_label = wx.StaticText(item_parent, label=self.item_type.capitalize(),
-            size=self._FromDIP((70, -1)), style=wx.ST_NO_AUTORESIZE)
+        if self.item_type == 'sec_sample':
+            item_label = 'SEC sample'
+        else:
+            item_label = self.item_type.capitalize()
+
+        if self.item_info['inst'].startswith('hplc'):
+            if self.item_info['num_flow_paths'] == 1:
+                inst_label = self.item_info['inst'].split('_')[0].upper()
+            else:
+                inst_label = '{} {}'.format(self.item_info['inst'].split('_')[0].upper(),
+                    self.item_info['inst'].split('_')[1].capitalize())
+
+        item_label = '{}, {}'.format(item_label, inst_label)
+
+        type_label = wx.StaticText(item_parent, label=item_label,
+            size=self._FromDIP((175, -1)), style=wx.ST_NO_AUTORESIZE)
 
         fsize = self.GetFont().GetPointSize()
         font = wx.Font(fsize, wx.DEFAULT, wx.NORMAL, wx.BOLD)
@@ -534,7 +716,10 @@ class AutoListItem(utils.ListItem):
 
         self.text_list.append(type_label)
 
-        if self.item_type == 'sample':
+        if self.item_type == 'sec_sample':
+
+            name_label = wx.StaticText(item_parent, label='Name:')
+            self.name_ctrl = wx.StaticText(item_parent, label='')
 
             desc_label = wx.StaticText(item_parent, label='Descripton:')
             self.desc_ctrl = wx.StaticText(item_parent, label='')
@@ -547,6 +732,8 @@ class AutoListItem(utils.ListItem):
 
             top_sizer = wx.BoxSizer(wx.HORIZONTAL)
             top_sizer.Add(type_label, flag=wx.RIGHT, border=self._FromDIP(5))
+            top_sizer.Add(name_label, flag=wx.RIGHT, border=self._FromDIP(3))
+            top_sizer.Add(self.name_ctrl, flag=wx.RIGHT, border=self._FromDIP(3))
             top_sizer.Add(desc_label, flag=wx.RIGHT, border=self._FromDIP(3))
             top_sizer.Add(self.desc_ctrl, flag=wx.RIGHT, border=self._FromDIP(3))
             top_sizer.Add(conc_label, flag=wx.RIGHT, border=self._FromDIP(3))
@@ -556,6 +743,18 @@ class AutoListItem(utils.ListItem):
 
             self.text_list.extend([desc_label, self.desc_ctrl,
                 conc_label, self.conc_ctrl, buffer_label, self.buffer_ctrl])
+
+        if self.item_type == 'equilibrate':
+
+            buffer_label = wx.StaticText(item_parent, label='Buffer:')
+            self.buffer_ctrl = wx.StaticText(item_parent, label='')
+
+            top_sizer = wx.BoxSizer(wx.HORIZONTAL)
+            top_sizer.Add(type_label, flag=wx.RIGHT, border=self._FromDIP(5))
+            top_sizer.Add(buffer_label, flag=wx.RIGHT, border=self._FromDIP(3))
+            top_sizer.Add(self.buffer_ctrl, flag=wx.RIGHT, border=self._FromDIP(3))
+
+            self.text_list.extend([buffer_label, self.buffer_ctrl])
 
         self.SetSizer(top_sizer)
 
@@ -569,6 +768,8 @@ class AutoListItem(utils.ListItem):
     def set_buffer(self, buffer_info):
         self.buffer_ctrl.SetLabel(buffer_info)
 
+    def set_name(self, name):
+        self.name_ctrl.SetLabel(name)
 
 
 class AutoFrame(wx.Frame):
@@ -651,8 +852,12 @@ if __name__ == '__main__':
     # automator.add_cmd('test2', 'test2cmd', ['testargs'], {'arg1:' 'testkwargs'})
     # automator.add_cmd('test', 'test1cmd3', ['testargs3'], {'arg1:' 'testkwargs3'})
 
+    automator_callback = None
+
     automator_settings = {
         'automator_thread'  : automator,
+        'instruments'       : {'hplc1' : {'num_paths': 2,
+                                'automator_callback': automator_callback}}
         }
 
 

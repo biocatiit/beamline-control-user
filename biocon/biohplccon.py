@@ -4434,28 +4434,35 @@ class HPLCPanel(utils.DevicePanel):
         equil_dialog.Destroy()
 
         if equil_settings is not None:
-            equil_vol = equil_settings.pop('equil_vol')
+            self._validate_and_equilibrate(flow_path, equil_settings)
+
+    def _validate_and_equilibrate(self, flow_path, equil_settings):
+        equil_vol = equil_settings.pop('equil_vol')
             equil_rate = equil_settings.pop('equil_rate')
-            equil_accel = equil_settings.pop('equil_accel')
+        equil_accel = equil_settings.pop('equil_accel')
 
-            try:
-                equil_vol = float(equil_vol)
-                equil_rate = float(equil_rate)
-                equil_accel = float(equil_accel)
-                equil_settings['purge_volume'] = float(equil_settings['purge_volume'])
-                equil_settings['purge_rate'] = float(equil_settings['purge_rate'])
-                equil_settings['purge_accel'] = float(equil_settings['purge_accel'])
-                equil_settings['purge_max_pressure'] = self.settings['purge_max_pressure']
-            except Exception:
-                equil_vol = None
-
-        else:
+        try:
+            equil_vol = float(equil_vol)
+            equil_rate = float(equil_rate)
+            equil_accel = float(equil_accel)
+            equil_settings['purge_volume'] = float(equil_settings['purge_volume'])
+            equil_settings['purge_rate'] = float(equil_settings['purge_rate'])
+            equil_settings['purge_accel'] = float(equil_settings['purge_accel'])
+            equil_settings['purge_max_pressure'] = self.settings['purge_max_pressure']
+        except Exception:
             equil_vol = None
 
         if equil_vol is not None:
             cmd = ['equil_flow_path', [self.name, flow_path, equil_vol,
                 equil_rate, equil_accel], equil_settings]
             self._send_cmd(cmd, False)
+
+            run_equil = True
+
+        else:
+            run_equil = False
+
+        return run_equil
 
     def _on_stop_eq(self, evt):
         evt_obj = evt.GetEventObject()
@@ -4550,28 +4557,29 @@ class HPLCPanel(utils.DevicePanel):
         sample_dialog.Destroy()
 
         if sample_settings is not None:
-            sample_name = sample_settings.pop('sample_name')
-            acq_method = sample_settings.pop('acq_method')
-            sample_loc = sample_settings.pop('sample_loc')
-            inj_vol = sample_settings.pop('inj_vol')
-            flow_rate = sample_settings.pop('flow_rate')
-            flow_accel = sample_settings.pop('flow_accel')
-            elution_vol = sample_settings.pop('elution_vol')
-            pressure_lim = sample_settings.pop('pressure_lim')
+            self._validate_and_submit_sample(sample_settings)
 
-            try:
-                inj_vol = float(inj_vol)
-                flow_rate = float(flow_rate)
-                flow_accel = float(flow_accel)
-                elution_vol = float(elution_vol)
-                pressure_lim = float(pressure_lim)
+    def _validate_and_submit_sample(self, sample_settings):
+        sample_name = sample_settings.pop('sample_name')
+        acq_method = sample_settings.pop('acq_method')
+        sample_loc = sample_settings.pop('sample_loc')
+        inj_vol = sample_settings.pop('inj_vol')
+        flow_rate = sample_settings.pop('flow_rate')
+        flow_accel = sample_settings.pop('flow_accel')
+        elution_vol = sample_settings.pop('elution_vol')
+        pressure_lim = sample_settings.pop('pressure_lim')
 
-                if sample_settings['wait_for_flow_ramp']:
-                    sample_settings['settle_time'] = float(sample_settings['settle_time'])
-            except Exception:
-                inj_vol = None
+        try:
+            inj_vol = float(inj_vol)
+            flow_rate = float(flow_rate)
+            flow_accel = float(flow_accel)
+            elution_vol = float(elution_vol)
+            pressure_lim = float(pressure_lim)
 
-        else:
+            if sample_settings['wait_for_flow_ramp']:
+                sample_settings['settle_time'] = float(sample_settings['settle_time'])
+
+        except Exception:
             inj_vol = None
 
         if inj_vol is not None:
@@ -4579,6 +4587,13 @@ class HPLCPanel(utils.DevicePanel):
                 sample_loc, inj_vol, flow_rate, flow_accel, elution_vol,
                 pressure_lim], sample_settings]
             self._send_cmd(cmd, False)
+
+            run_sample = True
+
+        else:
+            run_sample = False
+
+        return run_sample
 
     def _on_stop_submission(self, evt):
         cmd = ['stop_sample_submission', [self.name,], {}]
@@ -5085,6 +5100,22 @@ class HPLCPanel(utils.DevicePanel):
                 self._run_queue_ctrl.SetItem(i, 1, run_data[0])
 
         self._run_queue_ctrl.Thaw()
+
+    def automator_callback(self, cmd_name, cmd_args, cmd_kwargs):
+        if cmd_name == 'inject':
+            success = self._validate_and_submit_sample(cmd_kwargs)
+
+            if success:
+                state = 'run'
+            else:
+                state = 'idle'
+
+        if cmd_name == 'equilibrate':
+            flow_path = cmd_kwargs.pop('flow_path')
+            success = self._validate_and_equilibrate(flow_path, cmd_kwargs)
+
+        return state
+
 
 class BufferEntryDialog(wx.Dialog):
     """
