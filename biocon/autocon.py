@@ -185,6 +185,9 @@ class Automator(threading.Thread):
                 cmd_args = next_cmd['args']
                 cmd_kwargs = next_cmd['kwargs']
 
+                logger.info(('{} running cmd {} with args {} and kwargs'
+                    ' {}').format(name, cmd_name, cmd_args, cmd_kwargs))
+
                 if cmd_name != 'wait':
                     state = cmd_func(cmd_name, cmd_args, cmd_kwargs)
 
@@ -418,6 +421,10 @@ class AutoListPanel(wx.Panel):
                         inst_settings['automator_callback'])
 
                     self.inst_list.append(name)
+
+
+        # For testing
+        self.automator.add_control('exp', 'exp', test_cmd_func)
 
     def _create_layout(self):
         self.top_list_ctrl = self._create_list_layout()
