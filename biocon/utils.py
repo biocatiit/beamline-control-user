@@ -1204,6 +1204,261 @@ class DeviceFrame(wx.Frame):
         self.Destroy()
 
 
+class ItemList(wx.Panel):
+    def __init__(self, *args, **kwargs):
+        wx.Panel.__init__(self, *args, **kwargs)
+
+        self._create_layout()
+
+        self.all_items = []
+        self.selected_items = []
+        self.modified_items = []
+        self._marked_item = None
+
+    def _FromDIP(self, size):
+        # This is a hack to provide easy back compatibility with wxpython < 4.1
+        try:
+            return self.FromDIP(size)
+        except Exception:
+            return size
+
+    def _create_layout(self):
+        self.list_panel = wx.ScrolledWindow(self, style=wx.BORDER_SUNKEN)
+        self.list_panel.SetScrollRate(20,20)
+
+        self.list_bkg_color = wx.SystemSettings.GetColour(wx.SYS_COLOUR_LISTBOX)
+
+        self.list_panel.SetBackgroundColour(self.list_bkg_color)
+
+        self.list_panel_sizer = wx.BoxSizer(wx.VERTICAL)
+        self.list_panel.SetSizer(self.list_panel_sizer)
+
+        toolbar_sizer = self._create_toolbar()
+        button_sizer = self._create_buttons()
+
+        panel_sizer = wx.BoxSizer(wx.VERTICAL)
+        if toolbar_sizer is not None:
+            panel_sizer.Add(toolbar_sizer, border=self._FromDIP(5), flag=wx.LEFT
+                |wx.RIGHT|wx.EXPAND)
+        panel_sizer.Add(self.list_panel, proportion=1, border=self._FromDIP(3),
+            flag=wx.TOP|wx.LEFT|wx.RIGHT|wx.EXPAND)
+        if button_sizer is not None:
+            panel_sizer.Add(button_sizer, border=self._FromDIP(10),
+                flag=wx.EXPAND|wx.ALL)
+
+        self.SetSizer(panel_sizer)
+
+    def updateColors(self):
+        self.list_panel.SetBackgroundColour(self.list_bkg_color)
+
+        for item in self.all_items:
+            item.updateColors()
+        self.Refresh()
+
+    def _create_toolbar(self):
+        return None
+
+    def _create_buttons(self):
+        return None
+
+    def create_items(self):
+        pass
+
+    def resize_list(self):
+        self.list_panel.SetVirtualSize(self.list_panel.GetBestVirtualSize())
+        self.list_panel.Layout()
+        self.list_panel.Refresh()
+
+    def add_items(self, items):
+        for item in items:
+            self.list_panel_sizer.Add(item, flag=wx.EXPAND|wx.ALL,
+                border=self._FromDIP(1))
+            self.all_items.append(item)
+
+        self.resize_list()
+
+    def mark_item(self, item):
+        self._marked_item = item
+
+    def get_marked_item(self):
+        return self._marked_item
+
+    def clear_marked_item(self):
+        self._marked_item = None
+
+    def clear_list(self):
+        self._marked_item = None
+        self.selected_items = []
+        self.modified_items = []
+
+        remaining_items = []
+
+        for item in self.all_items:
+            try:
+                item.Destroy()
+            except Exception:
+                remaining_items.append(item)
+
+        self.all_items = remaining_items
+
+        self.resize_list()
+
+    def get_selected_items(self):
+        self.selected_items = []
+
+        for item in self.all_items:
+            if item.get_selected():
+                self.selected_items.append(item)
+
+        return self.selected_items
+
+    def select_all(self):
+        for item in self.all_items:
+            item.set_selected(True)
+
+    def deselect_all_but_one(self, sel_item):
+        selected_items = self.get_selected_items()
+
+        for item in selected_items:
+            if item is not sel_item:
+                item.set_selected(False)
+
+    def select_to_item(self, sel_item):
+        selected_items = self.get_selected_items()
+
+        sel_idx = self.get_item_index(sel_item)
+
+        first_idx = self.get_item_index(selected_items[0])
+
+        if sel_item in selected_items:
+            for item in self.all_items[first_idx:sel_idx]:
+                item.set_selected(False)
+        else:
+            if sel_idx < first_idx:
+                for item in self.all_items[sel_idx:first_idx]:
+                    item.set_selected(True)
+            else:
+                last_idx = self.get_item_index(selected_items[-1])
+                for item in self.all_items[last_idx+1:sel_idx+1]:
+                    item.set_selected(True)
+
+    def remove_items(self, items):
+        for item in items:
+            self.remove_item(item, resize=False)
+
+        self.resize_list()
+
+    def remove_selected_items(self):
+        selected_items = self.get_selected_items()
+
+        if len(selected_items) > 0:
+            self.remove_items(selected_items)
+
+    def remove_item(self, item, resize=True):
+        item.remove()
+
+        if item in self.modified_items:
+            self.modified_items.remove(item)
+
+        if item in self.selected_items:
+            self.selected_items.remove(item)
+
+        self.all_items.remove(item)
+
+        item.Destroy()
+
+        self.resize_list()
+
+    def get_items(self):
+        return self.all_items
+
+    def get_item_index(self, item):
+        return self.all_items.index(item)
+
+    def get_item(self, index):
+        return self.all_items[index]
+
+class ListItem(wx.Panel):
+    def __init__(self, item_list, *args, **kwargs):
+        wx.Panel.__init__(self, *args, parent=item_list.list_panel,
+            style=wx.BORDER_RAISED, **kwargs)
+
+        self._selected = False
+
+        self.item_list = item_list
+
+        self.text_list = []
+
+        self._create_layout()
+
+        self.Bind(wx.EVT_LEFT_DOWN, self._on_left_mouse_btn)
+        self.Bind(wx.EVT_RIGHT_DOWN, self._on_right_mouse_btn)
+        self.Bind(wx.EVT_KEY_DOWN, self._on_key_press)
+
+        self.general_text_color = wx.SystemSettings.GetColour(wx.SYS_COLOUR_LISTBOXTEXT)
+        self.highlight_text_color = wx.SystemSettings.GetColour(wx.SYS_COLOUR_LISTBOXHIGHLIGHTTEXT)
+        self.list_bkg_color = wx.SystemSettings.GetColour(wx.SYS_COLOUR_LISTBOX)
+        self.highlight_list_bkg_color = wx.Colour(178, 215, 255)
+
+    def _FromDIP(self, size):
+        # This is a hack to provide easy back compatibility with wxpython < 4.1
+        try:
+            return self.FromDIP(size)
+        except Exception:
+            return size
+
+    def _create_layout(self):
+        pass
+
+    def updateColors(self):
+        self.set_selected(self._selected)
+
+    def get_selected(self):
+        return self._selected
+
+    def set_selected(self, selected):
+        self._selected = selected
+
+        if self._selected:
+
+            self.SetBackgroundColour(self.highlight_list_bkg_color)
+
+            for text_item in self.text_list:
+                text_item.SetForegroundColour(self.general_text_color)
+
+        else:
+            self.SetBackgroundColour(self.list_bkg_color)
+            for text_item in self.text_list:
+                text_item.SetForegroundColour(self.general_text_color)
+
+        self.Refresh()
+
+    def toggle_selected(self):
+        self.set_selected(not self._selected)
+
+    def remove(self):
+        pass
+
+    def _on_left_mouse_btn(self, event):
+        if self.IsEnabled():
+            ctrl_is_down = event.CmdDown()
+            shift_is_down = event.ShiftDown()
+
+            if shift_is_down:
+                self.item_list.select_to_item(self)
+            elif ctrl_is_down:
+                self.toggle_selected()
+            else:
+                self.item_list.deselect_all_but_one(self)
+                self.toggle_selected()
+
+    def _on_right_mouse_btn(self, event):
+        pass
+
+    def _on_key_press(self, event):
+        pass
+
+
 elveflow_errors = {
     -8000   : 'No digital sensor found',
     -8001   : 'No pressure sensor compatible with OB1 MK3',
