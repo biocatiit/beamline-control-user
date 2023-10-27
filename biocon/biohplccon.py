@@ -4440,7 +4440,7 @@ class HPLCPanel(utils.DevicePanel):
 
     def _validate_and_equilibrate(self, flow_path, equil_settings):
         equil_vol = equil_settings.pop('equil_vol')
-            equil_rate = equil_settings.pop('equil_rate')
+        equil_rate = equil_settings.pop('equil_rate')
         equil_accel = equil_settings.pop('equil_accel')
 
         try:
@@ -5104,8 +5104,78 @@ class HPLCPanel(utils.DevicePanel):
         self._run_queue_ctrl.Thaw()
 
     def automator_callback(self, cmd_name, cmd_args, cmd_kwargs):
-        if cmd_name == 'inject':
-            success = self._validate_and_submit_sample(cmd_kwargs)
+        # if cmd_name != 'status':
+        #     print('automator_callback')
+        #     print(cmd_name)
+        #     print(cmd_args)
+        #     print(cmd_kwargs)
+
+        if cmd_name == 'status':
+            if (self._inst_status == 'Offline' or self._inst_status == 'Unknown'
+                or self._inst_status == 'Error' or self._inst_status == 'Idle' or
+                self._inst_status == 'NotReady' or self._inst_status == 'Standby'):
+
+                if self._sampler_submitting.lower() == 'true':
+                    state = 'run'
+
+                else:
+                    inst_name = cmd_kwargs['inst_name']
+
+                    flow_path = int(inst_name.split('_')[-1].lstrip('pump'))
+
+                    if self._flow_path_status.lower() == 'true':
+                        state = 'switch'
+
+                    elif flow_path == 1:
+                        if self._pump1_purge.lower() == 'true':
+                            state = 'equil'
+                        elif self._pump1_eq.lower() == 'true':
+                            state = 'equil'
+                        else:
+                            state = 'idle'
+
+                    elif flow_path == 2:
+                        if self._pump2_purge.lower() == 'true':
+                            state = 'equil'
+                        elif self._pump2_eq.lower() == 'true':
+                            state = 'equil'
+                        else:
+                            state = 'idle'
+
+            elif (self._inst_status == 'Run' or self._inst_status == 'Injecting'
+                or self._inst_status == 'PostRun' or self._inst_status == 'PreRun'):
+                state = 'run'
+
+
+        elif cmd_name == 'inject':
+            acq_method = cmd_kwargs['acq_method']
+            sp_method = cmd_kwargs['sp_method']
+
+            if acq_method not in self._methods:
+                acq_method = os.path.splitext(acq_method)[0]+'.amx'
+
+                if acq_method not in self._methods:
+                    acq_method = '.\\{}'.format(acq_method)
+
+            if (sp_method is not None and sp_method != ''
+                and sp_method not in self._sp_methods):
+                sp_method = os.path.splitext(sp_method)[0]+'.smx'
+
+                if sp_method not in self._sp_methods:
+                    sp_method = '.\\{}'.format(sp_method)
+
+            elif sp_method == '':
+                sp_method = None
+
+            cmd_kwargs['acq_method'] = acq_method
+            cmd_kwargs['sp_method'] = sp_method
+
+            if (acq_method in self._methods and (sp_method is None
+                or sp_method in self._sp_methods)):
+                success = self._validate_and_submit_sample(cmd_kwargs)
+
+            else:
+                success = False
 
             if success:
                 state = 'run'

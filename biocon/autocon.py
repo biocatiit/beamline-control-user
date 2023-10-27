@@ -85,14 +85,15 @@ class Automator(threading.Thread):
                     for name, controls in self._auto_cons.items():
                         state = controls['status']['state']
 
-                        if (state == 'run' or state == 'equil'
-                            or state == 'switch'):
+                        if not state.startswith('wait'):
                             self._check_status(name)
 
                         elif state.startswith('wait'):
                             self._check_wait(name)
 
-                        elif state == 'idle':
+                        state = controls['status']['state']
+
+                        if state == 'idle':
                             with controls['cmd_lock']:
                                 num_cmds = len(controls['cmd_queue'])
 
@@ -120,7 +121,7 @@ class Automator(threading.Thread):
 
                 cmd_name = 'status'
                 cmd_args = []
-                cmd_kwargs = {}
+                cmd_kwargs = {'inst_name': name}
 
                 state = cmd_func(cmd_name, cmd_args, cmd_kwargs)
 
@@ -185,10 +186,10 @@ class Automator(threading.Thread):
                 cmd_args = next_cmd['args']
                 cmd_kwargs = next_cmd['kwargs']
 
-                logger.info(('{} running cmd {} with args {} and kwargs'
+                logger.info(('Automator: {} running cmd {} with args {} and kwargs'
                     ' {}').format(name, cmd_name, cmd_args, cmd_kwargs))
 
-                if cmd_name != 'wait':
+                if not cmd_name.startswith('wait'):
                     state = cmd_func(cmd_name, cmd_args, cmd_kwargs)
 
                     if state is not None:
@@ -448,7 +449,7 @@ class AutoListPanel(wx.Panel):
         return wx.Panel(self)
 
     def _on_add_item_callback(self, item_info):
-        item_type == item_info['item_type']
+        item_type = item_info['item_type']
 
         if item_type == 'sec_sample':
             """
@@ -462,9 +463,9 @@ class AutoListPanel(wx.Panel):
             hplc_inst = item_info['inst']
 
             sample_wait_cmd = 'wait_sample_{}'.format(self._sample_wait_id)
-            cmd_id1 = self.add_cmd('exp', sample_wait_cmd, [], {'condition': 'status',
-                'inst_conds': [[hplc_inst, sample_wait_cmd], ['exp', sample_wait_cmd]]})
-            cmd_id2 = self.add_cmd('exp', 'expose', [], item_info)
+            cmd_id1 = self.automator.add_cmd('exp', sample_wait_cmd, [], {'condition': 'status',
+                'inst_conds': [[hplc_inst, [sample_wait_cmd,]], ['exp', [sample_wait_cmd,]]]})
+            cmd_id2 = self.automator.add_cmd('exp', 'expose', [], item_info)
 
             inj_settings = {
                 'sample_name'   : item_info['sample_name'],
@@ -481,9 +482,10 @@ class AutoListPanel(wx.Panel):
                 'settle_time'   : item_info['settle_time'],
                 }
 
-            cmd_id3 = self.add_cmd(hplc_inst, sample_wait_cmd, [], {'condition': 'status',
-                'inst_conds': [[hplc_inst, sample_wait_cmd], ['exp', 'run']]})
-            cmd_id4 = self.add_cmd(hplc_inst, 'inject', [], inj_settings)
+            cmd_id3 = self.automator.add_cmd(hplc_inst, sample_wait_cmd, [],
+                {'condition': 'status', 'inst_conds': [[hplc_inst,
+                [sample_wait_cmd,]], ['exp', ['idle',]]]})
+            cmd_id4 = self.automator.add_cmd(hplc_inst, 'inject', [], inj_settings)
 
             self._sample_wait_id += 1
 
@@ -506,10 +508,14 @@ class AutoListPanel(wx.Panel):
                 'flow_path'     : item_info['flow_path'],
                 }
 
-            cmd_id = self.add_cmd(hplc_inst, 'equilibrate', [], equil_settings)
+            # cmd_id1 = self.automator.add_cmd(hplc_inst, 'wait', [],
+            #     {'condition' : 'status', 'inst_conds': [[hplc_inst, 'idle'],]})
+            cmd_id2 = self.automator.add_cmd(hplc_inst, 'equilibrate', [], equil_settings)
 
+            # auto_names = [hplc_inst, hplc_inst]
+            # auto_ids = [cmd_id1, cmd_id2]
             auto_names = [hplc_inst,]
-            auto_ids = [cmd_id,]
+            auto_ids = [cmd_id2,]
 
         elif item_type == 'switch_pumps':
             auto_names = []
@@ -535,21 +541,21 @@ class AutoListPanel(wx.Panel):
 
             switch_wait_cmd = 'wait_switch_{}'.format(self._switch_wait_id)
 
-            inst_conds = [['{}_pump{}'.format(hplc_inst, i+1), switch_wait_cmd]
+            inst_conds = [['{}_pump{}'.format(hplc_inst, i+1), [switch_wait_cmd,]]
                 for i in range(num_paths)]
 
             for i in range(num_paths):
                 cmd_name = '{}_pump{}'.format(hplc_inst, i+1)
 
-                cmd_id = self.add_cmd(cmd_name, switch_wait_cmd, [], {'condition': 'status',
-                    'inst_conds': inst_conds})
+                cmd_id = self.automator.add_cmd(cmd_name, switch_wait_cmd, [],
+                    {'condition': 'status', 'inst_conds': inst_conds})
 
                 auto_names.append(cmd_name)
                 auto_ids.append(cmd_id)
 
             cmd_name = '{}_pump{}'.format(hplc_inst, item_info['flow_path'])
 
-            cmd_id = self.add_cmd(cmd_name, 'switch_pumps', [], switch_settings)
+            cmd_id = self.automator.add_cmd(cmd_name, 'switch_pumps', [], switch_settings)
 
             auto_names.append(cmd_name)
             auto_ids.append(cmd_id)
@@ -615,7 +621,7 @@ class AutoList(utils.ItemList):
         dialog.Destroy()
 
         if choice is not None:
-            # Stands in for getting info from the
+            # Stands in for getting info from a dialog or other location
 
             if choice == 'Run SEC-SAXS sample':
 
@@ -629,17 +635,17 @@ class AutoList(utils.ItemList):
                     'sample_name'   : 'test',
 
                     # Injection parameters
-                    'acq_method'    : 'SECSAXS_test',
-                    'sample_loc'    : 'DF2-A1',
-                    'inj_vol'       : 10.0,
-                    'flow_rate'     : 0.1,
-                    'elution_vol'   : 0.2,
-                    'flow_accel'    : 0.1,
-                    'pressure_lim'  : 60,
-                    'result_path'   : 'api_test',
-                    'sp_method'     : '',
+                    'acq_method'    : 'SEC-MALS',
+                    'sample_loc'    : 'D2F-A1',
+                    'inj_vol'       : '10.0',
+                    'flow_rate'     : '0.1',
+                    'elution_vol'   : '0.1',
+                    'flow_accel'    : '0.1',
+                    'pressure_lim'  : '60',
+                    'result_path'   : '',
+                    'sp_method'     : None,
                     'wait_for_flow_ramp'    : True,
-                    'settle_time'   : 0.0,
+                    'settle_time'   : '0.0',
                     'flow_path'     : 1,
 
                     # Exposure parameters
@@ -703,9 +709,9 @@ class AutoList(utils.ItemList):
 
     def _add_item(self, item_info):
 
-        # auto_names, auto_ids = self._on_add_item_callback(item_info)
-        auto_names = ['test']
-        auto_ids = [0]
+        auto_names, auto_ids = self._on_add_item_callback(item_info)
+        # auto_names = ['test']
+        # auto_ids = [0]
 
         item_type = item_info['item_type']
 
@@ -880,9 +886,11 @@ class AutoFrame(wx.Frame):
 
 
 def test_cmd_func(name, args, kwargs):
-    print(name)
-    print(args)
-    print(kwargs)
+    # if name != 'status':
+    #     print(name)
+    #     print(args)
+    #     print(kwargs)
+    pass
     return 'idle'
 
 
@@ -912,34 +920,39 @@ if __name__ == '__main__':
     # automator.add_cmd('test2', 'test2cmd', ['testargs'], {'arg1:' 'testkwargs'})
     # automator.add_cmd('test', 'test1cmd3', ['testargs3'], {'arg1:' 'testkwargs3'})
 
-    # 2 pump HPLC for SEC-SAXS
+     # SEC-MALS HPLC-1
+    hplc_args = {
+        'name'  : 'HPLC-1',
+        'args'  : ['AgilentHPLC', 'net.pipe://localhost/Agilent/OpenLAB/'],
+        'kwargs': {'instrument_name': 'HPLC-1', 'project_name': 'Demo',
+                    'get_inst_method_on_start': True}
+        }
+
+    purge1_valve_args = {
+        'name'  : 'Purge 1',
+        'args'  :['Rheodyne', 'COM5'],
+        'kwargs': {'positions' : 6}
+        }
+
+    buffer1_valve_args = {
+        'name'  : 'Buffer 1',
+        'args'  : ['Cheminert', 'COM3'],
+        'kwargs': {'positions' : 10}
+        }
+
+    # Standard stack for SEC-MALS
     setup_devices = [
-        {'name': 'SEC-SAXS', 'args': ['AgilentHPLC2Pumps', None],
+        {'name': 'HPLC-1', 'args': ['AgilentHPLCStandard', None],
             'kwargs': {'hplc_args' : hplc_args,
-            'selector_valve_args' : selector_valve_args,
-            'outlet_valve_args' : outlet_valve_args,
             'purge1_valve_args' : purge1_valve_args,
-            'purge2_valve_args' : purge2_valve_args,
             'buffer1_valve_args' : buffer1_valve_args,
-            'buffer2_valve_args' : buffer2_valve_args,
-            'pump1_id' : 'quat. pump 1#1c#1',
-            'pump2_id' : 'quat. pump 2#1c#2'},
-            }
+            'pump1_id' : 'quat. pump#1c#1',
+            },
+        }
         ]
 
-    # # Standard stack for SEC-MALS
-    # setup_devices = [
-    #     {'name': 'HPLC-1', 'args': ['AgilentHPLCStandard', None],
-    #         'kwargs': {'hplc_args' : hplc_args,
-    #         'purge1_valve_args' : purge1_valve_args,
-    #         'buffer1_valve_args' : buffer1_valve_args,
-    #         'pump1_id' : 'quat. pump#1c#1',
-    #         },
-    #     }
-    #     ]
-
     # Local
-    com_thread = HPLCCommThread('HPLCComm')
+    com_thread = biohplccon.HPLCCommThread('HPLCComm')
     com_thread.start()
 
     # # Remote
@@ -992,7 +1005,7 @@ if __name__ == '__main__':
 
     app = wx.App()
     logger.debug('Setting up wx app')
-    hplc_frame = HPLCFrame('HPLCFrame', hplc_settings, parent=None,
+    hplc_frame = biohplccon.HPLCFrame('HPLCFrame', hplc_settings, parent=None,
         title='HPLC Control')
     hplc_frame.Show()
 
@@ -1001,7 +1014,7 @@ if __name__ == '__main__':
 
     automator_settings = {
         'automator_thread'  : automator,
-        'instruments'       : {'hplc1' : {'num_paths': 2,
+        'instruments'       : {'hplc1' : {'num_paths': 1,
                                 'automator_callback': hplc_automator_callback}}
         }
 
@@ -1017,4 +1030,8 @@ if __name__ == '__main__':
     if automator is not None:
         automator.stop()
         automator.join()
+
+    if com_thread is not None:
+        com_thread.stop()
+        com_thread.join()
 
