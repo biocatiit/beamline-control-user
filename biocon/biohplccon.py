@@ -4183,23 +4183,25 @@ class HPLCPanel(utils.DevicePanel):
         switch_dialog.Destroy()
 
         if switch_settings is not None:
-            do_switch = True
+            self._validate_and_switch(flow_path, switch_settings)
 
-            if switch_settings['purge_active']:
-                try:
-                    switch_settings['purge_volume'] = float(switch_settings['purge_volume'])
-                    switch_settings['purge_rate'] = float(switch_settings['purge_rate'])
-                    switch_settings['purge_accel'] = float(switch_settings['purge_accel'])
-                    switch_settings['purge_max_pressure'] = self.settings['purge_max_pressure']
-                except Exception:
-                    do_switch = False
+    def _validate_and_switch(self, flow_path, switch_settings):
+        do_switch = True
 
-        else:
-            do_switch = False
+        if switch_settings['purge_active']:
+            try:
+                switch_settings['purge_volume'] = float(switch_settings['purge_volume'])
+                switch_settings['purge_rate'] = float(switch_settings['purge_rate'])
+                switch_settings['purge_accel'] = float(switch_settings['purge_accel'])
+                switch_settings['purge_max_pressure'] = self.settings['purge_max_pressure']
+            except Exception:
+                do_switch = False
 
         if do_switch:
             cmd = ['set_active_flow_path', [self.name, flow_path], switch_settings]
             self._send_cmd(cmd, False)
+
+        return do_switch
 
     def _on_stop_all(self, evt):
         cmd = ['stop_all', [self.name,], {}]
@@ -5110,9 +5112,23 @@ class HPLCPanel(utils.DevicePanel):
             else:
                 state = 'idle'
 
-        if cmd_name == 'equilibrate':
+        elif cmd_name == 'equilibrate':
             flow_path = cmd_kwargs.pop('flow_path')
             success = self._validate_and_equilibrate(flow_path, cmd_kwargs)
+
+            if success:
+                state = 'equil'
+            else:
+                state = 'idle'
+
+        elif cmd_name == 'switch_pumps':
+            flow_path = cmd_kwargs.pop('flow_path')
+            success = self._validate_and_switch(flow_path, cmd_kwargs)
+
+            if success:
+                state = 'switch'
+            else:
+                state = 'idle'
 
         return state
 
