@@ -59,6 +59,7 @@ class Automator(threading.Thread):
         self._stop_event = threading.Event()
 
         self._on_run_cmd_callbacks = []
+        self._on_finish_cmd_callbacks = []
 
         self._cmd_id = 0
 
@@ -121,12 +122,13 @@ class Automator(threading.Thread):
             with controls['cmd_lock']:
                 cmd_func = controls['cmd_func']
 
-
                 cmd_name = 'status'
                 cmd_args = []
                 cmd_kwargs = {'inst_name': name}
 
                 state = cmd_func(cmd_name, cmd_args, cmd_kwargs)
+
+                old_state = copy.copy(controls['status']['state'])
 
                 if state is not None:
                     controls['status']['state'] = state
@@ -135,6 +137,12 @@ class Automator(threading.Thread):
 
             if state == 'idle' and num_cmds > 0:
                 self._run_next_cmd(name)
+
+            elif state == 'idle' and old_state != 'idle':
+                prev_cmd_id = copy.copy(controls['run_id'])
+                queue_name = copy.copy(name)
+                for finish_callback in self._on_finish_cmd_callbacks:
+                    finish_callback(prev_cmd_id, queue_name)
 
 
     def _check_wait(self, name):
@@ -200,10 +208,7 @@ class Automator(threading.Thread):
                     run_callback(cmd_id, cmd_name, prev_cmd_id)
 
                 if not cmd_name.startswith('wait'):
-                    state = cmd_func(cmd_name, cmd_args, cmd_kwargs)
-
-                    if state is not None:
-                        controls['status']['state'] = state
+                    cmd_func(cmd_name, cmd_args, cmd_kwargs)
 
                 else:
                     status = cmd_kwargs
@@ -341,6 +346,9 @@ class Automator(threading.Thread):
     def add_on_run_cmd_callback(self, callback_func):
         self._on_run_cmd_callbacks.append(callback_func)
 
+    def add_on_finish_cmd_callback(self, callback_func):
+        self._on_finish_cmd_callbacks.append(callback_func)
+
     def abort(self):
         self._abort_event.set()
 
@@ -440,6 +448,7 @@ class AutoListPanel(wx.Panel):
         self.automator.add_control('exp', 'exp', test_cmd_func)
 
         self.automator.add_on_run_cmd_callback(self._on_automator_run_callback)
+        self.automator.add_on_finish_cmd_callback(self._on_automator_finish_callback)
 
     def _create_layout(self):
         self.top_list_ctrl = self._create_list_layout()
@@ -578,14 +587,13 @@ class AutoListPanel(wx.Panel):
 
         return auto_names, auto_ids
 
-
     def _on_remove_item_callback(self, cmd_list):
         self.automator.set_automator_state('pause')
 
         for cmds in cmd_list:
             for i in range(len(cmds[0])):
-                cmd_name =  cmd[0][i]
-                cmd_id = cmd[1][i]
+                cmd_name =  cmds[0][i]
+                cmd_id = cmds[1][i]
                 self.automator.remove_cmd(cmd_name, cmd_id)
 
         self.automator.set_automator_state('run')
@@ -594,6 +602,8 @@ class AutoListPanel(wx.Panel):
         wx.CallAfter(self.auto_list.set_item_status, prev_aid, 'done')
         wx.CallAfter(self.auto_list.set_item_status, aid, 'run')
 
+    def _on_automator_finish_callback(self, prev_aid, queue_name):
+        wx.CallAfter(self.auto_list.set_item_status, prev_aid, 'done')
 
 class AutoList(utils.ItemList):
     def __init__(self, on_add_item_callback, on_remove_item_callback,
@@ -728,8 +738,8 @@ class AutoList(utils.ItemList):
     def _add_item(self, item_info):
 
         auto_names, auto_ids = self._on_add_item_callback(item_info)
-        auto_names = ['test']
-        auto_ids = [0]
+        # auto_names = ['test']
+        # auto_ids = [0]
 
         item_type = item_info['item_type']
 
@@ -748,6 +758,8 @@ class AutoList(utils.ItemList):
         elif item_type == 'equilibrate':
             buf = item_info['buf']
             new_item.set_buffer(buf)
+
+        new_item.set_status_label('Queued')
 
         self.add_items([new_item])
 
@@ -834,8 +846,6 @@ class AutoListItem(utils.ListItem):
             self.buffer_ctrl = wx.StaticText(item_parent, label='')
 
             item_sizer = wx.BoxSizer(wx.HORIZONTAL)
-            item_sizer.Add(type_label, flag=wx.RIGHT|wx.LEFT,
-                border=self._FromDIP(5))
             item_sizer.Add(name_label, flag=wx.RIGHT, border=self._FromDIP(3))
             item_sizer.Add(self.name_ctrl, flag=wx.RIGHT, border=self._FromDIP(3))
             item_sizer.Add(desc_label, flag=wx.RIGHT, border=self._FromDIP(3))
@@ -854,16 +864,17 @@ class AutoListItem(utils.ListItem):
             self.buffer_ctrl = wx.StaticText(item_parent, label='')
 
             item_sizer = wx.BoxSizer(wx.HORIZONTAL)
-            item_sizer.Add(type_label, flag=wx.RIGHT, border=self._FromDIP(5))
-            item_sizer.Add(buffer_label, flag=wx.RIGHT, border=self._FromDIP(3))
-            item_sizer.Add(self.buffer_ctrl, flag=wx.RIGHT, border=self._FromDIP(3))
+            item_sizer.Add(buffer_label, flag=wx.RIGHT|wx.LEFT,
+                border=self._FromDIP(3))
+            item_sizer.Add(self.buffer_ctrl, flag=wx.RIGHT, border=self._FromDIP(5))
 
             self.text_list.extend([buffer_label, self.buffer_ctrl])
 
         top_sizer = wx.BoxSizer(wx.VERTICAL)
         top_sizer.Add(std_sizer, flag=wx.TOP|wx.BOTTOM, border=self._FromDIP(5))
-        self.SetSizer(top_sizer, flag=wx.BOTTOM, border=self._FromDIP(5))
+        top_sizer.Add(item_sizer, flag=wx.BOTTOM, border=self._FromDIP(5))
 
+        self.SetSizer(top_sizer)
 
     def set_description(self, descrip):
         self.desc_ctrl.SetLabel(descrip)
@@ -886,7 +897,7 @@ class AutoListItem(utils.ListItem):
 
             self.automator_id_status[index] = status
 
-        if all([val == 'queue'] for val in self.automator_id_status):
+        if all([val == 'queue' for val in self.automator_id_status]):
             self.status = 'queue'
         elif all([val == 'done' for val in self.automator_id_status]):
             self.status = 'done'
@@ -1017,11 +1028,11 @@ if __name__ == '__main__':
         ]
 
     # Local
-    # com_thread = biohplccon.HPLCCommThread('HPLCComm')
-    # com_thread.start()
+    com_thread = biohplccon.HPLCCommThread('HPLCComm')
+    com_thread.start()
 
     # # Remote
-    com_thread = None
+    # com_thread = None
 
     hplc_settings = {
         # Connection settings for hplc
@@ -1068,15 +1079,15 @@ if __name__ == '__main__':
         'settle_time'               : 0.0,
         }
 
-    # app = wx.App()
-    # logger.debug('Setting up wx app')
-    # hplc_frame = biohplccon.HPLCFrame('HPLCFrame', hplc_settings, parent=None,
-    #     title='HPLC Control')
-    # hplc_frame.Show()
+    app = wx.App()
+    logger.debug('Setting up wx app')
+    hplc_frame = biohplccon.HPLCFrame('HPLCFrame', hplc_settings, parent=None,
+        title='HPLC Control')
+    hplc_frame.Show()
 
 
-    # hplc_automator_callback = hplc_frame.devices[0].automator_callback
-    hplc_automator_callback = test_cmd_func
+    hplc_automator_callback = hplc_frame.devices[0].automator_callback
+    # hplc_automator_callback = test_cmd_func
 
     automator_settings = {
         'automator_thread'  : automator,
@@ -1087,10 +1098,7 @@ if __name__ == '__main__':
 
     """
     Next up to do:
-    - Make it so that item list knows when it's running/been run and has
-    an apropriate visual sign
-
-    - Make it so that remove works
+    Test removal of queued, running, and done items
 
     - Make it so that you can move items up and down in the list
 
@@ -1103,7 +1111,7 @@ if __name__ == '__main__':
     """
 
 
-    app = wx.App()
+    # app = wx.App()
     # logger.debug('Setting up wx app')
     frame = AutoFrame('AutoFrame', automator_settings, parent=None,
         title='Automator Control')

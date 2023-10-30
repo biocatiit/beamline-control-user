@@ -4505,12 +4505,12 @@ class HPLCPanel(utils.DevicePanel):
         if evt_obj == self._buffer1_valve_ctrl:
             valve = 'buffer1'
             val = self._buffer1_valve_ctrl.GetValue()
-        elif evt_obj == self._buffer2_valve_ctrl:
-            valve = 'buffer2'
-            val = self._buffer2_valve_ctrl.GetValue()
         elif evt_obj == self._purge1_valve_ctrl:
             valve = 'purge1'
             val = self._purge1_valve_ctrl.GetValue()
+        elif evt_obj == self._buffer2_valve_ctrl:
+            valve = 'buffer2'
+            val = self._buffer2_valve_ctrl.GetValue()
         elif evt_obj == self._purge2_valve_ctrl:
             valve = 'purge2'
             val = self._purge2_valve_ctrl.GetValue()
