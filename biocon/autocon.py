@@ -308,6 +308,8 @@ class Automator(threading.Thread):
         return found_id
 
     def _find_cmd(self, cmd_queue, cmd_lock, cmd_id):
+        index = -1 #In case no items are in the queue
+
         with cmd_lock:
             found_id = False
             for index, item in enumerate(cmd_queue):
@@ -443,12 +445,11 @@ class AutoListPanel(wx.Panel):
 
                     self.inst_list.append(name)
 
+        self.automator.add_on_run_cmd_callback(self._on_automator_run_callback)
+        self.automator.add_on_finish_cmd_callback(self._on_automator_finish_callback)
 
         # For testing
         self.automator.add_control('exp', 'exp', test_cmd_func)
-
-        self.automator.add_on_run_cmd_callback(self._on_automator_run_callback)
-        self.automator.add_on_finish_cmd_callback(self._on_automator_finish_callback)
 
     def _create_layout(self):
         self.top_list_ctrl = self._create_list_layout()
@@ -464,7 +465,8 @@ class AutoListPanel(wx.Panel):
 
     def _create_list_layout(self):
         self.auto_list = AutoList(self._on_add_item_callback,
-            self._on_remove_item_callback, self, self)
+            self._on_remove_item_callback, self._on_move_item_callback,
+            self, self)
 
         return self.auto_list
 
@@ -605,15 +607,19 @@ class AutoListPanel(wx.Panel):
     def _on_automator_finish_callback(self, prev_aid, queue_name):
         wx.CallAfter(self.auto_list.set_item_status, prev_aid, 'done')
 
+    def _on_move_item_callback(self, aid, cmd_name, dist):
+        self.automator.reorder_cmd(cmd_name, aid, dist)
+
 class AutoList(utils.ItemList):
     def __init__(self, on_add_item_callback, on_remove_item_callback,
-        auto_panel, *args, **kwargs):
+        on_move_item_callback, auto_panel, *args, **kwargs):
         utils.ItemList.__init__(self, *args)
 
         self.auto_panel = auto_panel
 
         self._on_add_item_callback = on_add_item_callback
         self._on_remove_item_callback = on_remove_item_callback
+        self._on_move_item_callback = on_move_item_callback
 
     def _create_buttons(self):
         button_parent = self
@@ -624,9 +630,19 @@ class AutoList(utils.ItemList):
         remove_item_btn = wx.Button(button_parent, label='Remove Action')
         remove_item_btn.Bind(wx.EVT_BUTTON, self._on_remove_item)
 
+        move_item_up_btn = wx.Button(button_parent, label='Move up')
+        move_item_up_btn.Bind(wx.EVT_BUTTON, self._on_move_item_up)
+
+        move_item_down_btn = wx.Button(button_parent, label='Move down')
+        move_item_down_btn.Bind(wx.EVT_BUTTON, self._on_move_item_down)
+
         button_sizer = wx.BoxSizer(wx.HORIZONTAL)
         button_sizer.Add(add_item_btn, border=self._FromDIP(5), flag=wx.LEFT)
         button_sizer.Add(remove_item_btn, border=self._FromDIP(5), flag=wx.LEFT)
+        button_sizer.Add(move_item_up_btn, border=self._FromDIP(5),
+            flag=wx.LEFT)
+        button_sizer.Add(move_item_down_btn, border=self._FromDIP(5),
+            flag=wx.LEFT)
 
         return button_sizer
 
@@ -773,13 +789,142 @@ class AutoList(utils.ItemList):
 
         self.remove_selected_items()
 
+    def _on_move_item_up(self, evt):
+        sel_items = self.get_selected_items()
+
+        if len(sel_items) > 0:
+            print('here1')
+
+            top_item = sel_items[0]
+            top_idx = self.get_item_index(top_item)
+
+            move_up = True
+
+            if top_idx == 0:
+                move_up = False
+
+            else:
+                prev_states_done = [item.status == 'done' for item in self.all_items[:top_idx]]
+
+                if all(prev_states_done):
+                    move_up = False
+
+            if move_up:
+                print('here2')
+                self.auto_panel.automator.set_automator_state('pause')
+
+                do_move = self._check_move_status(sel_items, 'up')
+
+                if do_move:
+                    print('here3')
+                    for item in sel_items:
+                        self._do_move_item(item, 'up')
+
+                    for name, controls in self.auto_panel.automator._auto_cons.items():
+                        print(name)
+
+                        for cmd in controls['cmd_queue']:
+                            print(cmd['cmd'])
+                            print(cmd['cmd_id'])
+
+                self.auto_panel.automator.set_automator_state('run')
+
+    def _on_move_item_down(self, evt):
+        sel_items = self.get_selected_items()
+
+        if len(sel_items) > 0:
+
+            bot_item = sel_items[-1]
+            bot_idx = self.get_item_index(bot_item)
+
+            move_down = True
+
+            if bot_idx == len(self.all_items)-1:
+                move_down = False
+
+            else:
+                item_states_done = [item.status == 'done' for item in sel_items]
+
+                if any(item_states_done):
+                    move_down = False
+
+            if move_down:
+                self.auto_panel.automator.set_automator_state('pause')
+
+                do_move = self._check_move_status(sel_items, 'down')
+
+                if do_move:
+                    for item in sel_items:
+                        self._do_move_item(item, 'down')
+
+                    for name, controls in self.auto_panel.automator._auto_cons.items():
+                        print(name)
+
+                        for cmd in controls['cmd_queue']:
+                            print(cmd['cmd'])
+                            print(cmd['cmd_id'])
+
+                self.auto_panel.automator.set_automator_state('run')
+
+    def _check_move_status(self, sel_items, move):
+        do_move = True
+
+        for item in sel_items:
+            item_idx = self.get_item_index(item)
+
+            if move == 'up':
+                switch_item = self.all_items[item_idx-1]
+            else:
+                switch_item = self.all_items[item_idx+1]
+
+            share_control = False
+
+            for name in item.automator_names:
+                if name in switch_item.automator_names:
+                    share_control = True
+                    break
+
+            if (any([status != 'queue' for status in switch_item.automator_id_status])
+                and share_control):
+                do_move = False
+                break
+
+        return do_move
+
+    def _do_move_item(self, item, move):
+        item_idx = self.get_item_index(item)
+
+        if move == 'up':
+            switch_item = self.all_items[item_idx-1]
+            move_list = enumerate(item.automator_names)
+        else:
+            switch_item = self.all_items[item_idx+1]
+            move_list = enumerate(item.automator_names)
+            move_list = list(move_list)[::-1]
+
+        for i, name in move_list:
+            move_dist = self._get_shared_cmd_number(name, switch_item)
+
+            if move_dist > 0:
+                if move == 'down':
+                    move_dist *= -1
+
+                self._on_move_item_callback(item.automator_ids[i],
+                    name, move_dist)
+
+        self.move_item(item, move, False)
+
+        self.resize_list()
+
+    def _get_shared_cmd_number(self, cmd_name, item):
+        return item.automator_names.count(cmd_name)
+
     def set_item_status(self, aid, status):
         for item in self.all_items:
             if item.status != 'done':
                 if aid in item.automator_ids:
                     item.set_automator_status(aid, status)
                     break
-
 
 
 class AutoListItem(utils.ListItem):
@@ -846,14 +991,14 @@ class AutoListItem(utils.ListItem):
             self.buffer_ctrl = wx.StaticText(item_parent, label='')
 
             item_sizer = wx.BoxSizer(wx.HORIZONTAL)
-            item_sizer.Add(name_label, flag=wx.RIGHT, border=self._FromDIP(3))
-            item_sizer.Add(self.name_ctrl, flag=wx.RIGHT, border=self._FromDIP(3))
-            item_sizer.Add(desc_label, flag=wx.RIGHT, border=self._FromDIP(3))
-            item_sizer.Add(self.desc_ctrl, flag=wx.RIGHT, border=self._FromDIP(3))
-            item_sizer.Add(conc_label, flag=wx.RIGHT, border=self._FromDIP(3))
-            item_sizer.Add(self.conc_ctrl, flag=wx.RIGHT, border=self._FromDIP(3))
-            item_sizer.Add(buffer_label, flag=wx.RIGHT, border=self._FromDIP(3))
-            item_sizer.Add(self.buffer_ctrl, flag=wx.RIGHT, border=self._FromDIP(3))
+            item_sizer.Add(name_label, flag=wx.RIGHT|wx.LEFT, border=self._FromDIP(5))
+            item_sizer.Add(self.name_ctrl, flag=wx.RIGHT, border=self._FromDIP(5))
+            item_sizer.Add(desc_label, flag=wx.RIGHT, border=self._FromDIP(5))
+            item_sizer.Add(self.desc_ctrl, flag=wx.RIGHT, border=self._FromDIP(5))
+            item_sizer.Add(conc_label, flag=wx.RIGHT, border=self._FromDIP(5))
+            item_sizer.Add(self.conc_ctrl, flag=wx.RIGHT, border=self._FromDIP(5))
+            item_sizer.Add(buffer_label, flag=wx.RIGHT, border=self._FromDIP(5))
+            item_sizer.Add(self.buffer_ctrl, flag=wx.RIGHT, border=self._FromDIP(5))
 
             self.text_list.extend([desc_label, self.desc_ctrl,
                 conc_label, self.conc_ctrl, buffer_label, self.buffer_ctrl])
@@ -1098,9 +1243,13 @@ if __name__ == '__main__':
 
     """
     Next up to do:
-    Test removal of queued, running, and done items
 
     - Make it so that you can move items up and down in the list
+
+    - There's something weird with the queue when using both equilibration and sample items. Need to figure that out.
+        Maybe the status isn't updating correctly? because it's running equil
+        as soon as the sample injects, which results in an error. Also not updating
+        status on sample after equil correctly (never goes from run to done)
 
     - Work on making the items look better
 

@@ -1378,6 +1378,30 @@ class ItemList(wx.Panel):
     def get_item(self, index):
         return self.all_items[index]
 
+    def move_item(self, item, move_dir, refresh=True):
+        item_idx = self.get_item_index(item)
+
+        if move_dir == 'up' and item_idx > 0:
+            new_item_idx = item_idx -1
+
+        elif move_dir == 'down' and item_idx < len(self.all_items) -1:
+            new_item_idx = item_idx +1
+
+        else:
+            new_item_idx = -1
+
+        if new_item_idx != -1:
+            self.list_panel_sizer.Detach(item)
+            self.list_panel_sizer.Insert(new_item_idx, item, flag=wx.EXPAND|wx.ALL,
+                border=self._FromDIP(1))
+
+            self.all_items.pop(item_idx)
+            self.all_items.insert(new_item_idx, item)
+
+            if refresh:
+                self.resize_list()
+
+
 class ListItem(wx.Panel):
     def __init__(self, item_list, *args, **kwargs):
         wx.Panel.__init__(self, *args, parent=item_list.list_panel,
