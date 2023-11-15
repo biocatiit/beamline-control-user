@@ -62,6 +62,7 @@ class Automator(threading.Thread):
         self._on_finish_cmd_callbacks = []
 
         self._cmd_id = 0
+        self._wait_id = 0
 
     def run(self):
         """
@@ -119,6 +120,30 @@ class Automator(threading.Thread):
         with self._auto_con_lock:
             controls = self._auto_cons[name]
 
+            state = self._inner_check_status()
+
+            with controls['cmd_lock']:
+                old_state = copy.copy(controls['status']['state'])
+
+                if state is not None:
+                    controls['status']['state'] = state
+
+                num_cmds = len(controls['cmd_queue'])
+
+            if state == 'idle' and old_state != 'idle':
+                with controls['cmd_lock']:
+                    prev_cmd_id = copy.copy(controls['run_id'])
+                queue_name = copy.copy(name)
+                for finish_callback in self._on_finish_cmd_callbacks:
+                    finish_callback(prev_cmd_id, queue_name)
+
+            if state == 'idle' and num_cmds > 0:
+                self._run_next_cmd(name)
+
+    def _inner_check_status(self, name):
+        with self._auto_con_lock:
+            controls = self._auto_cons[name]
+
             with controls['cmd_lock']:
                 cmd_func = controls['cmd_func']
 
@@ -128,22 +153,7 @@ class Automator(threading.Thread):
 
                 state = cmd_func(cmd_name, cmd_args, cmd_kwargs)
 
-                old_state = copy.copy(controls['status']['state'])
-
-                if state is not None:
-                    controls['status']['state'] = state
-
-                num_cmds = len(controls['cmd_queue'])
-
-            if state == 'idle' and num_cmds > 0:
-                self._run_next_cmd(name)
-
-            elif state == 'idle' and old_state != 'idle':
-                prev_cmd_id = copy.copy(controls['run_id'])
-                queue_name = copy.copy(name)
-                for finish_callback in self._on_finish_cmd_callbacks:
-                    finish_callback(prev_cmd_id, queue_name)
-
+        return state
 
     def _check_wait(self, name):
         with self._auto_con_lock:
@@ -208,7 +218,18 @@ class Automator(threading.Thread):
                     run_callback(cmd_id, cmd_name, prev_cmd_id)
 
                 if not cmd_name.startswith('wait'):
-                    cmd_func(cmd_name, cmd_args, cmd_kwargs)
+                    ex_state, success = cmd_func(cmd_name, cmd_args, cmd_kwargs)
+                    state = ''
+                    start_t = time.time()
+
+                    if success:
+                        while state != ex_state:
+                            state = self._inner_check_status(name)
+
+                            if time.time() - start_t > 30:
+                                break # Long timeout
+                            else:
+                                time.sleep(0.1)
 
                 else:
                     status = cmd_kwargs
@@ -325,6 +346,12 @@ class Automator(threading.Thread):
 
         return state
 
+    def get_wait_id(self):
+        wait_id = copy.copy(self._wait_id)
+        self._wait_id += 1
+
+        return wait_id
+
     def set_automator_state(self, state):
         """
         Sets automator state. Expected states are either 'run' or 'pause',
@@ -427,8 +454,6 @@ class AutoListPanel(wx.Panel):
 
     def _init_values(self):
         # Initialize automator controls
-        self._sample_wait_id = 0
-        self._switch_wait_id = 0
 
         self.automator = self.settings['automator_thread']
 
@@ -487,10 +512,17 @@ class AutoListPanel(wx.Panel):
             # Something like this. Arguments need refining, needs testing
             hplc_inst = item_info['inst']
 
-            sample_wait_cmd = 'wait_sample_{}'.format(self._sample_wait_id)
+            sample_wait_id = self.automator.get_wait_id()
+
+            finish_wait_id = self.automator.get_wait_id()
+            finish_wait_cmd = 'wait_finish_{}'.format(finish_wait_id)
+
+            sample_wait_cmd = 'wait_sample_{}'.format(sample_wait_id)
             cmd_id1 = self.automator.add_cmd('exp', sample_wait_cmd, [], {'condition': 'status',
                 'inst_conds': [[hplc_inst, [sample_wait_cmd,]], ['exp', [sample_wait_cmd,]]]})
             cmd_id2 = self.automator.add_cmd('exp', 'expose', [], item_info)
+            cmd_id3 = self.automator.add_cmd('exp', finish_wait_cmd, [], {'condition': 'status',
+                'inst_conds': [[hplc_inst, ['idle',]], ['exp', ['idle',]]]})
 
             inj_settings = {
                 'sample_name'   : item_info['sample_name'],
@@ -507,15 +539,16 @@ class AutoListPanel(wx.Panel):
                 'settle_time'   : item_info['settle_time'],
                 }
 
-            cmd_id3 = self.automator.add_cmd(hplc_inst, sample_wait_cmd, [],
+            cmd_id4 = self.automator.add_cmd(hplc_inst, sample_wait_cmd, [],
                 {'condition': 'status', 'inst_conds': [[hplc_inst,
                 [sample_wait_cmd,]], ['exp', ['idle',]]]})
-            cmd_id4 = self.automator.add_cmd(hplc_inst, 'inject', [], inj_settings)
+            cmd_id5 = self.automator.add_cmd(hplc_inst, 'inject', [], inj_settings)
+            cmd_id6 = self.automator.add_cmd(hplc_inst, finish_wait_cmd, [],
+                {'condition': 'status', 'inst_conds': [[hplc_inst,
+                ['idle',]], ['exp', ['idle',]]]})
 
-            self._sample_wait_id += 1
-
-            auto_names = ['exp', 'exp', hplc_inst, hplc_inst]
-            auto_ids = [cmd_id1, cmd_id2, cmd_id3, cmd_id4]
+            auto_names = ['exp', 'exp', 'exp', hplc_inst, hplc_inst, hplc_inst]
+            auto_ids = [cmd_id1, cmd_id2, cmd_id3, cmd_id4, cmd_id5, cmd_id6]
 
         elif item_type == 'equilibrate':
             hplc_inst = item_info['inst']
@@ -533,14 +566,19 @@ class AutoListPanel(wx.Panel):
                 'flow_path'     : item_info['flow_path'],
                 }
 
+            finish_wait_id = self.automator.get_wait_id()
+            finish_wait_cmd = 'wait_finish_{}'.format(finish_wait_id)
+
             # cmd_id1 = self.automator.add_cmd(hplc_inst, 'wait', [],
             #     {'condition' : 'status', 'inst_conds': [[hplc_inst, 'idle'],]})
             cmd_id2 = self.automator.add_cmd(hplc_inst, 'equilibrate', [], equil_settings)
+            cmd_id3 = self.automator.add_cmd(hplc_inst, finish_wait_cmd, [],
+                {'condition' : 'status', 'inst_conds': [[hplc_inst, ['idle',]],]})
 
-            # auto_names = [hplc_inst, hplc_inst]
-            # auto_ids = [cmd_id1, cmd_id2]
-            auto_names = [hplc_inst,]
-            auto_ids = [cmd_id2,]
+            # auto_names = [hplc_inst, hplc_inst, hplc_inst]
+            # auto_ids = [cmd_id1, cmd_id2, cmd_id3]
+            auto_names = [hplc_inst, hplc_inst]
+            auto_ids = [cmd_id2, cmd_id3]
 
         elif item_type == 'switch_pumps':
             auto_names = []
@@ -564,7 +602,9 @@ class AutoListPanel(wx.Panel):
 
             num_paths = inst_settings['num_flow_paths']
 
-            switch_wait_cmd = 'wait_switch_{}'.format(self._switch_wait_id)
+            switch_wait_id = self.automator.get_wait_id()
+
+            switch_wait_cmd = 'wait_switch_{}'.format(switch_wait_id)
 
             inst_conds = [['{}_pump{}'.format(hplc_inst, i+1), [switch_wait_cmd,]]
                 for i in range(num_paths)]
@@ -585,7 +625,21 @@ class AutoListPanel(wx.Panel):
             auto_names.append(cmd_name)
             auto_ids.append(cmd_id)
 
-            self._switch_wait_id += 1
+
+            finish_wait_id = self.automator.get_wait_id()
+            finish_wait_cmd = 'wait_finish_{}'.format(finish_wait_id)
+
+            finish_inst_conds = [['{}_pump{}'.format(hplc_inst, i+1), ['idle',]]
+                for i in range(num_paths)]
+
+            for i in range(num_paths):
+                cmd_name = '{}_pump{}'.format(hplc_inst, i+1)
+
+                cmd_id = self.automator.add_cmd(cmd_name, finish_wait_cmd, [],
+                    {'condition': 'status', 'inst_conds': finish_inst_conds})
+
+                auto_names.append(cmd_name)
+                auto_ids.append(cmd_id)
 
         return auto_names, auto_ids
 

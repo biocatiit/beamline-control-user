@@ -5110,6 +5110,8 @@ class HPLCPanel(utils.DevicePanel):
         #     print(cmd_args)
         #     print(cmd_kwargs)
 
+        success = True
+
         if cmd_name == 'status':
             if (self._inst_status == 'Offline' or self._inst_status == 'Unknown'
                 or self._inst_status == 'Error' or self._inst_status == 'Idle' or
@@ -5177,30 +5179,21 @@ class HPLCPanel(utils.DevicePanel):
             else:
                 success = False
 
-            if success:
-                state = 'run'
-            else:
-                state = 'idle'
+            state = 'run'
 
         elif cmd_name == 'equilibrate':
             flow_path = cmd_kwargs.pop('flow_path')
             success = self._validate_and_equilibrate(flow_path, cmd_kwargs)
 
-            if success:
-                state = 'equil'
-            else:
-                state = 'idle'
+            state = 'equil'
 
         elif cmd_name == 'switch_pumps':
             flow_path = cmd_kwargs.pop('flow_path')
             success = self._validate_and_switch(flow_path, cmd_kwargs)
 
-            if success:
-                state = 'switch'
-            else:
-                state = 'idle'
+            state = 'switch'
 
-        return state
+        return state, success
 
 
 class BufferEntryDialog(wx.Dialog):
