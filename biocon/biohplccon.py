@@ -5117,36 +5117,41 @@ class HPLCPanel(utils.DevicePanel):
                 or self._inst_status == 'Error' or self._inst_status == 'Idle' or
                 self._inst_status == 'NotReady' or self._inst_status == 'Standby'):
 
-                if self._sampler_submitting.lower() == 'true':
-                    state = 'run'
+                # if self._sampler_submitting.lower() == 'true':
+                #     state = 'run'
+                # This seems to cause issues because the instrument status goes
+                #back to idle before it goes to prerun, so automator triggers waits it shouldn't
 
-                else:
-                    inst_name = cmd_kwargs['inst_name']
+                # else:
+                inst_name = cmd_kwargs['inst_name']
 
-                    flow_path = int(inst_name.split('_')[-1].lstrip('pump'))
+                flow_path = int(inst_name.split('_')[-1].lstrip('pump'))
 
-                    if self._flow_path_status.lower() == 'true':
-                        state = 'switch'
+                if self._flow_path_status.lower() == 'true':
+                    state = 'switch'
 
-                    elif flow_path == 1:
-                        if self._pump1_purge.lower() == 'true':
-                            state = 'equil'
-                        elif self._pump1_eq.lower() == 'true':
-                            state = 'equil'
-                        else:
-                            state = 'idle'
+                elif flow_path == 1:
+                    if self._pump1_purge.lower() == 'true':
+                        state = 'equil'
+                    elif self._pump1_eq.lower() == 'true':
+                        state = 'equil'
+                    else:
+                        state = 'idle'
 
-                    elif flow_path == 2:
-                        if self._pump2_purge.lower() == 'true':
-                            state = 'equil'
-                        elif self._pump2_eq.lower() == 'true':
-                            state = 'equil'
-                        else:
-                            state = 'idle'
+                elif flow_path == 2:
+                    if self._pump2_purge.lower() == 'true':
+                        state = 'equil'
+                    elif self._pump2_eq.lower() == 'true':
+                        state = 'equil'
+                    else:
+                        state = 'idle'
 
             elif (self._inst_status == 'Run' or self._inst_status == 'Injecting'
                 or self._inst_status == 'PostRun' or self._inst_status == 'PreRun'):
                 state = 'run'
+
+            else:
+                state = 'idle'
 
 
         elif cmd_name == 'inject':

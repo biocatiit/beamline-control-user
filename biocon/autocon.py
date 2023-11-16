@@ -60,6 +60,7 @@ class Automator(threading.Thread):
 
         self._on_run_cmd_callbacks = []
         self._on_finish_cmd_callbacks = []
+        self._on_error_cmd_callbacks = []
 
         self._cmd_id = 0
         self._wait_id = 0
@@ -120,7 +121,7 @@ class Automator(threading.Thread):
         with self._auto_con_lock:
             controls = self._auto_cons[name]
 
-            state = self._inner_check_status()
+            state = self._inner_check_status(name)
 
             with controls['cmd_lock']:
                 old_state = copy.copy(controls['status']['state'])
@@ -134,11 +135,13 @@ class Automator(threading.Thread):
                 with controls['cmd_lock']:
                     prev_cmd_id = copy.copy(controls['run_id'])
                 queue_name = copy.copy(name)
+
                 for finish_callback in self._on_finish_cmd_callbacks:
                     finish_callback(prev_cmd_id, queue_name)
 
-            if state == 'idle' and num_cmds > 0:
-                self._run_next_cmd(name)
+            # if state == 'idle' and num_cmds > 0:
+            #     logger.info('running next cmd from status')
+            #     self._run_next_cmd(name)
 
     def _inner_check_status(self, name):
         with self._auto_con_lock:
@@ -151,7 +154,16 @@ class Automator(threading.Thread):
                 cmd_args = []
                 cmd_kwargs = {'inst_name': name}
 
-                state = cmd_func(cmd_name, cmd_args, cmd_kwargs)
+                state, success = cmd_func(cmd_name, cmd_args, cmd_kwargs)
+
+                try:
+                    state, success = cmd_func(cmd_name, cmd_args, cmd_kwargs)
+                except Exception:
+                    logger.error('Automator: {} failed to get status')
+                    success = False
+
+                    for error_callback in self._on_error_cmd_callbacks:
+                        error_callback(-1, 'status', name)
 
         return state
 
@@ -181,17 +193,32 @@ class Automator(threading.Thread):
                     for con, state_list in inst_conds:
                         cur_state = self._auto_cons[con]['status']['state']
 
-                        if cur_state not in state_list:
-                            wait_done = False
-                            break
+                        if cur_state.startswith('wait_finish'):
+                            inst_state = self._inner_check_status(con)
+
+                            if inst_state != 'idle':
+                                wait_done = False
+                                break
+
+                        elif cur_state.startswith('wait_cmd'):
+                            inst_state = self._inner_check_status(con)
+                            if inst_state not in state_list:
+                                wait_done = False
+                                break
+
+                        else:
+                            if cur_state not in state_list:
+                                wait_done = False
+                                break
 
                 if wait_done:
-                    controls['status'] = {'state': 'idle'}
+                    self._check_status(name)
 
                 num_cmds = len(controls['cmd_queue'])
 
-            if wait_done and num_cmds > 0:
-                self._run_next_cmd(name)
+            # if wait_done and num_cmds > 0:
+            #     logger.info('running next cmd from wait')
+            #     self._run_next_cmd(name)
 
 
     def _run_next_cmd(self, name):
@@ -218,18 +245,29 @@ class Automator(threading.Thread):
                     run_callback(cmd_id, cmd_name, prev_cmd_id)
 
                 if not cmd_name.startswith('wait'):
-                    ex_state, success = cmd_func(cmd_name, cmd_args, cmd_kwargs)
-                    state = ''
-                    start_t = time.time()
+
+                    try:
+                        ex_state, success = cmd_func(cmd_name, cmd_args, cmd_kwargs)
+                    except Exception:
+                        logger.error(('Automator: {} failed to run cmd {} with '
+                            'args {} and kwargs {}').format(name, cmd_name,
+                            cmd_args, cmd_kwargs))
+                        success = False
+
+                        for error_callback in self._on_error_cmd_callbacks:
+                            error_callback(cmd_id, cmd_name, name)
 
                     if success:
-                        while state != ex_state:
-                            state = self._inner_check_status(name)
+                        state = self._inner_check_status(name)
 
-                            if time.time() - start_t > 30:
-                                break # Long timeout
-                            else:
-                                time.sleep(0.1)
+                        if state != ex_state:
+                            wait_id = self.get_wait_id()
+
+                            status = {'state': 'wait_cmd_{}'.format(wait_id),
+                                'condition': 'status',
+                                'inst_conds': [[name, [ex_state,]]]}
+
+                            controls['status'] = status
 
                 else:
                     status = cmd_kwargs
@@ -254,7 +292,7 @@ class Automator(threading.Thread):
         with self._auto_con_lock:
             self._auto_cons[name] = controls
 
-    def add_cmd(self, name, cmd_name, cmd_args, cmd_kwargs):
+    def add_cmd(self, name, cmd_name, cmd_args, cmd_kwargs, at_start=False):
         """
         Special commands include:
         wait - Tells instrument to wait for a condtion. Expects additional
@@ -288,7 +326,11 @@ class Automator(threading.Thread):
                 'args': cmd_args,
                 'kwargs': cmd_kwargs
                 }
-            cmd_queue.append(cmd)
+
+            if not at_start:
+                cmd_queue.append(cmd)
+            else:
+                cmd_queue.appendleft(cmd)
 
         with self._auto_con_lock:
             self._cmd_id += 1
@@ -377,6 +419,9 @@ class Automator(threading.Thread):
 
     def add_on_finish_cmd_callback(self, callback_func):
         self._on_finish_cmd_callbacks.append(callback_func)
+
+    def add_on_error_cmd_callback(self, callback_func):
+        self._on_error_cmd_callbacks.append(callback_func)
 
     def abort(self):
         self._abort_event.set()
@@ -472,6 +517,7 @@ class AutoListPanel(wx.Panel):
 
         self.automator.add_on_run_cmd_callback(self._on_automator_run_callback)
         self.automator.add_on_finish_cmd_callback(self._on_automator_finish_callback)
+        self.automator.add_on_error_cmd_callback(self._on_automator_error_callback)
 
         # For testing
         self.automator.add_control('exp', 'exp', test_cmd_func)
@@ -547,8 +593,12 @@ class AutoListPanel(wx.Panel):
                 {'condition': 'status', 'inst_conds': [[hplc_inst,
                 ['idle',]], ['exp', ['idle',]]]})
 
-            auto_names = ['exp', 'exp', 'exp', hplc_inst, hplc_inst, hplc_inst]
-            auto_ids = [cmd_id1, cmd_id2, cmd_id3, cmd_id4, cmd_id5, cmd_id6]
+            #accounts for delayed update time between run queue and instrument status
+            cmd_id7 = self.automator.add_cmd(hplc_inst, 'wait_time', [],
+                {'condition': 'time', 't_wait': 1})
+
+            auto_names = ['exp', 'exp', 'exp', hplc_inst, hplc_inst, hplc_inst, hplc_inst]
+            auto_ids = [cmd_id1, cmd_id2, cmd_id3, cmd_id4, cmd_id5, cmd_id6, cmd_id7]
 
         elif item_type == 'equilibrate':
             hplc_inst = item_info['inst']
@@ -575,10 +625,25 @@ class AutoListPanel(wx.Panel):
             cmd_id3 = self.automator.add_cmd(hplc_inst, finish_wait_cmd, [],
                 {'condition' : 'status', 'inst_conds': [[hplc_inst, ['idle',]],]})
 
+            num_paths = item_info['num_flow_paths']
+
+            if num_paths == 1:
+                finish_wait_id = self.automator.get_wait_id()
+                equil_wait_cmd = 'wait_finish_{}'.format(finish_wait_id)
+                cmd_id4 = self.automator.add_cmd('exp', equil_wait_cmd, [],
+                {'condition' : 'status', 'inst_conds': [[hplc_inst, ['equil',]],]})
+                cmd_id5 = self.automator.add_cmd('exp', finish_wait_cmd, [],
+                {'condition' : 'status', 'inst_conds': [[hplc_inst, ['idle',]],]})
+
             # auto_names = [hplc_inst, hplc_inst, hplc_inst]
             # auto_ids = [cmd_id1, cmd_id2, cmd_id3]
-            auto_names = [hplc_inst, hplc_inst]
-            auto_ids = [cmd_id2, cmd_id3]
+
+            if num_paths == 1:
+                auto_names = [hplc_inst, hplc_inst, 'exp', 'exp']
+                auto_ids = [cmd_id2, cmd_id3, cmd_id4, cmd_id5]
+            else:
+                auto_names = [hplc_inst, hplc_inst]
+                auto_ids = [cmd_id2, cmd_id3]
 
         elif item_type == 'switch_pumps':
             auto_names = []
@@ -598,9 +663,7 @@ class AutoListPanel(wx.Panel):
                 'flow_path'     : item_info['flow_path'],
                 }
 
-            inst_settings = self.settings['instruments'][hplc_inst]
-
-            num_paths = inst_settings['num_flow_paths']
+            num_paths = item_info['num_flow_paths']
 
             switch_wait_id = self.automator.get_wait_id()
 
@@ -656,13 +719,19 @@ class AutoListPanel(wx.Panel):
 
     def _on_automator_run_callback(self, aid, cmd_name, prev_aid):
         wx.CallAfter(self.auto_list.set_item_status, prev_aid, 'done')
-        wx.CallAfter(self.auto_list.set_item_status, aid, 'run')
+        if cmd_name.startswith('wait'):
+            wx.CallAfter(self.auto_list.set_item_status, aid, 'wait')
+        else:
+            wx.CallAfter(self.auto_list.set_item_status, aid, 'run')
 
     def _on_automator_finish_callback(self, prev_aid, queue_name):
         wx.CallAfter(self.auto_list.set_item_status, prev_aid, 'done')
 
     def _on_move_item_callback(self, aid, cmd_name, dist):
         self.automator.reorder_cmd(cmd_name, aid, dist)
+
+    def _on_automator_error_callback(self, aid, cmd_name, inst_name):
+        pass # Do something with the errors here
 
 class AutoList(utils.ItemList):
     def __init__(self, on_add_item_callback, on_remove_item_callback,
@@ -847,8 +916,6 @@ class AutoList(utils.ItemList):
         sel_items = self.get_selected_items()
 
         if len(sel_items) > 0:
-            print('here1')
-
             top_item = sel_items[0]
             top_idx = self.get_item_index(top_item)
 
@@ -864,22 +931,13 @@ class AutoList(utils.ItemList):
                     move_up = False
 
             if move_up:
-                print('here2')
                 self.auto_panel.automator.set_automator_state('pause')
 
                 do_move = self._check_move_status(sel_items, 'up')
 
                 if do_move:
-                    print('here3')
                     for item in sel_items:
                         self._do_move_item(item, 'up')
-
-                    for name, controls in self.auto_panel.automator._auto_cons.items():
-                        print(name)
-
-                        for cmd in controls['cmd_queue']:
-                            print(cmd['cmd'])
-                            print(cmd['cmd_id'])
 
                 self.auto_panel.automator.set_automator_state('run')
 
@@ -910,13 +968,6 @@ class AutoList(utils.ItemList):
                 if do_move:
                     for item in sel_items:
                         self._do_move_item(item, 'down')
-
-                    for name, controls in self.auto_panel.automator._auto_cons.items():
-                        print(name)
-
-                        for cmd in controls['cmd_queue']:
-                            print(cmd['cmd'])
-                            print(cmd['cmd_id'])
 
                 self.auto_panel.automator.set_automator_state('run')
 
@@ -1100,6 +1151,9 @@ class AutoListItem(utils.ListItem):
             self.status = 'queue'
         elif all([val == 'done' for val in self.automator_id_status]):
             self.status = 'done'
+        elif (any([val == 'wait' for val in self.automator_id_status]) and
+            not any([val == 'run' for val in self.automator_id_status])):
+            self.status = 'wait'
         elif any([val == 'run' for val in self.automator_id_status]):
             self.status = 'run'
 
@@ -1107,6 +1161,8 @@ class AutoListItem(utils.ListItem):
 
         if self.status == 'queue' and label != 'Queued':
             self.status_ctrl.SetLabel('Queued')
+        elif self.status == 'wait' and label != 'Waiting':
+            self.status_ctrl.SetLabel('Waiting')
         elif self.status == 'run' and label != 'Running':
             self.status_ctrl.SetLabel('Running')
         elif self.status == 'done' and label != 'Done':
@@ -1166,7 +1222,7 @@ def test_cmd_func(name, args, kwargs):
     #     print(args)
     #     print(kwargs)
     pass
-    return 'idle'
+    return 'idle', True
 
 
 if __name__ == '__main__':
