@@ -37,6 +37,7 @@ import wx
 
 import utils
 import biohplccon
+import coflowcon
 
 
 class Automator(threading.Thread):

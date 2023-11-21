@@ -83,6 +83,8 @@ class CoflowControl(object):
         if self.settings['use_overflow_control']:
             self.overflow_connected = True
 
+        self._buffer_monitor1 = utils.BufferMonitor(self._get_buffer_monitor_flow_rate)
+
     def init_connections(self):
         self.coflow_pump_cmd_q = deque()
         self.coflow_pump_return_q = deque()
@@ -196,6 +198,8 @@ class CoflowControl(object):
         """
         Initializes the flow meters
         """
+
+        self._sheath_flow_rate = 0
 
         sheath_fm = self.settings['sheath_fm']
         self.sheath_fm_name = sheath_fm['name']
@@ -406,6 +410,7 @@ class CoflowControl(object):
         if ret is not None:
             ret_type = 'flow_rate'
             ret_val = ret*self.sheath_fr_mult
+            self._sheath_flow_rate = ret_val
         else:
             ret_type = None
             ret_val = None
@@ -483,6 +488,8 @@ class CoflowControl(object):
 
         position = self._send_valvecmd(get_sheath_valve_position_cmd, True)
 
+        self.set_active_buffer_position(position)
+
         return position
 
     def set_sheath_valve_position(self, position):
@@ -504,7 +511,97 @@ class CoflowControl(object):
                 'server.'.format(ret[1].replace('_', ' ')))
             success = False
 
+        if success:
+            self.set_active_buffer_position(position)
+
         return success
+
+    def _get_buffer_monitor_flow_rate(self):
+        return self._sheath_flow_rate
+
+    def get_buffer_info(self, position):
+        """
+        Gets the buffer info including the current volume
+
+        Parameters
+        ----------
+        position: str
+            The buffer position to get the info for.
+
+        Returns
+        -------
+        vol: float
+            The volume remaining
+        descrip: str
+            The buffer description (e.g. contents)
+        """
+        vol, descrip = self._buffer_monitor.get_buffer_info(position)
+
+        return vol, descrip
+
+    def get_all_buffer_info(self):
+        """
+        Gets information on all buffers
+
+        Returns
+        -------
+        buffers: dict
+            A dictionary where the keys are the buffer positions and
+            the values are dictionarys with keys for volume ('vol') and
+            description ('descrip').
+        """
+        buffers = self._buffer_monitor.get_all_buffer_info()
+
+
+        return buffers
+
+    def set_buffer_info(self, position, volume, descrip):
+        """
+        Sets the buffer info for a given buffer position
+
+        Parameters
+        ----------
+        position: str
+            The buffer position (e.g. 1 or A or etc)
+        volume: float
+            The current buffer volume
+        descrip: str
+            Buffer description (e.g. contents)
+
+        Returns
+        -------
+        success: bool
+            True if successful.
+        """
+        self._buffer_monitor.set_buffer_info(position, volume,descrip)
+
+        return True
+
+    def set_active_buffer_position(self, position):
+        """
+        Sets the active buffer position
+
+        Parameters
+        ----------
+        position: str
+            The buffer position (e.g. 1 or A)
+        """
+        self._buffer_monitor.set_active_buffer_position(position)
+
+        return True
+
+    def remove_buffer(self, position):
+        """
+        Removes the buffer at the given position.
+
+        Parameters
+        ----------
+        position: str
+            The buffer position (e.g. 1 or A)
+        """
+        self._buffer_monitor.remove_buffer(position)
+
+        return True
 
     def _send_pumpcmd(self, cmd, response=False):
         self.coflow_pump_status_q.clear() #For now, do nothing with the status
@@ -617,6 +714,7 @@ class CoflowPanel(wx.Panel):
         self._create_layout()
 
         self.current_sheath_valve_position = None
+        self._buffer_info = {}
 
         connect = True
 
@@ -1017,9 +1115,13 @@ class CoflowPanel(wx.Panel):
         status_grid_sizer.Add(outlet_label, flag=wx.ALIGN_CENTER_VERTICAL)
         status_grid_sizer.Add(self.outlet_flow, flag=wx.ALIGN_CENTER_VERTICAL)
 
+        coflow_buffer_sizer = self._create_buffer_ctrls(status_panel)
+
         coflow_status_sizer = wx.StaticBoxSizer(wx.StaticBox(status_panel,
             label='Coflow Status'), wx.HORIZONTAL)
         coflow_status_sizer.Add(status_grid_sizer, border=self._FromDIP(5), flag=wx.ALL)
+        coflow_status_sizer.Add(coflow_buffer_sizer, border=self._FromDIP(5),
+            flag=wx.LEFT|wx.RIGHT|wx.BOTTOM)
 
         coflow_status_sizer.AddStretchSpacer(1)
 
@@ -1041,6 +1143,31 @@ class CoflowPanel(wx.Panel):
         top_sizer.Add(status_panel, border=self._FromDIP(10), flag=wx.EXPAND|wx.TOP)
 
         self.SetSizer(top_sizer)
+
+    def _create_buffer_ctrls(self, parent):
+        buffer_box = wx.StaticBox(parent, label='Buffers')
+
+        self._buffer_list = utils.BufferList(buffer_box,
+            size=self._FromDIP((-1, 100)),style=wx.LC_REPORT|wx.BORDER_SUNKEN)
+
+        self._add_edit_buffer1_btn = wx.Button(buffer_box, label='Add/Edit Buffer')
+        self._remove_buffer1_btn = wx.Button(buffer_box, label='Remove Buffer')
+
+        self._add_edit_buffer1_btn.Bind(wx.EVT_BUTTON, self._on_add_edit_buffer)
+        self._remove_buffer1_btn.Bind(wx.EVT_BUTTON, self._on_remove_buffer)
+
+        button1_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        button1_sizer.Add(self._add_edit_buffer1_btn, flag=wx.RIGHT,
+            border=self._FromDIP(5))
+        button1_sizer.Add(self._remove_buffer1_btn)
+
+        buffer_sizer = wx.StaticBoxSizer(buffer_box, wx.VERTICAL)
+        buffer_sizer.Add(self._buffer1_list, flag=wx.EXPAND|wx.ALL,
+            proportion=1, border=self._FromDIP(5))
+        buffer_sizer.Add(button1_sizer, flag=wx.LEFT|wx.RIGHT|wx.BOTTOM,
+            border=self._FromDIP(5))
+
+        return buffer_sizer
 
     def on_collapse(self, event):
         self.Layout()
@@ -1770,6 +1897,69 @@ class CoflowPanel(wx.Panel):
             metadata['Coflow on:'] = False
 
         return metadata
+
+    def _on_add_edit_buffer(self, evt):
+        buffer_info = self._buffer_info
+
+        buffer_entry_dlg = utils.BufferEntryDialog(self, buffer_info,
+            title='Add/Edit coflow buffer')
+        result = buffer_entry_dlg.ShowModal()
+
+        if result == wx.ID_OK:
+            pos, vol, descrip = buffer_entry_dlg.get_settings()
+        else:
+            vol = None
+
+        buffer_entry_dlg.Destroy()
+
+        try:
+            vol = float(vol)
+        except Exception:
+            vol = None
+
+        if vol is not None:
+            vol = vol*1000
+            cmd = ['set_buffer_info', [self.name, pos, vol, descrip, flow_path],
+                {}]
+            self._send_cmd(cmd, False)
+
+    def _on_remove_buffer(self, evt):
+        evt_obj = evt.GetEventObject()
+
+        if self._remove_buffer1_btn == evt_obj:
+            flow_path = 1
+            buffer_info = self._buffer1_info
+        elif self._remove_buffer1_btn == evt_obj:
+            buffer_info = self._buffer2_info
+            flow_path = 2
+
+        choices = ['{} - {}'.format(key, buffer_info[key]['descrip'])
+            for key in buffer_info]
+        choice_pos = [key for key in buffer_info]
+
+        choice_dlg = wx.MultiChoiceDialog(self,
+            'Select pump {} buffer(s) to remove'.format(flow_path),
+            'Remove Buffer', choices)
+        result = choice_dlg.ShowModal()
+
+        if result == wx.ID_OK:
+            sel_items = choice_dlg.GetSelections()
+        else:
+            sel_items = None
+
+        choice_dlg.Destroy()
+
+        if sel_items is not None:
+            remove_pos = [choice_pos[i] for i in sel_items]
+
+            for pos in remove_pos:
+                cmd = ['remove_buffer', [self.name, pos, flow_path], {}]
+                self._send_cmd(cmd, True)
+
+                self._remove_buffer_from_list(flow_path, pos)
+
+    def automator_callback(self, cmd_name, cmd_args, cmd_kwargs):
+        pass
 
     def on_exit(self):
         if self.connected:

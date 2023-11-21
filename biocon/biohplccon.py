@@ -53,146 +53,6 @@ except Exception:
     AgilentHPLC = object
 
 
-class BufferMonitor(object):
-    """
-    Class for monitoring buffer levels. This is designed as an addon for an
-    hplc class, and requires methods for getting the flow rate to be defined
-    elsewhere.
-    """
-    def __init__(self, flow_rate_getter):
-        """
-        Initializes the buffer monitor class
-
-        Parameters
-        ----------
-        flow_rate_getter: func
-            A function that returns the flow rate of interest for monitoring.
-        """
-        self._get_buffer_flow_rate = flow_rate_getter
-
-        self._active_buffer_position = None
-        self._previous_flow_rate = None
-        self._buffers = {}
-
-        self._buffer_lock = threading.Lock()
-        self._terminate_buffer_monitor = threading.Event()
-        self._buffer_monitor_thread = threading.Thread(target=self._buffer_monitor)
-        self._buffer_monitor_thread.daemon = True
-        self._buffer_monitor_thread.start()
-
-    def _buffer_monitor(self):
-        while not self._terminate_buffer_monitor.is_set():
-            with self._buffer_lock:
-                if self._active_buffer_position is not None:
-                    if self._previous_flow_rate is None:
-                        self._previous_flow_rate = self._get_buffer_flow_rate()
-                        previous_time = time.time()
-
-                    current_flow = self._get_buffer_flow_rate()
-                    current_time = time.time()
-
-                    delta_vol = (((current_flow + self._previous_flow_rate)/2./60.)
-                        *(current_time-previous_time))
-
-                    if self._active_buffer_position in self._buffers:
-                        self._buffers[self._active_buffer_position]['vol'] -= delta_vol
-
-                    self._previous_flow_rate = current_flow
-                    previous_time = current_time
-
-            time.sleep(0.1)
-
-    def get_buffer_info(self, position):
-        """
-        Gets the buffer info including the current volume
-
-        Parameters
-        ----------
-        position: str
-            The buffer position to get the info for.
-
-        Returns
-        -------
-        vol: float
-            The volume remaining
-        descrip: str
-            The buffer description (e.g. contents)
-        """
-        with self._buffer_lock:
-            position = str(position)
-            vals = self._buffers[position]
-            vol = vals['vol']
-            descrip = vals['descrip']
-
-        return vol, descrip
-
-    def get_all_buffer_info(self):
-        """
-        Gets information on all buffers
-
-        Returns
-        -------
-        buffers: dict
-            A dictionary where the keys are the buffer positions and
-            the values are dictionarys with keys for volume ('vol') and
-            description ('descrip').
-        """
-        with self._buffer_lock:
-            buffers = copy.deepcopy(self._buffers)
-        return buffers
-
-    def remove_buffer(self, position):
-        """
-        Removes the buffer. If the buffer is the active buffer, active buffer
-        position is set to None.
-
-        Parameters
-        position: str
-            The buffer position (e.g. 1 or A or etc)
-        """
-        with self._buffer_lock:
-            position = str(position)
-            if position in self._buffers:
-                del self._buffers[position]
-
-            if position == self._active_buffer_position:
-                self._active_buffer_position = None
-                self._previous_flow_rate = None
-
-    def set_buffer_info(self, position, volume, descrip):
-        """
-        Sets the buffer info for a given buffer position
-
-        Parameters
-        ----------
-        position: str
-            The buffer position (e.g. 1 or A or etc)
-        volume: float
-            The current buffer volume
-        descrip: str
-            Buffer description (e.g. contents)
-        """
-        with self._buffer_lock:
-            position = str(position)
-            self._buffers[position] = {'vol': float(volume), 'descrip': descrip}
-
-    def set_active_buffer_position(self, position):
-        """
-        Sets the active buffer position
-
-        Parameters
-        ----------
-        position: str
-            The buffer position (e.g. 1 or A)
-        """
-        with self._buffer_lock:
-            self._active_buffer_position = str(position)
-            self._previous_flow_rate = None
-
-    def stop_monitor(self):
-        self._terminate_buffer_monitor.set()
-        self._buffer_monitor_thread.join()
-
 class AgilentHPLCStandard(AgilentHPLC):
     """
     Specific control for a standard Agilent stack with one pump
@@ -230,7 +90,7 @@ class AgilentHPLCStandard(AgilentHPLC):
         """
         self._equil_flow1 = False
 
-        self._buffer_monitor1 = BufferMonitor(self._get_flow_rate1)
+        self._buffer_monitor1 = utils.BufferMonitor(self._get_flow_rate1)
 
         # Connect valves
         if connect_valves:
@@ -2057,7 +1917,7 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
             The Agilent hashkey for pump 2
         """
 
-        self._buffer_monitor2 = BufferMonitor(self._get_flow_rate2)
+        self._buffer_monitor2 = utils.BufferMonitor(self._get_flow_rate2)
 
         # Defines valve positions for various states
         self._flow_path_positions = {
@@ -4033,7 +3893,7 @@ class HPLCPanel(utils.DevicePanel):
 
         buffer1_box = wx.StaticBox(self, label='Buffer 1')
 
-        self._buffer1_list = BufferList(buffer1_box,
+        self._buffer1_list = utils.BufferList(buffer1_box,
             size=self._FromDIP((-1, 100)),style=wx.LC_REPORT|wx.BORDER_SUNKEN)
 
         self._add_edit_buffer1_btn = wx.Button(buffer1_box, label='Add/Edit Buffer')
@@ -4056,7 +3916,7 @@ class HPLCPanel(utils.DevicePanel):
         if self._device_type == 'AgilentHPLC2Pumps':
             buffer2_box = wx.StaticBox(self, label='Buffer 2')
 
-            self._buffer2_list = BufferList(buffer2_box,
+            self._buffer2_list = utils.BufferList(buffer2_box,
                 size=self._FromDIP((-1, 100)),style=wx.LC_REPORT|wx.BORDER_SUNKEN)
 
             self._add_edit_buffer2_btn = wx.Button(buffer2_box,
@@ -4621,7 +4481,7 @@ class HPLCPanel(utils.DevicePanel):
             buffer_info = self._buffer2_info
             flow_path = 2
 
-        buffer_entry_dlg = BufferEntryDialog(self, buffer_info,
+        buffer_entry_dlg = utils.BufferEntryDialog(self, buffer_info,
             title='Add/Edit pump {} buffer'.format(flow_path))
         result = buffer_entry_dlg.ShowModal()
 
@@ -5240,86 +5100,7 @@ class HPLCPanel(utils.DevicePanel):
         return state, success
 
 
-class BufferEntryDialog(wx.Dialog):
-    """
-    Allows addition/editing of the buffer info in the buffer list
-    """
-    def __init__(self, parent, buffer_settings, *args, **kwargs):
-        wx.Dialog.__init__(self, parent, *args,
-            style=wx.RESIZE_BORDER|wx.CAPTION|wx.CLOSE_BOX, **kwargs)
 
-        self.SetSize(self._FromDIP((400, 200)))
-
-        self._buffer_settings = buffer_settings
-
-        self._create_layout()
-
-        self.CenterOnParent()
-
-    def _FromDIP(self, size):
-        # This is a hack to provide easy back compatibility with wxpython < 4.1
-        try:
-            return self.FromDIP(size)
-        except Exception:
-            return size
-
-    def _create_layout(self):
-        parent = self
-        self._buffer_ctrl = wx.Choice(parent, choices=[str(x) for x in range(1,11)])
-        self._buffer_ctrl.SetSelection(0)
-        self._buffer_ctrl.Bind(wx.EVT_CHOICE, self._on_buffer_choice)
-
-        self._buffer_volume = wx.TextCtrl(parent, size=self._FromDIP((100,-1)),
-            validator=utils.CharValidator('float'))
-        self._buffer_contents = wx.TextCtrl(parent,
-            style=wx.TE_MULTILINE|wx.TE_BESTWRAP)
-
-        buffer_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(5),
-            hgap=self._FromDIP(5))
-        buffer_sizer.Add(wx.StaticText(parent, label='Buffer position:'),
-            flag=wx.ALIGN_CENTER_VERTICAL)
-        buffer_sizer.Add(self._buffer_ctrl)
-        buffer_sizer.Add(wx.StaticText(parent, label='Buffer volume (L):'),
-            flag=wx.ALIGN_CENTER_VERTICAL)
-        buffer_sizer.Add(self._buffer_volume)
-        buffer_sizer.Add(wx.StaticText(parent, label='Buffer contents:'),
-            flag=wx.ALIGN_TOP)
-        buffer_sizer.Add(self._buffer_contents, flag=wx.EXPAND)
-
-        buffer_sizer.AddGrowableRow(2)
-        buffer_sizer.AddGrowableCol(1)
-
-
-        button_sizer = self.CreateButtonSizer(wx.OK | wx.CANCEL)
-
-        top_sizer=wx.BoxSizer(wx.VERTICAL)
-        top_sizer.Add(buffer_sizer, proportion=1, flag=wx.ALL|wx.EXPAND,
-            border=self._FromDIP(5))
-        top_sizer.Add(button_sizer ,flag=wx.BOTTOM|wx.RIGHT|wx.LEFT|wx.ALIGN_RIGHT,
-            border=self._FromDIP(10))
-
-        self.SetSizer(top_sizer)
-
-        self._on_buffer_choice(None)
-
-    def _on_buffer_choice(self, evt):
-        pos = self._buffer_ctrl.GetStringSelection()
-
-        if pos in self._buffer_settings:
-            vol = self._buffer_settings[pos]['vol']
-            descrip = self._buffer_settings[pos]['descrip']
-
-            vol = round(vol/1000., 4)
-
-            self._buffer_volume.SetValue(str(vol))
-            self._buffer_contents.SetValue(descrip)
-
-    def get_settings(self):
-        pos = self._buffer_ctrl.GetStringSelection()
-        vol = self._buffer_volume.GetValue()
-        descrip = self._buffer_contents.GetValue()
-
-        return pos, vol, descrip
 
 class PurgeDialog(wx.Dialog):
     """
@@ -5831,18 +5612,7 @@ class SampleDialog(wx.Dialog):
 
         return settings
 
-class BufferList(wx.ListCtrl, wx.lib.mixins.listctrl.ListCtrlAutoWidthMixin):
 
-    def __init__(self, *args, **kwargs):
-        wx.ListCtrl.__init__(self, *args, **kwargs)
-        self.InsertColumn(0, 'Port')
-        self.InsertColumn(1, 'Vol. (L)')
-        self.InsertColumn(2, 'Buffer')
-
-        self.SetColumnWidth(0, 40)
-        self.SetColumnWidth(1, 50)
-
-        wx.lib.mixins.listctrl.ListCtrlAutoWidthMixin.__init__(self)
 
 class RunList(wx.ListCtrl, wx.lib.mixins.listctrl.ListCtrlAutoWidthMixin):
 
