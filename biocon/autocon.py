@@ -61,6 +61,8 @@ class Automator(threading.Thread):
         self._on_run_cmd_callbacks = []
         self._on_finish_cmd_callbacks = []
         self._on_error_cmd_callbacks = []
+        self._on_state_change_callbacks = []
+        self._on_abort_callbacks = []
 
         self._cmd_id = 0
         self._wait_id = 0
@@ -136,8 +138,9 @@ class Automator(threading.Thread):
                     prev_cmd_id = copy.copy(controls['run_id'])
                 queue_name = copy.copy(name)
 
+                state = self.get_automator_state()
                 for finish_callback in self._on_finish_cmd_callbacks:
-                    finish_callback(prev_cmd_id, queue_name)
+                    finish_callback(prev_cmd_id, queue_name, state)
 
             # if state == 'idle' and num_cmds > 0:
             #     logger.info('running next cmd from status')
@@ -241,8 +244,9 @@ class Automator(threading.Thread):
                 prev_cmd_id = copy.copy(controls['run_id'])
                 controls['run_id'] = cmd_id
 
+                state = self.get_automator_state()
                 for run_callback in self._on_run_cmd_callbacks:
-                    run_callback(cmd_id, cmd_name, prev_cmd_id)
+                    run_callback(cmd_id, cmd_name, prev_cmd_id, state)
 
                 if not cmd_name.startswith('wait'):
 
@@ -403,7 +407,11 @@ class Automator(threading.Thread):
         separately paused in the particular instrument control.
         """
         with self._state_lock:
-            self._state = state
+            if self._state != state:
+                self._state = state
+
+                for state_callback in self._on_state_change_callbacks:
+                    state_callback(state)
 
     def set_control_status(self, name, status_dict):
         """
@@ -422,6 +430,24 @@ class Automator(threading.Thread):
 
     def add_on_error_cmd_callback(self, callback_func):
         self._on_error_cmd_callbacks.append(callback_func)
+
+    def add_on_state_change_callback(self, callback_func):
+        self._on_state_change_callbacks.append(callback_func)
+
+    def add_on_abort_callback(self, callback_func):
+        self._on_abort_callbacks.append(callback_func)
+
+    def stop_running_items(self):
+        with self._auto_con_lock:
+            for name, controls in self._auto_cons.items():
+                state = controls['status']['state']
+
+                if not state.startswith('wait') or state.startswith('wait_finish'):
+                    self.add_cmd(name, 'abort', [], {}, at_start=True)
+                    self._run_next_cmd(name)
+
+                    for abort_callback in self._on_abort_callbacks:
+                        abort_callback(controls['run_id'],  name)
 
     def abort(self):
         self._abort_event.set()
@@ -469,7 +495,7 @@ class AutoPanel(wx.Panel):
 
         ctrl_parent = self
 
-        self.status_panel = wx.Panel(ctrl_parent)
+        self.status_panel = AutoStatusPanel(self.settings, ctrl_parent)
         self.auto_list_panel = AutoListPanel(self.settings, ctrl_parent)
 
         self.top_sizer = wx.BoxSizer(wx.VERTICAL)
@@ -479,6 +505,111 @@ class AutoPanel(wx.Panel):
             border=self._FromDIP(5), flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM)
 
         self.SetSizer(self.top_sizer)
+
+class AutoStatusPanel(wx.Panel):
+    def __init__(self, self.settings, *args, **kwargs):
+        wx.Panel.__init__(self, *args, **kwargs)
+
+        self.settings = settings
+
+        self._create_layout()
+        self._init_values()
+
+    def _FromDIP(self, size):
+        # This is a hack to provide easy back compatibility with wxpython < 4.1
+        try:
+            return self.FromDIP(size)
+        except Exception:
+            return size
+
+    def _init_values(self):
+        # Initialize automator controls
+
+        self.automator = self.settings['automator_thread']
+
+        self.inst_list = []
+
+        for inst, inst_settings in self.settings['instruments'].items():
+            if inst.startswith('hplc'):
+                num_paths = inst_settings['num_paths']
+
+                for i in range(num_paths):
+                    name = '{}_pump{}'.format(inst, i+1)
+                    self.automator.add_control(name, name,
+                        inst_settings['automator_callback'])
+
+                    self.inst_list.append(name)
+
+        state = self.automator.get_automator_state()
+
+        if state == 'run':
+            self.pause_btn.Disable()
+            self.automator_state.SetLabel('Running')
+        else:
+            self.resume_btn.Disable()
+            self.automator_state.SetLabel('Paused')
+
+        self.automator.add_on_state_change_callback(self._on_state_change)
+
+    def _create_layout(self):
+
+        ctrl_parent = self
+
+        self.automator_state = wx.StaticText(ctrl_parent,
+            size=self._FromDIP((60,-1)), style=wx.ST_NO_AUTORESIZE)
+
+        status_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        status_sizer.Add(wx.StaticText(ctrl_parent, label='Queue status:'),
+            flag=wx.ALL, border=self._FromDIP(5))
+        status_sizer.Add(self.automator_state, flag=wx.ALL,
+            border=self._FromDIP(5))
+
+        self.pause_btn = wx.Button(ctrl_parent, label='Pause queue')
+        self.resume_btn = wx.Button(ctrl_parent, label='Resume queue')
+        self.stop_btn = wx.Button(ctrl_parent, label='Stop current items')
+
+        self.pause_btn.Bind(wx.EVT_BUTTON, self._on_pause_queue)
+        self.resume_btn.Bind(wx.EVT_BUTTON, self._on_resume_queue)
+        self.stop_btn.Bind(wx.EVT_BUTTON, self._on_stop_queue)
+
+        button_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        button_sizer.Add(self.pause_btn, flag=wx.ALL, border=self._FromDIP(5))
+        button_sizer.Add(self.resume_btn, flag=wx.ALL, border=self._FromDIP(5))
+        button_sizer.Add(self.stop_btn, flag=wx.ALL, border=self._FromDIP(5))
+
+        self.top_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        self.top_sizer.Add(self.top_list_ctrl, proportion=1,
+            flag=wx.RIGHT|wx.EXPAND, border=self._FromDIP(5))
+        self.top_sizer.Add(self.top_settings_ctrl, proportion=1,
+            flag=wx.EXPAND)
+
+        self.SetSizer(self.top_sizer)
+
+    def _on_pause_queue(self, evt):
+        self.automator.set_automator_state('pause')
+        self.pause_btn.Disable()
+        self.resume_btn.Enable()
+
+    def _on_resume_queue(self, evt):
+        self.automator.set_automator_state('run')
+        self.pause_btn.Enable()
+        self.resume_btn.Disable()
+
+    def _on_stop_queue(self, evt):
+        self._on_pause_queue(None)
+        self.automator.stop_running_items()
+
+
+    def _on_state_change(self, state):
+        if state == 'run':
+            wx.CallAfter(self.automator_state.SetLabel, 'Running')
+            wx.CallAfter(self.pause_btn.Enable)
+            wx.CallAfter(self.resume_btn.Disable)
+        else:
+            wx.CallAfter(self.automator_state.SetLabel, 'Paused')
+            wx.CallAfter(self.pause_btn.Disable)
+            wx.CallAfter(self.resume_btn.Enable)
+
 
 
 class AutoListPanel(wx.Panel):
@@ -518,6 +649,7 @@ class AutoListPanel(wx.Panel):
         self.automator.add_on_run_cmd_callback(self._on_automator_run_callback)
         self.automator.add_on_finish_cmd_callback(self._on_automator_finish_callback)
         self.automator.add_on_error_cmd_callback(self._on_automator_error_callback)
+        self.automator.add_on_abort_callback(self._on_automator_abort_callback)
 
         # For testing
         self.automator.add_control('exp', 'exp', test_cmd_func)
@@ -707,7 +839,10 @@ class AutoListPanel(wx.Panel):
         return auto_names, auto_ids
 
     def _on_remove_item_callback(self, cmd_list):
-        self.automator.set_automator_state('pause')
+        state = self.automator.get_automator_state()
+
+        if state == 'run':
+            self.automator.set_automator_state('pause')
 
         for cmds in cmd_list:
             for i in range(len(cmds[0])):
@@ -715,23 +850,27 @@ class AutoListPanel(wx.Panel):
                 cmd_id = cmds[1][i]
                 self.automator.remove_cmd(cmd_name, cmd_id)
 
-        self.automator.set_automator_state('run')
+        if state == 'run':
+            self.automator.set_automator_state('run')
 
-    def _on_automator_run_callback(self, aid, cmd_name, prev_aid):
-        wx.CallAfter(self.auto_list.set_item_status, prev_aid, 'done')
+    def _on_automator_run_callback(self, aid, cmd_name, prev_aid, state):
+        wx.CallAfter(self.auto_list.set_item_status, prev_aid, 'done', state)
         if cmd_name.startswith('wait'):
-            wx.CallAfter(self.auto_list.set_item_status, aid, 'wait')
+            wx.CallAfter(self.auto_list.set_item_status, aid, 'wait', state)
         else:
-            wx.CallAfter(self.auto_list.set_item_status, aid, 'run')
+            wx.CallAfter(self.auto_list.set_item_status, aid, 'run', state)
 
-    def _on_automator_finish_callback(self, prev_aid, queue_name):
-        wx.CallAfter(self.auto_list.set_item_status, prev_aid, 'done')
+    def _on_automator_finish_callback(self, prev_aid, queue_name, state):
+        wx.CallAfter(self.auto_list.set_item_status, prev_aid, 'done', state)
 
     def _on_move_item_callback(self, aid, cmd_name, dist):
         self.automator.reorder_cmd(cmd_name, aid, dist)
 
     def _on_automator_error_callback(self, aid, cmd_name, inst_name):
         pass # Do something with the errors here
+
+    def _on_automator_abort_callback(self, aid, name):
+        wx.CallAfter(self.auto_list.abort_item, aid)
 
 class AutoList(utils.ItemList):
     def __init__(self, on_add_item_callback, on_remove_item_callback,
@@ -926,8 +1065,9 @@ class AutoList(utils.ItemList):
 
             else:
                 prev_states_done = [item.status == 'done' for item in self.all_items[:top_idx]]
+                prev_states_abort = [item.status == 'abort' for item in self.all_items[:top_idx]]
 
-                if all(prev_states_done):
+                if all(prev_states_done) or all(prev_states_abort):
                     move_up = False
 
             if move_up:
@@ -956,8 +1096,9 @@ class AutoList(utils.ItemList):
 
             else:
                 item_states_done = [item.status == 'done' for item in sel_items]
+                item_states_abort = [item.status == 'abort' for item in self.all_items[:top_idx]]
 
-                if any(item_states_done):
+                if any(item_states_done) or all(prev_states_abort):
                     move_down = False
 
             if move_down:
@@ -1026,10 +1167,16 @@ class AutoList(utils.ItemList):
 
     def set_item_status(self, aid, status):
         for item in self.all_items:
-            if item.status != 'done':
+            if item.status != 'done' and item.status != 'abort':
                 if aid in item.automator_ids:
                     item.set_automator_status(aid, status)
                     break
+
+    def abort_item(self, aid):
+        for item in self.all_items:
+            if item.status != 'done' and item.status != 'abort':
+                if aid in item.automator_ids:
+                    item.abort(aid)
 
 
 class AutoListItem(utils.ListItem):
@@ -1141,7 +1288,7 @@ class AutoListItem(utils.ListItem):
     def set_status_label(self, status):
         self.status_ctrl.SetLabel(status)
 
-    def set_automator_status(self, aid, status):
+    def set_automator_status(self, aid, status, state):
         if aid in self.automator_ids:
             index = self.automator_ids.index(aid)
 
@@ -1156,6 +1303,9 @@ class AutoListItem(utils.ListItem):
             self.status = 'wait'
         elif any([val == 'run' for val in self.automator_id_status]):
             self.status = 'run'
+        elif (state != 'run' and
+            not all([val == 'done' for val in self.automator_id_status])):
+            self.status = 'pause'
 
         label = self.status_ctrl.GetLabel()
 
@@ -1167,6 +1317,16 @@ class AutoListItem(utils.ListItem):
             self.status_ctrl.SetLabel('Running')
         elif self.status == 'done' and label != 'Done':
             self.status_ctrl.SetLabel('Done')
+        elif self.status == 'pause' and label != 'Paused':
+            self.status_ctrl.SetLabel('Paused')
+
+    def abort(self, aid):
+        id_list = [[self.automator_names, self.automator_ids],]
+
+        self.item_list._on_remove_item_callback(id_list)
+
+        self.status = 'abort'
+        self.status_ctrl.SetLabel('Aborted')
 
 
 class AutoFrame(wx.Frame):

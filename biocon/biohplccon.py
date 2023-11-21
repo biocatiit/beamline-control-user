@@ -4401,6 +4401,9 @@ class HPLCPanel(utils.DevicePanel):
         elif self._pump2_stop_purge_btn == evt_obj:
             flow_path = 2
 
+        self._stop_purge(flow_path)
+
+    def _stop_purge(self, flow_path):
         cmd = ['stop_purge', [self.name, flow_path,], {}]
         self._send_cmd(cmd, False)
 
@@ -4474,6 +4477,9 @@ class HPLCPanel(utils.DevicePanel):
         elif self._pump2_stop_eq_btn == evt_obj:
             flow_path = 2
 
+        self._stop_eq(flow_path)
+
+    def _stop_eq(self, flow_path):
         cmd = ['stop_equil', [self.name, flow_path,], {}]
         self._send_cmd(cmd, False)
 
@@ -5197,6 +5203,33 @@ class HPLCPanel(utils.DevicePanel):
             success = self._validate_and_switch(flow_path, cmd_kwargs)
 
             state = 'switch'
+
+        elif cmd_name == 'abort':
+            if (self._inst_status == 'Run' or self._inst_status == 'Injecting'
+                or self._inst_status == 'PostRun' or self._inst_status == 'PreRun')
+                self._on_abort_current_run(None)
+            else:
+                inst_name = cmd_kwargs['inst_name']
+                flow_path = int(inst_name.split('_')[-1].lstrip('pump'))
+
+                if self._flow_path_status.lower() == 'true':
+                    self._on_stop_switch(None)
+
+                elif flow_path == 1:
+                    if self._pump1_eq.lower() == 'true':
+                        self._stop_eq(1)
+
+                    elif (self._pump1_eq.lower() != 'true'
+                        and self._pump1_purge.lower() == 'true'):
+                        self._stop_purge(1)
+
+                elif flow_path == 2:
+                    if self._pump2_eq.lower() == 'true':
+                        self._stop_eq(2)
+
+                    elif (self._pump2_eq.lower() != 'true'
+                        and self._pump2_purge.lower() == 'true'):
+                        self._stop_purge(2)
 
         return state, success
 
