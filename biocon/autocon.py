@@ -442,12 +442,19 @@ class Automator(threading.Thread):
             for name, controls in self._auto_cons.items():
                 state = controls['status']['state']
 
-                if not state.startswith('wait') or state.startswith('wait_finish'):
-                    self.add_cmd(name, 'abort', [], {}, at_start=True)
+                if (not state.startswith('wait_sample')):
+                    old_id = copy.copy(controls['run_id'])
+                    self.add_cmd(name, 'abort', [], {'inst_name': name}, at_start=True)
                     self._run_next_cmd(name)
 
+                    if state.startswith('wait_cmd'):
+                        controls['status']['state'] = 'idle'
+
+                    elif state.startswith('wait_t'):
+                        controls['status']['state'] = 'idle'
+
                     for abort_callback in self._on_abort_callbacks:
-                        abort_callback(controls['run_id'],  name)
+                        abort_callback(old_id,  name)
 
     def abort(self):
         self._abort_event.set()
@@ -507,7 +514,7 @@ class AutoPanel(wx.Panel):
         self.SetSizer(self.top_sizer)
 
 class AutoStatusPanel(wx.Panel):
-    def __init__(self, self.settings, *args, **kwargs):
+    def __init__(self, settings, *args, **kwargs):
         wx.Panel.__init__(self, *args, **kwargs)
 
         self.settings = settings
@@ -543,10 +550,10 @@ class AutoStatusPanel(wx.Panel):
         state = self.automator.get_automator_state()
 
         if state == 'run':
-            self.pause_btn.Disable()
+            self.resume_btn.Disable()
             self.automator_state.SetLabel('Running')
         else:
-            self.resume_btn.Disable()
+            self.pause_btn.Disable()
             self.automator_state.SetLabel('Paused')
 
         self.automator.add_on_state_change_callback(self._on_state_change)
@@ -578,9 +585,9 @@ class AutoStatusPanel(wx.Panel):
         button_sizer.Add(self.stop_btn, flag=wx.ALL, border=self._FromDIP(5))
 
         self.top_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        self.top_sizer.Add(self.top_list_ctrl, proportion=1,
+        self.top_sizer.Add(status_sizer, proportion=1,
             flag=wx.RIGHT|wx.EXPAND, border=self._FromDIP(5))
-        self.top_sizer.Add(self.top_settings_ctrl, proportion=1,
+        self.top_sizer.Add(button_sizer, proportion=1,
             flag=wx.EXPAND)
 
         self.SetSizer(self.top_sizer)
@@ -870,6 +877,7 @@ class AutoListPanel(wx.Panel):
         pass # Do something with the errors here
 
     def _on_automator_abort_callback(self, aid, name):
+        print('in abort callback')
         wx.CallAfter(self.auto_list.abort_item, aid)
 
 class AutoList(utils.ItemList):
@@ -1165,17 +1173,23 @@ class AutoList(utils.ItemList):
     def _get_shared_cmd_number(self, cmd_name, item):
         return item.automator_names.count(cmd_name)
 
-    def set_item_status(self, aid, status):
+    def set_item_status(self, aid, status, state):
         for item in self.all_items:
             if item.status != 'done' and item.status != 'abort':
                 if aid in item.automator_ids:
-                    item.set_automator_status(aid, status)
+                    item.set_automator_status(aid, status, state)
                     break
 
     def abort_item(self, aid):
+        print('in abort item')
         for item in self.all_items:
+            print(item.status)
             if item.status != 'done' and item.status != 'abort':
+                print('aborting')
+                print(aid)
+                print(item.automator_ids)
                 if aid in item.automator_ids:
+                    print('aborting2')
                     item.abort(aid)
 
 
@@ -1321,12 +1335,14 @@ class AutoListItem(utils.ListItem):
             self.status_ctrl.SetLabel('Paused')
 
     def abort(self, aid):
+        print('aborting item')
         id_list = [[self.automator_names, self.automator_ids],]
 
         self.item_list._on_remove_item_callback(id_list)
 
         self.status = 'abort'
         self.status_ctrl.SetLabel('Aborted')
+        print('here')
 
 
 class AutoFrame(wx.Frame):

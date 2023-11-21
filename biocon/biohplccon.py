@@ -5205,15 +5205,21 @@ class HPLCPanel(utils.DevicePanel):
             state = 'switch'
 
         elif cmd_name == 'abort':
+            state = 'idle'
+
             if (self._inst_status == 'Run' or self._inst_status == 'Injecting'
-                or self._inst_status == 'PostRun' or self._inst_status == 'PreRun')
+                or self._inst_status == 'PostRun' or self._inst_status == 'PreRun'):
                 self._on_abort_current_run(None)
+
             else:
                 inst_name = cmd_kwargs['inst_name']
                 flow_path = int(inst_name.split('_')[-1].lstrip('pump'))
 
                 if self._flow_path_status.lower() == 'true':
                     self._on_stop_switch(None)
+
+                elif self._sampler_submitting.lower() == 'true':
+                    self._on_stop_submission(None)
 
                 elif flow_path == 1:
                     if self._pump1_eq.lower() == 'true':
