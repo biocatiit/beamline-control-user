@@ -3195,7 +3195,7 @@ class UVPanel(utils.DevicePanel):
         abort_cmd = ['abort_collection', [self.name,], {}]
         self._send_cmd(abort_cmd)
 
-        self._open_ls_shutter(False)
+        # self._open_ls_shutter(False)
 
 
     def metadata(self):

@@ -239,13 +239,24 @@ class ControlServer(threading.Thread):
                                 answer_q = self._device_control[device]['answer_q']
 
                                 start_time = time.time()
-                                while len(answer_q) == 0 and time.time()-start_time < 5:
-                                    time.sleep(0.01)
+                                got_answer = False
 
-                                if len(answer_q) == 0:
+                                while not got_answer:
+                                    if time.time()-start_time > 5:
+                                        break
+
+                                    if len(answer_q) != 0:
+                                        answer = answer_q.popleft()
+
+                                        if answer[0] == device_cmd[1][0] and answer[1] == device_cmd[0]:
+                                            got_answer = True
+
+                                    else:
+                                        time.sleep(0.01)
+
+                                if not got_answer:
                                     answer = ''
-                                else:
-                                    answer = answer_q.popleft()
+
                             else:
                                 answer = 'cmd sent'
 
@@ -364,9 +375,9 @@ if __name__ == '__main__':
     port3 = '5558'
     port4 = '5559'
 
-    exp_type = 'coflow' #coflow or trsaxs_laminar or trsaxs_chaotic
+    # exp_type = 'coflow' #coflow or trsaxs_laminar or trsaxs_chaotic
     # exp_type = 'trsaxs_chaotic'
-    # exp_type = 'trsaxs_laminar'
+    exp_type = 'trsaxs_laminar'
 
 
     if exp_type == 'coflow':
@@ -451,22 +462,40 @@ if __name__ == '__main__':
             # Chaotic flow
 
             setup_pumps = [
-                {'name': 'Buffer 1', 'args': ['SSI Next Gen', 'COM17'],
-                    'kwargs': {'flow_rate_scale': 1.0478,
-                    'flow_rate_offset': -72.82/1000,'scale_type': 'up'},
-                    'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
-                    'max_pressure': 1800}},
-                {'name': 'Sample', 'args': ['SSI Next Gen', 'COM15'],
-                    'kwargs': {'flow_rate_scale': 1.0204,
-                    'flow_rate_offset': 15.346/1000,'scale_type': 'up'},
-                    'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
-                    'max_pressure': 1500}},
-                {'name': 'Buffer 2', 'args': ['SSI Next Gen', 'COM18'],
+                {'name': 'Buffer 2', 'args': ['SSI Next Gen', 'COM9'],
                     'kwargs': {'flow_rate_scale': 1.0179,
                     'flow_rate_offset': -20.842/10000,'scale_type': 'up'},
                     'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
                     'max_pressure': 1800}},
+                {'name': 'Sample', 'args': ['SSI Next Gen', 'COM7'],
+                    'kwargs': {'flow_rate_scale': 1.0204,
+                    'flow_rate_offset': 15.346/1000,'scale_type': 'up'},
+                    'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
+                    'max_pressure': 1500}},
+                {'name': 'Buffer 1', 'args': ['SSI Next Gen', 'COM15'],
+                    'kwargs': {'flow_rate_scale': 1.0478,
+                    'flow_rate_offset': -72.82/1000,'scale_type': 'up'},
+                    'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
+                    'max_pressure': 1800}},
                 ]
+
+            # setup_pumps = [
+            #     {'name': 'Buffer 2', 'args': ['SSI Next Gen', 'COM9'],
+            #         'kwargs': {'flow_rate_scale': 1.009,
+            #         'flow_rate_offset': -20.842/10000,'scale_type': 'up'},
+            #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
+            #         'max_pressure': 1800}},
+            #     {'name': 'Sample', 'args': ['SSI Next Gen', 'COM7'],
+            #         'kwargs': {'flow_rate_scale': 1.01,
+            #         'flow_rate_offset': 15.346/1000,'scale_type': 'up'},
+            #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
+            #         'max_pressure': 1500}},
+            #     {'name': 'Buffer 1', 'args': ['SSI Next Gen', 'COM15'],
+            #         'kwargs': {'flow_rate_scale': 1.024,
+            #         'flow_rate_offset': -72.82/1000,'scale_type': 'up'},
+            #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
+            #         'max_pressure': 1800}},
+            #     ]
 
             setup_valves = [
                 {'name': 'Injection', 'args': ['Rheodyne', 'COM6'],
@@ -525,32 +554,32 @@ if __name__ == '__main__':
         elif exp_type == 'trsaxs_laminar':
             # Laminar flow
             setup_pumps = [
-                {'name': 'Buffer', 'args': ['Pico Plus', 'COM19'],
-                    'kwargs': {'syringe_id': '10 mL, Medline P.C.',
-                    'pump_address': '00'}, 'ctrl_args': {'flow_rate' : '0.068',
-                    'refill_rate' : '5'}},
-                {'name': 'Sheath', 'args': ['Pico Plus', 'COM18'],
+                {'name': 'Buffer', 'args': ['Pico Plus', 'COM11'],
                     'kwargs': {'syringe_id': '3 mL, Medline P.C.',
-                    'pump_address': '00'}, 'ctrl_args': {'flow_rate' : '0.002',
-                    'refill_rate' : '1.5'}},
-                {'name': 'Sample', 'args': ['Pico Plus', 'COM20'],
-                    'kwargs': {'syringe_id': '3 mL, Medline P.C.',
-                    'pump_address': '00'}, 'ctrl_args': {'flow_rate' : '0.009',
-                    'refill_rate' : '1.5'}},
+                    'pump_address': '00', 'dual_syringe': 'False'},
+                    'ctrl_args': {'flow_rate' : '0.068', 'refill_rate' : '3'}},
+                {'name': 'Sample', 'args': ['Pico Plus', 'COM14'],
+                    'kwargs': {'syringe_id': '1 mL, Medline P.C.',
+                    'pump_address': '00', 'dual_syringe': 'False'},
+                    'ctrl_args': {'flow_rate' : '0.009', 'refill_rate' : '1.0'}},
+                {'name': 'Sheath', 'args': ['Pico Plus', 'COM12'],
+                    'kwargs': {'syringe_id': '1 mL, Medline P.C.',
+                    'pump_address': '00', 'dual_syringe': 'False'},
+                    'ctrl_args': {'flow_rate' : '0.002', 'refill_rate' : '1.0'}},
                 ]
 
             setup_valves = [
                 {'name': 'Injection', 'args': ['Rheodyne', 'COM6'],
                     'kwargs': {'positions' : 2}},
-                {'name': 'Buffer 1', 'args': ['Rheodyne', 'COM12'],
+                {'name': 'Buffer 1', 'args': ['Rheodyne', 'COM10'],
                     'kwargs': {'positions' : 6}},
-                {'name': 'Buffer 2', 'args': ['Rheodyne', 'COM14'],
+                {'name': 'Buffer 2', 'args': ['Rheodyne', 'COM4'],
                     'kwargs': {'positions' : 6}},
                 {'name': 'Sheath 1', 'args': ['Rheodyne', 'COM21'],
                     'kwargs': {'positions' : 6}},
                 {'name': 'Sheath 2', 'args': ['Rheodyne', 'COM8'],
                     'kwargs': {'positions' : 6}},
-                {'name': 'Sample', 'args': ['Rheodyne', 'COM17'],
+                {'name': 'Sample', 'args': ['Rheodyne', 'COM3'],
                     'kwargs': {'positions' : 6}},
                 ]
 

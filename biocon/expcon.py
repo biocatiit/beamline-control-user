@@ -34,6 +34,7 @@ import decimal
 from decimal import Decimal as D
 import datetime
 import copy
+import shutil
 
 if six.PY2:
     import subprocess32 as subprocess
@@ -447,10 +448,21 @@ class ExpCommThread(threading.Thread):
             time.sleep(0.01)
             status = ab_burst.get_status()
 
+        exp_start_num = '000001'
+
+        # cur_fprefix = '{}_{:04}'.format(fprefix, current_run)
+
+        if self._settings['add_file_postfix']:
+            new_fname = '{}_{}.tif'.format(fprefix, exp_start_num)
+        else:
+            new_fname = fprefix
+
         tot_frames = num_frames*num_runs
         logger.info(tot_frames)
         det.set_data_dir(data_dir)
         det.set_num_frames(tot_frames)
+        # det.set_num_frames(num_frames)
+        det.set_filename(new_fname)
         det.set_trigger_mode('ext_enable')
         det.set_exp_time(exp_time)
         det.set_exp_period(exp_period)
@@ -517,6 +529,7 @@ class ExpCommThread(threading.Thread):
                 else:
                     x_positions = np.array([step_start]*len(y_positions))
 
+            renum_threads = []
             for current_run in range(1,num_runs+1):
                 if self._abort_event.is_set():
                     break
@@ -534,7 +547,19 @@ class ExpCommThread(threading.Thread):
                     autoinject, autoinject_scan, start_autoinject_event, s_counters, log_vals,
                     x_positions, y_positions, comp_settings, tr_scan_settings)
 
+                logger.info('starting renum thread')
+                renum_t = threading.Thread(target=self.renum_scan_files,
+                    args=(data_dir, fprefix, num_frames, current_run))
+                renum_t.daemon = True
+                renum_t.start()
+
+                renum_threads.append(renum_t)
+                logger.info('renum thread started')
+
                 logger.info('Scan %s done', current_run)
+
+            for t in renum_threads:
+                t.join()
 
         else:
             if step_axis == 'x':
@@ -694,11 +719,13 @@ class ExpCommThread(threading.Thread):
         struck.start()
         ab_burst.arm()
 
-        det.set_filename(new_fname)
+        # det.set_filename(new_fname)
+
+        # det.arm()
 
         start = time.time()
         timeout = False
-        # x, y = motor.position
+        x, y = motor.position
 
         # logger.info(x)
         # logger.info(y)
@@ -829,9 +856,57 @@ class ExpCommThread(threading.Thread):
             cur_fprefix, exp_period, dark_counts, log_vals,
             exp_settings['metadata'], extra_vals)
 
+        # det.stop()
+
+        # while det.get_status() != 0:
+        #     time.sleep(0.001)
+        #     if self._abort_event.is_set():
+        #         self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6,
+        #             comp_settings, exp_time)
+        #         break
+
         if self._abort_event.is_set():
             self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6,
                 comp_settings, exp_time)
+
+
+    def renum_scan_files(self, data_dir, fprefix, num_frames, current_run):
+
+        data_dir = data_dir.replace(self._settings['remote_dir_root'],
+            self._settings['local_dir_root'], 1)
+
+        f_start = (int(current_run) - 1)*num_frames + 1
+
+        f_list = ['{}_data_{:06d}.h5'.format(fprefix, f_start+i) for i in range(num_frames)]
+
+        timeout = False
+
+        for i, f in enumerate(f_list):
+            full_path = os.path.join(data_dir, f)
+
+            new_name = '{}_{:04d}_data_{:06d}.h5'.format(fprefix, int(current_run), i+1)
+
+            full_new = os.path.join(data_dir, new_name)
+
+            if not os.path.exists(full_path):
+                start = time.time()
+
+            while not os.path.exists(full_path):
+                if time.time() - start > 10:
+                    timeout = True
+                    break
+                else:
+                    time.sleep(0.1)
+
+                if self._abort_event.is_set():
+                    timeout = True
+
+            if timeout:
+                break
+
+            logger.debug('Moving %s to %s', full_path, full_new)
+            shutil.move(full_path, full_new)
+
 
     def scan_exposure(self, exp_settings, comp_settings):
         logger.debug('Setting up scan exposure')
@@ -3624,7 +3699,7 @@ class ExpPanel(wx.Panel):
                 style=wx.OK|wx.ICON_ERROR)
 
         if ('trsaxs_scan' in self.settings['components'] and 'trsaxs_flow' in self.settings['components']
-            and trsaxs_scan_valid and trsaxs_flow_valid):
+            and trsaxs_scan_valid and trsaxs_flow_valid and not exp_only):
             autoinject = comp_settings['trsaxs_flow']['autoinject']
             autoinject_scan = comp_settings['trsaxs_flow']['autoinject_scan']
             total_scans = comp_settings['trsaxs_scan']['num_scans']

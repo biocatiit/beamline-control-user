@@ -29,6 +29,7 @@ import logging
 import sys
 import ctypes
 import copy
+import traceback
 
 if __name__ != '__main__':
     logger = logging.getLogger(__name__)
@@ -135,6 +136,7 @@ class SerialComm(object):
             data = data.encode()
 
         out = ''
+
         try:
             with self.ser as s:
                 s.write(data)
@@ -149,8 +151,8 @@ class SerialComm(object):
         except ValueError:
             logger.exception("Failed to write '%s' to serial device on port %s", data, self.ser.port)
 
-        logger.debug("Recived '%s' after writing to serial device on port %s", out, self.ser.port)
-
+        # logger.debug("Recived '%s' after writing to serial device on port %s", out, self.ser.port)
+        logger.debug('Received response from serial device on port %s', self.ser.port)
         return out
 
 
@@ -253,7 +255,7 @@ class RheodyneValve(Valve):
             with self.comm_lock:
                 self.valve_comm = SerialComm(self.device, 19200)
 
-            self.send_command('M', False) #Homes valve
+            # self.send_command('M', False) #Homes valve
 
             self.connected = True
 
@@ -342,9 +344,11 @@ class CheminertValve(Valve):
     A VICI cheminert valve with universal actuator and serial control.
     """
 
-    def __init__(self, name, device, positions, comm_lock=None):
+    def __init__(self, name, device, positions, comm_lock=None, baud=9600):
         """
         """
+        self._baud = baud
+
         Valve.__init__(self, name, device, comm_lock=comm_lock)
 
         logstr = ("Initializing valve {} on port {}".format(self.name,
@@ -361,16 +365,32 @@ class CheminertValve(Valve):
     def connect(self):
         if not self.connected:
             with self.comm_lock:
-                self.valve_comm = SerialComm(self.device, 9600)
+                self.valve_comm = SerialComm(self.device, self._baud)
 
             self.connected = True
 
     def get_position(self):
         position = self.send_command('CP')[0]
-        position = position.strip().lstrip('CP')
+
+        if 'position' in position.lower():
+            if '=' in position.lower():
+                position = position.split('=')[-1].strip()
+            else:
+                position = position.lower().split('is')[-1].strip('"').strip()
+        else:
+            position = position.strip().lstrip('CP')
 
         try:
+            if self._positions == 2:
+                if position == 'A':
+                    position = 1
+                elif position == 'B':
+                    position = 2
+            else:
+                position = int(position)
+
             position = '{}'.format(int(position))
+
             success = True
         except Exception:
             success = False
@@ -398,7 +418,13 @@ class CheminertValve(Valve):
             success = False
 
         else:
-            position = '{}'.format(position)
+            if self._positions == 2:
+                if position == 1:
+                    position = 'A'
+                elif position == 2:
+                    position = 'B'
+            else:
+                position = '{}'.format(position)
 
             ret, success = self.send_command('GO{}'.format(position))
 
@@ -458,6 +484,12 @@ class SoftValve(Valve):
 
         return success
 
+known_valves = {
+    'Rheodyne'  : RheodyneValve,
+    'Soft'      : SoftValve,
+    'Cheminert' : CheminertValve,
+    }
+
 class ValveCommThread(utils.CommManager):
     """
     Custom communication thread for valves.
@@ -485,11 +517,7 @@ class ValveCommThread(utils.CommManager):
         self._connected_devices = OrderedDict()
         self._connected_coms = OrderedDict()
 
-        self.known_devices = {
-            'Rheodyne'  : RheodyneValve,
-            'Soft'      : SoftValve,
-            'Cheminert' : CheminertValve,
-            }
+        self.known_devices = known_valves
 
     def _cleanup_devices(self):
         for device in self._connected_devices.values():
@@ -684,7 +712,7 @@ class ValvePanel(utils.DevicePanel):
     def _set_gui_position(self, position):
         try:
             position = int(position)
-            self.valve_position.SetValue(position)
+            self.valve_position.SafeChangeValue(position)
         except Exception:
             pass
 
@@ -702,7 +730,7 @@ class ValvePanel(utils.DevicePanel):
         if cmd == 'get_position':
             if val is not None and int(val) != self.current_position:
                 self._set_gui_position(val)
-                self.current_position = val
+                self.current_position = int(val)
 
 class ValveFrame(utils.DeviceFrame):
     """
@@ -732,6 +760,12 @@ if __name__ == '__main__':
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
     h1.setFormatter(formatter)
     logger.addHandler(h1)
+
+    # valve_args = {'name': 'Buffer 1', 'args': ['Cheminert', 'COM3'],
+    #         'kwargs': {'positions' : 10}}
+
+    # my_valve = CheminertValve(valve_args['name'], valve_args['args'][1],
+    #     valve_args['kwargs']['positions'], baud=9600)
 
     # my_rv67 = RheodyneValve('/dev/cu.usbserial-AC01UZ8O', '6p7_1', 6)
     # my_rv67.get_position()
@@ -784,22 +818,47 @@ if __name__ == '__main__':
     #         'kwargs': {'positions': 10}},
     #     ]
 
-    # # TR-SAXS laminar flow
+    # # # TR-SAXS laminar flow
+    # setup_devices = [
+    # # {'name': 'Injection', 'args': ['Rheodyne', 'COM6'],
+    #     #     'kwargs': {'positions' : 2}},
+    #     {'name': 'Buffer 1', 'args': ['Rheodyne', 'COM10'],
+    #         'kwargs': {'positions' : 6}},
+    #     {'name': 'Buffer 2', 'args': ['Rheodyne', 'COM4'],
+    #         'kwargs': {'positions' : 6}},
+    #     {'name': 'Sample', 'args': ['Rheodyne', 'COM3'],
+    #         'kwargs': {'positions' : 6}},
+    #     {'name': 'Sheath 1', 'args': ['Rheodyne', 'COM21'],
+    #         'kwargs': {'positions' : 6}},
+    #     {'name': 'Sheath 2', 'args': ['Rheodyne', 'COM8'],
+    #         'kwargs': {'positions' : 6}},
+    #     ]
+
+    # # New HPLC
+    # setup_devices = [
+    #     {'name': 'Selector', 'args': ['Cheminert', 'COM5'],
+    #         'kwargs': {'positions' : 2}},
+    #     # {'name': 'Outlet', 'args': ['Cheminert', 'COM8'],
+    #     #     'kwargs': {'positions' : 2}},
+    #     # {'name': 'Purge 1', 'args': ['Cheminert', 'COM7'],
+    #     #     'kwargs': {'positions' : 4}},
+    #     # {'name': 'Purge 2', 'args': ['Cheminert', 'COM6'],
+    #     #     'kwargs': {'positions' : 4}},
+    #     # {'name': 'Buffer 1', 'args': ['Cheminert', 'COM3'],
+    #     #     'kwargs': {'positions' : 10}},
+    #     # {'name': 'Buffer 2', 'args': ['Cheminert', 'COM4'],
+    #     #     'kwargs': {'positions' : 10}},
+    #     ]
+
+     # SEC-MALS
     setup_devices = [
-        {'name': 'Injection', 'args': ['Rheodyne', 'COM6'],
-            'kwargs': {'positions' : 2}},
-        {'name': 'Buffer 1', 'args': ['Rheodyne', 'COM12'],
-            'kwargs': {'positions' : 6}},
-        {'name': 'Buffer 2', 'args': ['Rheodyne', 'COM14'],
-            'kwargs': {'positions' : 6}},
-        {'name': 'Sheath 1', 'args': ['Rheodyne', 'COM21'],
-            'kwargs': {'positions' : 6}},
-        {'name': 'Sheath 2', 'args': ['Rheodyne', 'COM8'],
-            'kwargs': {'positions' : 6}},
-        {'name': 'Sample', 'args': ['Rheodyne', 'COM17'],
+        {'name': 'Buffer 1', 'args': ['Cheminert', 'COM3'],
+            'kwargs': {'positions' : 10}},
+        {'name': 'Buffer 2', 'args': ['Cheminert', 'COM4'],
+            'kwargs': {'positions' : 10}},
+        {'name': 'Purge 1', 'args': ['Rheodyne', 'COM5'],
             'kwargs': {'positions' : 6}},
         ]
-
 
     # Simulated
     # setup_devices = [

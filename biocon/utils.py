@@ -270,29 +270,36 @@ EVT_MY_SPIN = wx.PyEventBinder(myEVT_MY_SPIN, 1)
 
 class IntSpinCtrl(wx.Panel):
 
-    def __init__(self, parent, id=wx.ID_ANY, min = None, max = None, TextLength = 40, **kwargs):
+    def __init__(self, parent, my_id=wx.ID_ANY, my_min=None, my_max=None,
+        TextLength=40, **kwargs):
 
-        wx.Panel.__init__(self, parent, id, **kwargs)
+        wx.Panel.__init__(self, parent, my_id, **kwargs)
 
         if platform.system() != 'Windows':
-            self.ScalerButton = wx.SpinButton(self, -1, style = wx.SP_VERTICAL)
+            self.ScalerButton = wx.SpinButton(self, style=wx.SP_VERTICAL)
         else:
-            self.ScalerButton = wx.SpinButton(self, -1, size=(-1,22), style = wx.SP_VERTICAL)
+            self.ScalerButton = wx.SpinButton(self, size=self._FromDIP((-1,22)),
+                style=wx.SP_VERTICAL)
 
         self.ScalerButton.Bind(wx.EVT_SET_FOCUS, self.OnScaleChange)
         self.ScalerButton.Bind(wx.EVT_SPIN_UP, self.OnSpinUpScale)
         self.ScalerButton.Bind(wx.EVT_SPIN_DOWN, self.OnSpinDownScale)
         self.ScalerButton.SetRange(-99999, 99999)
-        self.max = max
-        self.min = min
+        self.max = my_max
+        self.min = my_min
 
         if platform.system() != 'Windows':
-            self.Scale = wx.TextCtrl(self, -1, str(min), size = (TextLength,-1), style = wx.TE_PROCESS_ENTER)
+            self.Scale = wx.TextCtrl(self, value=str(my_min),
+                size=self._FromDIP((TextLength,-1)), styl=wx.TE_PROCESS_ENTER,
+                validator=CharValidator('int'))
         else:
-            self.Scale = wx.TextCtrl(self, -1, str(min), size = (TextLength,22), style = wx.TE_PROCESS_ENTER)
+            self.Scale = wx.TextCtrl(self, value=str(my_min),
+                size=self._FromDIP((TextLength,22)), style=wx.TE_PROCESS_ENTER,
+                validator=CharValidator('int'))
 
         self.Scale.Bind(wx.EVT_KILL_FOCUS, self.OnScaleChange)
         self.Scale.Bind(wx.EVT_TEXT_ENTER, self.OnScaleChange)
+        self.Scale.Bind(wx.EVT_TEXT, self.OnText)
 
         sizer = wx.BoxSizer()
 
@@ -305,10 +312,28 @@ class IntSpinCtrl(wx.Panel):
 
         self.ScalerButton.SetValue(0)
 
+        self.Scale.SetBackgroundColour(wx.NullColour)
+        self.Scale.SetModified(False)
+
+    def _FromDIP(self, size):
+        # This is a hack to provide easy back compatibility with wxpython < 4.1
+        try:
+            return self.FromDIP(size)
+        except Exception:
+            return size
+
     def CastFloatSpinEvent(self):
         event = FloatSpinEvent(myEVT_MY_SPIN, self.GetId(), self)
-        event.SetValue( self.Scale.GetValue() )
+        event.SetValue(self.Scale.GetValue())
         self.GetEventHandler().ProcessEvent(event)
+
+    def OnText(self, event):
+        """
+        Called when text is changed in the box. Changes the background
+        color of the text box to indicate there are unset changes.
+        """
+        self.Scale.SetBackgroundColour("yellow")
+        self.Scale.SetModified(True)
 
     def OnScaleChange(self, event):
         self.ScalerButton.SetValue(0) # Resit spinbutton position for button to work in linux
@@ -322,16 +347,19 @@ class IntSpinCtrl(wx.Panel):
 
         if self.max is not None:
             if float(val) > self.max:
-                self.Scale.SetValue(str(self.max))
+                self.Scale.ChangeValue(str(self.max))
         if self.min is not None:
             if float(val) < self.min:
-                self.Scale.SetValue(str(self.min))
+                self.Scale.ChangeValue(str(self.min))
 
         #if val != self.oldValue:
         self.oldValue = val
         self.CastFloatSpinEvent()
 
         event.Skip()
+
+        self.Scale.SetBackgroundColour(wx.NullColour)
+        self.Scale.SetModified(False)
 
     def OnSpinUpScale(self, event):
         self.ScalerButton.SetFocus()    # Just to remove focus from the bgscaler to throw kill_focus event and update
@@ -353,18 +381,19 @@ class IntSpinCtrl(wx.Panel):
         if self.ScalerButton.GetValue() > 90000:
             self.ScalerButton.SetValue(0)
 
-        #print self.min, self.max, val, self.ScalerButton.GetMax(), self.ScalerButton.GetValue()
-
         if self.max is not None:
             if newval > self.max:
-                self.Scale.SetValue(str(self.max))
+                self.Scale.ChangeValue(str(self.max))
             else:
-                self.Scale.SetValue(str(newval))
+                self.Scale.ChangeValue(str(newval))
         else:
-            self.Scale.SetValue(str(newval))
+            self.Scale.ChangeValue(str(newval))
 
         self.oldValue = newval
         wx.CallAfter(self.CastFloatSpinEvent)
+
+        self.Scale.SetBackgroundColour(wx.NullColour)
+        self.Scale.SetModified(False)
 
     def OnSpinDownScale(self, event):
         #self.ScalerButton.SetValue(80)   # This breaks the spinbutton on Linux
@@ -390,15 +419,17 @@ class IntSpinCtrl(wx.Panel):
 
         if self.min is not None:
             if newval < self.min:
-                self.Scale.SetValue(str(self.min))
+                self.Scale.ChangeValue(str(self.min))
             else:
-                self.Scale.SetValue(str(newval))
+                self.Scale.ChangeValue(str(newval))
         else:
-            self.Scale.SetValue(str(newval))
+            self.Scale.ChangeValue(str(newval))
 
         self.oldValue = newval
         wx.CallAfter(self.CastFloatSpinEvent)
 
+        self.Scale.SetBackgroundColour(wx.NullColour)
+        self.Scale.SetModified(False)
 
     def GetValue(self):
         value = self.Scale.GetValue()
@@ -411,6 +442,9 @@ class IntSpinCtrl(wx.Panel):
     def SetValue(self, value):
         self.Scale.SetValue(str(value))
 
+    def ChangeValue(self, value):
+        self.Scale.ChangeValue(str(value))
+
     def SetRange(self, minmax):
         self.max = minmax[1]
         self.min = minmax[0]
@@ -419,10 +453,18 @@ class IntSpinCtrl(wx.Panel):
         return (self.min, self.max)
 
     def SetMin(self, value):
-        self.min = value
+        self.min = int(value)
 
     def SetMax(self, value):
-        self.max = value
+        self.max = int(value)
+
+    def SafeSetValue(self, val):
+        if not self.Scale.IsModified():
+            self.SetValue(val)
+
+    def SafeChangeValue(self, val):
+        if not self.Scale.IsModified():
+            self.ChangeValue(val)
 
 class WarningMessage(wx.Frame):
     def __init__(self, parent, msg, title, callback, *args, **kwargs):
@@ -644,8 +686,7 @@ class CommManager(threading.Thread):
                 ', '.join(['{}:{}'.format(kw, item) for kw, item in kwargs.items()])))
             logger.exception(msg)
 
-            if command == 'connect' or command == 'disconnect':
-                self._return_value((command, False), kwargs['comm_name'])
+            self._return_value((command, False), kwargs['comm_name'])
 
     def add_new_communication(self, name, command_queue, return_queue, status_queue):
         logger.info('Adding new communication device to thread: %s', name)
@@ -743,8 +784,10 @@ class CommManager(threading.Thread):
     def _return_value(self, val, comm_name):
         if comm_name == 'status':
             return_queue_list = self._status_queues.values()
-        else:
+        elif comm_name is not None:
             return_queue_list = [self._return_queues[comm_name]]
+        else:
+            return_queue_list = []
 
         for ret_q in return_queue_list:
             ret_q.append(val)
@@ -815,7 +858,7 @@ class DevicePanel(wx.Panel):
 
         wx.Panel.__init__(self, parent, panel_id, *args, **kwargs)
 
-        logger.debug('Initializing UVPanel for device %s', self.name)
+        logger.debug('Initializing DevicePanel for device %s', self.name)
 
         self.connected = False
 
@@ -921,7 +964,10 @@ class DevicePanel(wx.Panel):
                 new_status = None
 
             if new_status is not None:
-                device, cmd, val = new_status
+                try:
+                    device, cmd, val = new_status
+                except Exception:
+                    device = None
 
                 if device == self.name:
                     wx.CallAfter(self._set_status, cmd, val)
@@ -984,6 +1030,7 @@ def send_cmd(cmd, cmd_q, return_q, timeout_event, return_lock, remote,
 
         else:
             cmd_q.append(full_cmd)
+
 
     if get_response:
         if result is not None and result[0] == cmd[1][0] and result[1] == cmd[0]:
@@ -1157,6 +1204,285 @@ class DeviceFrame(wx.Frame):
         self.Destroy()
 
 
+class ItemList(wx.Panel):
+    def __init__(self, *args, **kwargs):
+        wx.Panel.__init__(self, *args, **kwargs)
+
+        self._create_layout()
+
+        self.all_items = []
+        self.selected_items = []
+        self.modified_items = []
+        self._marked_item = None
+
+    def _FromDIP(self, size):
+        # This is a hack to provide easy back compatibility with wxpython < 4.1
+        try:
+            return self.FromDIP(size)
+        except Exception:
+            return size
+
+    def _create_layout(self):
+        self.list_panel = wx.ScrolledWindow(self, style=wx.BORDER_SUNKEN)
+        self.list_panel.SetScrollRate(20,20)
+
+        self.list_bkg_color = wx.SystemSettings.GetColour(wx.SYS_COLOUR_LISTBOX)
+
+        self.list_panel.SetBackgroundColour(self.list_bkg_color)
+
+        self.list_panel_sizer = wx.BoxSizer(wx.VERTICAL)
+        self.list_panel.SetSizer(self.list_panel_sizer)
+
+        toolbar_sizer = self._create_toolbar()
+        button_sizer = self._create_buttons()
+
+        panel_sizer = wx.BoxSizer(wx.VERTICAL)
+        if toolbar_sizer is not None:
+            panel_sizer.Add(toolbar_sizer, border=self._FromDIP(5), flag=wx.LEFT
+                |wx.RIGHT|wx.EXPAND)
+        panel_sizer.Add(self.list_panel, proportion=1, border=self._FromDIP(3),
+            flag=wx.TOP|wx.LEFT|wx.RIGHT|wx.EXPAND)
+        if button_sizer is not None:
+            panel_sizer.Add(button_sizer, border=self._FromDIP(10),
+                flag=wx.EXPAND|wx.ALL)
+
+        self.SetSizer(panel_sizer)
+
+    def updateColors(self):
+        self.list_panel.SetBackgroundColour(self.list_bkg_color)
+
+        for item in self.all_items:
+            item.updateColors()
+        self.Refresh()
+
+    def _create_toolbar(self):
+        return None
+
+    def _create_buttons(self):
+        return None
+
+    def create_items(self):
+        pass
+
+    def resize_list(self):
+        self.list_panel.SetVirtualSize(self.list_panel.GetBestVirtualSize())
+        self.list_panel.Layout()
+        self.list_panel.Refresh()
+
+    def add_items(self, items):
+        for item in items:
+            self.list_panel_sizer.Add(item, flag=wx.EXPAND|wx.ALL,
+                border=self._FromDIP(1))
+            self.all_items.append(item)
+
+        self.resize_list()
+
+    def mark_item(self, item):
+        self._marked_item = item
+
+    def get_marked_item(self):
+        return self._marked_item
+
+    def clear_marked_item(self):
+        self._marked_item = None
+
+    def clear_list(self):
+        self._marked_item = None
+        self.selected_items = []
+        self.modified_items = []
+
+        remaining_items = []
+
+        for item in self.all_items:
+            try:
+                item.Destroy()
+            except Exception:
+                remaining_items.append(item)
+
+        self.all_items = remaining_items
+
+        self.resize_list()
+
+    def get_selected_items(self):
+        self.selected_items = []
+
+        for item in self.all_items:
+            if item.get_selected():
+                self.selected_items.append(item)
+
+        return self.selected_items
+
+    def select_all(self):
+        for item in self.all_items:
+            item.set_selected(True)
+
+    def deselect_all_but_one(self, sel_item):
+        selected_items = self.get_selected_items()
+
+        for item in selected_items:
+            if item is not sel_item:
+                item.set_selected(False)
+
+    def select_to_item(self, sel_item):
+        selected_items = self.get_selected_items()
+
+        sel_idx = self.get_item_index(sel_item)
+
+        first_idx = self.get_item_index(selected_items[0])
+
+        if sel_item in selected_items:
+            for item in self.all_items[first_idx:sel_idx]:
+                item.set_selected(False)
+        else:
+            if sel_idx < first_idx:
+                for item in self.all_items[sel_idx:first_idx]:
+                    item.set_selected(True)
+            else:
+                last_idx = self.get_item_index(selected_items[-1])
+                for item in self.all_items[last_idx+1:sel_idx+1]:
+                    item.set_selected(True)
+
+    def remove_items(self, items):
+        for item in items:
+            self.remove_item(item, resize=False)
+
+        self.resize_list()
+
+    def remove_selected_items(self):
+        selected_items = self.get_selected_items()
+
+        if len(selected_items) > 0:
+            self.remove_items(selected_items)
+
+    def remove_item(self, item, resize=True):
+        item.remove()
+
+        if item in self.modified_items:
+            self.modified_items.remove(item)
+
+        if item in self.selected_items:
+            self.selected_items.remove(item)
+
+        self.all_items.remove(item)
+
+        item.Destroy()
+
+        self.resize_list()
+
+    def get_items(self):
+        return self.all_items
+
+    def get_item_index(self, item):
+        return self.all_items.index(item)
+
+    def get_item(self, index):
+        return self.all_items[index]
+
+    def move_item(self, item, move_dir, refresh=True):
+        item_idx = self.get_item_index(item)
+
+        if move_dir == 'up' and item_idx > 0:
+            new_item_idx = item_idx -1
+
+        elif move_dir == 'down' and item_idx < len(self.all_items) -1:
+            new_item_idx = item_idx +1
+
+        else:
+            new_item_idx = -1
+
+        if new_item_idx != -1:
+            self.list_panel_sizer.Detach(item)
+            self.list_panel_sizer.Insert(new_item_idx, item, flag=wx.EXPAND|wx.ALL,
+                border=self._FromDIP(1))
+
+            self.all_items.pop(item_idx)
+            self.all_items.insert(new_item_idx, item)
+
+            if refresh:
+                self.resize_list()
+
+
+class ListItem(wx.Panel):
+    def __init__(self, item_list, *args, **kwargs):
+        wx.Panel.__init__(self, *args, parent=item_list.list_panel,
+            style=wx.BORDER_RAISED, **kwargs)
+
+        self._selected = False
+
+        self.item_list = item_list
+
+        self.text_list = []
+
+        self._create_layout()
+
+        self.Bind(wx.EVT_LEFT_DOWN, self._on_left_mouse_btn)
+        self.Bind(wx.EVT_RIGHT_DOWN, self._on_right_mouse_btn)
+        self.Bind(wx.EVT_KEY_DOWN, self._on_key_press)
+
+        self.general_text_color = wx.SystemSettings.GetColour(wx.SYS_COLOUR_LISTBOXTEXT)
+        self.highlight_text_color = wx.SystemSettings.GetColour(wx.SYS_COLOUR_LISTBOXHIGHLIGHTTEXT)
+        self.list_bkg_color = wx.SystemSettings.GetColour(wx.SYS_COLOUR_LISTBOX)
+        self.highlight_list_bkg_color = wx.Colour(178, 215, 255)
+
+    def _FromDIP(self, size):
+        # This is a hack to provide easy back compatibility with wxpython < 4.1
+        try:
+            return self.FromDIP(size)
+        except Exception:
+            return size
+
+    def _create_layout(self):
+        pass
+
+    def updateColors(self):
+        self.set_selected(self._selected)
+
+    def get_selected(self):
+        return self._selected
+
+    def set_selected(self, selected):
+        self._selected = selected
+
+        if self._selected:
+
+            self.SetBackgroundColour(self.highlight_list_bkg_color)
+
+            for text_item in self.text_list:
+                text_item.SetForegroundColour(self.general_text_color)
+
+        else:
+            self.SetBackgroundColour(self.list_bkg_color)
+            for text_item in self.text_list:
+                text_item.SetForegroundColour(self.general_text_color)
+
+        self.Refresh()
+
+    def toggle_selected(self):
+        self.set_selected(not self._selected)
+
+    def remove(self):
+        pass
+
+    def _on_left_mouse_btn(self, event):
+        if self.IsEnabled():
+            ctrl_is_down = event.CmdDown()
+            shift_is_down = event.ShiftDown()
+
+            if shift_is_down:
+                self.item_list.select_to_item(self)
+            elif ctrl_is_down:
+                self.toggle_selected()
+            else:
+                self.item_list.deselect_all_but_one(self)
+                self.toggle_selected()
+
+    def _on_right_mouse_btn(self, event):
+        pass
+
+    def _on_key_press(self, event):
+        pass
+
+
 elveflow_errors = {
     -8000   : 'No digital sensor found',
     -8001   : 'No pressure sensor compatible with OB1 MK3',
@@ -1166,3 +1492,240 @@ elveflow_errors = {
     -8005   : 'Sensor not compatible with AF1',
     -8006   : 'No instrument with selected ID',
     }
+
+
+class BufferMonitor(object):
+    """
+    Class for monitoring buffer levels. This is designed as an addon for an
+    hplc class, and requires methods for getting the flow rate to be defined
+    elsewhere.
+    """
+    def __init__(self, flow_rate_getter):
+        """
+        Initializes the buffer monitor class
+
+        Parameters
+        ----------
+        flow_rate_getter: func
+            A function that returns the flow rate of interest for monitoring.
+        """
+        self._get_buffer_flow_rate = flow_rate_getter
+
+        self._active_buffer_position = None
+        self._previous_flow_rate = None
+        self._buffers = {}
+
+        self._buffer_lock = threading.Lock()
+        self._terminate_buffer_monitor = threading.Event()
+        self._buffer_monitor_thread = threading.Thread(target=self._buffer_monitor)
+        self._buffer_monitor_thread.daemon = True
+        self._buffer_monitor_thread.start()
+
+    def _buffer_monitor(self):
+        while not self._terminate_buffer_monitor.is_set():
+            with self._buffer_lock:
+                if self._active_buffer_position is not None:
+                    if self._previous_flow_rate is None:
+                        self._previous_flow_rate = self._get_buffer_flow_rate()
+                        previous_time = time.time()
+
+                    current_flow = self._get_buffer_flow_rate()
+                    current_time = time.time()
+
+                    delta_vol = (((current_flow + self._previous_flow_rate)/2./60.)
+                        *(current_time-previous_time))
+
+                    if self._active_buffer_position in self._buffers:
+                        self._buffers[self._active_buffer_position]['vol'] -= delta_vol
+
+                    self._previous_flow_rate = current_flow
+                    previous_time = current_time
+
+            time.sleep(0.1)
+
+    def get_buffer_info(self, position):
+        """
+        Gets the buffer info including the current volume
+
+        Parameters
+        ----------
+        position: str
+            The buffer position to get the info for.
+
+        Returns
+        -------
+        vol: float
+            The volume remaining
+        descrip: str
+            The buffer description (e.g. contents)
+        """
+        with self._buffer_lock:
+            position = str(position)
+            vals = self._buffers[position]
+            vol = vals['vol']
+            descrip = vals['descrip']
+
+        return vol, descrip
+
+    def get_all_buffer_info(self):
+        """
+        Gets information on all buffers
+
+        Returns
+        -------
+        buffers: dict
+            A dictionary where the keys are the buffer positions and
+            the values are dictionarys with keys for volume ('vol') and
+            description ('descrip').
+        """
+        with self._buffer_lock:
+            buffers = copy.deepcopy(self._buffers)
+        return buffers
+
+    def remove_buffer(self, position):
+        """
+        Removes the buffer. If the buffer is the active buffer, active buffer
+        position is set to None.
+
+        Parameters
+        position: str
+            The buffer position (e.g. 1 or A or etc)
+        """
+        with self._buffer_lock:
+            position = str(position)
+            if position in self._buffers:
+                del self._buffers[position]
+
+            if position == self._active_buffer_position:
+                self._active_buffer_position = None
+                self._previous_flow_rate = None
+
+    def set_buffer_info(self, position, volume, descrip):
+        """
+        Sets the buffer info for a given buffer position
+
+        Parameters
+        ----------
+        position: str
+            The buffer position (e.g. 1 or A or etc)
+        volume: float
+            The current buffer volume
+        descrip: str
+            Buffer description (e.g. contents)
+        """
+        with self._buffer_lock:
+            position = str(position)
+            self._buffers[position] = {'vol': float(volume), 'descrip': descrip}
+
+    def set_active_buffer_position(self, position):
+        """
+        Sets the active buffer position
+
+        Parameters
+        ----------
+        position: str
+            The buffer position (e.g. 1 or A)
+        """
+        with self._buffer_lock:
+            self._active_buffer_position = str(position)
+            self._previous_flow_rate = None
+
+    def stop_monitor(self):
+        self._terminate_buffer_monitor.set()
+        self._buffer_monitor_thread.join()
+
+
+class BufferEntryDialog(wx.Dialog):
+    """
+    Allows addition/editing of the buffer info in the buffer list
+    """
+    def __init__(self, parent, buffer_settings, *args, **kwargs):
+        wx.Dialog.__init__(self, parent, *args,
+            style=wx.RESIZE_BORDER|wx.CAPTION|wx.CLOSE_BOX, **kwargs)
+
+        self.SetSize(self._FromDIP((400, 200)))
+
+        self._buffer_settings = buffer_settings
+
+        self._create_layout()
+
+        self.CenterOnParent()
+
+    def _FromDIP(self, size):
+        # This is a hack to provide easy back compatibility with wxpython < 4.1
+        try:
+            return self.FromDIP(size)
+        except Exception:
+            return size
+
+    def _create_layout(self):
+        parent = self
+        self._buffer_ctrl = wx.Choice(parent, choices=[str(x) for x in range(1,11)])
+        self._buffer_ctrl.SetSelection(0)
+        self._buffer_ctrl.Bind(wx.EVT_CHOICE, self._on_buffer_choice)
+
+        self._buffer_volume = wx.TextCtrl(parent, size=self._FromDIP((100,-1)),
+            validator=utils.CharValidator('float'))
+        self._buffer_contents = wx.TextCtrl(parent,
+            style=wx.TE_MULTILINE|wx.TE_BESTWRAP)
+
+        buffer_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(5),
+            hgap=self._FromDIP(5))
+        buffer_sizer.Add(wx.StaticText(parent, label='Buffer position:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        buffer_sizer.Add(self._buffer_ctrl)
+        buffer_sizer.Add(wx.StaticText(parent, label='Buffer volume (L):'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        buffer_sizer.Add(self._buffer_volume)
+        buffer_sizer.Add(wx.StaticText(parent, label='Buffer contents:'),
+            flag=wx.ALIGN_TOP)
+        buffer_sizer.Add(self._buffer_contents, flag=wx.EXPAND)
+
+        buffer_sizer.AddGrowableRow(2)
+        buffer_sizer.AddGrowableCol(1)
+
+
+        button_sizer = self.CreateButtonSizer(wx.OK | wx.CANCEL)
+
+        top_sizer=wx.BoxSizer(wx.VERTICAL)
+        top_sizer.Add(buffer_sizer, proportion=1, flag=wx.ALL|wx.EXPAND,
+            border=self._FromDIP(5))
+        top_sizer.Add(button_sizer ,flag=wx.BOTTOM|wx.RIGHT|wx.LEFT|wx.ALIGN_RIGHT,
+            border=self._FromDIP(10))
+
+        self.SetSizer(top_sizer)
+
+        self._on_buffer_choice(None)
+
+    def _on_buffer_choice(self, evt):
+        pos = self._buffer_ctrl.GetStringSelection()
+
+        if pos in self._buffer_settings:
+            vol = self._buffer_settings[pos]['vol']
+            descrip = self._buffer_settings[pos]['descrip']
+
+            vol = round(vol/1000., 4)
+
+            self._buffer_volume.SetValue(str(vol))
+            self._buffer_contents.SetValue(descrip)
+
+    def get_settings(self):
+        pos = self._buffer_ctrl.GetStringSelection()
+        vol = self._buffer_volume.GetValue()
+        descrip = self._buffer_contents.GetValue()
+
+        return pos, vol, descrip
+
+
+class BufferList(wx.ListCtrl, wx.lib.mixins.listctrl.ListCtrlAutoWidthMixin):
+
+    def __init__(self, *args, **kwargs):
+        wx.ListCtrl.__init__(self, *args, **kwargs)
+        self.InsertColumn(0, 'Port')
+        self.InsertColumn(1, 'Vol. (L)')
+        self.InsertColumn(2, 'Buffer')
+
+        self.SetColumnWidth(0, 40)
+        self.SetColumnWidth(1, 50)
+
+        wx.lib.mixins.listctrl.ListCtrlAutoWidthMixin.__init__(self)

@@ -29,6 +29,7 @@ import logging
 import sys
 import ctypes
 import copy
+import traceback
 
 if __name__ != '__main__':
     logger = logging.getLogger(__name__)
@@ -42,13 +43,14 @@ import serial.tools.list_ports as list_ports
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_03_00\\python_32')#add the path of the LoadElveflow.py
 
 sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\DLL64\\DLL64') #add the path of the library here
-sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\python_64')#add the path of the LoadElveflow.py
+sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\Python_64')#add the path of the LoadElveflow.py
 sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\DLL32\\DLL32') #add the path of the library here
-sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\python_32')#add the path of the LoadElveflow.py
+sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\Python_32')#add the path of the LoadElveflow.py
 
 try:
     import Elveflow64 as Elveflow
 except Exception:
+    traceback.print_exc()
     try:
         import Elveflow32 as Elveflow
     except Exception:
