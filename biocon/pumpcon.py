@@ -5227,14 +5227,13 @@ if __name__ == '__main__':
 
     # Coflow pumps
     # setup_devices = [
-    #     {'name': 'sheath', 'args': ['VICI M50', 'COM3'],
+    #     {'name': 'sheath', 'args': ['VICI M50', 'COM4'],
     #         'kwargs': {'flow_cal': '627.72', 'backlash_cal': '9.814'},
     #         'ctrl_args': {'flow_rate': 1}},
-    #     {'name': 'outlet', 'args': ['VICI M50', 'COM4'],
+    #     {'name': 'outlet', 'args': ['VICI M50', 'COM5'],
     #         'kwargs': {'flow_cal': '628.68', 'backlash_cal': '9.962'},
     #         'ctrl_args': {'flow_rate': 1}},
     #     ]
-
 
     # # Coflow with OB1
     # bfs = fmcon.BFS('outlet_fm', 'COM6')
@@ -5295,12 +5294,12 @@ if __name__ == '__main__':
     #     ]
 
     # # Teledyne SSI Reaxus pumps with scaling
-    # setup_devices = [
-    #     {'name': 'Buffer 1', 'args': ['SSI Next Gen', 'COM17'],
-    #         'kwargs': {'flow_rate_scale': 1.0478,
-    #         'flow_rate_offset': -72.82/1000,'scale_type': 'up'},
-    #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-    #     {'name': 'Sample', 'args': ['SSI Next Gen', 'COM15'],
+    setup_devices = [
+        {'name': 'Buffer 1', 'args': ['SSI Next Gen', 'COM3'],
+            'kwargs': {'flow_rate_scale': 1.0478,
+            'flow_rate_offset': -72.82/1000,'scale_type': 'up'},
+            'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
+        # {'name': 'Sample', 'args': ['SSI Next Gen', 'COM15'],
     #         'kwargs': {'flow_rate_scale': 1.0204,
     #         'flow_rate_offset': 15.346/1000,'scale_type': 'up'},
     #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
@@ -5308,7 +5307,7 @@ if __name__ == '__main__':
     #         'kwargs': {'flow_rate_scale': 1.0179,
     #         'flow_rate_offset': -20.842/10000,'scale_type': 'up'},
     #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-    #     ]
+         ]
 
     # # Teledyne SSI Reaxus pumps without scaling
     # setup_devices = [
@@ -5327,13 +5326,13 @@ if __name__ == '__main__':
     #     ]
 
 
-    # AKTA pump, Teledyne SSI Reaxus pumps without scaling
-    setup_devices = [
-        {'name': 'Pump 1', 'args': ['SSI Next Gen', 'COM5'],
-            'kwargs': {'flow_rate_scale': 1,
-            'flow_rate_offset': 0,'scale_type': 'up'},
-            'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-        ]
+    # # AKTA pump, Teledyne SSI Reaxus pumps without scaling
+    # setup_devices = [
+    #     {'name': 'Pump 1', 'args': ['SSI Next Gen', 'COM5'],
+    #         'kwargs': {'flow_rate_scale': 1,
+    #         'flow_rate_offset': 0,'scale_type': 'up'},
+    #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
+    #     ]
 
     # TR-SAXS Pico Plus pumps
     # setup_devices = [

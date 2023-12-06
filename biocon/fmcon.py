@@ -1087,8 +1087,8 @@ if __name__ == '__main__':
 
     # Coflow flow meters
     setup_devices = [
-        {'name': 'sheath', 'args' : ['BFS', 'COM5'], 'kwargs': {}},
-        {'name': 'outlet', 'args' : ['BFS', 'COM6'], 'kwargs': {}},
+        # {'name': 'sheath', 'args' : ['BFS', 'COM6'], 'kwargs': {}},
+        {'name': 'outlet', 'args' : ['BFS', 'COM7'], 'kwargs': {}},
         ]
 
     # # Simulated flow meter
