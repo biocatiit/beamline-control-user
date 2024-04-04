@@ -2904,6 +2904,71 @@ class OB1Pump(Pump):
 
             self.connected = False
 
+class KPHM100Pump(M50Pump):
+    """
+    .. todo:: This class doesn't know when the pump is done dispensing. This leads
+        to unncessary stop signals being sent to the pump, and makes the log harder
+        to follow. This could be fixed, when I have time.
+
+    This class provides control for the Kamoer Flud Tech KPHM100 peristaltic pump
+    with stepper motor, using the MForce controller.
+    """
+
+    def __init__(self, name, device, comm_lock=None, flow_cal=353):
+        """
+        This makes the initial serial connection, and then sets the MForce
+        controller parameters to the correct values.
+
+        :param device: The device comport as sent to pyserial
+        :type device: str
+
+        :param name: A unique identifier for the pump
+        :type name: str
+
+        :param flow_cal: The pump-specific flow calibration, in uL/rev. Defaults to 628 uL/rev
+        :type flow_cal: float
+        """
+        M50Pump.__init__(self, name, device, comm_lock=comm_lock,
+            flow_cal=flow_cal, backlash_cal=0)
+
+        self.send_cmd('RC 33') #Run current to 33%, equal to 1.0 A.
+
+        self._gear_ratio = 1 #No gearing
+
+        self.cal = 200*256/self._flow_cal #Calibration value in (micro)steps/uL
+            #full steps/rev * microsteps/full step / uL/revolution = microsteps/uL
+
+    @flow_rate.setter
+    def flow_rate(self, rate):
+        logger.info("Setting pump %s flow rate to %f %s", self.name, rate, self.units)
+
+        rate = self._convert_flow_rate(rate, self.units, self._pump_base_units)
+
+        #Maximum continuous flow rate is 210 mL/min
+        if rate>210000/60.:
+            rate = 210000/60.
+            logger.warning("Requested flow rate > 210 mL/min, setting pump %s flow rate to 210 mL/min", self.name)
+        elif rate<-210000/60.:
+            rate = -210000/60.
+            logger.warning("Requested flow rate > 210 mL/min, setting pump %s flow rate to -210 mL/min", self.name)
+
+        # #Minimum flow rate is 1 uL/min
+        # if abs(rate) < 1/60. and rate != 0:
+        #     if rate>0:
+        #         logger.warning("Requested flow rate < 1 uL/min, setting pump %s flow rate to 1 uL/min", self.name)
+        #         rate = 1/60.
+        #     else:
+        #         logger.warning("Requested flow rate < 1 uL/min, setting pump %s flow rate to -1 uL/min", self.name)
+        #         rate = -1/60.
+
+
+        self._flow_rate = int(round(rate*self.cal))
+
+        if self._is_flowing and not self._is_dispensing:
+            self.send_cmd("SL {}".format(self._flow_rate))
+        else:
+            self.send_cmd("VM {}".format(abs(self._flow_rate)))
+
 class SoftPump(Pump):
     """
     This class contains the settings and communication for a generic pump.
@@ -3396,6 +3461,7 @@ class PumpCommThread(utils.CommManager):
             'SSI Next Gen'  : SSINextGenPump,
             'OB1'           : OB1,
             'OB1 Pump'      : OB1Pump,
+            'KPHM100'       : KPHM100Pump,
             'Soft'          : SoftPump,
             'Soft Syringe'  : SoftSyringePump,
             }
