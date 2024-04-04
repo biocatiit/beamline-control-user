@@ -1087,16 +1087,16 @@ if __name__ == '__main__':
     # time.sleep(5)
     # my_fmcon.stop()
 
-    # Coflow flow meters
-    setup_devices = [
-        {'name': 'sheath', 'args' : ['BFS', 'COM5'], 'kwargs': {}},
-        {'name': 'outlet', 'args' : ['BFS', 'COM6'], 'kwargs': {}},
-        ]
-
-    # # Simulated flow meter
+    # # Coflow flow meters
     # setup_devices = [
-    #     {'name': 'sheath', 'args': ['Soft', None], 'kwargs': {}},
+    #     {'name': 'sheath', 'args' : ['BFS', 'COM5'], 'kwargs': {}},
+    #     {'name': 'outlet', 'args' : ['BFS', 'COM6'], 'kwargs': {}},
     #     ]
+
+    # Simulated flow meter
+    setup_devices = [
+        {'name': 'sheath', 'args': ['Soft', None], 'kwargs': {}},
+        ]
 
     settings = {
         'remote'        : False,

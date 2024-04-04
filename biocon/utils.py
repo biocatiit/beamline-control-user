@@ -39,6 +39,7 @@ logger = logging.getLogger(__name__)
 import wx
 from wx.lib.wordwrap import wordwrap
 from wx.lib.stattext import GenStaticText as StaticText
+import wx.lib.mixins.listctrl
 from matplotlib.backends.backend_wxagg import NavigationToolbar2WxAgg
 import numpy as np
 import serial.tools.list_ports as list_ports
@@ -290,7 +291,7 @@ class IntSpinCtrl(wx.Panel):
 
         if platform.system() != 'Windows':
             self.Scale = wx.TextCtrl(self, value=str(my_min),
-                size=self._FromDIP((TextLength,-1)), styl=wx.TE_PROCESS_ENTER,
+                size=self._FromDIP((TextLength,-1)), style=wx.TE_PROCESS_ENTER,
                 validator=CharValidator('int'))
         else:
             self.Scale = wx.TextCtrl(self, value=str(my_min),

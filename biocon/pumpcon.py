@@ -5335,13 +5335,13 @@ if __name__ == '__main__':
     #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
     #     ]
 
-    # SEC-SAXS pump, Teledyne SSI Reaxus pumps without scaling
-    setup_devices = [
-        {'name': 'Pump 1', 'args': ['SSI Next Gen', 'COM3'],
-            'kwargs': {'flow_rate_scale': 1,
-            'flow_rate_offset': 0,'scale_type': 'up'},
-            'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-        ]
+    # # SEC-SAXS pump, Teledyne SSI Reaxus pumps without scaling
+    # setup_devices = [
+    #     {'name': 'Pump 1', 'args': ['SSI Next Gen', 'COM3'],
+    #         'kwargs': {'flow_rate_scale': 1,
+    #         'flow_rate_offset': 0,'scale_type': 'up'},
+    #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
+    #     ]
 
     # # TR-SAXS Pico Plus pumps
     # setup_devices = [
@@ -5359,14 +5359,14 @@ if __name__ == '__main__':
     #         'ctrl_args': {'flow_rate' : '1', 'refill_rate' : '1'}},
     #     ]
 
-    # # Simulated pumps
-    # setup_devices = [
-    #     # {'name': 'Soft', 'args': ['Soft', None], 'kwargs': {},
-    #     #     'ctrl_args': {'flow_rate': 1, 'refill_rate': 1}},
-    #     {'name': 'Sample', 'args': ['Soft Syringe', None],
-    #         'kwargs': {'syringe_id': '3 mL, Medline P.C.',},
-    #         'ctrl_args': {'flow_rate': 1, 'refill_rate': 1}},
-    #     ]
+    # Simulated pumps
+    setup_devices = [
+        {'name': 'Soft', 'args': ['Soft', None], 'kwargs': {},
+            'ctrl_args': {'flow_rate': 1, 'refill_rate': 1}},
+        {'name': 'Sample', 'args': ['Soft Syringe', None],
+            'kwargs': {'syringe_id': '3 mL, Medline P.C.',},
+            'ctrl_args': {'flow_rate': 1, 'refill_rate': 1}},
+        ]
 
     # # Simulated coflow pumps
     # setup_devices = [

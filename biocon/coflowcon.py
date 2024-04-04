@@ -82,6 +82,7 @@ class CoflowControl(object):
 
         if self.settings['use_overflow_control']:
             self.overflow_connected = True
+            self.session = requests.Session()
 
         self._buffer_monitor1 = utils.BufferMonitor(self._get_buffer_monitor_flow_rate)
 
@@ -270,12 +271,12 @@ class CoflowControl(object):
     def start_overflow(self):
         ip = self.settings['remote_overflow_ip']
         params = {'c':'1','s':'1', 'u':'user'}
-        requests.get('http://{}/?'.format(ip), params=params, timeout=5)
+        self.session.get('http://{}/?'.format(ip), params=params, timeout=5)
 
     def stop_overflow(self):
         ip = self.settings['remote_overflow_ip']
         params = {'c':'1','s':'0', 'u':'user'}
-        requests.get('http://{}/?'.format(ip), params=params, timeout=5)
+        self.session.get('http://{}/?'.format(ip), params=params, timeout=5)
 
     def check_overflow_status(self):
         ip = self.settings['remote_overflow_ip']
@@ -284,7 +285,7 @@ class CoflowControl(object):
         err = False
 
         try:
-            r = requests.get('http://{}/?'.format(ip), params=params, timeout=1)
+            r = self.session.get('http://{}/?'.format(ip), params=params, timeout=1)
             self.overflow_connected = True
 
         except Exception:
