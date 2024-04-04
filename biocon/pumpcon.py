@@ -2928,6 +2928,8 @@ class KPHM100Pump(M50Pump):
         :param flow_cal: The pump-specific flow calibration, in uL/rev. Defaults to 628 uL/rev
         :type flow_cal: float
         """
+        # Based on the M50, since it uses the same controller and is the same
+        # type of pump (e.g. continuous flow vs. syringe)
         M50Pump.__init__(self, name, device, comm_lock=comm_lock,
             flow_cal=flow_cal, backlash_cal=0)
 
