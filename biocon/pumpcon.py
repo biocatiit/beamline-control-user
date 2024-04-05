@@ -2940,6 +2940,14 @@ class KPHM100Pump(M50Pump):
         self.cal = 200*256/self._flow_cal #Calibration value in (micro)steps/uL
             #full steps/rev * microsteps/full step / uL/revolution = microsteps/uL
 
+    @property
+    def flow_rate(self):
+        rate = float(self._flow_rate)/self.cal
+
+        rate = self._convert_flow_rate(rate, self._pump_base_units, self.units)
+
+        return rate
+
     @flow_rate.setter
     def flow_rate(self, rate):
         logger.info("Setting pump %s flow rate to %f %s", self.name, rate, self.units)
@@ -4542,7 +4550,8 @@ class PumpPanel(utils.DevicePanel):
 
         self.status_sizer.Hide(self.ssi_status_sizer, recursive=True)
 
-        if self.pump_type == 'VICI M50' or self.pump_type == 'Soft':
+        if (self.pump_type == 'VICI M50' or self.pump_type == 'KPHM100'
+            or self.pump_type == 'Soft'):
             self.pump_mode = 'continuous'
 
         elif (self.pump_type == 'PHD 4400' or self.pump_type == 'NE 500'
@@ -5312,6 +5321,13 @@ if __name__ == '__main__':
     #         'ctrl_args': {'flow_rate': 1}},
     #     ]
 
+    # Peristaltic batch mode pumps
+    setup_devices = [
+        {'name': 'water', 'args': ['KPHM100', 'COM6'],
+            'kwargs': {'flow_cal': '353',},
+            'ctrl_args': {'flow_rate': 1}},
+        ]
+
 
     # # Coflow with OB1
     # bfs = fmcon.BFS('outlet_fm', 'COM6')
@@ -5427,14 +5443,14 @@ if __name__ == '__main__':
     #         'ctrl_args': {'flow_rate' : '1', 'refill_rate' : '1'}},
     #     ]
 
-    # Simulated pumps
-    setup_devices = [
-        {'name': 'Soft', 'args': ['Soft', None], 'kwargs': {},
-            'ctrl_args': {'flow_rate': 1, 'refill_rate': 1}},
-        {'name': 'Sample', 'args': ['Soft Syringe', None],
-            'kwargs': {'syringe_id': '3 mL, Medline P.C.',},
-            'ctrl_args': {'flow_rate': 1, 'refill_rate': 1}},
-        ]
+    # # Simulated pumps
+    # setup_devices = [
+    #     {'name': 'Soft', 'args': ['Soft', None], 'kwargs': {},
+    #         'ctrl_args': {'flow_rate': 1, 'refill_rate': 1}},
+    #     {'name': 'Sample', 'args': ['Soft Syringe', None],
+    #         'kwargs': {'syringe_id': '3 mL, Medline P.C.',},
+    #         'ctrl_args': {'flow_rate': 1, 'refill_rate': 1}},
+    #     ]
 
     # # Simulated coflow pumps
     # setup_devices = [
