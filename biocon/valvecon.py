@@ -850,20 +850,20 @@ if __name__ == '__main__':
     #     #     'kwargs': {'positions' : 10}},
     #     ]
 
-     # SEC-MALS
-    setup_devices = [
-        {'name': 'Buffer 1', 'args': ['Cheminert', 'COM3'],
-            'kwargs': {'positions' : 10}},
-        {'name': 'Buffer 2', 'args': ['Cheminert', 'COM4'],
-            'kwargs': {'positions' : 10}},
-        {'name': 'Purge 1', 'args': ['Rheodyne', 'COM5'],
-            'kwargs': {'positions' : 6}},
-        ]
+    #  # SEC-MALS
+    # setup_devices = [
+    #     {'name': 'Buffer 1', 'args': ['Cheminert', 'COM3'],
+    #         'kwargs': {'positions' : 10}},
+    #     {'name': 'Buffer 2', 'args': ['Cheminert', 'COM4'],
+    #         'kwargs': {'positions' : 10}},
+    #     {'name': 'Purge 1', 'args': ['Rheodyne', 'COM5'],
+    #         'kwargs': {'positions' : 6}},
+    #     ]
 
     # Simulated
-    # setup_devices = [
-    #     {'name': 'Coflow Sheath', 'args': ['Soft', None], 'kwargs': {'positions': 10}}
-    #     ]
+    setup_devices = [
+        {'name': 'Coflow Sheath', 'args': ['Soft', None], 'kwargs': {'positions': 10}}
+        ]
 
     # Local
     com_thread = ValveCommThread('ValveComm')
