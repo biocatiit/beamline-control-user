@@ -1649,6 +1649,16 @@ class HamiltonPSD6Pump(SyringePump):
             'o' :   '15',
         }
 
+        self._valve_status = {
+            '0' : 'Not in defined position',
+            '1' : 'Input',
+            '2' : 'Output',
+            '3' : 'Wash',
+            '4' : 'Return',
+            '5' : 'Bypass',
+            '6' : 'Extra',
+            }
+
         SyringePump.__init__(self, name, device, diameter, max_volume,
             max_rate, syringe_id, dual_syringe,
             flow_rate_scale=flow_rate_scale,
@@ -1946,6 +1956,20 @@ class HamiltonPSD6Pump(SyringePump):
 
     def _send_pump_cal_cmd(self):
         pass
+
+    def get_valve_position(self):
+        ret, status = self.send_cmd('?23000')
+        status = self._valve_status[ret]
+
+        return status
+
+    def set_valve_position(self, pos):
+        if pos == 'Input':
+            self.send_cmd('h23001')
+        elif pos == 'Output':
+            self.send_cmd('h23002')
+        elif pos == 'Bypass':
+            self.send_cmd('h23005')
 
 
 class SSINextGenPump(Pump):
@@ -3832,6 +3856,8 @@ class PumpCommThread(utils.CommManager):
             'get_pump'          : self._get_pump,
             'initialize_ob1_pid': self._initialize_ob1_pid,
             'set_pid'           : self._set_pid,
+            'get_valve_pos'     : self._get_valve_pos,
+            'set_valve_pos'     : self._set_valve_pos,
             }
 
         self.known_devices = {
@@ -4509,6 +4535,41 @@ class PumpCommThread(utils.CommManager):
         self._return_value((name, cmd, True), comm_name)
         logger.debug("Set pump %s PID", name)
 
+    def _get_valve_pos(self, name, **kwargs):
+
+        logger.debug("Getting pump %s valve position", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        val = device.get_valve_position()
+
+        self._return_value((name, cmd, val), comm_name)
+
+        logger.debug("Pump %s valve position is %s", name, val)
+
+    def _set_valve_pos(self, name, val, **kwargs):
+        """
+        This method sets the valve position for a pump.
+
+        :param str name: The unique identifier for a pump that was used in the
+            :py:func:`_connect_pump` method.
+
+        :param float val: The valve position for the pump.
+        """
+        logger.info("Setting pump %s valve position to %s", name, val)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        device.set_valve_position(val)
+
+        self._return_value((name, cmd, True), comm_name)
+
+        logger.debug("Pump %s valve position set", name)
+
     def _send_pump_cmd(self, name, val, get_response=True, **kwargs):
         """
         This method can be used to send an arbitrary command to the pump.
@@ -4603,6 +4664,7 @@ class PumpPanel(utils.DevicePanel):
         self._current_max_pressure = -1
         self._current_pressure_units = ''
         self._current_flow_dir = 1
+        self._current_valve_position = ''
 
     def _create_layout(self):
         """Creates the layout for the panel."""
@@ -4776,6 +4838,14 @@ class PumpPanel(utils.DevicePanel):
         self.ob1_ctrl_sizer.Add(self.pressure_ctrl, border=self._FromDIP(2),
             flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT)
 
+
+        self.valve_ctrl = wx.Choice(self, choices=['Input', 'Output', 'Bypass'])
+        self.valve_ctrl.Bind(wx.EVT_CHOICE, self._on_valve_change)
+        self.hamilton_ctrl_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        self.hamilton_ctrl_sizer.Add(wx.StaticText(self, label='Valve position:'))
+        self.hamilton_ctrl_sizer.Add(self.valve_ctrl)
+
+
         self.vol_unit_ctrl = wx.Choice(self, choices=['nL', 'uL', 'mL'])
         self.vol_unit_ctrl.SetSelection(2)
         self.time_unit_ctrl = wx.Choice(self, choices=['s', 'min'])
@@ -4888,6 +4958,8 @@ class PumpPanel(utils.DevicePanel):
             border=self._FromDIP(2))
         self.control_box_sizer.Add(self.ob1_ctrl_sizer, flag=wx.EXPAND|wx.TOP,
             border=self._FromDIP(2))
+        self.control_box_sizer.Add(self.hamilton_ctrl_sizer, flag=wx.EXPAND|wx.TOP,
+            border=self._FromDIP(2))
 
         self.settings_box_sizer = wx.StaticBoxSizer(wx.StaticBox(self, label='Settings'),
             wx.VERTICAL)
@@ -4914,6 +4986,7 @@ class PumpPanel(utils.DevicePanel):
         self.fr_button.Hide()
 
         self.control_box_sizer.Hide(self.ob1_ctrl_sizer, recursive=True)
+        self.control_box_sizer.Hide(self.hamilton_ctrl_sizer, recursive=True)
 
         self.settings_box_sizer.Hide(self.phd4400_settings_sizer, recursive=True)
         # self.settings_box_sizer.Hide(self.picoplus_settings_sizer, recursive=True)
@@ -4967,6 +5040,7 @@ class PumpPanel(utils.DevicePanel):
 
         if self.pump_type == 'Hamilton PSD6':
             self.set_syringe_volume.Hide()
+            self.control_box_sizer.Show(self.hamilton_ctrl_sizer, recursive=True)
 
         vol_unit = self.vol_unit_ctrl.GetStringSelection()
         t_unit = self.time_unit_ctrl.GetStringSelection()
@@ -5073,6 +5147,10 @@ class PumpPanel(utils.DevicePanel):
 
                 get_refill_rate_cmd = ['get_refill_rate', [self.name,], {}]
                 self._update_status_cmd(get_refill_rate_cmd, 1)
+
+            if self.pump_type == 'Hamilton PSD6':
+                get_valve_pos_cmd = ['get_valve_pos', [self.name,], {}]
+                self._update_status_cmd(get_valve_pos_cmd, 5)
 
         logger.info('Initialized pump %s on startup', self.name)
 
@@ -5306,6 +5384,11 @@ class PumpPanel(utils.DevicePanel):
     #     value = int(value)
     #     cmd = ['set_force', [self.name, value], {}]
     #     self._send_cmd(cmd)
+
+    def _on_valve_change(self, evt):
+        value = self.valve_ctrl.GetStringSelection()
+        cmd = ['set_valve_pos', [self.name, value], {}]
+        self._send_cmd(cmd)
 
     def _on_max_pressure_change(self, obj, value):
         value = float(value)
@@ -5548,6 +5631,11 @@ class PumpPanel(utils.DevicePanel):
             if val is not None and val != self._current_pressure:
                 self.pressure.SetLabel(str(val))
                 self._current_pressure = val
+
+        elif cmd == 'get_valve_pos':
+            if val is not None and val != self._current_valve_position:
+                self.valve_ctrl.SetStringSelection(str(val))
+                self._current_valve_position = val
 
         elif cmd == 'get_settings':
             if val is not None:
