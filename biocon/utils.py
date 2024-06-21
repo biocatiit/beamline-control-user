@@ -38,6 +38,7 @@ logger = logging.getLogger(__name__)
 
 import wx
 from wx.lib.wordwrap import wordwrap
+import wx.lib.mixins.listctrl
 from wx.lib.stattext import GenStaticText as StaticText
 from matplotlib.backends.backend_wxagg import NavigationToolbar2WxAgg
 import numpy as np
