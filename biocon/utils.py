@@ -1667,7 +1667,7 @@ class BufferEntryDialog(wx.Dialog):
         self._buffer_ctrl.Bind(wx.EVT_CHOICE, self._on_buffer_choice)
 
         self._buffer_volume = wx.TextCtrl(parent, size=self._FromDIP((100,-1)),
-            validator=utils.CharValidator('float'))
+            validator=CharValidator('float'))
         self._buffer_contents = wx.TextCtrl(parent,
             style=wx.TE_MULTILINE|wx.TE_BESTWRAP)
 
