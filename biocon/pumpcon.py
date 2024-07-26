@@ -49,6 +49,12 @@ sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\python_64')#add the p
 sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\DLL32\\DLL32') #add the path of the library here
 sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\python_32')#add the path of the LoadElveflow.py
 
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_08_06\\DLL\\DLL64') #add the path of the library here
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_08_06\\DLL\\Python\\Python_64')#add the path of the LoadElveflow.py
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_08_06\\DLL\\DLL32') #add the path of the library here
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_08_06\\DLL\\Python\\Python_32')#add the path of the LoadElveflow.py
+
+
 try:
     import Elveflow64 as Elveflow
 except Exception:
@@ -5820,19 +5826,19 @@ if __name__ == '__main__':
     #         'ctrl_args': {}}
     #     ]
 
-    # # OB1 by itself
-    # bfs = fmcon.BFS('outlet_fm', 'COM5')
+    # OB1 by itself
+    bfs = fmcon.BFS('outlet_fm', 'COM5')
 
-    # ob1_comm_lock = threading.RLock()
+    ob1_comm_lock = threading.RLock()
 
-    # setup_devices = [
-    #     {'name': 'outlet', 'args': ['OB1 Pump', 'COM3'],
-    #         'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
-    #         'min_pressure': -1000, 'max_pressure': 1000, 'P': 8, 'I': 2,
-    #         'D': 0, 'bfs_instr_ID': bfs.instr_ID, 'comm_lock': ob1_comm_lock,
-    #         'calib_path': './resources/ob1_calib.txt'},
-    #         'ctrl_args': {}}
-    #     ]
+    setup_devices = [
+        {'name': 'outlet', 'args': ['OB1 Pump', 'COM8'],
+            'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
+            'min_pressure': -1000, 'max_pressure': 1000, 'P': 8, 'I': 2,
+            'D': 0, 'bfs_instr_ID': bfs.instr_ID, 'comm_lock': ob1_comm_lock,
+            'calib_path': './resources/ob1_calib.txt'},
+            'ctrl_args': {}}
+        ]
 
     # # TR-SAXS PHD 4400 pumps
     # setup_devices = [
@@ -5916,13 +5922,13 @@ if __name__ == '__main__':
     #         'ctrl_args': {'flow_rate' : '1', 'refill_rate' : '1'}},
     #     ]
 
-    # # Batch mode Hamilton PSD6 pump
-    setup_devices = [
-        {'name': 'Sample', 'args': ['Hamilton PSD6', 'COM4'],
-            'kwargs': {'syringe_id': '1 mL, Medline P.C.',
-             'pump_address': '1', 'dual_syringe': 'False'},
-            'ctrl_args': {'flow_rate' : '1', 'refill_rate' : '1'}},
-        ]
+    # # # Batch mode Hamilton PSD6 pump
+    # setup_devices = [
+    #     {'name': 'Sample', 'args': ['Hamilton PSD6', 'COM4'],
+    #         'kwargs': {'syringe_id': '1 mL, Medline P.C.',
+    #          'pump_address': '1', 'dual_syringe': 'False'},
+    #         'ctrl_args': {'flow_rate' : '1', 'refill_rate' : '1'}},
+    #     ]
 
     # # Simulated pumps
     # setup_devices = [

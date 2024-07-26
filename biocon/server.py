@@ -404,7 +404,7 @@ if __name__ == '__main__':
             {'name': 'sheath', 'args': ['VICI M50', 'COM3'],
                 'kwargs': {'flow_cal': '627.72', 'backlash_cal': '9.814'},
                 'ctrl_args': {'flow_rate': 1}},
-            {'name': 'outlet', 'args': ['OB1 Pump', 'COM7'],
+            {'name': 'outlet', 'args': ['OB1 Pump', 'COM8'],
                 'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
                 'min_pressure': -900, 'max_pressure': 1000, 'P': -2, 'I': -0.15,
                 'D': 0, 'bfs_instr_ID': None, 'comm_lock': ob1_comm_lock,
