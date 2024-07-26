@@ -5571,7 +5571,7 @@ class PumpPanel(utils.DevicePanel):
             if val is not None and val and not self._current_move_status:
                 self.run_button.SetLabel('Stop')
                 if self.pump_type != 'Hamilton PSD6':
-                self.fr_button.Show()
+                    self.fr_button.Show()
 
                 if self.pump_mode == 'continuous':
                     if self.mode_ctrl.GetStringSelection() == 'Fixed volume':
@@ -5586,7 +5586,7 @@ class PumpPanel(utils.DevicePanel):
                 self._current_move_status = val
 
             elif val is not None and not val and self._current_move_status:
-                    self.run_button.SetLabel('Start')
+                self.run_button.SetLabel('Start')
                 if self.pump_type != 'Hamilton PSD6':
                     self.fr_button.Hide()
                     self._set_status_label('Done')
