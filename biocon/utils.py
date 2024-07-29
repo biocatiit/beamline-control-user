@@ -293,11 +293,11 @@ class IntSpinCtrl(wx.Panel):
         if platform.system() != 'Windows':
             self.Scale = wx.TextCtrl(self, value=str(my_min),
                 size=self._FromDIP((TextLength,-1)), style=wx.TE_PROCESS_ENTER,
-                validator=CharValidator('int'))
+                validator=CharValidator('int_te'))
         else:
             self.Scale = wx.TextCtrl(self, value=str(my_min),
                 size=self._FromDIP((TextLength,22)), style=wx.TE_PROCESS_ENTER,
-                validator=CharValidator('int'))
+                validator=CharValidator('int_te'))
 
         self.Scale.Bind(wx.EVT_KILL_FOCUS, self.OnScaleChange)
         self.Scale.Bind(wx.EVT_TEXT_ENTER, self.OnScaleChange)

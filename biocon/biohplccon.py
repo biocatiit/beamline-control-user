@@ -482,6 +482,31 @@ class AgilentHPLCStandard(AgilentHPLC):
 
         return pump_power_status
 
+    def get_hplc_seal_wash_settings(self, flow_path):
+        """
+        Gets the pump seal wash settings of the specified flow path
+
+        Parameters
+        ----------
+        flow_path: int
+            The flow path to get the seal wash settings for. Either 1 or 2.
+
+        Returns
+        -------
+        wash_settings: dict
+            The seal wash settings. Has keys 'mode', 'single_duration',
+            'period', 'period_duration'. Returns an empty dictionary if
+            it fails.
+        """
+        flow_path = int(flow_path)
+
+        if flow_path == 1:
+            pump_power_status = self.get_seal_wash_settings(self._pump1_id)
+        elif flow_path == 2:
+            pump_power_status = self.get_seal_wash_settings(self._pump2_id)
+
+        return pump_power_status
+
     def get_hplc_autosampler_temperature(self):
         """
         Gets the autosampler temperature
@@ -1467,6 +1492,47 @@ class AgilentHPLCStandard(AgilentHPLC):
 
         return success
 
+    def set_hplc_seal_wash_settings(self, mode, single_duration=0., period=0.,
+        period_duration=0., flow_path):
+        """
+        Sets the pump seal wash settings on the specified flow path. This can
+        be used to turn off the pump wash by setting the mode to 'Off'.
+
+        Parameters
+        ----------
+        mode: str
+            Either 'Off', 'Single', or 'Periodic'
+        single_duration: float
+            The duration in minutes of a single wash. Only used if the
+            mode is set to Single
+        period: float
+            The period in minutes between washes. Only used if the mode is
+            set to Periodic
+        period_duration: float
+            The duration in minutes of the wash every period. Only used if
+            the mode is set to Periodic.
+        flow_path: int
+            The flow path to stop the purge on. Either 1 or 2.
+
+        Returns
+        -------
+        success: bool
+            True if successful.
+        """
+        flow_path = int(flow_path)
+        single_duration = float(single_duration)
+        period = float(period)
+        period_duration = float(period_duration)
+
+        if flow_path == 1:
+            pump_id = self._pump1_id
+        elif flow_path == 2:
+            pump_id = self._pump2_id
+
+        success = self.set_seal_wash_settings(mode, single_duration, period,
+            period_duration, pump_id)
+
+        return success
 
     def set_hplc_pump_on(self, flow_path):
         """
@@ -1515,6 +1581,31 @@ class AgilentHPLCStandard(AgilentHPLC):
             pump_id = self._pump2_id
 
         success = self.set_pump_standby(pump_id)
+
+        return success
+
+    def set_hplc_pump_off(self, flow_path):
+        """
+        Turns the pump on the specified flow path to off.
+
+        Parameters
+        ----------
+        flow_path: int
+            The flow path to set the pump to standby on. Either 1 or 2.
+
+        Returns
+        -------
+        success: bool
+            True if successful.
+        """
+        flow_path = int(flow_path)
+
+        if flow_path == 1:
+            pump_id = self._pump1_id
+        elif flow_path == 2:
+            pump_id = self._pump2_id
+
+        success = self.set_pump_off(pump_id)
 
         return success
 
@@ -2276,6 +2367,11 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
                 logger.info(('HPLC %s switched active flow path to %s'),
                     self.name, flow_path)
 
+                if flow_path == 1:
+                    self.set_autosampler_linked_pump(self._pump1_id)
+                elif flow_path == 2:
+                    self.set_autosampler_linked_pump(self._pump2_id)
+
                 if purge_active:
                     if flow_path == 1:
                         stop_before_purge = stop_flow1
@@ -2567,10 +2663,19 @@ class HPLCCommThread(utils.CommManager):
             'set_flow_rate'             : self._set_flow_rate,
             'set_flow_accel'            : self._set_flow_accel,
             'set_high_pressure_lim'     : self._set_high_pressure_lim,
+            'set_seal_wash_settings'    : self._set_pump_seal_wash_settings,
             'set_pump_on'               : self._set_pump_on,
             'set_pump_standby'          : self._set_pump_standby,
+            'set_pump_off'              : self._set_pump_off,
             'set_autosampler_on'        : self._set_autosampler_on,
-            'set_mwd_on'                 : self._set_mwd_on,
+            'set_autosampler_therm_on'  : self._set_autosampler_therm_on,
+            'set_autosampler_therm_off' : self._set_autosampler_therm_off,
+            'set_autosampler_temp'      : self._set_autosampler_temp,
+            'set_mwd_on'                : self._set_mwd_on,
+            'set_uv_lamp_on'            : self._set_uv_lamp_on,
+            'set_uv_lamp_off'           : self._set_uv_lamp_off,
+            'set_vis_lamp_on'           : self._set_vis_lamp_on,
+            'set_vis_lamp_off'          : self._set_vis_lamp_off,
             'set_buffer_info'           : self._set_buffer_info,
             'remove_buffer'             : self._remove_buffer,
             'submit_sample'             : self._submit_sample,
@@ -2669,6 +2774,8 @@ class HPLCCommThread(utils.CommManager):
             'errors'            : device.get_instrument_errors(),
             'run_queue_status'  : device.get_run_queue_status(),
             'run_queue'         : device.get_run_queue(),
+            'elapsed_runtime'   : device.get_elapsed_runtime(),
+            'remaining_runtime' : device.get_remaining_runtime(),
             }
 
         pump_status = {
@@ -2691,6 +2798,7 @@ class HPLCCommThread(utils.CommManager):
         autosampler_status = {
             'submitting_sample'         : device.get_submitting_sample_status(),
             'temperature'               : device.get_hplc_autosampler_temperature(),
+            'temperature_setpoint'      : device.get_autosampler_temperature_set_point(),
             }
 
         if (isinstance(device, AgilentHPLCStandard)
@@ -2727,6 +2835,7 @@ class HPLCCommThread(utils.CommManager):
             'flow_accel1'       : device.get_hplc_flow_accel(1, False),
             'power_status1'     : device.get_hplc_pump_power_status(1),
             'high_pressure_lim1': device.get_hplc_high_pressure_limit(1, False),
+            'seal_wash1'        : device.get_hplc_seal_wash_settings(1),
             }
 
         if isinstance(device, AgilentHPLC2Pumps):
@@ -2735,6 +2844,7 @@ class HPLCCommThread(utils.CommManager):
             pump_status['power_status2'] = device.get_hplc_pump_power_status(2)
             pump_status['high_pressure_lim2'] =device.get_hplc_high_pressure_limit(2,
                 False)
+            pump_status['seal_wash2'] = device.get_hplc_seal_wash_settings(2)
 
         autosampler_status = {
             'thermostat_power_status'   : device.get_autosampler_thermostat_power_status(),
@@ -2870,7 +2980,8 @@ class HPLCCommThread(utils.CommManager):
         logger.debug("Set %s flow path %s flow accel %s: %s", name, flow_path,
             val, success)
 
-    def _set_high_pressure_lim(self, name, val, flow_path, **kwargs):
+    def _set_high_pressure_lim(self, name, mode, single_duration, period,
+        period_duration, flow_path, **kwargs):
         logger.debug("Setting %s flow path %s high pressure limit %s ", name,
             flow_path, val)
 
@@ -2884,6 +2995,22 @@ class HPLCCommThread(utils.CommManager):
 
         logger.debug("Set %s flow path %s high pressure limit %s: %s", name,
             flow_path, val, success)
+
+    def _set_pump_seal_wash_settings(self, name, val, flow_path, **kwargs):
+        logger.debug("Setting %s flow path %s seal wash settings", name,
+            flow_path)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        success = device.set_hplc_seal_wash_settings(mode, single_duration,
+            period, period_duration, flow_path, **kwargs)
+
+        self._return_value((name, cmd, success), comm_name)
+
+        logger.debug("Set %s flow path %s seal wash settings: %s", name,
+            flow_path, success)
 
     def _set_buffer_info(self, name, position, volume, descrip, flow_path,
         **kwargs):
@@ -2945,6 +3072,20 @@ class HPLCCommThread(utils.CommManager):
         logger.debug("Set %s flow path %s pump standby: %s", name, flow_path,
             success)
 
+    def _set_pump_off(self, name, flow_path, **kwargs):
+        logger.debug("Setting %s flow path %s pump off", name, flow_path)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        success = device.set_hplc_pump_off(flow_path, **kwargs)
+
+        self._return_value((name, cmd, success), comm_name)
+
+        logger.debug("Set %s flow path %s pump off: %s", name, flow_path,
+            success)
+
     def _set_autosampler_on(self, name, **kwargs):
         logger.debug("Setting %s autosampler on", name)
 
@@ -2958,6 +3099,47 @@ class HPLCCommThread(utils.CommManager):
 
         logger.debug("Set %s autosampler on: %s", name, success)
 
+    def _set_autosampler_therm_on(self, name, **kwargs):
+        logger.debug("Setting %s autosampler thermostat on", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        success = device.set_autosampler_thermostat_on(**kwargs)
+
+        self._return_value((name, cmd, success), comm_name)
+
+        logger.debug("Set %s autosampler thermostat on: %s", name, success)
+
+    def _set_autosampler_therm_off(self, name, **kwargs):
+        logger.debug("Setting %s autosampler thermostat off", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        success = device.set_autosampler_thermostat_off(**kwargs)
+
+        self._return_value((name, cmd, success), comm_name)
+
+        logger.debug("Set %s autosampler thermostat off: %s", name, success)
+
+    def _set_autosampler_temp(self, name, val, **kwargs):
+        logger.debug("Setting %s autosampler temperature set point to %s ",
+            name, val)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        success = device.set_autosampler_temperature_set_point(val, **kwargs)
+
+        self._return_value((name, cmd, success), comm_name)
+
+        logger.debug("Set %s autosampler temperature set point to %s ",
+            name, val)
+
     def _set_mwd_on(self, name, **kwargs):
         logger.debug("Setting %s uv on", name)
 
@@ -2970,6 +3152,58 @@ class HPLCCommThread(utils.CommManager):
         self._return_value((name, cmd, success), comm_name)
 
         logger.debug("Set %s uv on: %s", name, success)
+
+    def _set_uv_lamp_on(self, name, **kwargs):
+        logger.debug("Setting %s uv lamp on", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        success = device.set_uv_lamp_on(**kwargs)
+
+        self._return_value((name, cmd, success), comm_name)
+
+        logger.debug("Set %s uv lamp on: %s", name, success)
+
+    def _set_uv_lamp_off(self, name, **kwargs):
+        logger.debug("Setting %s uv lamp off", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        success = device.set_uv_lamp_off(**kwargs)
+
+        self._return_value((name, cmd, success), comm_name)
+
+        logger.debug("Set %s uv lamp off: %s", name, success)
+
+    def _set_vis_lamp_on(self, name, **kwargs):
+        logger.debug("Setting %s vis lamp on", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        success = device.set_vis_lamp_on(**kwargs)
+
+        self._return_value((name, cmd, success), comm_name)
+
+        logger.debug("Set %s vis lamp on: %s", name, success)
+
+    def _set_vis_lamp_off(self, name, **kwargs):
+        logger.debug("Setting %s vis lamp off", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        success = device.set_vis_lamp_off(**kwargs)
+
+        self._return_value((name, cmd, success), comm_name)
+
+        logger.debug("Set %s vis lamp off: %s", name, success)
 
     def _submit_sample(self, name, sample_name, acq_method, sample_loc, inj_vol,
         flow_rate, flow_accel, total_elution_vol, high_pressure_lim, **kwargs):
@@ -4557,6 +4791,8 @@ class HPLCPanel(utils.DevicePanel):
             status = str(inst_status['status'])
             run_queue_status = str(inst_status['run_queue_status'])
             run_queue = inst_status['run_queue']
+            elapsed_runtime = inst_status['elapsed_runtime']
+            remaining_runtime = inst_status['remaining_runtime']
 
             if connected != self._inst_connected:
                 wx.CallAfter(self._inst_connected_ctrl.SetLabel,
@@ -4740,6 +4976,7 @@ class HPLCPanel(utils.DevicePanel):
             sampler_status = val['autosampler_status']
             submitting_sample = str(sampler_status['submitting_sample'])
             temperature = str(round(float(sampler_status['temperature']),3))
+            temperature_setpoint = sampler_status['temperature_setpoint']
 
             if submitting_sample != self._sampler_submitting:
                 wx.CallAfter(self._sampler_submitting_ctrl.SetLabel,
