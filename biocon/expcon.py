@@ -2916,11 +2916,11 @@ class ExpPanel(wx.Panel):
         self.exp_btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
         self.exp_btn_sizer.AddStretchSpacer(1)
         self.exp_btn_sizer.Add(self.start_scan_btn, border=self._FromDIP(5),
-            flag=wx.ALIGN_CENTER_VERTICAL|wx.ALIGN_RIGHT|wx.RIGHT)
+            flag=wx.ALIGN_CENTER_VERTICAL|wx.RIGHT)
         self.exp_btn_sizer.Add(self.start_exp_btn, border=self._FromDIP(5),
-            flag=wx.ALIGN_CENTER_VERTICAL|wx.ALIGN_RIGHT|wx.RIGHT)
+            flag=wx.ALIGN_CENTER_VERTICAL|wx.RIGHT)
         self.exp_btn_sizer.Add(self.stop_exp_btn, border=self._FromDIP(5),
-            flag=wx.ALIGN_CENTER_VERTICAL|wx.ALIGN_LEFT|wx.LEFT)
+            flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT)
         self.exp_btn_sizer.AddStretchSpacer(1)
 
         exp_ctrl_box_sizer = wx.StaticBoxSizer(wx.StaticBox(self,
@@ -2933,7 +2933,7 @@ class ExpPanel(wx.Panel):
         exp_ctrl_box_sizer.Add(self.advanced_options, border=self._FromDIP(5),
             flag=wx.TOP|wx.LEFT|wx.RIGHT|wx.EXPAND)
         exp_ctrl_box_sizer.Add(self.exp_btn_sizer, border=self._FromDIP(5),
-            flag=wx.EXPAND|wx.ALIGN_CENTER_HORIZONTAL|wx.ALL)
+            flag=wx.EXPAND|wx.ALL)
 
         exp_ctrl_box_sizer.Show(self.advanced_options,
             self.settings['show_advanced_options'], recursive=True)

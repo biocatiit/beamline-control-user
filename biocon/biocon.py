@@ -293,7 +293,7 @@ if __name__ == '__main__':
         'i0_gain_pv'            : '18ID_D_BPM_Gain:Level-SP',
 
         'struck_log_vals'       : [
-            # Format: (mx_record_name, struck_channel, header_name, 
+            # Format: (mx_record_name, struck_channel, header_name,
             # scale, offset, use_dark_current, normalize_by_exp_time)
             {'mx_record': 'mcs3', 'channel': 2, 'name': 'I0',
             'scale': 1, 'offset': 0, 'dark': True, 'norm_time': False},
