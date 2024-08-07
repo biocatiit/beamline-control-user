@@ -1209,7 +1209,8 @@ class CoflowPanel(wx.Panel):
 
         self.change_buffer()
 
-    def change_buffer(self, target_valve_pos=1, change_valve_pos=False, interactive=True):
+    def change_buffer(self, target_valve_pos=1, change_valve_pos=False,
+        interactive=True):
         #Stop flow
         self.stop_flow()
 
@@ -1267,12 +1268,18 @@ class CoflowPanel(wx.Panel):
             self.change_buffer(next_buffer, True, False)
 
     def _on_put_in_water(self, evt):
+        self._put_in_water()
+
+    def _put_in_water(self):
         self.stop_flow_timer()
         self.verbose_buffer_change = False
 
         self.change_buffer(self.settings['sheath_valve_water_pos'], True, False)
 
     def _on_put_in_ethanol(self, evt):
+        self._put_in_ethanol()
+
+    def _put_in_ethanol(self):
         self.stop_flow_timer()
         self.verbose_buffer_change = False
 
@@ -1283,6 +1290,9 @@ class CoflowPanel(wx.Panel):
         self._next_buffer_change()
 
     def _on_put_in_hellmanex(self, evt):
+        self._put_in_hellmanex()
+
+    def _put_in_hellmanex(self):
         self.stop_flow_timer()
         self.verbose_buffer_change = False
 
@@ -1293,6 +1303,9 @@ class CoflowPanel(wx.Panel):
         self._next_buffer_change()
 
     def _on_clean(self, evt):
+        self._clean_cell()
+
+    def _clean_cell(self):
         self.stop_flow_timer()
         self.verbose_buffer_change = False
 
@@ -1348,7 +1361,7 @@ class CoflowPanel(wx.Panel):
             title = 'Flow time not set'
             style=wx.OK|wx.ICON_WARNING
 
-            wx.CallAfter(self._show_message_dialog, msg, title, style)
+            wx.CallAfter(self.showMessageDialog, self, msg, title, style)
 
             flow_time = None
 
@@ -1493,7 +1506,7 @@ class CoflowPanel(wx.Panel):
         if start_monitor:
             self.monitor_timer.Start(self.settings['settling_time'])
 
-    def stop_flow(self):
+    def stop_flow(self, verbose=True):
         logger.debug('Stopping flow')
 
         stop_coflow = True
@@ -1504,7 +1517,7 @@ class CoflowPanel(wx.Panel):
         else:
             exposure_running = False
 
-        if exposure_running:
+        if exposure_running and verbose:
             msg = ('The exposure is still running. Are you sure you want '
                 'to stop the coflow?')
 
@@ -2020,8 +2033,78 @@ class CoflowPanel(wx.Panel):
                 buffer_list.DeleteItem(i)
                 break
 
+    def _get_automator_state(self):
+        if self.doing_buffer_change:
+            state = 'change_buf'
+
+        elif self.coflow_control.coflow_on:
+            state = 'idle'
+
+        else:
+            state = 'idle'
+
+        return state
+
     def automator_callback(self, cmd_name, cmd_args, cmd_kwargs):
-        pass
+        if cmd_name != 'status':
+            print('automator_callback')
+            print(cmd_name)
+            print(cmd_args)
+            print(cmd_kwargs)
+
+        success = True
+
+        if cmd_name == 'status':
+            state = self._get_automator_state()
+
+        elif cmd_name == 'abort':
+            state = 'idle'
+
+        elif cmd_name == 'start':
+            flow_rate = cmd_kwargs['flow_rate']
+            self._change_flow_rate(flow_rate)
+            self._start_flow()
+            state = 'coflow_on'
+
+        elif cmd_name == 'stop':
+            self.stop_flow(False)
+            state = 'coflow_off'
+
+        elif cmd_name == 'change_flow':
+            flow_rate = cmd_kwargs['flow_rate']
+            self._change_flow_rate(flow_rate)
+            state = self._get_automator_state()
+
+        elif cmd_name == 'change_buf':
+            buffer_pos = cmd_kwargs['buffer_pos']
+            self.change_buffer(buffer_pos, True, False)
+            state = 'change_buf'
+
+        elif cmd_name == 'clean':
+            self._clean_cell()
+            state = 'change_buf'
+
+        elif cmd_name == 'into_hellmanex':
+            self._put_in_hellmanex()
+            state = 'change_buf'
+
+        elif cmd_name == 'into_ethanol':
+            self._put_in_ethanol()
+            state = 'change_buf'
+
+        elif cmd_name == 'into_water':
+            self._put_in_water()
+            state = 'change_buf'
+
+        elif cmd_name == 'overflow_on':
+            self.coflow_control.start_overflow()
+            state = self._get_automator_state()
+
+        elif cmd_name == 'overflow_off':
+            self.coflow_control.stop_overflow()
+            state = self._get_automator_state()
+
+        return state, success
 
     def on_exit(self):
         if self.connected:
