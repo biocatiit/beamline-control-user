@@ -29,6 +29,7 @@ import logging
 import sys
 import copy
 import os
+import traceback
 
 if __name__ != '__main__':
     logger = logging.getLogger(__name__)
@@ -110,6 +111,14 @@ class Automator(threading.Thread):
                                 self._run_next_cmd(name)
                                 status_change = True
 
+                        # with controls['cmd_lock']:
+                        #     num_cmds = len(controls['cmd_queue'])
+
+                        #     if num_cmds > 0:
+                        #         print(name)
+                        #         print(state)
+                        #         print(controls['cmd_queue'])
+
             if not status_change:
                 time.sleep(0.5)
 
@@ -189,33 +198,49 @@ class Automator(threading.Thread):
                     else:
                         wait_done = False
 
+                    if wait_done:
+                        self._check_status(name)
+
                 elif cond == 'status':
                     inst_conds = status['inst_conds']
 
                     wait_done = True
 
-                    for con, state_list in inst_conds:
-                        cur_state = self._auto_cons[con]['status']['state']
-                        if cur_state.startswith('wait_cmd'):
-                            inst_state = self._inner_check_status(con)
-                            if inst_state not in state_list:
-                                wait_done = False
-                                break
+                    if status['state'].startswith('wait_sync'):
+                        all_states = []
 
-                        else:
+                        for con, state_list in inst_conds:
+                            cur_state = self._auto_cons[con]['status']['state']
+
                             if cur_state not in state_list:
-                                wait_done = False
-                                break
+                                all_states.append(False)
+                            else:
+                                all_states.append(True)
 
-                if wait_done:
-                    self._check_status(name)
+                        if not all(all_states):
+                            wait_done = False
 
-                # num_cmds = len(controls['cmd_queue'])
+                        if wait_done:
+                            for con, state_list in inst_conds:
+                                self._check_status(con)
+                            self._check_status(name)
 
-            # if wait_done and num_cmds > 0:
-            #     logger.info('running next cmd from wait')
-            #     self._run_next_cmd(name)
+                    else:
+                        for con, state_list in inst_conds:
+                            cur_state = self._auto_cons[con]['status']['state']
+                            if cur_state.startswith('wait_cmd'):
+                                inst_state = self._inner_check_status(con)
+                                if inst_state not in state_list:
+                                    wait_done = False
+                                    break
 
+                            else:
+                                if cur_state not in state_list:
+                                    wait_done = False
+                                    break
+
+                        if wait_done:
+                            self._check_status(name)
 
     def _run_next_cmd(self, name):
         with self._auto_con_lock:
@@ -250,6 +275,7 @@ class Automator(threading.Thread):
                             'args {} and kwargs {}').format(name, cmd_name,
                             cmd_args, cmd_kwargs))
                         success = False
+                        traceback.print_exc()
 
                         for error_callback in self._on_error_cmd_callbacks:
                             error_callback(cmd_id, cmd_name, name)
@@ -432,23 +458,23 @@ class Automator(threading.Thread):
 
     def remove_on_run_cmd_callback(self, callback_func):
         if callback_func in self._on_run_cmd_callbacks:
-            self._on_run_cmd_callbacks.pop(callback_func)
+            self._on_run_cmd_callbacks.remove(callback_func)
 
     def remove_on_finish_cmd_callback(self, callback_func):
         if callback_func in self._on_finish_cmd_callbacks:
-            self._on_finish_cmd_callbacks.pop(callback_func)
+            self._on_finish_cmd_callbacks.remove(callback_func)
 
     def remove_on_error_cmd_callback(self, callback_func):
         if callback_func in self._on_error_cmd_callbacks:
-            self._on_error_cmd_callbacks.pop(callback_func)
+            self._on_error_cmd_callbacks.remove(callback_func)
 
     def remove_on_state_change_callback(self, callback_func):
         if callback_func in self._on_state_change_callbacks:
-            self._on_state_change_callbacks.pop(callback_func)
+            self._on_state_change_callbacks.remove(callback_func)
 
     def remove_on_abort_callback(self, callback_func):
         if callback_func in self._on_abort_callbacks:
-            self._on_abort_callbacks.pop(callback_func)
+            self._on_abort_callbacks.remove(callback_func)
 
     def stop_running_items(self):
         ########################################################################
@@ -500,9 +526,10 @@ class AutoCommand(object):
     """
     def __init__(self, automator, cmd_info):
         self.automator = automator
-        self._cmd_info = cmd_info
+        self.cmd_info = cmd_info
         self.auto_names = []
         self.auto_ids = []
+        self.status = ''
         self._initialize_cmd(cmd_info)
         self._status_change_callbacks = []
 
@@ -524,7 +551,7 @@ class AutoCommand(object):
         self.automator.add_on_run_cmd_callback(self._on_automator_run_callback)
         self.automator.add_on_finish_cmd_callback(self._on_automator_finish_callback)
 
-    def _on_automator_run_cmd_callback(self, aid, cmd_name, prev_aid, state):
+    def _on_automator_run_callback(self, aid, cmd_name, prev_aid, state):
         self.set_command_status(prev_aid, 'done', state)
 
         if cmd_name.startswith('wait'):
@@ -534,7 +561,7 @@ class AutoCommand(object):
 
         self.set_command_status(aid, status, state)
 
-    def _on_automator_finish_cmd_callback(self, aid, queue_name, state):
+    def _on_automator_finish_callback(self, aid, queue_name, state):
         self.set_command_status(aid, 'done', state)
 
     def set_command_status(self, aid, status, state):
@@ -601,14 +628,14 @@ class AutoCommand(object):
 
     def remove_status_change_callback(self, callback_func):
         if callback_func in self._status_change_callbacks:
-            self._status_change_callbacks.pop(callback_func)
+            self._status_change_callbacks.remove(callback_func)
 
     def _add_automator_cmd(self, inst, cmd, cmd_args, cmd_kwargs):
         cmd_id = self.automator.add_cmd(inst, cmd, cmd_args, cmd_kwargs)
         self.auto_names.append(inst)
         self.auto_ids.append(cmd_id)
 
-class SecSampleCmd(AutoCommand):
+class SecSampleCommand(AutoCommand):
     """
     A command for running a SEC sample and collecting SAXS data
     """
@@ -621,65 +648,64 @@ class SecSampleCmd(AutoCommand):
         Should synchronize start and finish of exp, hplc, and coflow
         """
         # Something like this. Arguments need refining, needs testing
-        hplc_inst = item_info['inst']
+        hplc_inst = cmd_info['inst']
 
         sample_wait_id = self.automator.get_wait_id()
-        sample_wait_cmd = 'wait_sample_{}'.format(sample_wait_id)
+        sample_wait_cmd = 'wait_sync_{}'.format(sample_wait_id)
         sample_conds = [[hplc_inst, [sample_wait_cmd,]], ['exp', [sample_wait_cmd,]],
             ['coflow', [sample_wait_cmd,]],]
 
         finish_wait_id = self.automator.get_wait_id()
-        finish_wait_cmd = 'wait_finish_{}'.format(finish_wait_id)
-        finish_conds = [[hplc_inst, ['idle',]], ['exp', ['idle',]],
-            ['coflow', ['idle',]],]
+        finish_wait_cmd = 'wait_sync_{}'.format(finish_wait_id)
+        finish_conds = [[hplc_inst, [finish_wait_cmd,]], ['exp', [finish_wait_cmd,]],
+            ['coflow', [finish_wait_cmd,]],]
 
         self._add_automator_cmd('exp', sample_wait_cmd, [], {'condition': 'status',
             'inst_conds': sample_conds})
-        self._add_automator_cmd('exp', 'expose', [], item_info)
+        self._add_automator_cmd('exp', 'expose', [], cmd_info)
         self._add_automator_cmd('exp', finish_wait_cmd, [], {'condition': 'status',
             'inst_conds': finish_conds})
 
         inj_settings = {
-            'sample_name'   : item_info['sample_name'],
-            'acq_method'    : item_info['acq_method'],
-            'sample_loc'    : item_info['sample_loc'],
-            'inj_vol'       : item_info['inj_vol'],
-            'flow_rate'     : item_info['flow_rate'],
-            'elution_vol'   : item_info['elution_vol'],
-            'flow_accel'    : item_info['flow_accel'],
-            'pressure_lim'  : item_info['pressure_lim'],
-            'result_path'   : item_info['result_path'],
-            'sp_method'     : item_info['sp_method'],
-            'wait_for_flow_ramp'    : item_info['wait_for_flow_ramp'],
-            'settle_time'   : item_info['settle_time'],
+            'sample_name'   : cmd_info['sample_name'],
+            'acq_method'    : cmd_info['acq_method'],
+            'sample_loc'    : cmd_info['sample_loc'],
+            'inj_vol'       : cmd_info['inj_vol'],
+            'flow_rate'     : cmd_info['flow_rate'],
+            'elution_vol'   : cmd_info['elution_vol'],
+            'flow_accel'    : cmd_info['flow_accel'],
+            'pressure_lim'  : cmd_info['pressure_lim'],
+            'result_path'   : cmd_info['result_path'],
+            'sp_method'     : cmd_info['sp_method'],
+            'wait_for_flow_ramp'    : cmd_info['wait_for_flow_ramp'],
+            'settle_time'   : cmd_info['settle_time'],
             }
 
         hplc_wait_id = self.automator.get_wait_id()
         hplc_wait_cmd = 'wait_exposure_{}'.format(hplc_wait_id)
 
         self._add_automator_cmd(hplc_inst, sample_wait_cmd, [],
-            {'condition': 'status', 'inst_conds': start_conds})
+            {'condition': 'status', 'inst_conds': sample_conds})
         self._add_automator_cmd(hplc_inst, hplc_wait_cmd, [],
             {'condition': 'status', 'inst_conds': [[hplc_inst,
             [hplc_wait_cmd,]], ['exp', ['idle',]]]}) # Change this once I've integrated exposure
         self._add_automator_cmd(hplc_inst, 'inject', [], inj_settings)
-        self._add_automator_cmd(hplc_inst, finish_wait_cmd, [],
-            {'condition': 'status', 'inst_conds': finish_conds})
-
         #accounts for delayed update time between run queue and instrument status
         self._add_automator_cmd(hplc_inst, 'wait_time', [],
             {'condition': 'time', 't_wait': 1})
+        self._add_automator_cmd(hplc_inst, finish_wait_cmd, [],
+            {'condition': 'status', 'inst_conds': finish_conds})
 
         self._add_automator_cmd('coflow', sample_wait_cmd, [],
-            {'condition': 'status', 'inst_conds': start_conds})
+            {'condition': 'status', 'inst_conds': sample_conds})
         self._add_automator_cmd('coflow', 'change_flow', [],
-            {'flow_rate': item_info['flow_rate']})
+            {'flow_rate': cmd_info['flow_rate']})
         self._add_automator_cmd('coflow', finish_wait_cmd, [],
             {'condition': 'status', 'inst_conds': finish_conds})
 
         self._post_initialize_cmd()
 
-class EquilibrateCmd(AutoCommand):
+class EquilibrateCommand(AutoCommand):
     """
     A command for running an equilibration on an HPLC
     """
@@ -697,34 +723,34 @@ class EquilibrateCmd(AutoCommand):
         dual flow path, since other path might be running samples.
         """
         # Not finisehd adding in coflow
-        hplc_inst = item_info['inst']
+        hplc_inst = cmd_info['inst']
 
         equil_settings = {
-            'equil_rate'    : item_info['equil_rate'],
-            'equil_vol'     : item_info['equil_vol'],
-            'equil_accel'   : item_info['equil_accel'],
-            'purge'         : item_info['purge'],
-            'purge_rate'    : item_info['purge_rate'],
-            'purge_volume'  : item_info['purge_volume'],
-            'purge_accel'   : item_info['purge_accel'],
-            'equil_with_sample' : item_info['equil_with_sample'],
-            'stop_after_equil'  : item_info['stop_after_equil'],
-            'flow_path'     : item_info['flow_path'],
+            'equil_rate'    : cmd_info['equil_rate'],
+            'equil_vol'     : cmd_info['equil_vol'],
+            'equil_accel'   : cmd_info['equil_accel'],
+            'purge'         : cmd_info['purge'],
+            'purge_rate'    : cmd_info['purge_rate'],
+            'purge_volume'  : cmd_info['purge_volume'],
+            'purge_accel'   : cmd_info['purge_accel'],
+            'equil_with_sample' : cmd_info['equil_with_sample'],
+            'stop_after_equil'  : cmd_info['stop_after_equil'],
+            'flow_path'     : cmd_info['flow_path'],
             }
 
-        equil_coflow = item_info['coflow_equil']
-        num_paths = item_info['num_flow_paths']
+        equil_coflow = cmd_info['coflow_equil']
+        num_paths = cmd_info['num_flow_paths']
 
 
         wait_id = self.automator.get_wait_id()
-        finish_wait_cmd = 'wait_finish_{}'.format(wait_id)
+        finish_wait_cmd = 'wait_sync_{}'.format(wait_id)
         finish_conds = [[hplc_inst, [finish_wait_cmd,]],]
 
         if num_paths == 1:
             finish_conds.append(['exp', [finish_wait_cmd,]])
 
             wait_id = self.automator.get_wait_id()
-            start_wait_cmd = 'wait_start_{}'.format(wait_id)
+            start_wait_cmd = 'wait_sync_{}'.format(wait_id)
 
             start_conds = [[hplc_inst, [start_wait_cmd,]],
                 ['exp', [start_wait_cmd,]],]
@@ -734,7 +760,7 @@ class EquilibrateCmd(AutoCommand):
                 finish_conds.append(['coflow', [finish_wait_cmd,]])
 
             self._add_automator_cmd(hplc_inst, start_wait_cmd, [],
-                    {'condition' : 'status', 'inst_conds': })
+                    {'condition' : 'status', 'inst_conds': start_conds })
 
         self._add_automator_cmd(hplc_inst, 'equilibrate', [], equil_settings)
         self._add_automator_cmd(hplc_inst, finish_wait_cmd, [],
@@ -755,14 +781,14 @@ class EquilibrateCmd(AutoCommand):
                     {'condition' : 'status', 'inst_conds': start_conds})
 
             self._add_automator_cmd('coflow', 'change_buf', [],
-                {'buffer_pos': item_info['coflow_buf_pos']})
+                {'buffer_pos': cmd_info['coflow_buf_pos']})
 
-            if item_info['coflow_restart']:
-                self._add_automator_cmd('coflow', eqil_wait_cmd, [],
+            if cmd_info['coflow_restart']:
+                self._add_automator_cmd('coflow', equil_wait_cmd, [],
                     {'condition' : 'status', 'inst_conds': [[hplc_inst,
                     [finish_wait_cmd,]],]})
                 self._add_automator_cmd('coflow', 'start', [],
-                    {'flow_rate': item_info['coflow_rate']})
+                    {'flow_rate': cmd_info['coflow_rate']})
 
             if num_paths == 1:
                 self._add_automator_cmd('coflow', finish_wait_cmd, [],
@@ -770,7 +796,7 @@ class EquilibrateCmd(AutoCommand):
 
         self._post_initialize_cmd()
 
-class SwitchPumpsCmd(AutoCommand):
+class SwitchPumpsCommand(AutoCommand):
     """
     A command for switching the dual HPLC pumps
     """
@@ -781,22 +807,22 @@ class SwitchPumpsCmd(AutoCommand):
         self.auto_names = []
         self.auto_ids = []
 
-        hplc_inst = item_info['inst']
-        coflow_equil = item_info['coflow_equil']
+        hplc_inst = cmd_info['inst']
+        coflow_equil = cmd_info['coflow_equil']
 
         switch_settings = {
-            'purge_rate'    : item_info['purge_rate'],
-            'purge_volume'  : item_info['purge_volume'],
-            'purge_accel'   : item_info['purge_accel'],
-            'restore_flow_after_switch' : item_info['restore_flow_after_switch'],
-            'switch_with_sample'    : item_info['switch_with_sample'],
-            'stop_flow1'    : item_info['stop_flow1'],
-            'stop_flow2'    : item_info['stop_flow2'],
-            'purge_active'  : item_info['purge_active'],
-            'flow_path'     : item_info['flow_path'],
+            'purge_rate'    : cmd_info['purge_rate'],
+            'purge_volume'  : cmd_info['purge_volume'],
+            'purge_accel'   : cmd_info['purge_accel'],
+            'restore_flow_after_switch' : cmd_info['restore_flow_after_switch'],
+            'switch_with_sample'    : cmd_info['switch_with_sample'],
+            'stop_flow1'    : cmd_info['stop_flow1'],
+            'stop_flow2'    : cmd_info['stop_flow2'],
+            'purge_active'  : cmd_info['purge_active'],
+            'flow_path'     : cmd_info['flow_path'],
             }
 
-        num_paths = item_info['num_flow_paths']
+        num_paths = cmd_info['num_flow_paths']
 
         switch_wait_id = self.automator.get_wait_id()
 
@@ -814,7 +840,7 @@ class SwitchPumpsCmd(AutoCommand):
             self._add_automator_cmd(cmd_name, switch_wait_cmd, [],
                 {'condition': 'status', 'inst_conds': switch_inst_conds})
 
-        cmd_name = '{}_pump{}'.format(hplc_inst, item_info['flow_path'])
+        cmd_name = '{}_pump{}'.format(hplc_inst, cmd_info['flow_path'])
 
         self._add_automator_cmd(cmd_name, 'switch_pumps', [], switch_settings)
 
@@ -838,11 +864,11 @@ class SwitchPumpsCmd(AutoCommand):
                 {'condition': 'status', 'inst_conds': switch_inst_conds})
 
             self._add_automator_cmd('coflow', 'change_buf', [],
-                {'buffer_pos': item_info['coflow_buf_pos']})
+                {'buffer_pos': cmd_info['coflow_buf_pos']})
 
-            if item_info['coflow_restart']:
+            if cmd_info['coflow_restart']:
                 self._add_automator_cmd('coflow', 'start', [],
-                    {'flow_rate': item_info['coflow_rate']})
+                    {'flow_rate': cmd_info['coflow_rate']})
 
             self._add_automator_cmd(cmd_name, finish_wait_cmd, [],
                 {'condition': 'status', 'inst_conds': finish_inst_conds})
@@ -1048,19 +1074,19 @@ class AutoListPanel(wx.Panel):
 
         if item_type == 'sec_sample':
             """
-            Check various things, inclucing:
+            Check various things, including:
                 *   Is there enough buffer to do the run
-                *   Do we need to add an instrument switch or an equlibration
+                *   Do we need to add an instrument switch or an equilibration
                     (should this be checked in the auto list, so that it can add
-                    an equilibraiton item or switch item above this?)
+                    an equilibration item or switch item above this?)
             """
-            command = SecSampleCommand(item_info)
+            command = SecSampleCommand(self.automator, item_info)
 
         elif item_type == 'equilibrate':
-            command = EquilibrateCmd(item_info)
+            command = EquilibrateCommand(self.automator, item_info)
 
         elif item_type == 'switch_pumps':
-            command = SwitchPumpsCmd(item_info)
+            command = SwitchPumpsCommand(self.automator, item_info)
 
         return command
 
@@ -1160,7 +1186,7 @@ class AutoList(utils.ItemList):
                     'inj_vol'       : '10.0',
                     'flow_rate'     : '0.1',
                     'elution_vol'   : '0.1',
-                    'flow_accel'    : '0.1',
+                    'flow_accel'    : '1',
                     'pressure_lim'  : '60',
                     'result_path'   : '',
                     'sp_method'     : None,
@@ -1185,8 +1211,8 @@ class AutoList(utils.ItemList):
                     # HPLC equilibrate parameters
                     'equil_rate'        : 0.1,
                     'equil_vol'         : 0.1,
-                    'equil_accel'       : 0.1,
-                    'purge'             : True,
+                    'equil_accel'       : 1,
+                    'purge'             : False,
                     'purge_rate'        : 0.2,
                     'purge_volume'      : 0.2,
                     'purge_accel'       : 0.2,
@@ -1220,9 +1246,9 @@ class AutoList(utils.ItemList):
                     'flow_path'     : 1,
 
                     #Coflow switch parameters
-                    'switch_coflow'     : True,
+                    'switch_coflow'     : False,
                     'coflow_buf_pos'    : 10,
-                    'coflow_restart'    : True,
+                    'coflow_restart'    : False,
                     'coflow_rate'       : 0.1
                     }
 
@@ -1402,12 +1428,12 @@ class AutoListItem(utils.ListItem):
     def __init__(self, item_list, item_type, command, *args, **kwargs):
         self.item_type = item_type
         self.command = command
-        self.command.add_status_change_callback(self._on_cmd_status_change)
-        self.item_info = command.item_info
+        self.item_info = command.cmd_info
 
         utils.ListItem.__init__(self, item_list, *args, **kwargs)
 
-        self.status = 'queue'
+        self.command.add_status_change_callback(self._on_command_status_change)
+        self.set_automator_status()
 
     def _create_layout(self):
         item_parent = self
@@ -1753,17 +1779,19 @@ if __name__ == '__main__':
         # 'outlet_fr_mult'            : -1,
         'settling_time'             : 5000, #in ms
         # 'settling_time'             : 120000, #in ms
-        'lc_flow_rate'              : '0.6',
+        'lc_flow_rate'              : '0.1',
         'show_sheath_warning'       : True,
         'show_outlet_warning'       : True,
         'use_overflow_control'      : True,
-        'buffer_change_fr'          : 2., #in ml/min
-        'buffer_change_vol'         : 25., #in ml
+        'buffer_change_fr'          : 0.1, #in ml/min
+        'buffer_change_vol'         : 0.1, #in ml
         'air_density_thresh'        : 700, #g/L
         'sheath_valve_water_pos'    : 10,
         'sheath_valve_hellmanex_pos': 8,
         'sheath_valve_ethanol_pos'  : 9,
         }
+
+    coflow_settings['components'] = ['coflow']
 
     app = wx.App()
     logger.debug('Setting up wx app')
@@ -1772,8 +1800,8 @@ if __name__ == '__main__':
         title='HPLC Control')
     hplc_frame.Show()
 
-    frame = coflowcon.CoflowFrame(coflow_settings, True, parent=None, title='Coflow Control')
-    frame.Show()
+    coflow_frame = coflowcon.CoflowFrame(coflow_settings, True, parent=None, title='Coflow Control')
+    coflow_frame.Show()
 
 
     hplc_automator_callback = hplc_frame.devices[0].automator_callback
