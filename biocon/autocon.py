@@ -688,7 +688,7 @@ class SecSampleCommand(AutoCommand):
             {'condition': 'status', 'inst_conds': sample_conds})
         self._add_automator_cmd(hplc_inst, hplc_wait_cmd, [],
             {'condition': 'status', 'inst_conds': [[hplc_inst,
-            [hplc_wait_cmd,]], ['exp', ['idle',]]]}) # Change this once I've integrated exposure
+            [hplc_wait_cmd,]], ['exp', ['exposing',]]]})
         self._add_automator_cmd(hplc_inst, 'inject', [], inj_settings)
         #accounts for delayed update time between run queue and instrument status
         self._add_automator_cmd(hplc_inst, 'wait_time', [],
@@ -1195,10 +1195,14 @@ class AutoList(utils.ItemList):
                     'flow_path'     : 1,
 
                     # Exposure parameters
-                    'data_dir'      : '',
+                    'num_frames'    : 2
                     'exp_time'      : 0.5,
                     'exp_period'    : 1,
-                    'exp_num'       : 2,
+                    'data_dir'      : '',
+                    'filename'      : '',
+                    'wait_for_trig' : True,
+                    'num_trig'      : 1,
+                    'musc_samp'     : 0.001, #Not used, for completeness
                     }
 
             elif choice == 'Equilibrate column':

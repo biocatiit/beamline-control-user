@@ -917,7 +917,7 @@ class CoflowPanel(wx.Panel):
         flow_rate_sizer.Add(self.change_flow_button, flag=wx.ALIGN_CENTER_VERTICAL)
 
         self.start_flow_button = wx.Button(control_box, label='Start Coflow')
-        self.stop_flow_button = wx.Button(control_box, label='Stop Coflow')
+        self.stop_flow_button = wx.Button(control_box, label='Coflow')
         self.change_buffer_button = wx.Button(control_box, label='Change Buffer')
 
         self.auto_flow = wx.CheckBox(control_box, label='Start/stop coflow automatically with exposure')
@@ -2046,6 +2046,8 @@ class CoflowPanel(wx.Panel):
             state = self._get_automator_state()
 
         elif cmd_name == 'abort':
+            if self.doing_buffer_change:
+                self.stop_flow(False)
             state = 'idle'
 
         elif cmd_name == 'start':

@@ -2723,61 +2723,18 @@ class ExpCommThread(threading.Thread):
 
 class ExpPanel(wx.Panel):
     """
-    This pump panel supports standard flow controls and settings, including
-    connection settings, for a pump. It is meant to be embedded in a larger application
-    and can be instanced several times, once for each pump. It communciates
-    with the pumps using the :py:class:`PumpCommThread`. Currently it only supports
-    the :py:class:`M50Pump`, but it should be easy to extend for other pumps. The
-    only things that should have to be changed are the are adding in pump-specific
-    settings, modeled after how the ``m50_pump_sizer`` is constructed in the
-    :py:func:`_create_layout` function, and then add in type switching in the
-    :py:func:`_on_type` function.
+    Exposure panel
     """
     def __init__(self, settings, *args, **kwargs):
         """
-        Initializes the custom thread. Important parameters here are the
-        list of known commands ``_commands`` and known pumps ``known_pumps``.
-
-        :param wx.Window parent: Parent class for the panel.
-
-        :param int panel_id: wx ID for the panel.
-
-        :param str panel_name: Name for the panel
-
-        :param list all_comports: A list containing all comports that the pump
-            could be connected to.
-
-        :param collections.deque pump_cmd_q: The ``pump_cmd_q`` that was passed to
-            the :py:class:`PumpCommThread`.
-
-        :param list known_pumps: The list of known pump types, obtained from
-            the :py:class:`PumpCommThread`.
-
-        :param str pump_name: An identifier for the pump, displayed in the pump
-            panel.
-
-        :param str pump_type: One of the ``known_pumps``, corresponding to the pump
-            connected to this panel. Only required if you are connecting the pump
-            when the panel is first set up (rather than manually later).
-
-        :param str comport: The comport the pump is connected to. Only required
-            if you are connecting the pump when the panel is first set up (rather
-            than manually later).
-
-        :param list pump_args: Pump specific arguments for initialization.
-            Only required if you are connecting the pump when the panel is first
-            set up (rather than manually later).
-
-        :param dict pump_kwargs: Pump specific keyword arguments for initialization.
-            Only required if you are connecting the pump when the panel is first
-            set up (rather than manually later).
-
         """
 
         wx.Panel.__init__(self, *args, **kwargs)
         logger.debug('Initializing ExpPanel')
 
         self.settings = settings
+        self._exp_status = ''
+        self._run_number = '_{:03d}'.format(self.settings['run_num'])
 
         self.exp_cmd_q = deque()
         self.exp_ret_q = deque()
@@ -2826,7 +2783,7 @@ class ExpPanel(wx.Panel):
             size=self._FromDIP((60,-1)), validator=utils.CharValidator('float'))
         self.exp_period = wx.TextCtrl(self, value=self.settings['exp_period'],
             size=self._FromDIP((60,-1)), validator=utils.CharValidator('float'))
-        self.run_num = wx.StaticText(self, label='_{:03d}'.format(self.settings['run_num']))
+        self.run_num = wx.StaticText(self, label=self._run_number)
         self.wait_for_trig = wx.CheckBox(self, label='Wait for external trigger')
         self.wait_for_trig.SetValue(self.settings['wait_for_trig'])
         self.num_trig = wx.TextCtrl(self, value=self.settings['num_trig'],
@@ -3060,29 +3017,34 @@ class ExpPanel(wx.Panel):
     def _on_stop_exp(self, evt):
         self.stop_exp()
 
-    def start_exp(self, exp_only):
+    def start_exp(self, exp_only, exp_values=None, verbose=True):
         self.abort_event.clear()
         self.exp_event.clear()
         self.timeout_event.clear()
 
-        warnings_valid = self._check_warnings()
+        warnings_valid = self._check_warnings(verbose)
 
         if not warnings_valid:
             return
 
-        exp_values, exp_valid = self._get_exp_values()
+        if exp_values is None:
+            exp_values, exp_valid = self._get_exp_values(verbose)
+        else:
+            exp_valid = True
+
+        self.current_exposure_values = exp_values
 
         if not exp_valid:
             return
 
-        metadata, metadata_valid = self._get_metadata()
+        metadata, metadata_valid = self._get_metadata(verbose)
 
         if metadata_valid:
             exp_values['metadata'] = metadata
         else:
             return
 
-        overwrite_valid = self._check_overwrite(exp_values)
+        overwrite_valid = self._check_overwrite(exp_values, verbose)
 
         if not overwrite_valid:
             return
@@ -3091,7 +3053,7 @@ class ExpPanel(wx.Panel):
             data_dir = os.path.join(self.current_exposure_values['data_dir'], 'images')
             self.current_exposure_values['data_dir'] = data_dir
 
-        comp_valid, comp_settings = self._check_components(exp_only)
+        comp_valid, comp_settings = self._check_components(exp_only, verbose)
 
         if not comp_valid:
             return
@@ -3114,8 +3076,8 @@ class ExpPanel(wx.Panel):
         self._pipeline_start_exp()
 
         self.set_status('Preparing exposure')
-        self.start_exp_btn.Disable()
-        self.stop_exp_btn.Enable()
+        wx.CallAfter(self.start_exp_btn.Disable)
+        wx.CallAfter(self.stop_exp_btn.Enable)
         self.total_time = exp_values['num_frames']*exp_values['exp_period']
 
         if self.settings['tr_muscle_exp']:
@@ -3142,10 +3104,10 @@ class ExpPanel(wx.Panel):
 
         if (('trsaxs_scan' in self.settings['components'] and not exp_only) or exp_values['wait_for_trig']
             or ('scan' in self.settings['components'] and not exp_only)):
-            self.exp_status_sizer.Show(self.scan_num_sizer, recursive=True)
-            self.scan_number.SetLabel('1')
+            wx.CallAfter(self.exp_status_sizer.Show, self.scan_num_sizer, recursive=True)
+            wx.CallAfter(self.scan_number.SetLabel, '1')
         else:
-            self.exp_status_sizer.Hide(self.scan_num_sizer, recursive=True)
+            wx.CallAfter(self.exp_status_sizer.Hide, self.scan_num_sizer, recursive=True)
 
         if 'trsaxs_flow' in self.settings['components'] and not exp_only:
             trsaxs_flow_panel = wx.FindWindowByName('trsaxs_flow')
@@ -3170,7 +3132,9 @@ class ExpPanel(wx.Panel):
         self.set_time_remaining(0)
         old_rn = self.run_num.GetLabel()
         run_num = int(old_rn[1:])+1
-        self.run_num.SetLabel('_{:03d}'.format(run_num))
+        self._run_number = '_{:03d}'.format(run_num)
+        self.run_num.SetLabel(self._run_number)
+
 
         if 'coflow' in self.settings['components']:
             coflow_panel = wx.FindWindowByName('coflow')
@@ -3187,7 +3151,8 @@ class ExpPanel(wx.Panel):
             uv_panel.on_exposure_stop(self)
 
     def set_status(self, status):
-        self.status.SetLabel(status)
+        Wx.CallAfter(self.status.SetLabel, status)
+        self._exp_status = status
 
     def set_time_remaining(self, tr):
         if tr < 3600:
@@ -3197,7 +3162,7 @@ class ExpPanel(wx.Panel):
         else:
             tr = time.strftime('%d:%H:%M:%S', time.gmtime(tr))
 
-        self.time_remaining.SetLabel(tr)
+        wx.CallAfter(self.time_remaining.SetLabel, tr)
 
     def set_scan_number(self, val):
         self.scan_number.SetLabel(str(val))
@@ -3355,20 +3320,20 @@ class ExpPanel(wx.Panel):
     def _on_close_timeout_dialog(self):
         self.timeout_dialog = None
 
-    def _check_warnings(self):
-        shutter_valid = self._check_shutters()
+    def _check_warnings(self, verbose=True):
+        shutter_valid = self._check_shutters(verbose)
 
         if not shutter_valid:
             return shutter_valid
 
-        vac_valid = self._check_vacuum()
+        vac_valid = self._check_vacuum(verbose)
 
         if not vac_valid:
             return vac_valid
 
         return True
 
-    def _check_shutters(self):
+    def _check_shutters(self, verbose=True):
 
         cont = True
         msg = ''
@@ -3405,8 +3370,9 @@ class ExpPanel(wx.Panel):
                 msg = ('The D Hutch shutter is closed. Are you sure you '
                     'want to continue?')
 
-            if msg != '':
-                dlg = wx.MessageDialog(None, msg, "Shutter Closed", wx.YES_NO|wx.ICON_EXCLAMATION|wx.NO_DEFAULT)
+            if msg != '' and verbose:
+                dlg = wx.MessageDialog(None, msg, "Shutter Closed",
+                    wx.YES_NO|wx.ICON_EXCLAMATION|wx.NO_DEFAULT)
                 result = dlg.ShowModal()
                 dlg.Destroy()
 
@@ -3424,7 +3390,7 @@ class ExpPanel(wx.Panel):
 
         return cont
 
-    def _check_vacuum(self):
+    def _check_vacuum(self, verbose=True):
         cont = True
         msg = ''
 
@@ -3484,10 +3450,11 @@ class ExpPanel(wx.Panel):
                 msg = msg + ('\nFlight tube vacuum (< {} mtorr): {} mtorr'.format(
                     int(round(thresh*1000)), int(round(vac*1000))))
 
-        if msg != '':
+        if msg != '' and verbose:
             msg = ('The following vacuum readings are too high, are you sure '
                 'you want to continue?') + msg
-            dlg = wx.MessageDialog(None, msg, "Shutter Closed", wx.YES_NO|wx.ICON_EXCLAMATION|wx.NO_DEFAULT)
+            dlg = wx.MessageDialog(None, msg, "Shutter Closed",
+                wx.YES_NO|wx.ICON_EXCLAMATION|wx.NO_DEFAULT)
             result = dlg.ShowModal()
             dlg.Destroy()
 
@@ -3496,13 +3463,13 @@ class ExpPanel(wx.Panel):
 
         return cont
 
-    def _get_exp_values(self):
+    def _get_exp_values(self, verbose=True):
         num_frames = self.num_frames.GetValue()
         exp_time = self.exp_time.GetValue()
         exp_period = self.exp_period.GetValue()
         data_dir = self.data_dir.GetValue()
         filename = self.filename.GetValue()
-        run_num = self.run_num.GetLabel()
+        run_num = self._run_number
         wait_for_trig = self.wait_for_trig.GetValue()
         num_trig = self.num_trig.GetValue()
         shutter_speed_open = self.settings['shutter_speed_open']
@@ -3603,7 +3570,7 @@ class ExpPanel(wx.Panel):
                 if num_trig < 1:
                     errors.append(('Number of triggers (greater than 0)'))
 
-        if len(errors) > 0:
+        if len(errors) > 0 and verbose:
             msg = 'The following field(s) have invalid values:'
             for err in errors:
                 msg = msg + '\n- ' + err
@@ -3647,11 +3614,9 @@ class ExpPanel(wx.Panel):
 
             valid = True
 
-        self.current_exposure_values = exp_values
-
         return exp_values, valid
 
-    def _check_components(self, exp_only):
+    def _check_components(self, exp_only, verbose=True):
         comp_settings = {}
         errors = []
 
@@ -3717,7 +3682,7 @@ class ExpPanel(wx.Panel):
                 errors.append(('Exposure period must be at least 0.01 s longer '
                     'than exposure time with UV data collection'))
 
-        if len(errors) > 0:
+        if len(errors) > 0 and verbose:
             msg = 'The following field(s) have invalid values:'
             for err in errors:
                 msg = msg + '\n- ' + err
@@ -3728,13 +3693,15 @@ class ExpPanel(wx.Panel):
 
             comp_settings = {}
             valid = False
+        elif not verbose:
+            valid = True
         else:
             valid = (coflow_started and trsaxs_scan_valid and trsaxs_flow_valid
                 and scan_valid and uv_valid)
 
         return valid, comp_settings
 
-    def _check_overwrite(self, exp_settings):
+    def _check_overwrite(self, exp_settings, verbose=True):
         data_dir = exp_settings['data_dir']
         fprefix = exp_settings['fprefix']
         num_frames = exp_settings['num_frames']
@@ -3760,7 +3727,7 @@ class ExpPanel(wx.Panel):
                 cont = False
                 break
 
-        if not cont:
+        if not cont and verbose:
             msg = ("Warning: data collection will overwrite existing files "
                 "with the same name. Do you want to proceed?")
             dlg = wx.MessageDialog(None, msg, "Confirm data overwrite",
@@ -3770,11 +3737,13 @@ class ExpPanel(wx.Panel):
 
             if result == wx.ID_YES:
                 cont = True
+        else:
+            cont = True
 
         return cont
 
 
-    def _get_metadata(self):
+    def _get_metadata(self, verbose=True):
 
         metadata = self.metadata()
 
@@ -3861,7 +3830,7 @@ class ExpPanel(wx.Panel):
                 msg = ('Coflow is not on')
                 errors.append(msg)
 
-        if len(errors) == 0:
+        if len(errors) == 0 or not verbose:
             metadata_valid = True
 
         else:
@@ -3979,7 +3948,7 @@ class ExpPanel(wx.Panel):
 
         exp_settings['data_dir'] = self.data_dir.GetValue()
         exp_settings['filename'] = self.filename.GetValue()
-        exp_settings['run_num'] = self.run_num.GetLabel()
+        exp_settings['run_num'] = self._run_number
         exp_settings['wait_for_trig'] = self.wait_for_trig.GetValue()
 
         return exp_settings
@@ -4019,6 +3988,76 @@ class ExpPanel(wx.Panel):
 
         else:
             self.pipeline_warning_shown = False
+
+    def automator_callback(self, cmd_name, cmd_args, cmd_kwargs):
+        success = True
+
+        if cmd_name == 'status':
+            if (self._exp_status == 'Aborting'
+                or self._exp_status == 'Exposing'
+                or self._exp_status == 'Waiting for Trigger'):
+                state = 'exposing'
+
+            elif self._exp_status == 'Preparing exposure':
+                state = 'preparing'
+
+            elif self._exp_status == 'Ready':
+                state = 'idle'
+
+        elif cmd_name == 'abort':
+            self.stop_exp()
+
+            state = 'idle'
+
+        elif cmd_name == 'expose':
+            num_frames = int(cmd_kwargs['num_frames'])
+            exp_time = float(cmd_kwargs['exp_time'])
+            exp_period = float(cmd_kwargs['exp_period'])
+            data_dir = cmd_kwargs['data_dir']
+            filename = cmd_kwargs['filename']
+            run_num = self._run_number
+            wait_for_trig = cmd_kwargs['wait_for_trig']
+            num_trig = int(cmd_kwargs['num_trig'])
+            shutter_speed_open = self.settings['shutter_speed_open']
+            shutter_speed_close = self.settings['shutter_speed_close']
+            shutter_cycle = self.settings['shutter_cycle']
+            shutter_pad = self.settings['shutter_pad']
+            struck_log_vals = self.settings['struck_log_vals']
+            joerger_log_vals = self.settings['joerger_log_vals']
+            struck_measurement_time = float(cmd_kwargs['musc_samp'])
+
+            if self.settings['tr_muscle_exp']:
+                struck_num_meas = exp_period*num_frames/struck_measurement_time
+                struck_num_meas = int(struck_num_meas+0.5)
+            else:
+                struck_num_meas = 0
+
+            exp_values = {
+                'num_frames'                : num_frames,
+                'exp_time'                  : exp_time,
+                'exp_period'                : exp_period,
+                'data_dir'                  : data_dir,
+                'local_data_dir'            : local_data_dir,
+                'fprefix'                   : filename+run_num,
+                'wait_for_trig'             : wait_for_trig,
+                'num_trig'                  : num_trig,
+                'shutter_speed_open'        : shutter_speed_open,
+                'shutter_speed_close'       : shutter_speed_close,
+                'shutter_cycle'             : shutter_cycle,
+                'shutter_pad'               : shutter_pad,
+                'joerger_log_vals'          : joerger_log_vals,
+                'struck_log_vals'           : struck_log_vals,
+                'struck_measurement_time'   : struck_measurement_time,
+                'struck_num_meas'           : struck_num_meas,
+                }
+
+            wx.CallAfter(self.set_exp_settings, exp_values)
+
+            self._start_exp(True, exp_values, False)
+
+            state = 'exposing'
+
+        return state, success
 
 
     def on_exit(self):
@@ -4069,7 +4108,7 @@ class ExpFrame(wx.Frame):
         self.exp_sizer.Add(self.exp_panel, proportion=1, flag=wx.EXPAND)
 
         top_sizer = wx.BoxSizer(wx.VERTICAL)
-        top_sizer.Add(self.exp_sizer, flag=wx.EXPAND|wx.ALL, border=5)
+        top_sizer.Add(self.exp_sizer, flag=wx.EXPAND)
 
         return top_sizer
 
