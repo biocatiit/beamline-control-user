@@ -826,7 +826,7 @@ class SwitchPumpsCommand(AutoCommand):
 
         switch_wait_id = self.automator.get_wait_id()
 
-        switch_wait_cmd = 'wait_switch_{}'.format(switch_wait_id)
+        switch_wait_cmd = 'wait_sync_{}'.format(switch_wait_id)
 
         switch_inst_conds = [['{}_pump{}'.format(hplc_inst, i+1), [switch_wait_cmd,]]
             for i in range(num_paths)]
@@ -845,13 +845,13 @@ class SwitchPumpsCommand(AutoCommand):
         self._add_automator_cmd(cmd_name, 'switch_pumps', [], switch_settings)
 
         finish_wait_id = self.automator.get_wait_id()
-        finish_wait_cmd = 'wait_finish_{}'.format(finish_wait_id)
+        finish_wait_cmd = 'wait_sync_{}'.format(finish_wait_id)
 
-        finish_inst_conds = [['{}_pump{}'.format(hplc_inst, i+1), ['idle',]]
+        finish_inst_conds = [['{}_pump{}'.format(hplc_inst, i+1), [finish_wait_cmd,]]
             for i in range(num_paths)]
 
         if coflow_equil:
-            finish_inst_conds.append(['coflow', [switch_wait_cmd,]])
+            finish_inst_conds.append(['coflow', [finish_wait_cmd,]])
 
         for i in range(num_paths):
             cmd_name = '{}_pump{}'.format(hplc_inst, i+1)
@@ -1237,7 +1237,7 @@ class AutoList(utils.ItemList):
                     #Switch parameters
                     'purge_rate'    : 0.1,
                     'purge_volume'  : 0.1,
-                    'purge_accel'   : 0.1,
+                    'purge_accel'   : 1,
                     'restore_flow_after_switch' : True,
                     'switch_with_sample'    : False,
                     'stop_flow1'    : True,
@@ -1246,7 +1246,7 @@ class AutoList(utils.ItemList):
                     'flow_path'     : 1,
 
                     #Coflow switch parameters
-                    'switch_coflow'     : False,
+                    'coflow_equil'     : False,
                     'coflow_buf_pos'    : 10,
                     'coflow_restart'    : False,
                     'coflow_rate'       : 0.1
@@ -1498,7 +1498,7 @@ class AutoListItem(utils.ListItem):
             self.text_list.extend([desc_label, self.desc_ctrl,
                 conc_label, self.conc_ctrl, buffer_label, self.buffer_ctrl])
 
-        if self.item_type == 'equilibrate':
+        elif self.item_type == 'equilibrate':
 
             buffer_label = wx.StaticText(item_parent, label='Buffer:')
             self.buffer_ctrl = wx.StaticText(item_parent, label='')
@@ -1509,6 +1509,9 @@ class AutoListItem(utils.ListItem):
             item_sizer.Add(self.buffer_ctrl, flag=wx.RIGHT, border=self._FromDIP(5))
 
             self.text_list.extend([buffer_label, self.buffer_ctrl])
+
+        elif self.item_type == 'switch_pumps':
+            item_sizer = wx.BoxSizer()
 
         top_sizer = wx.BoxSizer(wx.VERTICAL)
         top_sizer.Add(std_sizer, flag=wx.TOP|wx.BOTTOM, border=self._FromDIP(5))
@@ -1639,18 +1642,68 @@ if __name__ == '__main__':
     # automator.add_cmd('test2', 'test2cmd', ['testargs'], {'arg1:' 'testkwargs'})
     # automator.add_cmd('test', 'test1cmd3', ['testargs3'], {'arg1:' 'testkwargs3'})
 
-     # SEC-MALS HPLC-1
+    #  # SEC-MALS HPLC-1
+    # hplc_args = {
+    #     'name'  : 'HPLC-1',
+    #     'args'  : ['AgilentHPLC', 'net.pipe://localhost/Agilent/OpenLAB/'],
+    #     'kwargs': {'instrument_name': 'HPLC-1', 'project_name': 'Demo',
+    #                 'get_inst_method_on_start': True}
+    #     }
+
+    # purge1_valve_args = {
+    #     'name'  : 'Purge 1',
+    #     'args'  :['Rheodyne', 'COM5'],
+    #     'kwargs': {'positions' : 6}
+    #     }
+
+    # buffer1_valve_args = {
+    #     'name'  : 'Buffer 1',
+    #     'args'  : ['Cheminert', 'COM3'],
+    #     'kwargs': {'positions' : 10}
+    #     }
+
+    # # Standard stack for SEC-MALS
+    # setup_devices = [
+    #     {'name': 'HPLC-1', 'args': ['AgilentHPLCStandard', None],
+    #         'kwargs': {'hplc_args' : hplc_args,
+    #         'purge1_valve_args' : purge1_valve_args,
+    #         'buffer1_valve_args' : buffer1_valve_args,
+    #         'pump1_id' : 'quat. pump#1c#1',
+    #         },
+    #     }
+    #     ]
+
+
+    # SEC-SAXS 2 pump
     hplc_args = {
-        'name'  : 'HPLC-1',
+        'name'  : 'SEC-SAXS',
         'args'  : ['AgilentHPLC', 'net.pipe://localhost/Agilent/OpenLAB/'],
-        'kwargs': {'instrument_name': 'HPLC-1', 'project_name': 'Demo',
+        'kwargs': {'instrument_name': 'SEC-SAXS', 'project_name': 'Demo',
                     'get_inst_method_on_start': True}
+        }
+
+    selector_valve_args = {
+        'name'  : 'Selector',
+        'args'  : ['Cheminert', 'COM5'],
+        'kwargs': {'positions' : 2}
+        }
+
+    outlet_valve_args = {
+        'name'  : 'Outlet',
+        'args'  : ['Cheminert', 'COM8'],
+        'kwargs': {'positions' : 2}
         }
 
     purge1_valve_args = {
         'name'  : 'Purge 1',
-        'args'  :['Rheodyne', 'COM5'],
-        'kwargs': {'positions' : 6}
+        'args'  : ['Cheminert', 'COM9'],
+        'kwargs': {'positions' : 4}
+        }
+
+    purge2_valve_args = {
+        'name'  : 'Purge 2',
+        'args'  : ['Cheminert', 'COM6'],
+        'kwargs': {'positions' : 4}
         }
 
     buffer1_valve_args = {
@@ -1659,15 +1712,25 @@ if __name__ == '__main__':
         'kwargs': {'positions' : 10}
         }
 
-    # Standard stack for SEC-MALS
-    setup_devices = [
-        {'name': 'HPLC-1', 'args': ['AgilentHPLCStandard', None],
-            'kwargs': {'hplc_args' : hplc_args,
-            'purge1_valve_args' : purge1_valve_args,
-            'buffer1_valve_args' : buffer1_valve_args,
-            'pump1_id' : 'quat. pump#1c#1',
-            },
+    buffer2_valve_args = {
+        'name'  : 'Buffer 2',
+        'args'  : ['Cheminert', 'COM4'],
+        'kwargs': {'positions' : 10}
         }
+
+    # 2 pump HPLC for SEC-SAXS
+    setup_devices = [
+        {'name': 'SEC-SAXS', 'args': ['AgilentHPLC2Pumps', None],
+            'kwargs': {'hplc_args' : hplc_args,
+            'selector_valve_args' : selector_valve_args,
+            'outlet_valve_args' : outlet_valve_args,
+            'purge1_valve_args' : purge1_valve_args,
+            'purge2_valve_args' : purge2_valve_args,
+            'buffer1_valve_args' : buffer1_valve_args,
+            'buffer2_valve_args' : buffer2_valve_args,
+            'pump1_id' : 'quat. pump 1#1c#1',
+            'pump2_id' : 'quat. pump 2#1c#2'},
+            }
         ]
 
     # Local
@@ -1708,8 +1771,8 @@ if __name__ == '__main__':
         'switch_stop_flow1'         : True,
         'switch_stop_flow2'         : True,
         'restore_flow_after_switch' : True,
-        # 'acq_method'                : 'SECSAXS_test',
-        'acq_method'                : 'SEC-MALS',
+        'acq_method'                : 'SECSAXS_test',
+        # 'acq_method'                : 'SEC-MALS',
         'sample_loc'                : 'D2F-A1',
         'inj_vol'                   : 10.0,
         'flow_rate'                 : 0.6,

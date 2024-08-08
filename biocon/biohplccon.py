@@ -5540,6 +5540,28 @@ class HPLCPanel(utils.DevicePanel):
 
         self._run_queue_ctrl.Thaw()
 
+    def _get_automator_state(self, flow_path):
+        if self._flow_path_status.lower() == 'true':
+            state = 'switch'
+
+        elif flow_path == 1:
+            if self._pump1_purge.lower() == 'true':
+                state = 'equil'
+            elif self._pump1_eq.lower() == 'true':
+                state = 'equil'
+            else:
+                state = 'idle'
+
+        elif flow_path == 2:
+            if self._pump2_purge.lower() == 'true':
+                state = 'equil'
+            elif self._pump2_eq.lower() == 'true':
+                state = 'equil'
+            else:
+                state = 'idle'
+
+        return state
+
     def automator_callback(self, cmd_name, cmd_args, cmd_kwargs):
         # if cmd_name != 'status':
         #     print('automator_callback')
@@ -5564,28 +5586,19 @@ class HPLCPanel(utils.DevicePanel):
 
                 flow_path = int(inst_name.split('_')[-1].lstrip('pump'))
 
-                if self._flow_path_status.lower() == 'true':
-                    state = 'switch'
-
-                elif flow_path == 1:
-                    if self._pump1_purge.lower() == 'true':
-                        state = 'equil'
-                    elif self._pump1_eq.lower() == 'true':
-                        state = 'equil'
-                    else:
-                        state = 'idle'
-
-                elif flow_path == 2:
-                    if self._pump2_purge.lower() == 'true':
-                        state = 'equil'
-                    elif self._pump2_eq.lower() == 'true':
-                        state = 'equil'
-                    else:
-                        state = 'idle'
+                state = self._get_automator_state(flow_path)
 
             elif (self._inst_status == 'Run' or self._inst_status == 'Injecting'
                 or self._inst_status == 'PostRun' or self._inst_status == 'PreRun'):
-                state = 'run'
+                inst_name = cmd_kwargs['inst_name']
+                flow_path = int(inst_name.split('_')[-1].lstrip('pump'))
+                if self._device_type == 'AgilentHPLC2Pumps':
+                    if flow_path == int(self._flow_path):
+                        state = 'run'
+                    else:
+                        state = self._get_automator_state(flow_path)
+                else:
+                    state = 'run'
 
             else:
                 state = 'idle'
