@@ -3017,7 +3017,7 @@ class ExpPanel(wx.Panel):
     def _on_stop_exp(self, evt):
         self.stop_exp()
 
-    def start_exp(self, exp_only, exp_values=None, verbose=True):
+    def start_exp(self, exp_only, exp_values=None, metadata_vals=None, verbose=True):
         self.abort_event.clear()
         self.exp_event.clear()
         self.timeout_event.clear()
@@ -3028,7 +3028,7 @@ class ExpPanel(wx.Panel):
             return
 
         if exp_values is None:
-            exp_values, exp_valid = self._get_exp_values(verbose)
+            exp_values, exp_valid = self.get_exp_values(verbose)
         else:
             exp_valid = True
 
@@ -3037,7 +3037,7 @@ class ExpPanel(wx.Panel):
         if not exp_valid:
             return
 
-        metadata, metadata_valid = self._get_metadata(verbose)
+        metadata, metadata_valid = self._get_metadata(metadata_vals, verbose)
 
         if metadata_valid:
             exp_values['metadata'] = metadata
@@ -3463,7 +3463,7 @@ class ExpPanel(wx.Panel):
 
         return cont
 
-    def _get_exp_values(self, verbose=True):
+    def get_exp_values(self, verbose=True):
         num_frames = self.num_frames.GetValue()
         exp_time = self.exp_time.GetValue()
         exp_period = self.exp_period.GetValue()
@@ -3743,7 +3743,7 @@ class ExpPanel(wx.Panel):
         return cont
 
 
-    def _get_metadata(self, verbose=True):
+    def _get_metadata(self, metadata_vals=None, verbose=True):
 
         metadata = self.metadata()
 
@@ -3782,11 +3782,18 @@ class ExpPanel(wx.Panel):
             for key, value in scan_metadata.items():
                 metadata[key] = value
 
-        if 'metadata' in self.settings['components']:
+        if 'metadata' in self.settings['components'] and metadata_vals is None:
             params_panel = wx.FindWindowByName('metadata')
             params_metadata = params_panel.metadata()
 
             for key, value in params_metadata.items():
+                metadata[key] = value
+
+                if key == 'Column:':
+                    column = value
+
+        elif metadata_vals is not None:
+            for key, value in metadata_vals.items():
                 metadata[key] = value
 
                 if key == 'Column:':
@@ -4032,6 +4039,10 @@ class ExpPanel(wx.Panel):
             else:
                 struck_num_meas = 0
 
+            local_data_dir = copy.copy(data_dir)
+            data_dir = data_dir.replace(self.settings['local_dir_root'],
+                self.settings['remote_dir_root'], 1)
+
             exp_values = {
                 'num_frames'                : num_frames,
                 'exp_time'                  : exp_time,
@@ -4051,9 +4062,38 @@ class ExpPanel(wx.Panel):
                 'struck_num_meas'           : struck_num_meas,
                 }
 
+            if cmd_kwargs['item_type'] == 'sec_sample':
+                exp_type = 'SEC-SAXS'
+                column = cmd_kwargs['column']
+
+            sample = cmd_kwargs['sample']
+            buf = cmd_kwargs['buf']
+            temperature = cmd_kwargs['temp']
+            vol = cmd_kwargs['inj_vol']
+            conc = cmd_kwargs['conc']
+            notes = cmd_kwargs['notes']
+
+            metadata = {
+                'Experiment type:'      : exp_type,
+                'Sample:'               : sample,
+                'Buffer:'               : buf,
+                'Temperature [C]'       : temperature,
+                'Loaded volume [uL]'    : vol,
+                'Concentration [mg/ml]' : conc,
+                }
+
+            if (exp_type == 'SEC-SAXS' or exp_type == 'SEC-MALS-SAXS' or
+                exp_type == 'IEC-SAXS'):
+                metadata['Column:'] = column
+
+            metadata['Notes:'] = notes
+
             wx.CallAfter(self.set_exp_settings, exp_values)
 
-            self._start_exp(True, exp_values, False)
+            params_panel = wx.FindWindowByName('metadata')
+            wx.CallAfter(params_panel.set_metadata(metadata))
+
+            self._start_exp(True, exp_values, metadata, False)
 
             state = 'exposing'
 

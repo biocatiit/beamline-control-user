@@ -1208,6 +1208,9 @@ class CoflowPanel(wx.Panel):
 
         self.change_buffer(interactive=True)
 
+    def get_flow_rate(self):
+        return self.flow_rate.GetValue()
+
     def change_buffer(self, target_valve_pos=1, change_valve_pos=False,
         interactive=True):
         #Stop flow

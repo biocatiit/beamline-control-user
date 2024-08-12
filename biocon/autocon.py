@@ -1150,11 +1150,12 @@ class AutoList(utils.ItemList):
 
     def _on_add_item(self, evt):
         # Call a dialog to get item information
-        # Stand in:
-        dialog = wx.SingleChoiceDialog(self, 'Pick an action to add',
+        dialog = wx.SingleChoiceDialog(self, 'Pick an action to add:',
             'Pick an action to add to the queue',
             ['Run SEC-SAXS sample', 'Equilibrate column',
             'Switch pumps'])
+
+        dialog.SetSize(self._FromDIP((300,250)))
 
         res = dialog.ShowModal()
 
@@ -1170,97 +1171,190 @@ class AutoList(utils.ItemList):
             # Stands in for getting info from a dialog or other location
 
             if choice == 'Run SEC-SAXS sample':
+                exp_panel = wx.FindWindowByName('exposure')
+                default_exp_settings, _ = exp_panel._get_exp_values(False)
 
-                item_info = {
+                hplc_panel = wx.FindWindowByName('hplc')
+                default_inj_settings = hplc_panel.get_default_sample_settings()
+
+                default_settings = {
                     # General parameters
                     'item_type'     : 'sec_sample',
-                    'descrip'       : 'Test sample',
-                    'conc'          : '1',
-                    'buf'           : 'Test buffer',
-                    'inst'          : 'hplc1_pump1',
-                    'sample_name'   : 'test',
+                    'notes'         : '',
+                    'conc'          : '',
+                    'buf'           : '',
+                    'inst'          : '_pump'.format(self.auto_panel.settings['hplc_inst']),
+                    'sample_name'   : '',
+                    'column'        : 'Superdex 200 10/300 Incease',
+                    'temp'          : '20',
 
                     # Injection parameters
-                    'acq_method'    : 'SEC-MALS',
-                    'sample_loc'    : 'D2F-A1',
-                    'inj_vol'       : '10.0',
-                    'flow_rate'     : '0.1',
-                    'elution_vol'   : '0.1',
-                    'flow_accel'    : '1',
-                    'pressure_lim'  : '60',
-                    'result_path'   : '',
-                    'sp_method'     : None,
-                    'wait_for_flow_ramp'    : True,
-                    'settle_time'   : '0.0',
+                    'acq_method'    : default_inj_settings['acq_method'],
+                    'sample_loc'    : default_inj_settings['sample_loc'],
+                    'inj_vol'       : default_inj_settings['inj_vol'],
+                    'flow_rate'     : default_inj_settings['flow_rate'],
+                    'elution_vol'   : default_inj_settings['elution_vol'],
+                    'flow_accel'    : default_inj_settings['flow_accel'],
+                    'pressure_lim'  : default_inj_settings['sample_pressure_lim'],
+                    'result_path'   : default_inj_settings['result_path'],
+                    'sp_method'     : default_inj_settings['sp_method'],
+                    'wait_for_flow_ramp'    : default_inj_settings['wait_for_flow_ramp'],
+                    'settle_time'   : default_inj_settings['settle_time'],
                     'flow_path'     : 1,
 
                     # Exposure parameters
-                    'num_frames'    : 2
-                    'exp_time'      : 0.5,
-                    'exp_period'    : 1,
-                    'data_dir'      : '',
+                    'frames_by_elut': True,
+                    'num_frames'    : default_exp_settings['num_frames'],
+                    'exp_time'      : default_exp_settings['exp_time'],
+                    'exp_period'    : default_exp_settings['exp_period'],
+                    'data_dir'      : exp_panel.settings['base_data_dir'],
                     'filename'      : '',
-                    'wait_for_trig' : True,
-                    'num_trig'      : 1,
-                    'musc_samp'     : 0.001, #Not used, for completeness
+                    'wait_for_trig' : default_exp_settings['wait_for_trig'],
+                    'num_trig'      : default_exp_settings['num_trig'],
+                    #Not used, for completeness
+                    'musc_samp'     : default_exp_settings['struck_measurement_time'],
                     }
 
+                inst = self.auto_panel.settings['hplc_inst']
+                num_flow_paths = self.auto_panel.settings['instruments'][inst]['num_paths']
+                cmd_settings['num_flow_paths'] = num_flow_paths
+
+                cmd_dialog = SecSampleCmdDialog(self, default_settings,
+                    default_inj_settings['all_acq_methods'],
+                    default_inj_settings['all_sample_methods'],
+                    title='SEC-SAXS Sample Settings')
+
             elif choice == 'Equilibrate column':
-                item_info = {
+                hplc_panel = wx.FindWindowByName('hplc')
+                default_equil_settings = hplc_panel.get_default_sample_settings()
+
+                coflow_panel = wx.FindWindowByName('coflow')
+                coflow_fr = coflow_panel.get_flow_rate()
+                try:
+                    coflow_fr = float(coflow_fr)
+                except ValueError:
+                    coflow_fr = float(coflow_panel.settings['lc_flow_rate'])
+
+                default_settings = {
                     # General aprameters
                     'item_type' : 'equilibrate',
                     'buf'       : 'Test buffer',
-                    'inst'      : 'hplc1_pump1',
+                    'inst'      : '_pump'.format(self.auto_panel.settings['hplc_inst']),
 
                     # HPLC equilibrate parameters
-                    'equil_rate'        : 0.1,
-                    'equil_vol'         : 0.1,
-                    'equil_accel'       : 1,
-                    'purge'             : False,
-                    'purge_rate'        : 0.2,
-                    'purge_volume'      : 0.2,
-                    'purge_accel'       : 0.2,
+                    'equil_rate'        : default_equil_settings['equil_rate'],
+                    'equil_vol'         : default_equil_settings['equil_vol'],
+                    'equil_accel'       : default_equil_settings['equil_accel'],
+                    'purge'             : default_equil_settings['purge'],
+                    'purge_rate'        : default_equil_settings['purge_rate'],
+                    'purge_volume'      : default_equil_settings['purge_vol'],
+                    'purge_accel'       : default_equil_settings['purge_accel'],
                     'equil_with_sample' : False,
-                    'stop_after_equil'  : False,
+                    'stop_after_equil'  : default_equil_settings['stop_after_equil'],
                     'flow_path'         : 1,
                     'buffer_position'   : 1,
 
                     # Coflow equilibrate parameters
                     'coflow_equil'      : True,
-                    'coflow_buf_pos'    : 10,
+                    'coflow_buf_pos'    : 1,
                     'coflow_restart'    : True,
-                    'coflow_rate'       : 0.1
-                }
+                    'coflow_rate'       : coflow_fr,
+                    }
+
+                inst = self.auto_panel.settings['hplc_inst']
+                num_flow_paths = self.auto_panel.settings['instruments'][inst]['num_paths']
+                # num_flow_paths = 2
+                default_settings['num_flow_paths'] = num_flow_paths
+
+                if num_flow_paths == 1:
+                    default_settings['coflow_equil'] = True
+                else:
+                    default_settings['coflow_equil'] = False
+
+                cmd_dialog = EquilibrateDialog(self, default_settings,
+                    title='Equilibration Settings', size=self._FromDIP((200,200)))
 
             elif choice == 'Switch pumps':
+                hplc_panel = wx.FindWindowByName('hplc')
+                default_switch_settings = hplc_panel.get_default_switch_flow_path_settings()
 
-                item_info = {
+                coflow_panel = wx.FindWindowByName('coflow')
+                coflow_fr = coflow_panel.get_flow_rate()
+                try:
+                    coflow_fr = float(coflow_fr)
+                except ValueError:
+                    coflow_fr = float(coflow_panel.settings['lc_flow_rate'])
+
+                default_settings = {
                     'item_type' : 'switch_pumps',
-                    'inst'      : 'hplc1',
+                    'inst'      : self.auto_panel.settings['hplc_inst'],
 
                     #Switch parameters
-                    'purge_rate'    : 0.1,
-                    'purge_volume'  : 0.1,
-                    'purge_accel'   : 1,
-                    'restore_flow_after_switch' : True,
+                    'purge_rate'    : default_switch_settings['purge_rate'],
+                    'purge_volume'  : default_switch_settings['purge_vol'],
+                    'purge_accel'   : default_switch_settings['purge_accel'],
+                    'restore_flow_after_switch' : default_switch_settings['restore_flow_after_switch'],
                     'switch_with_sample'    : False,
-                    'stop_flow1'    : True,
-                    'stop_flow2'    : True,
-                    'purge_active'  : True,
+                    'stop_flow1'    : default_switch_settings['stop_flow1'],
+                    'stop_flow2'    : default_switch_settings['stop_flow2'],
+                    'purge_active'  : default_switch_settings['purge_active'],
                     'flow_path'     : 1,
 
                     #Coflow switch parameters
-                    'coflow_equil'     : False,
-                    'coflow_buf_pos'    : 10,
-                    'coflow_restart'    : False,
-                    'coflow_rate'       : 0.1
+                    'coflow_equil'      : True,
+                    'coflow_buf_pos'    : 1,
+                    'coflow_restart'    : True,
+                    'coflow_rate'       : coflow_fr,
                     }
 
-            num_flow_paths = self.auto_panel.settings['instruments'][item_info['inst'].split('_')[0]]['num_paths']
+                inst = self.auto_panel.settings['hplc_inst']
+                # num_flow_paths = self.auto_panel.settings['instruments'][inst]['num_paths']
+                num_flow_paths = 2
+                default_settings['num_flow_paths'] = num_flow_paths
 
-            item_info['num_flow_paths'] = num_flow_paths
+                cmd_dialog = SwitchDialog(self, default_settings,
+                    title='Switch Pump Settings')
 
-            self._add_item(item_info)
+            res = cmd_dialog.ShowModal()
+
+            if res == wx.ID_OK:
+                cmd_settings = cmd_dialog.get_settings()
+
+            else:
+                cmd_settings = None
+
+            cmd_dialog.Destroy()
+
+            # Need to add a item specific section here to update a few settings
+
+            # Need to move these to the cmd_settings
+
+            if cmd_settings is not None:
+                if cmd_settings['item_type'] == 'sec_sample':
+                    # Do exposure verification and hplc param verification here
+                    cmd_settings['inst'] = '{}{}'.format(cmd_settings['inst'],
+                        cmd_settings['flow_path'])
+
+                    cmd_settings['data_dir'] += cmd_settings['filename']
+
+                    if cmd_settings['frames_by_elut']:
+                        elution_time = cmd_settings['elution_vol']/cmd_settings['flow_rate']
+                        exp_time = elution_time*self.auto_panel.settings['exp_elut_scale']
+                        num_frames = int(round(exp_time/cmd_settings['exp_period']+0.5))
+                        cmd_settings['num_frames'] = num_frames
+
+                elif cmd_settings['item_type'] == 'equilibrate':
+                    # Do equilibration verification here
+
+                    cmd_settings['inst'] = '{}{}'.format(cmd_settings['inst'],
+                        cmd_settings['flow_path'])
+
+                elif cmd_settings['item_type'] == 'switch_pumps':
+                    # Do switch verification here
+                    pass
+
+
+                self._add_item(item_info)
 
     def _add_item(self, item_info):
 
@@ -1563,6 +1657,425 @@ class AutoListItem(utils.ListItem):
         self.status_ctrl.SetLabel('Aborted')
         print('here')
 
+class AutoCmdDialog(wx.Dialog):
+    """
+    Allows addition/editing of the buffer info in the buffer list
+    """
+    def __init__(self, parent, default_settings, *args, **kwargs):
+        wx.Dialog.__init__(self, parent, *args,
+            style=wx.RESIZE_BORDER|wx.CAPTION|wx.CLOSE_BOX, **kwargs)
+
+        self._default_settings = default_settings
+        self.ctrl_ids = {}
+
+        for key in default_settings.keys():
+            self.ctrl_ids[key] = wx.NewIdRef()
+
+        self._create_layout()
+        self._init_settings()
+
+        utils.set_best_size(self)
+        self.CenterOnParent()
+
+    def _FromDIP(self, size):
+        # This is a hack to provide easy back compatibility with wxpython < 4.1
+        try:
+            return self.FromDIP(size)
+        except Exception:
+            return size
+
+    def _create_layout(self):
+        pass
+
+    def _create_sizer(self, layout_settings, parent):
+        top_sizer = wx.GridBagSizer(vgap=self._FromDIP(5), hgap=self._FromDIP(5))
+
+        for row, item in enumerate(layout_settings.values()):
+            label = item[0]
+            myId = item[1]
+            itemType = item[2]
+
+            if itemType == 'choice':
+                labeltxt = wx.StaticText(parent, -1, label)
+                ctrl = wx.Choice(parent, myId, choices = item[3])
+
+                top_sizer.Add(labeltxt, (row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
+                top_sizer.Add(ctrl, (row, 1), flag=wx.ALIGN_CENTER_VERTICAL)
+
+            elif itemType == 'text' or itemType == 'int' or itemType =='float':
+                labeltxt = wx.StaticText(parent, -1, label)
+
+                if itemType == 'int':
+                    valid = utils.CharValidator('int')
+                elif itemType == 'float':
+                    valid=utils.CharValidator('float')
+                else:
+                    valid = None
+
+                if valid:
+                    ctrl = wx.TextCtrl(parent, myId, '', size=self._FromDIP((60,-1)),
+                        validator=valid)
+                else:
+                    ctrl = wx.TextCtrl(parent, myId, '', size=self._FromDIP((60,-1)))
+
+                top_sizer.Add(labeltxt, (row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
+                top_sizer.Add(ctrl, (row, 1), flag=wx.ALIGN_CENTER_VERTICAL)
+
+            elif itemType == 'bool':
+                ctrl = wx.CheckBox(parent, myId, label)
+                top_sizer.Add(ctrl, (row, 0), span=(1,2),
+                    flag=wx.ALIGN_CENTER_VERTICAL)
+
+        return top_sizer
+
+    def _init_settings(self):
+        for key, c_id in self.ctrl_ids.items():
+            default_val = self._default_settings[key]
+            ctrl = wx.FindWindowById(c_id)
+
+            if ctrl is not None:
+                if isinstance(ctrl, wx.Choice):
+                    ctrl.SetStringSelection(str(default_val))
+                else:
+                    try:
+                        ctrl.SetValue(str(default_val))
+                    except TypeError:
+                        ctrl.SetValue(default_val)
+
+    def get_settings(self):
+        cmd_settings = {}
+
+
+        for key, c_id in self.ctrl_ids:
+            ctrl = wx.FindWindowById(c_id)
+
+            if ctrl is not None:
+                if isinstance(ctrl, wx.Choice):
+                    cmd_settings[key] =ctrl.GetStringSelection()
+                else:
+                    cmd_settings[key] =ctrl.GetValue()
+            else:
+                cmd_settings[key] = self._default_settings[key]
+
+        return cmd_settings
+
+class SecSampleCmdDialog(AutoCmdDialog):
+    """
+    Allows addition/editing of the buffer info in the buffer list
+    """
+    def __init__(self, default_settings, acq_methods, sample_methods, *args, **kwargs):
+        self.acq_methods = acq_methods
+        self.sample_methods = sample_methods
+
+        AutoCmdDialog.__init__(self, default_settings, *args, **kwargs)
+
+    def _create_layout(self):
+        parent = self
+
+        ################ Metadata #################
+        column_choices = ['Superdex 200 10/300 Increase', 'Superdex 75 10/300 Increase',
+            'Superose 6 10/300 Increase', 'Superdex 200 5/150 Increase',
+            'Superdex 75 5/150 Increase', 'Superose 6 5/150 Increase',
+            'Superdex 200 10/300', 'Superdex 75 10/300', 'Superose 6 10/300',
+            'Superdex 200 5/150', 'Superdex 75 5/150', 'Superose 6 5/150',
+            'Wyatt 010S5', 'Wyatt 015S5', 'Wyatt 030S5', 'Capto HiRes Q 5/50',
+            'Capto HiRes S 5/50', 'Other']
+
+        metadata_settings = {
+            'sample_name'   : ['Sample:', self.ctrl_ids['sample_name'], 'text'],
+            'buf'           : ['Buffer:', self.ctrl_ids['buf'], 'text'],
+            'temp'          : ['Temperature [C]:', self.ctrl_ids['temp'], 'float'],
+            'conc'          : ['Concentration [mg/ml]:', self.ctrl_ids['conc'], 'float'],
+            'column'        : ['Column:', self.ctrl_ids['column'], 'choice', column_choices],
+            }
+
+        metadata_box = wx.StaticBox(parent, label='Metadata')
+        md_sizer1 = self._create_sizer(metadata_settings, metadata_box)
+
+        notes = wx.TextCtrl(metadata_box, self.ctrl_ids['notes'],
+            style=wx.TE_MULTILINE, size=(100, 100))
+        md_sizer2 = wx.BoxSizer(wx.HORIZONTAL)
+        md_sizer2.Add(wx.StaticText(metadata_box, label='Notes:'))
+        md_sizer2.Add(notes, proportion=1, border=5,
+            flag=wx.EXPAND|wx.LEFT)
+
+        metadata_sizer = wx.StaticBoxSizer(metadata_box, wx.VERTICAL)
+        metadata_sizer.Add(md_sizer1, flag=wx.EXPAND)
+        metadata_sizer.Add(md_sizer2, proportion=1, flag=wx.EXPAND|wx.TOP,
+            border=self._FromDIP(5))
+
+        ################ HPLC #################
+        fp_choices = ['{}'.format(i+1) for i in range(len(int(default_settings['num_flow_paths'])))]
+
+        hplc_settings = {
+            'sample_loc'    : ['Sample location:', self.ctrl_ids['sample_loc'], 'text'],
+            'inj_vol'       : ['Injection volume [uL]:', self.ctrl_ids['inj_vol'], 'float'],
+            'flow_rate'     : ['Flow rate [ml/min]:', self.ctrl_ids['flow_rate'], 'float'],
+            'elution_vol'   : ['Elution volume [ml]:', self.ctrl_ids['elution_vol'], 'float'],
+            'flow_path'     : ['Flow path:', self.ctrl_ids['flow_path'], 'choice', fp_choices],
+            }
+
+        hplc_adv_settings = {
+            'acq_method'    : ['Acquisition method:', self.ctrl_ids['acq_method'], 'choice', self.acq_methods],
+            'sp_method'     : ['Sample prep. method:', self.ctrl_ids['sp_method'], 'choice', self.sample_methods],
+            'flow_accel'    : ['Flow acceleration [ml/min^2]:', self.ctrl_ids['flow_accel'], 'float'],
+            'pressure_lim'  : ['Max pressure [bar]:', self.ctrl_ids['pressure_lim'], 'float'],
+            'wait_for_flow_ramp' : ['Wait for flow ramp', self.ctrl_ids['wait_for_flow_ramp'], 'bool'],
+            'settle_time'   : ['Settle time [s]:', self.ctrl_ids['settle_time'], 'float'],
+            'result_path'   : ['Result path:', self.ctrl_ids['result_path'], 'text'],
+            }
+
+        hplc_box = wx.StaticBox(parent, label='Injection Settings')
+
+        hplc_adv_pane = wx.CollapsiblePane(hplc_box, label="Advanced Settings")
+        hplc_adv_win = hplc_adv_pane.GetPane()
+
+        hplc_sizer1 = self._create_sizer(hplc_settings, hplc_box)
+        hplc_sizer2 = self._create_sizer(hplc_adv_settings, hplc_adv_win)
+
+        hplc_adv_win.SetSizer(hplc_sizer2)
+        hplc_adv_pane.Collapse()
+
+        hplc_sizer = wx.StaticBoxSizer(hplc_box, wx.VERTICAL)
+        hplc_sizer.Add(hplc_sizer1, flag=wx.EXPAND)
+        hplc_sizer.Add(hplc_adv_pane, flag=wx.EXPAND|wx.TOP, border=self._FromDIP(5))
+
+
+        ################ Exposure #################
+        exp_settings = {
+            'filename'      : ['File prefix:', self.ctrl_ids['filename'], 'text'],
+            'exp_time'      : ['Exposure time [s]:', self.ctrl_ids['exp_time'], 'float'],
+            'exp_period'    : ['Exposure time [s]:', self.ctrl_ids['exp_period'], 'float'],
+            }
+
+        exp_adv_settings = {
+            'frames_by_elut': ['Set number of frames from elution time',
+                                self.ctrl_ids['frames_by_elut'], 'bool'],
+            'num_frames'    : ['Number of frames:', self.ctrl_ids['num_frames'], 'int'],
+            'wait_for_trig' : ['Wait for external trigger', self.ctrl_ids['wait_for_trig'], 'bool'],
+            'num_trig'      : ['Number of triggers:', self.ctrl_ids['num_trig'], 'int'],
+            }
+
+        exp_box = wx.StaticBox(parent, label='Exposure Settings')
+
+        exp_adv_pane = wx.CollapsiblePane(exp_box, label="Advanced Settings")
+        exp_adv_win = exp_adv_pane.GetPane()
+
+        exp_sizer1 = self._create_sizer(exp_settings, exp_box)
+        exp_sizer2 = self._create_sizer(exp_adv_settings, exp_adv_win)
+
+        exp_adv_win.SetSizer(exp_sizer2)
+        exp_adv_pane.Collapse()
+
+        exp_sizer = wx.StaticBoxSizer(exp_box, wx.VERTICAL)
+        exp_sizer.Add(exp_sizer1, flag=wx.EXPAND)
+        exp_sizer.Add(exp_adv_pane, flag=wx.EXPAND|wx.TOP, border=self._FromDIP(5))
+
+        button_sizer = self.CreateButtonSizer(wx.OK | wx.CANCEL)
+
+        cmd_sizer=wx.BoxSizer(wx.HORIZONTAL)
+        cmd_sizer.Add(metadata_sizer, proportion=1, flag=wx.ALL|wx.EXPAND,
+            border=self._FromDIP(5))
+        cmd_sizer.Add(hplc_sizer, flag=wx.TOP|wx.RIGHT|wx.BOTTOM|wx.EXPAND,
+            border=self._FromDIP(5))
+        cmd_sizer.Add(exp_sizer, flag=wx.TOP|wx.RIGHT|wx.BOTTOM|wx.EXPAND,
+            border=self._FromDIP(5))
+
+        top_sizer = wx.BoxSizer(wx.VERTICAL)
+        top_sizer.Add(cmd_sizer, proportion=1, flag=wx.EXPAND|wx.ALL,
+            border=self._FromDIP(5))
+        top_sizer.Add(button_sizer ,flag=wx.BOTTOM|wx.RIGHT|wx.LEFT|wx.ALIGN_RIGHT,
+            border=self._FromDIP(5))
+
+        self.SetSizer(top_sizer)
+
+class EquilibrateDialog(AutoCmdDialog):
+    """
+    Allows addition/editing of the buffer info in the buffer list
+    """
+    def __init__(self, default_settings, *args, **kwargs):
+        AutoCmdDialog.__init__(self, default_settings, *args, **kwargs)
+
+    def _create_layout(self):
+        parent = self
+
+        ################ HPLC #################
+        fp_choices = ['{}'.format(i+1) for i in range(int(self._default_settings['num_flow_paths']))]
+        buffer_choices = ['{}'.format(i) for i in range(1,11)]
+
+        equil_settings = {
+            'equil_vol'     : ['Equilibration volume [mL]:', self.ctrl_ids['equil_vol'], 'float'],
+            'equil_rate'    : ['Equilibration rate [mL/min]:', self.ctrl_ids['equil_rate'], 'float'],
+            'purge'         : ['Run purge', self.ctrl_ids['purge'], 'bool'],
+            'flow_path'     : ['Flow path:', self.ctrl_ids['flow_path'], 'choice', fp_choices],
+            'buffer_position': ['Buffer position:', self.ctrl_ids['buffer_position'],
+                                'choice', buffer_choices],
+            }
+
+        equil_adv_settings = {
+            'equil_accel'   : ['Equilibration acceleration [mL/min^2]:',
+                                self.ctrl_ids['equil_accel'], 'float'],
+            'purge_volume'  : ['Purge volume [mL]:', self.ctrl_ids['purge_volume'], 'float'],
+            'purge_rate'    : ['Purge rate [mL/min]:', self.ctrl_ids['purge_rate'], 'float'],
+            'purge_accel'   : ['Purge acceleration [mL/min^2]:',
+                                self.ctrl_ids['purge_accel'], 'float'],
+            'stop_after_equil': ['Stop flow after equilibration',
+                                self.ctrl_ids['stop_after_equil'], 'bool'],
+        }
+
+        equil_box = wx.StaticBox(parent, label='HPLC Equilibration Settings')
+
+        equil_adv_pane = wx.CollapsiblePane(equil_box, label="Advanced Settings")
+        equil_adv_win = equil_adv_pane.GetPane()
+
+        equil_sizer1 = self._create_sizer(equil_settings, equil_box)
+        equil_sizer2 = self._create_sizer(equil_adv_settings, equil_adv_win)
+
+        equil_adv_win.SetSizer(equil_sizer2)
+        equil_adv_pane.Collapse()
+
+        equil_sizer = wx.StaticBoxSizer(equil_box, wx.VERTICAL)
+        equil_sizer.Add(equil_sizer1, flag=wx.EXPAND)
+        equil_sizer.Add(equil_adv_pane, flag=wx.EXPAND|wx.TOP, border=self._FromDIP(5))
+
+
+        ################ Coflow #################
+        coflow_buffer_choices = ['{}'.format(i) for i in range(1,11)]
+        coflow_settings = {
+            'coflow_buf_pos': ['Buffer position:', self.ctrl_ids['coflow_buf_pos'],
+                                'choice', coflow_buffer_choices],
+            'coflow_rate'   : ['Restart flow rate [mL/min]:',
+                                self.ctrl_ids['coflow_rate'], 'float'],
+            }
+
+        coflow_adv_settings = {
+            'coflow_equil'  : ['Equilibrate coflow', self.ctrl_ids['coflow_equil'], 'bool'],
+            'coflow_restart': ['Restart coflow after equilibration',
+                                self.ctrl_ids['coflow_restart'], 'bool'],
+            }
+
+        if self._default_settings['num_flow_paths'] == 1:
+            coflow_box = wx.StaticBox(parent, label='Coflow Pump Switch Settings')
+
+            coflow_adv_pane = wx.CollapsiblePane(coflow_box, label="Advanced Settings")
+            coflow_adv_win = coflow_adv_pane.GetPane()
+
+            coflow_sizer1 = self._create_sizer(coflow_settings, coflow_box)
+            coflow_sizer2 = self._create_sizer(coflow_adv_settings, coflow_adv_win)
+
+            coflow_adv_win.SetSizer(coflow_sizer2)
+            coflow_adv_pane.Collapse()
+
+            coflow_sizer = wx.StaticBoxSizer(coflow_box, wx.VERTICAL)
+            coflow_sizer.Add(coflow_sizer1, flag=wx.EXPAND)
+            coflow_sizer.Add(coflow_adv_pane, flag=wx.EXPAND|wx.TOP, border=self._FromDIP(5))
+
+        button_sizer = self.CreateButtonSizer(wx.OK | wx.CANCEL)
+
+        cmd_sizer=wx.BoxSizer(wx.HORIZONTAL)
+        cmd_sizer.Add(equil_sizer, flag=wx.TOP|wx.RIGHT|wx.BOTTOM|wx.EXPAND,
+            border=self._FromDIP(5))
+        if self._default_settings['num_flow_paths'] == 1:
+            cmd_sizer.Add(coflow_sizer, flag=wx.TOP|wx.RIGHT|wx.BOTTOM|wx.EXPAND,
+                border=self._FromDIP(5))
+
+        top_sizer = wx.BoxSizer(wx.VERTICAL)
+        top_sizer.Add(cmd_sizer, proportion=1, flag=wx.EXPAND|wx.ALL,
+            border=self._FromDIP(5))
+        top_sizer.Add(button_sizer ,flag=wx.BOTTOM|wx.RIGHT|wx.LEFT|wx.ALIGN_RIGHT,
+            border=self._FromDIP(5))
+
+        self.SetSizer(top_sizer)
+
+class SwitchDialog(AutoCmdDialog):
+    """
+    Allows addition/editing of the buffer info in the buffer list
+    """
+    def __init__(self, default_settings, *args, **kwargs):
+        AutoCmdDialog.__init__(self, default_settings, *args, **kwargs)
+
+    def _create_layout(self):
+        parent = self
+
+        ################ HPLC #################
+        switch_adv_settings = {
+            'restore_flow_after_switch' : ['Restore flow to current rate after switching',
+                                    self.ctrl_ids['restore_flow_after_switch'], 'bool'],
+            'stop_flow1'     : ['Ramp pump 1 flow to 0 before switching',
+                                    self.ctrl_ids['stop_flow1'], 'bool'],
+            'stop_flow2'     : ['Ramp pump 2 flow to 0 before switching',
+                                self.ctrl_ids['stop_flow2'], 'bool'],
+            'purge_active'   : ['Purge active flow path after switching',
+                                self.ctrl_ids['purge_active'], 'bool'],
+            'purge_volume'  : ['Purge volume [mL]:', self.ctrl_ids['purge_volume'], 'float'],
+            'purge_rate'    : ['Purge rate [mL/min]:', self.ctrl_ids['purge_rate'], 'float'],
+            'purge_accel'   : ['Purge acceleration [mL/min^2]:',
+                                self.ctrl_ids['purge_accel'], 'float'],
+        }
+
+        switch_box = wx.StaticBox(parent, label='HPLC Pump Switch Settings')
+
+        switch_adv_pane = wx.CollapsiblePane(switch_box, label="Advanced Settings")
+        switch_adv_win = switch_adv_pane.GetPane()
+
+        switch_sizer1 = wx.BoxSizer(wx.HORIZONTAL)
+        switch_sizer1.Add(wx.StaticText(switch_box, label='Doing the pump switch with default settings is recommended'))
+        switch_sizer2 = self._create_sizer(switch_adv_settings, switch_adv_win)
+
+        switch_adv_win.SetSizer(switch_sizer2)
+        switch_adv_pane.Collapse()
+
+        switch_sizer = wx.StaticBoxSizer(switch_box, wx.VERTICAL)
+        switch_sizer.Add(switch_sizer1, flag=wx.EXPAND)
+        switch_sizer.Add(switch_adv_pane, flag=wx.EXPAND|wx.TOP, border=self._FromDIP(5))
+
+
+        ################ Coflow #################
+        coflow_buffer_choices = ['{}'.format(i) for i in range(1,11)]
+        coflow_settings = {
+            'coflow_buf_pos': ['Buffer position:', self.ctrl_ids['coflow_buf_pos'],
+                                'choice', coflow_buffer_choices],
+            'coflow_rate'   : ['Restart flow rate [mL/min]:',
+                                self.ctrl_ids['coflow_rate'], 'float'],
+            }
+
+        coflow_adv_settings = {
+            'coflow_equil'  : ['Equilibrate coflow', self.ctrl_ids['coflow_equil'], 'bool'],
+            'coflow_restart': ['Restart coflow after equilibration',
+                                self.ctrl_ids['coflow_restart'], 'bool'],
+            }
+
+        coflow_box = wx.StaticBox(parent, label='Coflow Pump Switch Settings')
+
+        coflow_adv_pane = wx.CollapsiblePane(coflow_box, label="Advanced Settings")
+        coflow_adv_win = coflow_adv_pane.GetPane()
+
+        coflow_sizer1 = self._create_sizer(coflow_settings, coflow_box)
+        coflow_sizer2 = self._create_sizer(coflow_adv_settings, coflow_adv_win)
+
+        coflow_adv_win.SetSizer(coflow_sizer2)
+        coflow_adv_pane.Collapse()
+
+        coflow_sizer = wx.StaticBoxSizer(coflow_box, wx.VERTICAL)
+        coflow_sizer.Add(coflow_sizer1, flag=wx.EXPAND)
+        coflow_sizer.Add(coflow_adv_pane, flag=wx.EXPAND|wx.TOP, border=self._FromDIP(5))
+
+
+        button_sizer = self.CreateButtonSizer(wx.OK | wx.CANCEL)
+
+        cmd_sizer=wx.BoxSizer(wx.HORIZONTAL)
+        cmd_sizer.Add(switch_sizer, flag=wx.TOP|wx.RIGHT|wx.BOTTOM|wx.EXPAND,
+            border=self._FromDIP(5))
+        cmd_sizer.Add(coflow_sizer, flag=wx.TOP|wx.RIGHT|wx.BOTTOM|wx.EXPAND,
+            border=self._FromDIP(5))
+
+        top_sizer = wx.BoxSizer(wx.VERTICAL)
+        top_sizer.Add(cmd_sizer, proportion=1, flag=wx.EXPAND|wx.ALL,
+            border=self._FromDIP(5))
+        top_sizer.Add(button_sizer ,flag=wx.BOTTOM|wx.RIGHT|wx.LEFT|wx.ALIGN_RIGHT,
+            border=self._FromDIP(5))
+
+        self.SetSizer(top_sizer)
 
 class AutoFrame(wx.Frame):
     """
@@ -1678,234 +2191,218 @@ if __name__ == '__main__':
     #     ]
 
 
-    # SEC-SAXS 2 pump
-    hplc_args = {
-        'name'  : 'SEC-SAXS',
-        'args'  : ['AgilentHPLC', 'net.pipe://localhost/Agilent/OpenLAB/'],
-        'kwargs': {'instrument_name': 'SEC-SAXS', 'project_name': 'Demo',
-                    'get_inst_method_on_start': True}
-        }
+    # # SEC-SAXS 2 pump
+    # hplc_args = {
+    #     'name'  : 'SEC-SAXS',
+    #     'args'  : ['AgilentHPLC', 'net.pipe://localhost/Agilent/OpenLAB/'],
+    #     'kwargs': {'instrument_name': 'SEC-SAXS', 'project_name': 'Demo',
+    #                 'get_inst_method_on_start': True}
+    #     }
 
-    selector_valve_args = {
-        'name'  : 'Selector',
-        'args'  : ['Cheminert', 'COM5'],
-        'kwargs': {'positions' : 2}
-        }
+    # selector_valve_args = {
+    #     'name'  : 'Selector',
+    #     'args'  : ['Cheminert', 'COM5'],
+    #     'kwargs': {'positions' : 2}
+    #     }
 
-    outlet_valve_args = {
-        'name'  : 'Outlet',
-        'args'  : ['Cheminert', 'COM8'],
-        'kwargs': {'positions' : 2}
-        }
+    # outlet_valve_args = {
+    #     'name'  : 'Outlet',
+    #     'args'  : ['Cheminert', 'COM8'],
+    #     'kwargs': {'positions' : 2}
+    #     }
 
-    purge1_valve_args = {
-        'name'  : 'Purge 1',
-        'args'  : ['Cheminert', 'COM9'],
-        'kwargs': {'positions' : 4}
-        }
+    # purge1_valve_args = {
+    #     'name'  : 'Purge 1',
+    #     'args'  : ['Cheminert', 'COM9'],
+    #     'kwargs': {'positions' : 4}
+    #     }
 
-    purge2_valve_args = {
-        'name'  : 'Purge 2',
-        'args'  : ['Cheminert', 'COM6'],
-        'kwargs': {'positions' : 4}
-        }
+    # purge2_valve_args = {
+    #     'name'  : 'Purge 2',
+    #     'args'  : ['Cheminert', 'COM6'],
+    #     'kwargs': {'positions' : 4}
+    #     }
 
-    buffer1_valve_args = {
-        'name'  : 'Buffer 1',
-        'args'  : ['Cheminert', 'COM3'],
-        'kwargs': {'positions' : 10}
-        }
+    # buffer1_valve_args = {
+    #     'name'  : 'Buffer 1',
+    #     'args'  : ['Cheminert', 'COM3'],
+    #     'kwargs': {'positions' : 10}
+    #     }
 
-    buffer2_valve_args = {
-        'name'  : 'Buffer 2',
-        'args'  : ['Cheminert', 'COM4'],
-        'kwargs': {'positions' : 10}
-        }
+    # buffer2_valve_args = {
+    #     'name'  : 'Buffer 2',
+    #     'args'  : ['Cheminert', 'COM4'],
+    #     'kwargs': {'positions' : 10}
+    #     }
 
-    # 2 pump HPLC for SEC-SAXS
-    setup_devices = [
-        {'name': 'SEC-SAXS', 'args': ['AgilentHPLC2Pumps', None],
-            'kwargs': {'hplc_args' : hplc_args,
-            'selector_valve_args' : selector_valve_args,
-            'outlet_valve_args' : outlet_valve_args,
-            'purge1_valve_args' : purge1_valve_args,
-            'purge2_valve_args' : purge2_valve_args,
-            'buffer1_valve_args' : buffer1_valve_args,
-            'buffer2_valve_args' : buffer2_valve_args,
-            'pump1_id' : 'quat. pump 1#1c#1',
-            'pump2_id' : 'quat. pump 2#1c#2'},
-            }
-        ]
+    # # 2 pump HPLC for SEC-SAXS
+    # setup_devices = [
+    #     {'name': 'SEC-SAXS', 'args': ['AgilentHPLC2Pumps', None],
+    #         'kwargs': {'hplc_args' : hplc_args,
+    #         'selector_valve_args' : selector_valve_args,
+    #         'outlet_valve_args' : outlet_valve_args,
+    #         'purge1_valve_args' : purge1_valve_args,
+    #         'purge2_valve_args' : purge2_valve_args,
+    #         'buffer1_valve_args' : buffer1_valve_args,
+    #         'buffer2_valve_args' : buffer2_valve_args,
+    #         'pump1_id' : 'quat. pump 1#1c#1',
+    #         'pump2_id' : 'quat. pump 2#1c#2'},
+    #         }
+    #     ]
 
-    # Local
-    com_thread = biohplccon.HPLCCommThread('HPLCComm')
-    com_thread.start()
+    # # Local
+    # com_thread = biohplccon.HPLCCommThread('HPLCComm')
+    # com_thread.start()
 
-    # # Remote
-    # com_thread = None
+    # # # Remote
+    # # com_thread = None
 
-    hplc_settings = {
-        # Connection settings for hplc
-        'remote'        : False,
-        'remote_device' : 'hplc',
-        'device_init'   : setup_devices,
-        'remote_ip'     : '192.168.1.16',
-        'remote_port'   : '5558',
-        'com_thread'    : com_thread,
-        # Default settings for hplc
-        'purge_volume'              : 20,
-        'purge_rate'                : 5,
-        'purge_accel'               : 10,
-        'purge_max_pressure'        : 250,
-        'restore_flow_after_purge'  : True,
-        'purge_with_sample'         : False,
-        'stop_before_purge'         : True,
-        'stop_after_purge'          : True,
-        'equil_volume'              : 48,
-        'equil_rate'                : 0.6,
-        'equil_accel'               : 0.1,
-        'equil_purge'               : True,
-        'equil_with_sample'         : False,
-        'stop_after_equil'          : True,
-        'switch_purge_active'       : True,
-        'switch_purge_volume'       : 1,
-        'switch_purge_rate'         : 1,
-        'switch_purge_accel'        : 10,
-        'switch_with_sample'        : False,
-        'switch_stop_flow1'         : True,
-        'switch_stop_flow2'         : True,
-        'restore_flow_after_switch' : True,
-        'acq_method'                : 'SECSAXS_test',
-        # 'acq_method'                : 'SEC-MALS',
-        'sample_loc'                : 'D2F-A1',
-        'inj_vol'                   : 10.0,
-        'flow_rate'                 : 0.6,
-        'flow_accel'                : 0.1,
-        'elution_vol'               : 30,
-        'sample_pressure_lim'       : 60.0,
-        'result_path'               : '',
-        'sp_method'                 : '',
-        'wait_for_flow_ramp'        : True,
-        'settle_time'               : 0.0,
-        }
+    # hplc_settings = {
+    #     # Connection settings for hplc
+    #     'remote'        : False,
+    #     'remote_device' : 'hplc',
+    #     'device_init'   : setup_devices,
+    #     'remote_ip'     : '192.168.1.16',
+    #     'remote_port'   : '5558',
+    #     'com_thread'    : com_thread,
+    #     # Default settings for hplc
+    #     'purge_volume'              : 20,
+    #     'purge_rate'                : 5,
+    #     'purge_accel'               : 10,
+    #     'purge_max_pressure'        : 250,
+    #     'restore_flow_after_purge'  : True,
+    #     'purge_with_sample'         : False,
+    #     'stop_before_purge'         : True,
+    #     'stop_after_purge'          : True,
+    #     'equil_volume'              : 48,
+    #     'equil_rate'                : 0.6,
+    #     'equil_accel'               : 0.1,
+    #     'equil_purge'               : True,
+    #     'equil_with_sample'         : False,
+    #     'stop_after_equil'          : True,
+    #     'switch_purge_active'       : True,
+    #     'switch_purge_volume'       : 1,
+    #     'switch_purge_rate'         : 1,
+    #     'switch_purge_accel'        : 10,
+    #     'switch_with_sample'        : False,
+    #     'switch_stop_flow1'         : True,
+    #     'switch_stop_flow2'         : True,
+    #     'restore_flow_after_switch' : True,
+    #     'acq_method'                : 'SECSAXS_test',
+    #     # 'acq_method'                : 'SEC-MALS',
+    #     'sample_loc'                : 'D2F-A1',
+    #     'inj_vol'                   : 10.0,
+    #     'flow_rate'                 : 0.6,
+    #     'flow_accel'                : 0.1,
+    #     'elution_vol'               : 30,
+    #     'sample_pressure_lim'       : 60.0,
+    #     'result_path'               : '',
+    #     'sp_method'                 : '',
+    #     'wait_for_flow_ramp'        : True,
+    #     'settle_time'               : 0.0,
+    #     }
 
-    #Settings
-    coflow_settings = {
-        'show_advanced_options'     : False,
-        'device_communication'      : 'remote',
-        'remote_pump_ip'            : '164.54.204.53',
-        'remote_pump_port'          : '5556',
-        'remote_fm_ip'              : '164.54.204.53',
-        'remote_fm_port'            : '5557',
-        'remote_overflow_ip'        : '164.54.204.75',
-        'remote_valve_ip'           : '164.54.204.53',
-        'remote_valve_port'         : '5558',
-        'flow_units'                : 'mL/min',
-        'sheath_pump'               : {'name': 'sheath', 'args': ['VICI M50', 'COM3'],
-                                        'kwargs': {'flow_cal': '627.72',
-                                        'backlash_cal': '9.814'},
-                                        'ctrl_args': {'flow_rate': 1}},
-        # 'outlet_pump'               : {'name': 'outlet', 'args': ['VICI M50', 'COM4'],
-        #                                 'kwargs': {'flow_cal': '628.68',
-        #                                 'backlash_cal': '9.962'},
-        #                                 'ctrl_args': {'flow_rate': 1}},
-        'outlet_pump'               : {'name': 'outlet', 'args': ['OB1 Pump', 'COM8'],
-                                        'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
-                                        'min_pressure': -1000, 'max_pressure': 1000, 'P': 5, 'I': 0.00015,
-                                        'D': 0, 'bfs_instr_ID': None, 'comm_lock': None,
-                                        'calib_path': './resources/ob1_calib.txt'},
-                                        'ctrl_args': {}},
-        'sheath_fm'                 : {'name': 'sheath', 'args': ['BFS', 'COM6'],
-                                        'kwargs':{}},
-        'outlet_fm'                 : {'name': 'outlet', 'args': ['BFS', 'COM5'],
-                                        'kwargs':{}},
-        'sheath_valve'              : {'name': 'Coflow Sheath',
-                                        'args':['Cheminert', 'COM4'],
-                                        'kwargs': {'positions' : 10}},
-        # 'sheath_pump'               : {'name': 'sheath', 'args': ['Soft', None], # Simulated devices for testing
-        #                                 'kwargs': {}},
-        # 'outlet_pump'               : {'name': 'outlet', 'args': ['Soft', None],
-        #                                 'kwargs': {}},
-        # 'sheath_fm'                 : {'name': 'sheath', 'args': ['Soft', None],
-        #                                 'kwargs':{}},
-        # 'outlet_fm'                 : {'name': 'outlet', 'args': ['Soft', None],
-        #                                 'kwargs':{}},
-        # 'sheath_valve'              : {'name': 'Coflow Sheath',
-        #                                 'args': ['Soft', None],
-        #                                 'kwargs': {'positions' : 10}},
-        'sheath_ratio'              : 0.3,
-        'sheath_excess'             : 1.5,
-        'sheath_warning_threshold_low'  : 0.8,
-        'sheath_warning_threshold_high' : 1.2,
-        'outlet_warning_threshold_low'  : 0.8,
-        'outlet_warning_threshold_high' : 1.2,
-        # 'outlet_warning_threshold_low'  : 0.98,
-        # 'outlet_warning_threshold_high' : 1.02,
-        'sheath_fr_mult'            : 1,
-        'outlet_fr_mult'            : 1,
-        # 'outlet_fr_mult'            : -1,
-        'settling_time'             : 5000, #in ms
-        # 'settling_time'             : 120000, #in ms
-        'lc_flow_rate'              : '0.1',
-        'show_sheath_warning'       : True,
-        'show_outlet_warning'       : True,
-        'use_overflow_control'      : True,
-        'buffer_change_fr'          : 0.1, #in ml/min
-        'buffer_change_vol'         : 0.1, #in ml
-        'air_density_thresh'        : 700, #g/L
-        'sheath_valve_water_pos'    : 10,
-        'sheath_valve_hellmanex_pos': 8,
-        'sheath_valve_ethanol_pos'  : 9,
-        }
+    # #Settings
+    # coflow_settings = {
+    #     'show_advanced_options'     : False,
+    #     'device_communication'      : 'remote',
+    #     'remote_pump_ip'            : '164.54.204.53',
+    #     'remote_pump_port'          : '5556',
+    #     'remote_fm_ip'              : '164.54.204.53',
+    #     'remote_fm_port'            : '5557',
+    #     'remote_overflow_ip'        : '164.54.204.75',
+    #     'remote_valve_ip'           : '164.54.204.53',
+    #     'remote_valve_port'         : '5558',
+    #     'flow_units'                : 'mL/min',
+    #     'sheath_pump'               : {'name': 'sheath', 'args': ['VICI M50', 'COM3'],
+    #                                     'kwargs': {'flow_cal': '627.72',
+    #                                     'backlash_cal': '9.814'},
+    #                                     'ctrl_args': {'flow_rate': 1}},
+    #     # 'outlet_pump'               : {'name': 'outlet', 'args': ['VICI M50', 'COM4'],
+    #     #                                 'kwargs': {'flow_cal': '628.68',
+    #     #                                 'backlash_cal': '9.962'},
+    #     #                                 'ctrl_args': {'flow_rate': 1}},
+    #     'outlet_pump'               : {'name': 'outlet', 'args': ['OB1 Pump', 'COM8'],
+    #                                     'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
+    #                                     'min_pressure': -1000, 'max_pressure': 1000, 'P': 5, 'I': 0.00015,
+    #                                     'D': 0, 'bfs_instr_ID': None, 'comm_lock': None,
+    #                                     'calib_path': './resources/ob1_calib.txt'},
+    #                                     'ctrl_args': {}},
+    #     'sheath_fm'                 : {'name': 'sheath', 'args': ['BFS', 'COM6'],
+    #                                     'kwargs':{}},
+    #     'outlet_fm'                 : {'name': 'outlet', 'args': ['BFS', 'COM5'],
+    #                                     'kwargs':{}},
+    #     'sheath_valve'              : {'name': 'Coflow Sheath',
+    #                                     'args':['Cheminert', 'COM4'],
+    #                                     'kwargs': {'positions' : 10}},
+    #     # 'sheath_pump'               : {'name': 'sheath', 'args': ['Soft', None], # Simulated devices for testing
+    #     #                                 'kwargs': {}},
+    #     # 'outlet_pump'               : {'name': 'outlet', 'args': ['Soft', None],
+    #     #                                 'kwargs': {}},
+    #     # 'sheath_fm'                 : {'name': 'sheath', 'args': ['Soft', None],
+    #     #                                 'kwargs':{}},
+    #     # 'outlet_fm'                 : {'name': 'outlet', 'args': ['Soft', None],
+    #     #                                 'kwargs':{}},
+    #     # 'sheath_valve'              : {'name': 'Coflow Sheath',
+    #     #                                 'args': ['Soft', None],
+    #     #                                 'kwargs': {'positions' : 10}},
+    #     'sheath_ratio'              : 0.3,
+    #     'sheath_excess'             : 1.5,
+    #     'sheath_warning_threshold_low'  : 0.8,
+    #     'sheath_warning_threshold_high' : 1.2,
+    #     'outlet_warning_threshold_low'  : 0.8,
+    #     'outlet_warning_threshold_high' : 1.2,
+    #     # 'outlet_warning_threshold_low'  : 0.98,
+    #     # 'outlet_warning_threshold_high' : 1.02,
+    #     'sheath_fr_mult'            : 1,
+    #     'outlet_fr_mult'            : 1,
+    #     # 'outlet_fr_mult'            : -1,
+    #     'settling_time'             : 5000, #in ms
+    #     # 'settling_time'             : 120000, #in ms
+    #     'lc_flow_rate'              : '0.1',
+    #     'show_sheath_warning'       : True,
+    #     'show_outlet_warning'       : True,
+    #     'use_overflow_control'      : True,
+    #     'buffer_change_fr'          : 0.1, #in ml/min
+    #     'buffer_change_vol'         : 0.1, #in ml
+    #     'air_density_thresh'        : 700, #g/L
+    #     'sheath_valve_water_pos'    : 10,
+    #     'sheath_valve_hellmanex_pos': 8,
+    #     'sheath_valve_ethanol_pos'  : 9,
+    #     }
 
-    coflow_settings['components'] = ['coflow']
-
-    app = wx.App()
-    logger.debug('Setting up wx app')
-
-    hplc_frame = biohplccon.HPLCFrame('HPLCFrame', hplc_settings, parent=None,
-        title='HPLC Control')
-    hplc_frame.Show()
-
-    coflow_frame = coflowcon.CoflowFrame(coflow_settings, True, parent=None, title='Coflow Control')
-    coflow_frame.Show()
-
-
-    hplc_automator_callback = hplc_frame.devices[0].automator_callback
-    coflow_automator_callback = coflow_frame.coflow_panel.automator_callback
-
-    automator_settings = {
-        'automator_thread'  : automator,
-        'instruments'       :
-                {'hplc1'    : {'num_paths': 1,
-                    'automator_callback': hplc_automator_callback},
-                'coflow'    : {'automator_callback': coflow_automator_callback},
-                'exp'       : {'automator_callback': test_cmd_func}
-                }
-        }
-
-
-    """
-    Next up to do:
-
-    - Make it so that you can move items up and down in the list
-
-    - There's something weird with the queue when using both equilibration and sample items. Need to figure that out.
-        Maybe the status isn't updating correctly? because it's running equil
-        as soon as the sample injects, which results in an error. Also not updating
-        status on sample after equil correctly (never goes from run to done)
-
-    - Work on making the items look better
-
-    - Add ties to exposure, coflow, add coflow change buffer to the system for
-    appropriate commands (equilibrate for single pump, switch pumps for dual pump)
-
-    - Add buffer volume tracking to coflow
-    """
-
+    # coflow_settings['components'] = ['coflow']
 
     # app = wx.App()
     # logger.debug('Setting up wx app')
+
+    # hplc_frame = biohplccon.HPLCFrame('HPLCFrame', hplc_settings, parent=None,
+    #     title='HPLC Control')
+    # hplc_frame.Show()
+
+    # coflow_frame = coflowcon.CoflowFrame(coflow_settings, True, parent=None, title='Coflow Control')
+    # coflow_frame.Show()
+
+
+    # hplc_automator_callback = hplc_frame.devices[0].automator_callback
+    # coflow_automator_callback = coflow_frame.coflow_panel.automator_callback
+
+    automator_settings = {
+        'automator_thread'  : automator,
+        # 'instruments'       :
+        #         {'hplc1'    : {'num_paths': 1,
+        #             'automator_callback': hplc_automator_callback},
+        #         'coflow'    : {'automator_callback': coflow_automator_callback},
+        #         'exp'       : {'automator_callback': test_cmd_func}
+        #         }
+        'instruments'       : {},
+        'exp_elut_scale'    : 0.95,
+        'hplc_inst'         : 'hplc1',
+        }
+
+
+    app = wx.App()
+    logger.debug('Setting up wx app')
     frame = AutoFrame('AutoFrame', automator_settings, parent=None,
         title='Automator Control')
     frame.Show()
@@ -1916,7 +2413,7 @@ if __name__ == '__main__':
         automator.stop()
         automator.join()
 
-    if com_thread is not None:
-        com_thread.stop()
-        com_thread.join()
+    # if com_thread is not None:
+    #     com_thread.stop()
+    #     com_thread.join()
 

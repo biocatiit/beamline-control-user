@@ -298,6 +298,35 @@ class SAXSPanel(wx.Panel):
 
         return metadata
 
+    def set_metadata(self new_metadata):
+        if 'Experment type:' in new_metadata:
+            self.experiment_type.SetStringSelection(new_metadata['Experment type:'])
+            self._set_experiment_type()
+
+        if 'Sample:' in new_metadata:
+            self.sample.SetValue(new_metadata['Sample:'])
+
+        if 'Buffer:' in new_metadata:
+            self.buffer.SetValue(new_metadata['Buffer:'])
+
+        if 'Temperature [C]:' in new_metadata:
+            self.temperature.SetValue(str(new_metadata['Temperature [C]:']))
+
+        if 'Loaded volume [uL]:' in new_metadata:
+            self.volume.SetValue(str(new_metadata['Loaded volume [uL]:']))
+
+        if 'Concentration [mg/ml]:' in new_metadata:
+            self.concentration.SetValue(str(new_metadata['Concentration [mg/ml]:']))
+
+        if 'Is Buffer:' in new_metadata:
+            self.is_buffer.SetStringSelection(str(new_metadata['Is Buffer:']))
+
+        if 'Column:' in new_metadata:
+            self.lc_column_choice.SetStringSelection(new_metadata['Column:'])
+
+        if 'Notes:' in new_metadata:
+            self.notes.SetValue(new_metadata['Notes:'])
+
 class MusclePanel(wx.Panel):
     def __init__(self, settings, *args, **kwargs):
         wx.Panel.__init__(self, *args, **kwargs)

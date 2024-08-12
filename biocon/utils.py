@@ -1731,3 +1731,32 @@ class BufferList(wx.ListCtrl, wx.lib.mixins.listctrl.ListCtrlAutoWidthMixin):
         self.SetColumnWidth(1, 50)
 
         wx.lib.mixins.listctrl.ListCtrlAutoWidthMixin.__init__(self)
+
+
+def set_best_size(window, shrink=False):
+
+    best_size = window.GetBestSize()
+    current_size = window.GetSize()
+
+    client_display = wx.GetClientDisplayRect()
+
+    best_width = min(best_size.GetWidth(), client_display.Width)
+    best_height = min(best_size.GetHeight(), client_display.Height)
+
+    if best_size.GetWidth() > current_size.GetWidth():
+        best_size.SetWidth(best_width)
+    else:
+        if not shrink:
+            best_size.SetWidth(current_size.GetWidth())
+        else:
+            best_size.SetWidth(best_width)
+
+    if best_size.GetHeight() > current_size.GetHeight():
+        best_size.SetHeight(best_height)
+    else:
+        if not shrink:
+            best_size.SetHeight(current_size.GetHeight())
+        else:
+            best_size.SetHeight(best_height)
+
+    window.SetSize(best_size)

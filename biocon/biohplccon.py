@@ -4404,14 +4404,7 @@ class HPLCPanel(utils.DevicePanel):
             cmd = ['abort_current_run', [self.name,], {}]
             self._send_cmd(cmd, False)
 
-    def _on_set_flow_path(self, evt):
-        evt_obj = evt.GetEventObject()
-
-        if self._set_path1_btn == evt_obj:
-            flow_path = 1
-        elif self._set_path2_btn == evt_obj:
-            flow_path = 2
-
+    def get_default_switch_flow_path_settings(self):
         default_switch_settings = {
             'purge_vol'                 : self.settings['switch_purge_volume'],
             'purge_rate'                : self.settings['switch_purge_rate'],
@@ -4422,6 +4415,18 @@ class HPLCPanel(utils.DevicePanel):
             'stop_flow2'                : self.settings['switch_stop_flow2'],
             'purge_active'              : self.settings['switch_purge_active'],
             }
+
+        return default_switch_settings
+
+    def _on_set_flow_path(self, evt):
+        evt_obj = evt.GetEventObject()
+
+        if self._set_path1_btn == evt_obj:
+            flow_path = 1
+        elif self._set_path2_btn == evt_obj:
+            flow_path = 2
+
+        default_switch_settings = self.get_default_switch_flow_path_settings()
 
         switch_dialog = SwitchDialog(self, default_switch_settings,
             title='Switch active flowpath to {} settings'.format(flow_path))
@@ -4659,14 +4664,7 @@ class HPLCPanel(utils.DevicePanel):
         cmd = ['stop_purge', [self.name, flow_path,], {}]
         self._send_cmd(cmd, False)
 
-    def _on_eq(self, evt):
-        evt_obj = evt.GetEventObject()
-
-        if self._pump1_eq_btn == evt_obj:
-            flow_path = 1
-        elif self._pump2_eq_btn == evt_obj:
-            flow_path = 2
-
+    def get_defauilt_equil_settings(self):
         default_equil_settings = {
             'equil_vol'     : self.settings['equil_volume'],
             'equil_rate'    : self.settings['equil_rate'],
@@ -4678,6 +4676,18 @@ class HPLCPanel(utils.DevicePanel):
             'equil_with_sample' : self.settings['equil_with_sample'],
             'stop_after_equil'  : self.settings['stop_after_equil'],
         }
+
+        return default_equil_settings
+
+    def _on_eq(self, evt):
+        evt_obj = evt.GetEventObject()
+
+        if self._pump1_eq_btn == evt_obj:
+            flow_path = 1
+        elif self._pump2_eq_btn == evt_obj:
+            flow_path = 2
+
+        default_equil_settings = self.get_defauilt_equil_settings()
 
         equil_dialog = EquilDialog(self, default_equil_settings,
             title='Equilibration {} settings'.format(flow_path))
@@ -4903,7 +4913,7 @@ class HPLCPanel(utils.DevicePanel):
                         wx.CallAfter(self._pump2_flow_target_ctrl.SetLabel, str(val))
                         self._pump2_flow_target = str(val)
 
-    def _on_submit_sample(self, evt):
+    def get_default_sample_settings(self):
         default_sample_settings = {
             'acq_method'    : self.settings['acq_method'],
             'sample_loc'    : self.settings['sample_loc'],
@@ -4919,6 +4929,11 @@ class HPLCPanel(utils.DevicePanel):
             'all_acq_methods'       : self._methods,
             'all_sample_methods'    : self._sp_methods,
             }
+
+        return default_sample_settings
+
+    def _on_submit_sample(self, evt):
+        default_sample_settings = self.get_default_sample_settings()
 
         sample_dialog = SampleDialog(self, default_sample_settings,
             title='Sample submission settings')
