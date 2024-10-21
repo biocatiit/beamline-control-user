@@ -73,6 +73,7 @@ class SpectraData(object):
         self.timestamp = timestamp
         self.wavelength = spectrum[:,0]
 
+        self._raw_spectrum = None
         self.spectrum = None
         self.trans_spectrum = None
         self.abs_spectrum = None
@@ -82,6 +83,7 @@ class SpectraData(object):
         self.absorbance_values = {}
 
         if spec_type == 'raw':
+            self._raw_spectrum = spectrum[:,1]
             self.spectrum = spectrum[:,1]
         elif spec_type == 'trans':
             self.trans_spectrum = spectrum[:,1]
@@ -119,6 +121,7 @@ class SpectraData(object):
         logger.debug('SpectraData: Setting %s spectrum', spec_type)
 
         if spec_type == 'raw':
+            self._raw_spectrum = spectrum[:,1]
             self.spectrum = spectrum[:,1]
 
         elif spec_type == 'trans':
@@ -134,6 +137,21 @@ class SpectraData(object):
         bkg = dark_spectrum.get_spectrum()
 
         self.spectrum = self.spectrum - bkg[:,1]
+
+    def drift_correct(self, ref_spectrum, window):
+        logger.debug('SpectraData: Drift correcting spectrum')
+        bkg = ref_spectrum.get_spectrum()
+
+        wstart = window[0]
+        wend = window[1]
+
+        _, start_idx = utils.find_closest(window[0], self.wavelength)
+        _, end_idx = utils.find_closest(window[1], self.wavelength)
+
+        ref_avg = np.mean(bkg[start_idx:end_idx+1,1])
+        spec_avg = np.mean(self.spectrum[start_idx:end_idx+1,1])
+
+        self.spectrum = self.spectrum*ref_avg/spec_avg
 
     def transmission_from_ref(self, ref_spectrum):
         logger.debug('SpectraData: Calculating transmission and absorbance')
@@ -260,6 +278,8 @@ class Spectrometer(object):
         self._scan_avg = 1
         self._smoothing = 0
 
+        self._drift_window = [None, None]
+
         self._absorbance_window = 1 #window of lambdas to average for absorbance at particular wavelengths
         self._absorbance_wavelengths = {}
 
@@ -269,6 +289,11 @@ class Spectrometer(object):
         # the measured range of the spectrometer
         self._wavelength_range = [None, None]
         self._wavelength_range_idx = [None, None]
+
+        self._do_analog_out = True
+        self._analog_out_v_max = 10
+        self._analog_out_au_max = 10
+        self._analog_out_wavelengths = {}
 
         self._autosave_dir = None
         self._autosave_prefix = None
@@ -345,6 +370,12 @@ class Spectrometer(object):
             Whether spectrometer is currently in a light condition
         """
         logger.debug('Spectrometer %s: Checking light conditions', self.name)
+
+    def _set_analog_output(self, output, val):
+        """
+        Sets the analog output value, used for integration with external
+        equipment such as the the Wyatt MALS/DLS
+        """
 
     def is_busy(self):
         busy =self._taking_data or self._taking_series
@@ -494,7 +525,7 @@ class Spectrometer(object):
             self.collect_dark()
 
     def collect_spectrum(self, spec_type='abs', dark_correct=True, int_trigger=True,
-        auto_dark=True, dark_time=60*60):
+        auto_dark=True, dark_time=60*60, drift_correct=True):
         """
         Parameters
         ----------
@@ -513,11 +544,11 @@ class Spectrometer(object):
 
             if spec_type == 'abs':
                 spectrum = self._collect_absorbance_spectrum_inner(dark_correct,
-                    int_trigger)
+                    int_trigger, drift_correct)
 
             elif spec_type == 'trans':
                 spectrum = self._collect_transmission_spectrum_inner(dark_correct,
-                    int_trigger)
+                    int_trigger, drift_correct)
             else:
                 spectrum = self._collect_spectrum_inner(dark_correct, int_trigger)
 
@@ -547,11 +578,15 @@ class Spectrometer(object):
 
         return spectrum
 
-    def _collect_transmission_spectrum_inner(self, dark_correct, int_trigger):
+    def _collect_transmission_spectrum_inner(self, dark_correct, int_trigger,
+        drift_correct):
         logger.debug('Spectrometer %s: Getting transmission spectrum', self.name)
         spectrum = self._collect_spectrum_inner(dark_correct, int_trigger)
 
         ref_spectrum = self.get_reference_spectrum()
+
+        if drift_correct:
+            spectrum.drift_correct(ref_spectrum, self._drift_window)
 
         spectrum.transmission_from_ref(ref_spectrum)
 
@@ -559,18 +594,30 @@ class Spectrometer(object):
 
         return spectrum
 
-    def _collect_absorbance_spectrum_inner(self, dark_correct, int_trigger):
+    def _collect_absorbance_spectrum_inner(self, dark_correct, int_trigger,
+        drift_correct):
         logger.debug('Spectrometer %s: Getting absorbance spectrum', self.name)
         spectrum = self._collect_transmission_spectrum_inner(dark_correct,
-            int_trigger)
+            int_trigger, drift_correct)
 
         self._add_spectrum_to_history(spectrum, spec_type='abs')
+
+        if self._do_analog_out:
+            for output, wav in self._analog_out_wavelengths.items():
+                abs_val = spectrum.get_absorbance(wav)
+
+                output_val = min(1, abs(abs_val/self.analog_out_au_max))*self._analog_out_v_max
+
+                if abs_val < 0:
+                    output_val *= -1
+
+                self._set_analog_output(output, output_val)
 
         return spectrum
 
     def collect_spectra_series(self, num_spectra, spec_type='abs', return_q=None,
         delta_t_min=0, dark_correct=True, int_trigger=True, auto_dark=True,
-        dark_time=60*60, take_ref=True, ref_avgs=1):
+        dark_time=60*60, take_ref=True, ref_avgs=1, drift_correct=True):
         if self.is_busy():
             raise RuntimeError('A spectrum or series of spectrum is already being '
                 'collected, cannot collect a new spectrum.')
@@ -583,14 +630,15 @@ class Spectrometer(object):
                 'spec_type': spec_type, 'delta_t_min' : delta_t_min,
                 'dark_correct' : dark_correct, 'int_trigger' : int_trigger,
                 'auto_dark' : auto_dark, 'dark_time' : dark_time,
-                'take_ref' : take_ref, 'ref_avgs' : ref_avgs,})
+                'take_ref' : take_ref, 'ref_avgs' : ref_avgs,
+                'drift_correct': drift_correct})
 
             self._series_thread.daemon = True
             self._series_thread.start()
 
     def _collect_spectra_series(self, num_spectra, return_q=None, spec_type='abs',
         delta_t_min=0, dark_correct=True, int_trigger=True, auto_dark=True,
-        dark_time=60*60, take_ref=True, ref_avgs=1):
+        dark_time=60*60, take_ref=True, ref_avgs=1, drift_correct=True):
         if self.is_busy():
             raise RuntimeError('A spectrum or series of spectrum is already being '
                 'collected, cannot collect a new spectrum.')
@@ -650,11 +698,11 @@ class Spectrometer(object):
 
                 if spec_type == 'abs':
                     spectrum = self._collect_absorbance_spectrum_inner(dark_correct,
-                        int_trigger)
+                        int_trigger, drift_correct)
 
                 elif spec_type == 'trans':
                     spectrum = self._collect_transmission_spectrum_inner(dark_correct,
-                        int_trigger)
+                        int_trigger, drift_correct)
                 else:
                     spectrum = self._collect_spectrum_inner(dark_correct,
                         int_trigger)
@@ -926,6 +974,15 @@ class Spectrometer(object):
         logger.debug('Spectrometer %s: Getting history length', self.name)
         return self._history_length
 
+    def set_drift_window(self, window):
+        logger.info(('Spectrometer %s: Setting drift correction window to '
+                    '%s to %s nm.', self.name, window[0], window[1]))
+        self._drift_window = window
+
+    def get_drift_window(self):
+        logger.debug('Spectrometer %s: Getting drift correction window', self.name)
+        return self._drift_window
+
     def add_absorbance_wavelength(self, wavelength):
         logger.info('Spectrometer %s: Adding absorbance at %s nm', self.name,
             wavelength)
@@ -1031,7 +1088,8 @@ class StellarnetUVVis(Spectrometer):
     """
 
     def __init__(self, name, device, shutter_pv_name='18ID:LJT4:2:DI11',
-        trigger_pv_name='18ID:LJT4:2:DI12'):
+        trigger_pv_name='18ID:LJT4:2:DI12', out1_pv_name='18ID:E1608:Ao1',
+        out2_pv_name='18ID:E1608:Ao2'):
 
         Spectrometer.__init__(self, name, device)
 
@@ -1046,11 +1104,17 @@ class StellarnetUVVis(Spectrometer):
 
         self.connected = False
 
-        self.shutter_pv = epics.PV(shutter_pv_name)
-        self.trigger_pv = epics.PV(trigger_pv_name)
+        self.shutter_pv = epics.get_pv(shutter_pv_name)
+        self.trigger_pv = epics.get_pv(trigger_pv_name)
 
         self.shutter_pv.get()
         self.trigger_pv.get()
+
+        self.analog_outs = {'out1': epics.get_pv(out1_pv_name),
+            'out2': epics.get_pv(out2_pv_name),}
+
+        self.analog_outs['out1'].get()
+        self.analog_outs['out2'].get()
 
         self.connect()
         self._get_config()
@@ -1259,6 +1323,14 @@ class StellarnetUVVis(Spectrometer):
     def get_external_trigger(self):
         return self.ext_trig
 
+     def _set_analog_output(self, output, val):
+        """
+        Sets the analog output value, used for integration with external
+        equipment such as the the Wyatt MALS/DLS
+        """
+        dev = self.analog_outs[output]
+        dev.put(val, wait=False)
+
     def abort_collection(self):
         logger.info('Spectrometer %s: Aborting collection', self.name)
         self._series_abort_event.set()
@@ -1320,6 +1392,8 @@ class UVCommThread(utils.CommManager):
             'set_int_trig'      : self._set_internal_trigger,
             'set_wl_range'      : self._set_wavelength_range,
             'get_wl_range'      : self._get_wavelength_range,
+            'set_drift_window'  : self._set_drift_window,
+            'get_drift_window'  : self._get_drift_window,
         }
 
         self._connected_devices = OrderedDict()
@@ -1847,6 +1921,7 @@ class UVCommThread(utils.CommManager):
         hist_t = device.get_history_time(**kwargs)
         ls_shutter = device.get_lightsource_shutter()
         wl_range = device.get_wavelength_range()
+        drift_win = device.get_drift_window()
 
         ret_vals = {
             'int_time'  : int_time,
@@ -1860,6 +1935,7 @@ class UVCommThread(utils.CommManager):
             'hist_t'    : hist_t,
             'ls_shutter': ls_shutter,
             'wl_range'  : wl_range,
+            'drift_win' : drift_win,
         }
 
         self._return_value((name, cmd, ret_vals), comm_name)
@@ -1933,6 +2009,32 @@ class UVCommThread(utils.CommManager):
         logger.debug("Device %s wavelength range: %s to %s", name, val[0],
             val[1])
 
+    def _set_drift_window(self, name, val, **kwargs):
+        logger.debug("Device %s setting drift window %s nm", name, val)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        device.set_drift_window(val, **kwargs)
+
+        self._return_value((name, cmd, True), comm_name)
+
+        logger.debug("Device %s drift window set", name)
+
+    def _get_drift_window(self, name, **kwargs):
+        logger.debug("Getting device %s drift window", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        val = device.get_drift_window(**kwargs)
+
+        self._return_value((name, cmd, val), comm_name)
+
+        logger.debug("Device %s drift window: %s nm", name, val)
+
     def _monitor_series(self, name):
         device = self._connected_devices[name]
 
@@ -1996,6 +2098,7 @@ class UVPanel(utils.DevicePanel):
         self._current_scan_avg = None
         self._current_smooth = None
         self._current_xtiming = None
+        self._current_drift_win = None
         self._current_abs_wav = None
         self._current_abs_win = None
         self._current_wav_range = None
@@ -2080,6 +2183,7 @@ class UVPanel(utils.DevicePanel):
                 validator=utils.CharValidator('int'))
             self.ref_avgs = wx.TextCtrl(settings_parent,
                 validator=utils.CharValidator('int'))
+            self.drift_correct = wx.Checkbox(settings_parent, label='Drift correction')
             self.history_time = utils.ValueEntry(self._on_settings_change,
                 settings_parent, validator=utils.CharValidator('float_te'))
 
@@ -2087,6 +2191,7 @@ class UVPanel(utils.DevicePanel):
             self.auto_dark.SetValue(True)
             self.auto_dark_period.SetValue('{}'.format(60*60))
             self.dark_avgs.SetValue('1')
+            self.drift_correct.SetValue(True)
             self.ref_avgs.SetValue('1')
 
             other_settings_sizer = wx.GridBagSizer(vgap=self._FromDIP(5),
@@ -2103,9 +2208,10 @@ class UVPanel(utils.DevicePanel):
             other_settings_sizer.Add(wx.StaticText(settings_parent, label='Ref. averages:'),
                 (4,0))
             other_settings_sizer.Add(self.ref_avgs, (4,1), flag=wx.EXPAND)
+            other_settings_sizer.Add(self.drift_correct, (5,0), span=(1,2), flag=wx.EXPAND)
             other_settings_sizer.Add(wx.StaticText(settings_parent, label='History (s):'),
-                (5,0))
-            other_settings_sizer.Add(self.history_time, (5,1), flag=wx.EXPAND)
+                (6,0))
+            other_settings_sizer.Add(self.history_time, (6,1), flag=wx.EXPAND)
 
             other_settings_sizer.AddGrowableCol(1)
 
@@ -2653,8 +2759,13 @@ class UVPanel(utils.DevicePanel):
             if self.inline:
                 self._set_wavelength_range()
                 dark_correct = self.settings['dark_correct']
+                drift_correct = self.settings['drift_correct']
             else:
                 dark_correct = self.dark_correct.GetValue()
+                drift_correct = self.drift_correct.GetValue()
+
+            if drift_correct:
+                self._set_drift_params()
 
             auto_dark = self.auto_dark.GetValue()
             dark_time = float(self.auto_dark_period.GetValue())
@@ -2677,6 +2788,7 @@ class UVPanel(utils.DevicePanel):
                     'dark_correct'  : dark_correct,
                     'auto_dark'     : auto_dark,
                     'dark_time'     : dark_time,
+                    'drift_correct' : drift_correct,
                 }
 
                 cmd = ['collect_spec', [self.name,], kwargs]
@@ -2727,6 +2839,7 @@ class UVPanel(utils.DevicePanel):
 
                 spec_type = self.settings['spectrum_type']
                 dark_correct = self.settings['dark_correct']
+                drift_correct = self.settings['drift_correct']
                 take_ref = self.settings['series_ref_at_start']
 
                 int_trigger = False
@@ -2743,11 +2856,15 @@ class UVPanel(utils.DevicePanel):
 
                 spec_type = self.spectrum_type.GetStringSelection()
                 dark_correct = self.dark_correct.GetValue()
+                drift_correct = self.drift_correct.GetValue()
                 take_ref = self.series_ref.GetValue()
 
                 delta_t_min = int_time
 
                 int_trigger = True
+
+            if drift_correct:
+                self._set_drift_params()
 
             auto_dark = self.auto_dark.GetValue()
             dark_time = float(self.auto_dark_period.GetValue())
@@ -2769,6 +2886,7 @@ class UVPanel(utils.DevicePanel):
                 'dark_time'     : dark_time,
                 'take_ref'      : take_ref,
                 'ref_avgs'      : ref_avgs,
+                'drift_correct' : drift_correct,
             }
 
             cmd = ['collect_series', [self.name, num_spectra], kwargs]
@@ -2844,6 +2962,11 @@ class UVPanel(utils.DevicePanel):
 
         if self._current_abs_win != self.settings['abs_window']:
             cmd = ['set_abs_window', [self.name, self.settings['abs_window']], {}]
+            self._send_cmd(cmd)
+
+    def _set_drift_params(self):
+        if self._current_drift_win != self.settings['drift_window']:
+            cmd = ['set_drift_window', [self.name, self.settings['drift_window']],{}]
             self._send_cmd(cmd)
 
     def _set_autosave_parameters(self, prefix, data_dir):
@@ -2971,6 +3094,7 @@ class UVPanel(utils.DevicePanel):
             hist_t = val['hist_t']
             ls_shutter = val['ls_shutter']
             wl_range = val['wl_range']
+            drift_win = val['drift_win']
 
             if not self.inline and str(int_time) != self.int_time.GetValue():
                 self.int_time.SafeChangeValue(str(int_time))
@@ -2991,6 +3115,7 @@ class UVPanel(utils.DevicePanel):
             self._current_abs_wav = abs_wavs
             self._current_abs_win = abs_win
             self._current_wav_range = wl_range
+            self._current_drift_win = drift_win
 
             self._dark_spectrum = dark
             self._reference_spectrum = ref
@@ -3207,7 +3332,7 @@ class UVPanel(utils.DevicePanel):
 
     def _on_show_uv_plot(self, evt):
         if self.uvplot_frame is None:
-            self.uvplot_frame = UVPlotFrame(self.settings['plot_refresh_t'], self, 
+            self.uvplot_frame = UVPlotFrame(self.settings['plot_refresh_t'], self,
                 title='UV Plot', size=self._FromDIP((500, 500)))
 
             self.uv_plot = self.uvplot_frame.uv_plot
@@ -3420,7 +3545,7 @@ class UVPlot(wx.Panel):
 
     def _on_twindow_change(self, obj, val):
         self._time_window = float(val)
-        
+
         self.canvas.mpl_disconnect(self.cid)
         self.updatePlot()
         self.cid = self.canvas.mpl_connect('draw_event', self.ax_redraw)
@@ -3646,7 +3771,7 @@ class UVPlot(wx.Panel):
                     else:
                         cur_xmax = xmax
 
-                if (cur_xmax > oldx[1] or (oldx[1] - oldx[0] != self._time_window*1.1 
+                if (cur_xmax > oldx[1] or (oldx[1] - oldx[0] != self._time_window*1.1
                     and oldx[1] - oldx[0] != self._time_window)):
                     new_trange = True
                 else:
@@ -4056,7 +4181,9 @@ if __name__ == '__main__':
     spectrometer_settings = {
         'device_init'           : [{'name': 'CoflowUV', 'args': ['StellarNet', None],
                                     'kwargs': {'shutter_pv_name': '18ID:LJT4:2:DO11',
-                                    'trigger_pv_name' : '18ID:LJT4:2:DO12'}}],
+                                    'trigger_pv_name' : '18ID:LJT4:2:DO12',
+                                    'out1_pv_name' : '18ID:E1608:Ao1',
+                                    'out2_pv_name' : '18ID:E1608.Ao2'}}],
         'max_int_t'             : 0.025, # in s
         'scan_avg'              : 1,
         'smoothing'             : 0,
@@ -4071,10 +4198,15 @@ if __name__ == '__main__':
         'save_subdir'           : 'UV',
         'save_type'             : 'Absorbance',
         'series_ref_at_start'   : True,
+        'drift_correct'         : True,
+        'drift_window'          : [750, 800],
         'abs_wav'               : [280, 260],
         'abs_window'            : 1,
         'int_t_scale'           : 2,
         'wavelength_range'      : [200, 838.39],
+        'analog_out_v_max'      : 10,
+        'analog_out_au_max'     : 10,
+        'analog_out_wav'        : {'out1': 280, 'out2': 260},
         'remote_ip'             : '164.54.204.53',
         'remote_port'           : '5559',
         'remote'                : False,

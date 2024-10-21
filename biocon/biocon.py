@@ -682,6 +682,8 @@ if __name__ == '__main__':
         'save_subdir'           : 'UV',
         'save_type'             : 'Absorbance',
         'series_ref_at_start'   : True,
+        'drift_correct'         : True,
+        'drift_window'          : [750, 800],
         'abs_wav'               : [280, 260],
         'abs_window'            : 1,
         'int_t_scale'           : 2,
