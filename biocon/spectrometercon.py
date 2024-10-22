@@ -1021,6 +1021,29 @@ class Spectrometer(object):
         logger.debug('Spectrometer %s: Getting absorbance window', self.name)
         return self._absorbance_window
 
+    def get_analog_out_params(self):
+        logger.debug('Spectrometer %s: Getting analog out params', self.name)
+        ao_params = {
+            'do_analog_out': self._do_analog_out,
+            'analog_out_v_max': self._analog_out_v_max,
+            'analog_out_au_max': self._analog_out_au_max,
+            'analog_out_wavelengths': self._analog_out_wavelengths,
+            }
+
+        return ao_params
+
+    def set_analog_out_params(self, do_analog_out=True, analog_out_v_max=10,
+        analog_out_au_max=10, analog_out_wavelengths={}):
+        logger.info(('Spectrometer %s: Setting analog output parameters. '
+            'On: %s, V max: %s, Au max: %s, Wavelengths: %s'), self.name,
+            do_analog_out, analog_out_v_max, analog_out_au_max,
+            analog_out_wavelengths)
+        self._do_analog_out = do_analog_out
+        self._analog_out_v_max = analog_out_v_max
+        self._analog_out_au_max = analog_out_au_max
+        self._analog_out_wavelengths = analog_out_wavelengths
+
+
     def set_autosave_parameters(self, data_dir, prefix, save_raw=False,
         save_trans=False, save_abs=True):
         logger.debug('Spectrometer %s: Setting series autosave parameters: '
@@ -1394,6 +1417,8 @@ class UVCommThread(utils.CommManager):
             'get_wl_range'      : self._get_wavelength_range,
             'set_drift_window'  : self._set_drift_window,
             'get_drift_window'  : self._get_drift_window,
+            'set_ao_params'     : self._set_ao_params,
+            'get_ao_params'     : self._get_ao_params,
         }
 
         self._connected_devices = OrderedDict()
@@ -1922,6 +1947,7 @@ class UVCommThread(utils.CommManager):
         ls_shutter = device.get_lightsource_shutter()
         wl_range = device.get_wavelength_range()
         drift_win = device.get_drift_window()
+        ao_params = device.get_analog_out_params()
 
         ret_vals = {
             'int_time'  : int_time,
@@ -1936,6 +1962,9 @@ class UVCommThread(utils.CommManager):
             'ls_shutter': ls_shutter,
             'wl_range'  : wl_range,
             'drift_win' : drift_win,
+            'ao_v_max'  : ao_params['analog_out_v_max'],
+            'ao_au_max' : ao_params['analog_out_au_max'],
+            'ao_wavs'   : ao_params['analog_out_wavelengths'],
         }
 
         self._return_value((name, cmd, ret_vals), comm_name)
@@ -2035,6 +2064,32 @@ class UVCommThread(utils.CommManager):
 
         logger.debug("Device %s drift window: %s nm", name, val)
 
+    def _set_ao_params(self, name, **kwargs):
+        logger.debug("Device %s setting analog output params %s", name, kwargs)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        device.set_analog_out_params(val, **kwargs)
+
+        self._return_value((name, cmd, True), comm_name)
+
+        logger.debug("Device %s analog output params set", name)
+
+    def _get_ao_params(self, name, **kwargs):
+        logger.debug("Getting device %s drift window", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        val = device.get_analog_out_params(**kwargs)
+
+        self._return_value((name, cmd, val), comm_name)
+
+        logger.debug("Device %s analog output params: %s", name, val)
+
     def _monitor_series(self, name):
         device = self._connected_devices[name]
 
@@ -2102,6 +2157,9 @@ class UVPanel(utils.DevicePanel):
         self._current_abs_wav = None
         self._current_abs_win = None
         self._current_wav_range = None
+        self._current_ao_v_max = None
+        self._current_ao_au_max = None
+        self._current_ao_wav = {'out1': None, 'out2': None}
 
         self._series_exp_time = None
         self._series_scan_avg = None
