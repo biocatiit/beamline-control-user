@@ -149,7 +149,7 @@ class SpectraData(object):
         _, end_idx = utils.find_closest(window[1], self.wavelength)
 
         ref_avg = np.mean(bkg[start_idx:end_idx+1,1])
-        spec_avg = np.mean(self.spectrum[start_idx:end_idx+1,1])
+        spec_avg = np.mean(self.spectrum[start_idx:end_idx+1])
 
         self.spectrum = self.spectrum*ref_avg/spec_avg
 
@@ -165,7 +165,7 @@ class SpectraData(object):
     def calc_abs(self):
         logger.debug('SpectraData: Calculating absorbance')
 
-        self.abs_spectrum = -np.log10(self.trans_spectrum)
+        self.abs_spectrum = -np.log10(self.trans_spectrum)*1000
 
         self._calculate_all_abs_single_wavelength()
 
@@ -232,7 +232,7 @@ class SpectraData(object):
         elif spec_type == 'trans':
             header = h_start + 'Transmission'
         elif spec_type == 'abs':
-            header = h_start + 'Absorbance_(Au)'
+            header = h_start + 'Absorbance_(mAu)'
 
         np.savetxt(fname, self.get_spectrum(spec_type), delimiter=',',
             header=header)
@@ -291,8 +291,8 @@ class Spectrometer(object):
         self._wavelength_range_idx = [None, None]
 
         self._do_analog_out = True
-        self._analog_out_v_max = 10
-        self._analog_out_au_max = 10
+        self._analog_out_v_max = 10.
+        self._analog_out_au_max = 10000.
         self._analog_out_wavelengths = {}
 
         self._autosave_dir = None
@@ -376,6 +376,7 @@ class Spectrometer(object):
         Sets the analog output value, used for integration with external
         equipment such as the the Wyatt MALS/DLS
         """
+        pass
 
     def is_busy(self):
         busy =self._taking_data or self._taking_series
@@ -533,7 +534,6 @@ class Spectrometer(object):
             Spectrum type. Can be 'abs' - absorbance, 'trans' - transmission,
             'raw' - uncorrected (except for dark correction).
         """
-
         if not self.is_busy():
             if auto_dark:
                 self._auto_dark(dark_time)
@@ -551,7 +551,6 @@ class Spectrometer(object):
                     int_trigger, drift_correct)
             else:
                 spectrum = self._collect_spectrum_inner(dark_correct, int_trigger)
-
         else:
             raise RuntimeError('A spectrum or series of spectrum is already being '
                 'collected, cannot collect a new spectrum.')
@@ -597,6 +596,7 @@ class Spectrometer(object):
     def _collect_absorbance_spectrum_inner(self, dark_correct, int_trigger,
         drift_correct):
         logger.debug('Spectrometer %s: Getting absorbance spectrum', self.name)
+
         spectrum = self._collect_transmission_spectrum_inner(dark_correct,
             int_trigger, drift_correct)
 
@@ -604,14 +604,21 @@ class Spectrometer(object):
 
         if self._do_analog_out:
             for output, wav in self._analog_out_wavelengths.items():
-                abs_val = spectrum.get_absorbance(wav)
+                try:
+                    wav = float(wav)
+                except Exception:
+                    wav = 0
 
-                output_val = min(1, abs(abs_val/self.analog_out_au_max))*self._analog_out_v_max
+                if wav > 0:
+                    abs_val = spectrum.get_absorbance(wav)
 
-                if abs_val < 0:
-                    output_val *= -1
+                    output_val = (min(1., abs(abs_val/self._analog_out_au_max))
+                        *self._analog_out_v_max)
 
-                self._set_analog_output(output, output_val)
+                    if abs_val < 0:
+                        output_val *= -1
+
+                    self._set_analog_output(output, output_val)
 
         return spectrum
 
@@ -749,7 +756,7 @@ class Spectrometer(object):
                     .format(self.get_absorbance_window())
                                 )
                 for wav in absorbance:
-                    header += 'Abs_{}_nm_(Au),'.format(wav)
+                    header += 'Abs_{}_nm_(mAu),'.format(wav)
                 header.rstrip(',')
 
                 if out_data.size > 0:
@@ -1032,16 +1039,30 @@ class Spectrometer(object):
 
         return ao_params
 
-    def set_analog_out_params(self, do_analog_out=True, analog_out_v_max=10,
-        analog_out_au_max=10, analog_out_wavelengths={}):
-        logger.info(('Spectrometer %s: Setting analog output parameters. '
-            'On: %s, V max: %s, Au max: %s, Wavelengths: %s'), self.name,
-            do_analog_out, analog_out_v_max, analog_out_au_max,
-            analog_out_wavelengths)
-        self._do_analog_out = do_analog_out
-        self._analog_out_v_max = analog_out_v_max
-        self._analog_out_au_max = analog_out_au_max
-        self._analog_out_wavelengths = analog_out_wavelengths
+    def set_analog_out_params(self, **kwargs):
+        logger.info(('Spectrometer %s: Setting analog output parameters: %s'),
+            self.name, kwargs)
+        if 'do_ao' in kwargs:
+            self._do_analog_out = kwargs['do_ao']
+
+        if 'ao_v_max' in kwargs:
+            self._analog_out_v_max = kwargs['ao_v_max']
+
+        if 'ao_au_max' in kwargs:
+            self._analog_out_au_max = kwargs['ao_au_max']
+
+        if 'ao_wav' in kwargs:
+            self._analog_out_wavelengths = kwargs['ao_wav']
+
+        if not self._do_analog_out:
+            for output, wav in self._analog_out_wavelengths.items():
+                self._set_analog_output(output, 0)
+        else:
+            for output, wav in self._analog_out_wavelengths.items():
+                try:
+                    float(wav)
+                except Exception:
+                    self._set_analog_output(output, 0)
 
 
     def set_autosave_parameters(self, data_dir, prefix, save_raw=False,
@@ -1346,7 +1367,7 @@ class StellarnetUVVis(Spectrometer):
     def get_external_trigger(self):
         return self.ext_trig
 
-     def _set_analog_output(self, output, val):
+    def _set_analog_output(self, output, val):
         """
         Sets the analog output value, used for integration with external
         equipment such as the the Wyatt MALS/DLS
@@ -1962,6 +1983,7 @@ class UVCommThread(utils.CommManager):
             'ls_shutter': ls_shutter,
             'wl_range'  : wl_range,
             'drift_win' : drift_win,
+            'ao_on'     : ao_params['do_analog_out'],
             'ao_v_max'  : ao_params['analog_out_v_max'],
             'ao_au_max' : ao_params['analog_out_au_max'],
             'ao_wavs'   : ao_params['analog_out_wavelengths'],
@@ -2071,7 +2093,7 @@ class UVCommThread(utils.CommManager):
         cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
-        device.set_analog_out_params(val, **kwargs)
+        device.set_analog_out_params(**kwargs)
 
         self._return_value((name, cmd, True), comm_name)
 
@@ -2157,6 +2179,7 @@ class UVPanel(utils.DevicePanel):
         self._current_abs_wav = None
         self._current_abs_win = None
         self._current_wav_range = None
+        self._current_ao_on = None
         self._current_ao_v_max = None
         self._current_ao_au_max = None
         self._current_ao_wav = {'out1': None, 'out2': None}
@@ -2241,16 +2264,33 @@ class UVPanel(utils.DevicePanel):
                 validator=utils.CharValidator('int'))
             self.ref_avgs = wx.TextCtrl(settings_parent,
                 validator=utils.CharValidator('int'))
-            self.drift_correct = wx.Checkbox(settings_parent, label='Drift correction')
+            self.drift_correct = wx.CheckBox(settings_parent, label='Drift correction')
+            self.abs_wavs = utils.ValueEntry(self._on_settings_change,
+                settings_parent, validator=utils.CharValidator('float_list_pos_te'))
+            self.abs_window = utils.ValueEntry(self._on_settings_change,
+                settings_parent, validator=utils.CharValidator('float_pos_te'))
+            self.do_ao = wx.CheckBox(settings_parent, label='Analog Output')
+            self.ao_au_max = utils.ValueEntry(self._on_settings_change,
+                settings_parent, validator=utils.CharValidator('float_pos_te'))
+            self.ao_out1 = utils.ValueEntry(self._on_settings_change,
+                settings_parent, validator=utils.CharValidator('float_pos_te'))
+            self.ao_out2 = utils.ValueEntry(self._on_settings_change,
+                settings_parent, validator=utils.CharValidator('float_pos_te'))
             self.history_time = utils.ValueEntry(self._on_settings_change,
-                settings_parent, validator=utils.CharValidator('float_te'))
+                settings_parent, validator=utils.CharValidator('float_pos_te'))
 
             self.dark_correct.SetValue(True)
             self.auto_dark.SetValue(True)
             self.auto_dark_period.SetValue('{}'.format(60*60))
-            self.dark_avgs.SetValue('1')
+            self.dark_avgs.SetValue('2')
             self.drift_correct.SetValue(True)
-            self.ref_avgs.SetValue('1')
+            self.ref_avgs.SetValue('2')
+            self.abs_wavs.SafeChangeValue('280, 260')
+            self.abs_window.SafeChangeValue('1')
+            self.do_ao.SetValue(True)
+            self.ao_au_max.SafeChangeValue('10000')
+            self.ao_out1.SafeChangeValue('280')
+            self.ao_out2.SafeChangeValue('260')
 
             other_settings_sizer = wx.GridBagSizer(vgap=self._FromDIP(5),
                 hgap=self._FromDIP(5))
@@ -2267,9 +2307,25 @@ class UVPanel(utils.DevicePanel):
                 (4,0))
             other_settings_sizer.Add(self.ref_avgs, (4,1), flag=wx.EXPAND)
             other_settings_sizer.Add(self.drift_correct, (5,0), span=(1,2), flag=wx.EXPAND)
+            other_settings_sizer.Add(self.do_ao, (6,0), span=(1,2), flag=wx.EXPAND)
+            other_settings_sizer.Add(wx.StaticText(settings_parent, label='Abs. wav.s (nm):'),
+                (7,0))
+            other_settings_sizer.Add(self.abs_wavs, (7,1), flag=wx.EXPAND)
+            other_settings_sizer.Add(wx.StaticText(settings_parent, label='Abs. window (nm):'),
+                (8,0))
+            other_settings_sizer.Add(self.abs_window, (8,1), flag=wx.EXPAND)
+            other_settings_sizer.Add(wx.StaticText(settings_parent, label='AO mAu max:'),
+                (9,0))
+            other_settings_sizer.Add(self.ao_au_max, (9,1), flag=wx.EXPAND)
+            other_settings_sizer.Add(wx.StaticText(settings_parent, label='AO 1 wav:'),
+                (10,0))
+            other_settings_sizer.Add(self.ao_out1, (10,1), flag=wx.EXPAND)
+            other_settings_sizer.Add(wx.StaticText(settings_parent, label='AO 2 wav:'),
+                (11,0))
+            other_settings_sizer.Add(self.ao_out2, (11,1), flag=wx.EXPAND)
             other_settings_sizer.Add(wx.StaticText(settings_parent, label='History (s):'),
-                (6,0))
-            other_settings_sizer.Add(self.history_time, (6,1), flag=wx.EXPAND)
+                (12,0))
+            other_settings_sizer.Add(self.history_time, (12,1), flag=wx.EXPAND)
 
             other_settings_sizer.AddGrowableCol(1)
 
@@ -2367,17 +2423,21 @@ class UVPanel(utils.DevicePanel):
             series_box_sizer.Add(series_sizer, flag=wx.EXPAND|wx.ALL,
                 border=self._FromDIP(5))
 
-            control_sizer = wx.BoxSizer(wx.VERTICAL)
-            control_sizer.Add(status_sizer, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
+            cs_sizer_1 = wx.BoxSizer(wx.VERTICAL)
+            cs_sizer_1.Add(status_sizer, flag=wx.EXPAND|wx.BOTTOM,
                 border=self._FromDIP(5))
-            control_sizer.Add(settings_box_sizer, flag=wx.EXPAND|wx.ALL,
-                border=self._FromDIP(5))
-            control_sizer.Add(single_spectrum_box_sizer,
-                flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM, border=self._FromDIP(5))
-            control_sizer.Add(series_box_sizer, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM,
-                border=self._FromDIP(5))
-            control_sizer.AddStretchSpacer(1)
+            cs_sizer_1.Add(settings_box_sizer, flag=wx.EXPAND)
 
+            cs_sizer_2 = wx.BoxSizer(wx.VERTICAL)
+            cs_sizer_2.Add(single_spectrum_box_sizer,
+                flag=wx.EXPAND|wx.BOTTOM, border=self._FromDIP(5))
+            cs_sizer_2.Add(series_box_sizer, flag=wx.EXPAND)
+
+            control_sizer = wx.BoxSizer(wx.HORIZONTAL)
+            control_sizer.Add(cs_sizer_1, proportion=1, flag=wx.ALL,
+                border=self._FromDIP(5))
+            control_sizer.Add(cs_sizer_2, proportion=1,
+                flag=wx.TOP|wx.RIGHT|wx.BOTTOM, border=self._FromDIP(5))
 
             save_parent = wx.StaticBox(self, label='Save')
 
@@ -2704,6 +2764,9 @@ class UVPanel(utils.DevicePanel):
         elif obj == self.history_time:
             cmd = ['set_hist_time', [self.name, float(val)], {}]
 
+        elif (obj == self.ao_au_max or obj == self.ao_out1 or obj == self.ao_out2):
+            self._set_ao_params()
+            cmd = None
         else:
             cmd = None
 
@@ -2731,44 +2794,47 @@ class UVPanel(utils.DevicePanel):
 
             if self._live_update_evt.is_set():
                 if time.time() - update_time > self._plot_update_period:
-                    self._collect_spectrum()
                     update_time = time.time()
+                    self._collect_spectrum()
                 else:
-                    time.sleep(self._plot_update_period/3)
+                    time.sleep(self._plot_update_period/10)
             else:
                 time.sleep(0.5)
 
     def _set_wavelength_range(self):
         if self.inline:
-            update = False
+            wav_start = self.settings['wavelength_range'][0]
+            wav_end = self.settings['wavelength_range'][1]
+        else:
+            try:
+                wav_start = self.settings['wavelength_range'][0]
+                wav_end = self.settings['wavelength_range'][1]
+            except Exeption:
+                wav_start = None
+
+        update = False
+
+        if wav_start is not None:
             if self._current_wav_range is not None:
                 if ((self._current_wav_range[0] is None
-                    and self.settings['wavelength_range'][0] is not None) or
+                    and wav_start is not None) or
                     (self._current_wav_range[0] is not None
-                    and self.settings['wavelength_range'][0] is None) or
-                    (self._current_wav_range[0] != self.settings['wavelength_range'][0])
+                    and wav_start is None) or
+                    (self._current_wav_range[0] != wav_start)
                     or (self._current_wav_range[1] is None
-                    and self.settings['wavelength_range'][1] is not None) or
+                    and wav_end is not None) or
                     (self._current_wav_range[1] is not None
-                    and self.settings['wavelength_range'][1] is None) or
-                    (self._current_wav_range[1] != self.settings['wavelength_range'][1])):
+                    and wav_end is None) or
+                    (self._current_wav_range[1] != wav_end)):
                     update = True
 
             else:
                 update = True
 
-            if update:
-                cmd = ['set_wl_range', [self.name, self.settings['wavelength_range'][0],
-                    self.settings['wavelength_range'][1]], {}]
-                self._send_cmd(cmd)
-                self._current_wav_range = self.settings['wavelength_range']
-
-        else:
-            if self._current_abs_wav is None or len(self._current_abs_wav) == 0:
-                cmd = ['add_abs_wav', [self.name, 280], {}]
-                self._send_cmd(cmd)
-                # cmd = ['add_abs_wav', [self.name, 260], {}]
-                # self._send_cmd(cmd)
+        if update:
+            cmd = ['set_wl_range', [self.name, wav_start, wav_end], {}]
+            self._send_cmd(cmd)
+            self._current_wav_range = [wav_start, wav_end]
 
     def _on_collect_single(self, evt):
         obj = evt.GetEventObject()
@@ -2815,15 +2881,18 @@ class UVPanel(utils.DevicePanel):
 
         if not is_busy:
             if self.inline:
-                self._set_wavelength_range()
                 dark_correct = self.settings['dark_correct']
                 drift_correct = self.settings['drift_correct']
             else:
                 dark_correct = self.dark_correct.GetValue()
                 drift_correct = self.drift_correct.GetValue()
 
+            self._set_wavelength_range()
+            self._set_abs_params()
+
             if drift_correct:
                 self._set_drift_params()
+            self._set_ao_params()
 
             auto_dark = self.auto_dark.GetValue()
             dark_time = float(self.auto_dark_period.GetValue())
@@ -2891,14 +2960,12 @@ class UVPanel(utils.DevicePanel):
 
         if not is_busy:
             if self.inline:
-                self._set_wavelength_range()
                 self._set_exposure_settings(int_time, scan_avgs)
-                self._set_abs_params()
 
                 spec_type = self.settings['spectrum_type']
                 dark_correct = self.settings['dark_correct']
-                drift_correct = self.settings['drift_correct']
                 take_ref = self.settings['series_ref_at_start']
+                drift_correct = self.settings['drift_correct']
 
                 int_trigger = False
 
@@ -2914,15 +2981,19 @@ class UVPanel(utils.DevicePanel):
 
                 spec_type = self.spectrum_type.GetStringSelection()
                 dark_correct = self.dark_correct.GetValue()
-                drift_correct = self.drift_correct.GetValue()
                 take_ref = self.series_ref.GetValue()
+                drift_correct = self.drift_correct.GetValue()
 
                 delta_t_min = int_time
 
                 int_trigger = True
 
+            self._set_wavelength_range()
+            self._set_abs_params()
+
             if drift_correct:
                 self._set_drift_params()
+            self._set_ao_params()
 
             auto_dark = self.auto_dark.GetValue()
             dark_time = float(self.auto_dark_period.GetValue())
@@ -3008,24 +3079,121 @@ class UVPanel(utils.DevicePanel):
 
     def _set_abs_params(self):
 
-        for wav in self.settings['abs_wav']:
+        if self.inline:
+            abs_wav_list = self.settings['abs_wav']
+            abs_window = self.settings['abs_window']
+
+        else:
+            wavs_str = self.abs_wavs.GetValue()
+            abs_window = self.abs_window.GetValue()
+
+            try:
+                abs_window = float(abs_window)
+            except Exception:
+                abs_window = None
+
+            abs_wav_split = wavs_str.split(',')
+
+            abs_wav_list = []
+
+            for wav in abs_wav_split:
+                try:
+                    abs_wav_list.append(float(wav))
+                except Exception:
+                    pass
+
+        update = False
+
+        for wav in abs_wav_list:
             if wav not in self._current_abs_wav:
                 cmd = ['add_abs_wav', [self.name, wav], {}]
                 self._send_cmd(cmd)
+                update = True
 
         for wav in self._current_abs_wav:
-            if wav not in self.settings['abs_wav']:
+            if wav not in abs_wav_list:
                 cmd = ['remove_abs_wav', [self.name, wav], {}]
                 self._send_cmd(cmd)
+                update = True
 
-        if self._current_abs_win != self.settings['abs_window']:
-            cmd = ['set_abs_window', [self.name, self.settings['abs_window']], {}]
+        if update:
+            self._current_abs_wav = abs_wav_list
+
+        if self._current_abs_win != abs_window:
+            cmd = ['set_abs_window', [self.name, abs_window], {}]
             self._send_cmd(cmd)
+            self._current_abs_win = abs_window
 
     def _set_drift_params(self):
-        if self._current_drift_win != self.settings['drift_window']:
-            cmd = ['set_drift_window', [self.name, self.settings['drift_window']],{}]
+        if self.inline:
+            drift_window = self.settings['drift_window']
+        else:
+            try:
+                drift_window = self.settings['drift_window']
+            except Exception:
+                drift_window = [-1, -1]
+
+        if self._current_drift_win != drift_window:
+            cmd = ['set_drift_window', [self.name, drift_window],{}]
             self._send_cmd(cmd)
+
+    def _set_ao_params(self):
+        if self.inline:
+            do_ao = self.settings['do_ao']
+            ao_v_max = self.settings['analog_out_v_max']
+            ao_au_max = self.settings['analog_out_au_max']
+            ao_wav = self.settings['analog_out_wav']
+            params = {'do_ao': do_ao, 'ao_v_max': ao_v_max,
+                'ao_au_max' : ao_au_max, 'ao_wav': ao_wav}
+        else:
+            do_ao = self.do_ao.GetValue()
+            params = {'do_ao': do_ao}
+
+            try:
+                ao_au_max = float(self.ao_au_max.GetValue())
+                params['ao_au_max'] = ao_au_max
+            except Exception:
+                ao_au_max = 0
+
+            ao_wav = {}
+
+            try:
+                ao_out1 = float(self.ao_out1.GetValue())
+                ao_wav['out1'] = ao_out1
+            except Exception:
+                ao_wav['out1'] = None
+
+            try:
+                ao_out2 = float(self.ao_out2.GetValue())
+                ao_wav['out2'] = ao_out2
+            except Exception:
+                 ao_wav['out2'] = None
+
+            params['ao_wav'] = ao_wav
+
+            try:
+                ao_v_max = self.settings['analog_out_v_max']
+                params['ao_v_max'] = ao_v_max
+            except Exception:
+                ao_v_max = 0
+
+        if (do_ao != self._current_ao_on or ao_v_max != self._current_ao_v_max
+            or ao_au_max != self._current_ao_au_max
+            or ao_wav != self._current_ao_wav):
+                cmd = ['set_ao_params', [self.name,], params]
+                self._send_cmd(cmd)
+
+        if do_ao != self._current_ao_on:
+            self._current_ao_on = do_ao
+
+        if ao_v_max != self._current_ao_v_max:
+            self._current_ao_v_max = ao_v_max
+
+        if ao_au_max != self._current_ao_au_max:
+            self._current_ao_au_max = ao_au_max
+
+        if ao_wav != self._current_ao_wav:
+            self._current_ao_wav = ao_wav
 
     def _set_autosave_parameters(self, prefix, data_dir):
 
@@ -3153,6 +3321,10 @@ class UVPanel(utils.DevicePanel):
             ls_shutter = val['ls_shutter']
             wl_range = val['wl_range']
             drift_win = val['drift_win']
+            ao_on = val['ao_on']
+            ao_v_max = val['ao_v_max']
+            ao_au_max = val['ao_au_max']
+            ao_wav = val['ao_wavs']
 
             if not self.inline and str(int_time) != self.int_time.GetValue():
                 self.int_time.SafeChangeValue(str(int_time))
@@ -3162,6 +3334,14 @@ class UVPanel(utils.DevicePanel):
                 self.smoothing.SafeChangeValue(str(smooth))
             if not self.inline and str(xtiming) != self.xtiming.GetValue():
                 self.xtiming.SafeChangeValue(str(xtiming))
+            if not self.inline and str(ao_au_max) != self.ao_au_max.GetValue():
+                self.ao_au_max.SafeChangeValue(str(ao_au_max))
+            if (not self.inline and 'out1' in ao_wav
+                and str(ao_wav['out1']) != self.ao_out1.GetValue()):
+                self.ao_out1.SafeChangeValue(str(ao_wav['out1']))
+            if (not self.inline and 'out2' in ao_wav
+                and str(ao_wav['out2']) != self.ao_out2.GetValue()):
+                self.ao_out2.SafeChangeValue(str(ao_wav['out2']))
             if hist_t != self._history_length:
                 self.history_time.SafeChangeValue(str(hist_t))
 
@@ -3174,6 +3354,10 @@ class UVPanel(utils.DevicePanel):
             self._current_abs_win = abs_win
             self._current_wav_range = wl_range
             self._current_drift_win = drift_win
+            self._current_ao_on = ao_on
+            self._current_ao_v_max = ao_v_max
+            self._current_ao_au_max = ao_au_max
+            self._current_ao_wav = ao_wav
 
             self._dark_spectrum = dark
             self._reference_spectrum = ref
@@ -3489,7 +3673,7 @@ class UVPlot(wx.Panel):
 
         self.refresh_timer = wx.Timer()
         self.refresh_timer.Bind(wx.EVT_TIMER, self._on_refresh_timer)
-        self.refresh_timer.Start(self._refresh_time*1000)
+        self.refresh_timer.Start(int(self._refresh_time*1000))
 
 
     def _FromDIP(self, size):
@@ -3544,7 +3728,7 @@ class UVPlot(wx.Panel):
 
         self.subplot = self.fig.add_subplot(1,1,1)
         self.subplot.set_xlabel('Wavelength [nm]')
-        self.subplot.set_ylabel('Absorbance [Au]')
+        self.subplot.set_ylabel('Absorbance [mAu]')
 
         self.fig.subplots_adjust(left = 0.13, bottom = 0.1, right = 0.93,
             top = 0.93, hspace = 0.26)
@@ -3579,7 +3763,7 @@ class UVPlot(wx.Panel):
             self.zero_time.Disable()
         elif self.plot_type == 'Absorbance':
             self.subplot.set_xlabel('Time [min]')
-            self.subplot.set_ylabel('Absorbance [Au]')
+            self.subplot.set_ylabel('Absorbance [mAu]')
             self.spectrum_type_ctrl.Disable()
             self.t_window.Enable()
             self.zero_time.Enable()
@@ -3591,7 +3775,7 @@ class UVPlot(wx.Panel):
 
         if stype == 'Absorbance':
             self.spectrum_type = 'abs'
-            self.subplot.set_ylabel('Absorbance [Au]')
+            self.subplot.set_ylabel('Absorbance [mAu]')
         elif stype == 'Transmission':
             self.spectrum_type = 'trans'
             self.subplot.set_ylabel('Transmission')
@@ -4238,10 +4422,10 @@ if __name__ == '__main__':
 
     spectrometer_settings = {
         'device_init'           : [{'name': 'CoflowUV', 'args': ['StellarNet', None],
-                                    'kwargs': {'shutter_pv_name': '18ID:LJT4:2:DO11',
-                                    'trigger_pv_name' : '18ID:LJT4:2:DO12',
+                                    'kwargs': {'shutter_pv_name': '18ID:LJT4:2:Bi11',
+                                    'trigger_pv_name' : '18ID:LJT4:2:Bi12',
                                     'out1_pv_name' : '18ID:E1608:Ao1',
-                                    'out2_pv_name' : '18ID:E1608.Ao2'}}],
+                                    'out2_pv_name' : '18ID:E1608:Ao2'}}],
         'max_int_t'             : 0.025, # in s
         'scan_avg'              : 1,
         'smoothing'             : 0,
@@ -4262,8 +4446,8 @@ if __name__ == '__main__':
         'abs_window'            : 1,
         'int_t_scale'           : 2,
         'wavelength_range'      : [200, 838.39],
-        'analog_out_v_max'      : 10,
-        'analog_out_au_max'     : 10,
+        'analog_out_v_max'      : 10.,
+        'analog_out_au_max'     : 10000, #mAu
         'analog_out_wav'        : {'out1': 280, 'out2': 260},
         'remote_ip'             : '164.54.204.53',
         'remote_port'           : '5559',
@@ -4274,6 +4458,9 @@ if __name__ == '__main__':
         'inline_panel'          : False,
         'plot_refresh_t'        : 0.1, #in s
     }
+
+    #initialized epics ca context in the main thread first as recommended
+    epics.get_pv(spectrometer_settings['device_init'][0]['kwargs']['shutter_pv_name'])
 
     app = wx.App()
     logger.debug('Setting up wx app')

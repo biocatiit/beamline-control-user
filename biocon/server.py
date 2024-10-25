@@ -419,8 +419,8 @@ if __name__ == '__main__':
 
         setup_uv = [
             {'name': 'CoflowUV', 'args': ['StellarNet', None], 'kwargs':
-            {'shutter_pv_name': '18ID:LJT4:2:DO11',
-            'trigger_pv_name' : '18ID:LJT4:2:DO12'}},
+            {'shutter_pv_name': '18ID:LJT4:2:Bi11',
+            'trigger_pv_name' : '18ID:LJT4:2:Bi12'}},
             ]
 
         outlet_fm_comm_lock = threading.Lock()

@@ -93,6 +93,8 @@ class CharValidator(wx.Validator):
                 return
             elif self.flag == 'float_pos_te' and key not in string.digits+'.\n\r':
                 return
+            elif self.flag == 'float_list_pos_te' and key not in string.digits+', .\n\r':
+                return
 
         event.Skip()
 
