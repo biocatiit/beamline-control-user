@@ -2301,7 +2301,7 @@ class UVPanel(utils.DevicePanel):
             self.dark_correct.SetValue(True)
             self.auto_dark.SetValue(True)
             self.auto_dark_period.SetValue('{}'.format(60*60))
-            self.dark_avgs.SetValue('2')
+            self.dark_avgs.SetValue('3')
             self.drift_correct.SetValue(True)
             self.ref_avgs.SetValue('2')
             self.abs_wavs.SafeChangeValue('280, 260')
@@ -4523,7 +4523,7 @@ if __name__ == '__main__':
         'dark_correct'          : True,
         'auto_dark'             : True,
         'auto_dark_t'           : 60*60, #in s
-        'dark_avgs'             : 2,
+        'dark_avgs'             : 3,
         'ref_avgs'              : 2,
         'history_t'             : 60*60*24, #in s
         'save_subdir'           : 'UV',
