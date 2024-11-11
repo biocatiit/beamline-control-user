@@ -2917,12 +2917,12 @@ class HPLCCommThread(utils.CommManager):
             pump_status['power_status2'] = device.get_hplc_pump_power_status(2)
             pump_status['high_pressure_lim2'] =device.get_hplc_high_pressure_limit(2,
                 False)
-            pump_status['seal_wash1'] = device.get_hplc_seal_wash_settings(1)
-            pump_status['seal_wash2'] = device.get_hplc_seal_wash_settings(2)
+            # pump_status['seal_wash1'] = device.get_hplc_seal_wash_settings(1)
+            # pump_status['seal_wash2'] = device.get_hplc_seal_wash_settings(2)
 
         autosampler_status = {
             'thermostat_power_status'   : device.get_autosampler_thermostat_power_status(),
-            'temperature_setpoint'      : device.get_autosampler_temperature_set_point(),
+            'temperature_setpoint'      : device.get_autosampler_temperature_set_point(update=False),
             }
 
         if (isinstance(device, AgilentHPLCStandard)
@@ -3783,8 +3783,8 @@ class HPLCPanel(utils.DevicePanel):
         self._pump1_stop_eq_btn = wx.Button(pump1_box, label='Stop Equil.')
         self._pump1_on_btn = wx.Button(pump1_box, label='Pump On')
         self._pump1_standby_btn = wx.Button(pump1_box, label='Pump Standby')
-        self._pump1_off_btn = wx.Button(pump1_box, label='Pump Off')
-        self._pump1_seal_wash_btn = wx.Button(pump1_box, label='Set Seal Wash')
+        # self._pump1_off_btn = wx.Button(pump1_box, label='Pump Off')
+        # self._pump1_seal_wash_btn = wx.Button(pump1_box, label='Set Seal Wash')
 
         self._set_pump1_flow_rate_btn.Bind(wx.EVT_BUTTON, self._on_set_flow)
         self._set_pump1_flow_accel_btn.Bind(wx.EVT_BUTTON, self._on_set_flow_accel)
@@ -3797,8 +3797,8 @@ class HPLCPanel(utils.DevicePanel):
         self._pump1_stop_eq_btn.Bind(wx.EVT_BUTTON, self._on_stop_eq)
         self._pump1_on_btn.Bind(wx.EVT_BUTTON, self._on_pump_on)
         self._pump1_standby_btn.Bind(wx.EVT_BUTTON, self._on_pump_standby)
-        self._pump1_off_btn.Bind(wx.EVT_BUTTON, self._on_pump_off)
-        self._pump1_seal_wash_btn.Bind(wx.EVT_BUTTON, self._on_pump_seal_wash)
+        # self._pump1_off_btn.Bind(wx.EVT_BUTTON, self._on_pump_off)
+        # self._pump1_seal_wash_btn.Bind(wx.EVT_BUTTON, self._on_pump_seal_wash)
 
 
         pump1_ctrl_sizer1 = wx.FlexGridSizer(vgap=self._FromDIP(5),
@@ -3833,7 +3833,7 @@ class HPLCPanel(utils.DevicePanel):
         pump1_btn_sizer.Add(self._pump1_on_btn)
         pump1_btn_sizer.Add(self._pump1_standby_btn)
         pump1_btn_sizer.Add(self._pump1_off_btn)
-        pump1_btn_sizer.Add(self._pump1_seal_wash_btn)
+        # pump1_btn_sizer.Add(self._pump1_seal_wash_btn)
 
 
         pump1_sizer = wx.StaticBoxSizer(pump1_box, wx.VERTICAL)
@@ -3993,8 +3993,8 @@ class HPLCPanel(utils.DevicePanel):
             self._pump2_stop_eq_btn = wx.Button(pump2_box, label='Stop Equil.')
             self._pump2_on_btn = wx.Button(pump2_box, label='Pump On')
             self._pump2_standby_btn = wx.Button(pump2_box, label='Pump Standby')
-            self._pump2_off_btn = wx.Button(pump2_box, label='Pump Off')
-            self._pump2_seal_wash_btn = wx.Button(pump2_box, label='Set Seal Wash')
+            # self._pump2_off_btn = wx.Button(pump2_box, label='Pump Off')
+            # self._pump2_seal_wash_btn = wx.Button(pump2_box, label='Set Seal Wash')
 
 
             self._set_pump2_flow_rate_btn.Bind(wx.EVT_BUTTON, self._on_set_flow)
@@ -4008,8 +4008,8 @@ class HPLCPanel(utils.DevicePanel):
             self._pump2_stop_eq_btn.Bind(wx.EVT_BUTTON, self._on_stop_eq)
             self._pump2_on_btn.Bind(wx.EVT_BUTTON, self._on_pump_on)
             self._pump2_standby_btn.Bind(wx.EVT_BUTTON, self._on_pump_standby)
-            self._pump2_off_btn.Bind(wx.EVT_BUTTON, self._on_pump_off)
-            self._pump2_seal_wash_btn.Bind(wx.EVT_BUTTON, self._on_pump_seal_wash)
+            # self._pump2_off_btn.Bind(wx.EVT_BUTTON, self._on_pump_off)
+            # self._pump2_seal_wash_btn.Bind(wx.EVT_BUTTON, self._on_pump_seal_wash)
 
 
             pump2_ctrl_sizer1 = wx.FlexGridSizer(vgap=self._FromDIP(5),
@@ -4044,7 +4044,7 @@ class HPLCPanel(utils.DevicePanel):
             pump2_btn_sizer.Add(self._pump2_on_btn)
             pump2_btn_sizer.Add(self._pump2_standby_btn)
             pump2_btn_sizer.Add(self._pump2_off_btn)
-            pump2_btn_sizer.Add(self._pump2_seal_wash_btn)
+            # pump2_btn_sizer.Add(self._pump2_seal_wash_btn)
 
 
             pump2_sizer = wx.StaticBoxSizer(pump2_box, wx.VERTICAL)
@@ -4250,23 +4250,23 @@ class HPLCPanel(utils.DevicePanel):
         uv_sizer.Add(self._uv_260_abs_ctrl, flag=wx.ALIGN_CENTER_VERTICAL)
 
         self._mwd_power_on_btn = wx.Button(uv_box, label='MWD On')
-        self._uv_lamp_on_btn = wx.Button(uv_box, label='UV Lamp On')
-        self._uv_lamp_off_btn = wx.Button(uv_box, label='UV Lamp Off')
-        self._vis_lamp_on_btn = wx.Button(uv_box, label='Vis Lamp On')
-        self._vis_lamp_off_btn = wx.Button(uv_box, label='Vis Lamp Off')
+        # self._uv_lamp_on_btn = wx.Button(uv_box, label='UV Lamp On')
+        # self._uv_lamp_off_btn = wx.Button(uv_box, label='UV Lamp Off')
+        # self._vis_lamp_on_btn = wx.Button(uv_box, label='Vis Lamp On')
+        # self._vis_lamp_off_btn = wx.Button(uv_box, label='Vis Lamp Off')
 
         self._mwd_power_on_btn.Bind(wx.EVT_BUTTON, self._on_mwd_power_on)
-        self._uv_lamp_on_btn.Bind(wx.EVT_BUTTON, self._on_uv_lamp_on)
-        self._uv_lamp_off_btn.Bind(wx.EVT_BUTTON, self._on_uv_lamp_off)
-        self._vis_lamp_on_btn.Bind(wx.EVT_BUTTON, self._on_vis_lamp_on)
-        self._vis_lamp_off_btn.Bind(wx.EVT_BUTTON, self._on_vis_lamp_off)
+        # self._uv_lamp_on_btn.Bind(wx.EVT_BUTTON, self._on_uv_lamp_on)
+        # self._uv_lamp_off_btn.Bind(wx.EVT_BUTTON, self._on_uv_lamp_off)
+        # self._vis_lamp_on_btn.Bind(wx.EVT_BUTTON, self._on_vis_lamp_on)
+        # self._vis_lamp_off_btn.Bind(wx.EVT_BUTTON, self._on_vis_lamp_off)
 
         uv_btn_sizer = wx.FlexGridSizer(cols=2, hgap=self._FromDIP(5),
             vgap=self._FromDIP(5))
-        uv_btn_sizer.Add(self._uv_lamp_on_btn)
-        uv_btn_sizer.Add(self._uv_lamp_off_btn)
-        uv_btn_sizer.Add(self._vis_lamp_on_btn)
-        uv_btn_sizer.Add(self._vis_lamp_off_btn)
+        # uv_btn_sizer.Add(self._uv_lamp_on_btn)
+        # uv_btn_sizer.Add(self._uv_lamp_off_btn)
+        # uv_btn_sizer.Add(self._vis_lamp_on_btn)
+        # uv_btn_sizer.Add(self._vis_lamp_off_btn)
         uv_btn_sizer.Add(self._mwd_power_on_btn)
 
         top_sizer = wx.StaticBoxSizer(uv_box, wx.VERTICAL)
@@ -5382,8 +5382,8 @@ class HPLCPanel(utils.DevicePanel):
             if self._device_type == 'AgilentHPLC2Pumps':
                 pump2_power = str(pump_status['power_status2'])
                 pump2_pressure_lim = str(round(float(pump_status['high_pressure_lim2']),3))
-                pump1_seal_wash = pump_status['seal_wash1']
-                pump2_seal_wash = pump_status['seal_wash2']
+                # pump1_seal_wash = pump_status['seal_wash1']
+                # pump2_seal_wash = pump_status['seal_wash2']
 
                 if pump2_power != self._pump2_power:
                     wx.CallAfter(self._pump2_power_ctrl.SetLabel, pump2_power)
@@ -5394,15 +5394,15 @@ class HPLCPanel(utils.DevicePanel):
                         pump2_pressure_lim)
                     self._pump2_pressure_lim = pump2_pressure_lim
 
-                self._pump1_seal_wash_mode = str(pump1_seal_wash['mode'])
-                self._pump1_seal_wash_single_duration = str(pump1_seal_wash['single_duration'])
-                self._pump1_seal_wash_period = str(pump1_seal_wash['period'])
-                self._pump1_seal_wash_period_duration = str(pump1_seal_wash['period_duration'])
+                # self._pump1_seal_wash_mode = str(pump1_seal_wash['mode'])
+                # self._pump1_seal_wash_single_duration = str(pump1_seal_wash['single_duration'])
+                # self._pump1_seal_wash_period = str(pump1_seal_wash['period'])
+                # self._pump1_seal_wash_period_duration = str(pump1_seal_wash['period_duration'])
 
-                self._pump2_seal_wash_mode = str(pump2_seal_wash['mode'])
-                self._pump2_seal_wash_single_duration = str(pump2_seal_wash['single_duration'])
-                self._pump2_seal_wash_period = str(pump2_seal_wash['period'])
-                self._pump2_seal_wash_period_duration = str(pump2_seal_wash['period_duration'])
+                # self._pump2_seal_wash_mode = str(pump2_seal_wash['mode'])
+                # self._pump2_seal_wash_single_duration = str(pump2_seal_wash['single_duration'])
+                # self._pump2_seal_wash_period = str(pump2_seal_wash['period'])
+                # self._pump2_seal_wash_period_duration = str(pump2_seal_wash['period_duration'])
 
 
             sampler_status = val['autosampler_status']
