@@ -378,6 +378,12 @@ class Spectrometer(object):
         """
         pass
 
+    def _get_ext_trig_in(self):
+        """
+        Gets the value of the external trigger in (for running with MALS).
+        Should return True when it is high/starting the series.
+        """
+
     def is_busy(self):
         busy =self._taking_data or self._taking_series
         # logger.debug('Spectrometer %s: Busy: %s', self.name, busy)
@@ -624,7 +630,8 @@ class Spectrometer(object):
 
     def collect_spectra_series(self, num_spectra, spec_type='abs', return_q=None,
         delta_t_min=0, dark_correct=True, int_trigger=True, auto_dark=True,
-        dark_time=60*60, take_ref=True, ref_avgs=1, drift_correct=True):
+        dark_time=60*60, take_ref=True, ref_avgs=1, drift_correct=True,
+        wait_for_trig=False):
         if self.is_busy():
             raise RuntimeError('A spectrum or series of spectrum is already being '
                 'collected, cannot collect a new spectrum.')
@@ -638,14 +645,15 @@ class Spectrometer(object):
                 'dark_correct' : dark_correct, 'int_trigger' : int_trigger,
                 'auto_dark' : auto_dark, 'dark_time' : dark_time,
                 'take_ref' : take_ref, 'ref_avgs' : ref_avgs,
-                'drift_correct': drift_correct})
+                'drift_correct': drift_correct, 'wait_for_trig': wait_for_trig})
 
             self._series_thread.daemon = True
             self._series_thread.start()
 
     def _collect_spectra_series(self, num_spectra, return_q=None, spec_type='abs',
         delta_t_min=0, dark_correct=True, int_trigger=True, auto_dark=True,
-        dark_time=60*60, take_ref=True, ref_avgs=1, drift_correct=True):
+        dark_time=60*60, take_ref=True, ref_avgs=1, drift_correct=True,
+        wait_for_trig=False):
         if self.is_busy():
             raise RuntimeError('A spectrum or series of spectrum is already being '
                 'collected, cannot collect a new spectrum.')
@@ -690,6 +698,10 @@ class Spectrometer(object):
                 absorbance = {wav : [] for wav in abs_wavs}
 
                 abs_t = []
+
+            if wait_for_trig:
+                while not self._get_ext_trig_in():
+                    pass
 
             self._taking_series = True
 
@@ -1133,7 +1145,7 @@ class StellarnetUVVis(Spectrometer):
 
     def __init__(self, name, device, shutter_pv_name='18ID:LJT4:2:DI11',
         trigger_pv_name='18ID:LJT4:2:DI12', out1_pv_name='18ID:E1608:Ao1',
-        out2_pv_name='18ID:E1608:Ao2'):
+        out2_pv_name='18ID:E1608:Ao2', trigger_in_pv_name='18ID_E1608:Bi8'):
 
         Spectrometer.__init__(self, name, device)
 
@@ -1159,6 +1171,9 @@ class StellarnetUVVis(Spectrometer):
 
         self.analog_outs['out1'].get()
         self.analog_outs['out2'].get()
+
+        self.trigger_in_pv = epics.get_pv(trigger_in_pv_name)
+        self.trigger_in_pv.get()
 
         self.connect()
         self._get_config()
@@ -1374,6 +1389,10 @@ class StellarnetUVVis(Spectrometer):
         """
         dev = self.analog_outs[output]
         dev.put(val, wait=False)
+
+    def _get_ext_trig_in(self):
+        state = self.trigger_in_pv.get()
+        return state
 
     def abort_collection(self):
         logger.info('Spectrometer %s: Aborting collection', self.name)
@@ -2282,7 +2301,7 @@ class UVPanel(utils.DevicePanel):
             self.dark_correct.SetValue(True)
             self.auto_dark.SetValue(True)
             self.auto_dark_period.SetValue('{}'.format(60*60))
-            self.dark_avgs.SetValue('2')
+            self.dark_avgs.SetValue('3')
             self.drift_correct.SetValue(True)
             self.ref_avgs.SetValue('2')
             self.abs_wavs.SafeChangeValue('280, 260')
@@ -2369,6 +2388,7 @@ class UVPanel(utils.DevicePanel):
             self.series_period = wx.TextCtrl(series_parent,
                 validator=utils.CharValidator('float'))
             self.series_ref = wx.CheckBox(series_parent, label='Collect ref. at start')
+            self.series_trig = wx.CheckBox(series_parent, label='Wait for trig. (not SAXS)')
             self.autosave_series = wx.CheckBox(series_parent, label='Autosave series')
             self.autosave_choice = wx.Choice(series_parent, choices=['Absorbance',
                 'Transmission', 'Raw', 'A & T', 'A & T & R', 'A & R', 'T & R'])
@@ -2385,6 +2405,7 @@ class UVPanel(utils.DevicePanel):
             self.series_num.SetValue('2')
             self.series_period.SetValue('0')
             self.series_ref.SetValue(True)
+            self.series_trig.SetValue(False)
             self.autosave_series.SetValue(True)
             self.autosave_choice.SetStringSelection('Absorbance')
             self.autosave_dir.SetValue('.')
@@ -2407,16 +2428,17 @@ class UVPanel(utils.DevicePanel):
                 (1,0))
             series_sizer.Add(self.series_period, (1,1), span=(1,2), flag=wx.EXPAND)
             series_sizer.Add(self.series_ref, (2,0), span=(1,3))
-            series_sizer.Add(self.autosave_series, (3,0), span=(1,3))
-            series_sizer.Add(self.autosave_choice, (4,0), span=(1,3))
+            series_sizer.Add(self.series_trig, (3,0), span=(1,3))
+            series_sizer.Add(self.autosave_series, (4,0), span=(1,3))
+            series_sizer.Add(self.autosave_choice, (5,0), span=(1,3))
             series_sizer.Add(wx.StaticText(series_parent, label='Save prefix:'),
-                (5,0))
-            series_sizer.Add(self.autosave_prefix, (5,1), span=(1,2), flag=wx.EXPAND)
-            series_sizer.Add(wx.StaticText(series_parent, label='Save dir.:'),
                 (6,0))
-            series_sizer.Add(self.autosave_dir, (6,1), flag=wx.EXPAND)
-            series_sizer.Add(self.change_dir_btn, (6,2))
-            series_sizer.Add(start_stop_sizer, (7,0), span=(1,3),
+            series_sizer.Add(self.autosave_prefix, (6,1), span=(1,2), flag=wx.EXPAND)
+            series_sizer.Add(wx.StaticText(series_parent, label='Save dir.:'),
+                (7,0))
+            series_sizer.Add(self.autosave_dir, (7,1), flag=wx.EXPAND)
+            series_sizer.Add(self.change_dir_btn, (7,2))
+            series_sizer.Add(start_stop_sizer, (8,0), span=(1,3),
                 flag=wx.ALIGN_CENTER_HORIZONTAL)
 
             series_box_sizer = wx.StaticBoxSizer(series_parent,
@@ -3020,6 +3042,7 @@ class UVPanel(utils.DevicePanel):
                 drift_correct = self.settings['drift_correct']
 
                 int_trigger = False
+                wait_for_trig = False
 
                 uv_time = max(int_time*self.settings['int_t_scale'], 0.05)*scan_avgs
 
@@ -3039,6 +3062,7 @@ class UVPanel(utils.DevicePanel):
                 delta_t_min = int_time
 
                 int_trigger = True
+                wait_for_trig = self.series_trig.GetValue()
 
             self._set_wavelength_range()
             self._set_abs_params()
@@ -3068,6 +3092,7 @@ class UVPanel(utils.DevicePanel):
                 'take_ref'      : take_ref,
                 'ref_avgs'      : ref_avgs,
                 'drift_correct' : drift_correct,
+                'wait_for_trig' : wait_for_trig,
             }
 
             cmd = ['collect_series', [self.name, num_spectra], kwargs]
@@ -4488,7 +4513,8 @@ if __name__ == '__main__':
                                     'kwargs': {'shutter_pv_name': '18ID:LJT4:2:Bi11',
                                     'trigger_pv_name' : '18ID:LJT4:2:Bi12',
                                     'out1_pv_name' : '18ID:E1608:Ao1',
-                                    'out2_pv_name' : '18ID:E1608:Ao2'}}],
+                                    'out2_pv_name' : '18ID:E1608:Ao2',
+                                    'trigger_in_pv_name' : '18ID:E1608:Bi8'}}],
         'max_int_t'             : 0.025, # in s
         'scan_avg'              : 1,
         'smoothing'             : 0,
@@ -4497,7 +4523,7 @@ if __name__ == '__main__':
         'dark_correct'          : True,
         'auto_dark'             : True,
         'auto_dark_t'           : 60*60, #in s
-        'dark_avgs'             : 2,
+        'dark_avgs'             : 3,
         'ref_avgs'              : 2,
         'history_t'             : 60*60*24, #in s
         'save_subdir'           : 'UV',
