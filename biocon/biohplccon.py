@@ -544,6 +544,54 @@ class AgilentHPLCStandard(AgilentHPLC):
 
         return uv_abs
 
+    def get_hplc_elapsed_runtime(self, update=True):
+        """
+        Gets the elasped runtime of the specified flow path
+
+        Parameters
+        ----------
+        update: bool
+
+        Returns
+        -------
+        run_time: float
+            The elasped runtime of the specified flow path. Returns -1
+            if time cannot be acquired.
+        """
+
+        if self._active_flow_path == 1:
+            run_time = self.get_elapsed_runtime(self._pump1_id,
+                update)
+        elif self._active_flow_path == 2:
+            run_time = self.get_elapsed_runtime(self._pump2_id,
+                update)
+
+        return run_time
+
+    def get_hplc_total_runtime(self, update=True):
+        """
+        Gets the total runtime of the specified flow path
+
+        Parameters
+        ----------
+        update: bool
+
+        Returns
+        -------
+        run_time: float
+            The total runtime of the specified flow path. Returns -1
+            if time cannot be acquired.
+        """
+
+        if self._active_flow_path == 1:
+            run_time = self.get_total_runtime(self._pump1_id,
+                update)
+        elif self._active_flow_path == 2:
+            run_time = self.get_total_runtime(self._pump2_id,
+                update)
+
+        return run_time
+
     def _get_flow_rate1(self):
         return self.get_hplc_flow_rate(1)
 
@@ -2791,13 +2839,7 @@ class HPLCCommThread(utils.CommManager):
             'errors'            : device.get_instrument_errors(),
             'run_queue_status'  : device.get_run_queue_status(),
             'run_queue'         : device.get_run_queue(),
-            'elapsed_runtime'   : 0,
-            'remaining_runtime' : 0,
             }
-
-        if instrument_status['status'] == 'Run':
-            instrument_status['elapsed_runtime'] = device.get_elapsed_runtime()
-            instrument_status['remaining_runtime'] = device.get_remaining_runtime()
 
         pump_status = {
             'purging_pump1'     : device.get_purge_status(1),
@@ -2861,13 +2903,23 @@ class HPLCCommThread(utils.CommManager):
             # don't bother it when it's running
             return
 
+        instrument_status = {
+            'elapsed_runtime'   : 0,
+            'total_runtime'     : 0,
+            'status'            : status,
+            }
+
+        if status == 'Run':
+            instrument_status['elapsed_runtime'] = device.get_hplc_elapsed_runtime()
+            instrument_status['total_runtime'] = device.get_hplc_total_runtime( update=False)
+
         pump_status = {
             'target_flow1'      : device.get_hplc_target_flow_rate(1),
             'flow_accel1'       : device.get_hplc_flow_accel(1, False),
             }
 
         if isinstance(device, AgilentHPLC2Pumps):
-            pump_status['target_flow2'] = device.get_hplc_target_flow_rate(2, False)
+            pump_status['target_flow2'] = device.get_hplc_target_flow_rate(2)
             pump_status['flow_accel2'] = device.get_hplc_flow_accel(2, False)
 
         autosampler_status = {
@@ -2882,6 +2934,7 @@ class HPLCCommThread(utils.CommManager):
             uv_status = {}
 
         val = {
+            'instrument_status' : instrument_status,
             'pump_status'       : pump_status,
             'autosampler_status': autosampler_status,
             'uv_status'         : uv_status,
@@ -2922,7 +2975,7 @@ class HPLCCommThread(utils.CommManager):
 
         autosampler_status = {
             'thermostat_power_status'   : device.get_autosampler_thermostat_power_status(),
-            'temperature_setpoint'      : device.get_autosampler_temperature_set_point(update=False),
+            'temperature_setpoint'      : device.get_autosampler_temperature_set_point(),
             }
 
         if (isinstance(device, AgilentHPLCStandard)
@@ -3783,7 +3836,7 @@ class HPLCPanel(utils.DevicePanel):
         self._pump1_stop_eq_btn = wx.Button(pump1_box, label='Stop Equil.')
         self._pump1_on_btn = wx.Button(pump1_box, label='Pump On')
         self._pump1_standby_btn = wx.Button(pump1_box, label='Pump Standby')
-        # self._pump1_off_btn = wx.Button(pump1_box, label='Pump Off')
+        self._pump1_off_btn = wx.Button(pump1_box, label='Pump Off')
         # self._pump1_seal_wash_btn = wx.Button(pump1_box, label='Set Seal Wash')
 
         self._set_pump1_flow_rate_btn.Bind(wx.EVT_BUTTON, self._on_set_flow)
@@ -3797,7 +3850,7 @@ class HPLCPanel(utils.DevicePanel):
         self._pump1_stop_eq_btn.Bind(wx.EVT_BUTTON, self._on_stop_eq)
         self._pump1_on_btn.Bind(wx.EVT_BUTTON, self._on_pump_on)
         self._pump1_standby_btn.Bind(wx.EVT_BUTTON, self._on_pump_standby)
-        # self._pump1_off_btn.Bind(wx.EVT_BUTTON, self._on_pump_off)
+        self._pump1_off_btn.Bind(wx.EVT_BUTTON, self._on_pump_off)
         # self._pump1_seal_wash_btn.Bind(wx.EVT_BUTTON, self._on_pump_seal_wash)
 
 
@@ -3993,7 +4046,7 @@ class HPLCPanel(utils.DevicePanel):
             self._pump2_stop_eq_btn = wx.Button(pump2_box, label='Stop Equil.')
             self._pump2_on_btn = wx.Button(pump2_box, label='Pump On')
             self._pump2_standby_btn = wx.Button(pump2_box, label='Pump Standby')
-            # self._pump2_off_btn = wx.Button(pump2_box, label='Pump Off')
+            self._pump2_off_btn = wx.Button(pump2_box, label='Pump Off')
             # self._pump2_seal_wash_btn = wx.Button(pump2_box, label='Set Seal Wash')
 
 
@@ -4008,7 +4061,7 @@ class HPLCPanel(utils.DevicePanel):
             self._pump2_stop_eq_btn.Bind(wx.EVT_BUTTON, self._on_stop_eq)
             self._pump2_on_btn.Bind(wx.EVT_BUTTON, self._on_pump_on)
             self._pump2_standby_btn.Bind(wx.EVT_BUTTON, self._on_pump_standby)
-            # self._pump2_off_btn.Bind(wx.EVT_BUTTON, self._on_pump_off)
+            self._pump2_off_btn.Bind(wx.EVT_BUTTON, self._on_pump_off)
             # self._pump2_seal_wash_btn.Bind(wx.EVT_BUTTON, self._on_pump_seal_wash)
 
 
@@ -4250,23 +4303,23 @@ class HPLCPanel(utils.DevicePanel):
         uv_sizer.Add(self._uv_260_abs_ctrl, flag=wx.ALIGN_CENTER_VERTICAL)
 
         self._mwd_power_on_btn = wx.Button(uv_box, label='MWD On')
-        # self._uv_lamp_on_btn = wx.Button(uv_box, label='UV Lamp On')
-        # self._uv_lamp_off_btn = wx.Button(uv_box, label='UV Lamp Off')
-        # self._vis_lamp_on_btn = wx.Button(uv_box, label='Vis Lamp On')
-        # self._vis_lamp_off_btn = wx.Button(uv_box, label='Vis Lamp Off')
+        self._uv_lamp_on_btn = wx.Button(uv_box, label='UV Lamp On')
+        self._uv_lamp_off_btn = wx.Button(uv_box, label='UV Lamp Off')
+        self._vis_lamp_on_btn = wx.Button(uv_box, label='Vis Lamp On')
+        self._vis_lamp_off_btn = wx.Button(uv_box, label='Vis Lamp Off')
 
         self._mwd_power_on_btn.Bind(wx.EVT_BUTTON, self._on_mwd_power_on)
-        # self._uv_lamp_on_btn.Bind(wx.EVT_BUTTON, self._on_uv_lamp_on)
-        # self._uv_lamp_off_btn.Bind(wx.EVT_BUTTON, self._on_uv_lamp_off)
-        # self._vis_lamp_on_btn.Bind(wx.EVT_BUTTON, self._on_vis_lamp_on)
-        # self._vis_lamp_off_btn.Bind(wx.EVT_BUTTON, self._on_vis_lamp_off)
+        self._uv_lamp_on_btn.Bind(wx.EVT_BUTTON, self._on_uv_lamp_on)
+        self._uv_lamp_off_btn.Bind(wx.EVT_BUTTON, self._on_uv_lamp_off)
+        self._vis_lamp_on_btn.Bind(wx.EVT_BUTTON, self._on_vis_lamp_on)
+        self._vis_lamp_off_btn.Bind(wx.EVT_BUTTON, self._on_vis_lamp_off)
 
         uv_btn_sizer = wx.FlexGridSizer(cols=2, hgap=self._FromDIP(5),
             vgap=self._FromDIP(5))
-        # uv_btn_sizer.Add(self._uv_lamp_on_btn)
-        # uv_btn_sizer.Add(self._uv_lamp_off_btn)
-        # uv_btn_sizer.Add(self._vis_lamp_on_btn)
-        # uv_btn_sizer.Add(self._vis_lamp_off_btn)
+        uv_btn_sizer.Add(self._uv_lamp_on_btn)
+        uv_btn_sizer.Add(self._uv_lamp_off_btn)
+        uv_btn_sizer.Add(self._vis_lamp_on_btn)
+        uv_btn_sizer.Add(self._vis_lamp_off_btn)
         uv_btn_sizer.Add(self._mwd_power_on_btn)
 
         top_sizer = wx.StaticBoxSizer(uv_box, wx.VERTICAL)
@@ -4455,6 +4508,9 @@ class HPLCPanel(utils.DevicePanel):
                 do_switch = False
 
         if do_switch:
+            if switch_settings['purge_volume'] == 0:
+                switch_settings['purge_active'] = False
+
             cmd = ['set_active_flow_path', [self.name, flow_path], switch_settings]
             self._send_cmd(cmd, False)
 
@@ -5103,16 +5159,6 @@ class HPLCPanel(utils.DevicePanel):
             status = str(inst_status['status'])
             run_queue_status = str(inst_status['run_queue_status'])
             run_queue = inst_status['run_queue']
-            elapsed_runtime = inst_status['elapsed_runtime']
-            remaining_runtime = inst_status['remaining_runtime']
-
-            if (status != 'Run' and status != 'Injecting'
-                and status != 'PostRun' and status != 'PreRun'):
-                total_runtime = '0.0'
-                elapsed_runtime = '0.0'
-            else:
-                total_runtime = str(round(elapsed_runtime + remaining_runtime,1))
-                elapsed_runtime = str(round(elapsed_runtime, 1))
 
             if connected != self._inst_connected:
                 wx.CallAfter(self._inst_connected_ctrl.SetLabel,
@@ -5123,13 +5169,6 @@ class HPLCPanel(utils.DevicePanel):
                 wx.CallAfter(self._inst_status_ctrl.SetLabel,
                     status)
                 self._inst_status =  status
-
-            if((elapsed_runtime != self._inst_elapsed_runtime) or
-                (total_runtime != self._inst_total_runtime)):
-                wx.CallAfter(self._inst_runtime_ctrl.SetLabel,
-                    '{}/{}'.format(elapsed_runtime, total_runtime))
-                self._inst_elapsed_runtime =  elapsed_runtime
-                self._inst_total_runtime =  total_runtime
 
             if (run_queue_status != self._inst_run_queue_status):
                 wx.CallAfter(self._inst_run_queue_status_ctrl.SetLabel,
@@ -5337,6 +5376,26 @@ class HPLCPanel(utils.DevicePanel):
 
 
         elif cmd == 'get_slow_hplc_status':
+            inst_status = val['instrument_status']
+            elapsed_runtime = inst_status['elapsed_runtime']
+            total_runtime = inst_status['total_runtime']
+            status = str(inst_status['status'])
+
+            if (status != 'Run' and status != 'Injecting'
+                and status != 'PostRun' and status != 'PreRun'):
+                total_runtime = '0.0'
+                elapsed_runtime = '0.0'
+            else:
+                total_runtime = str(round(total_runtime,1))
+                elapsed_runtime = str(round(elapsed_runtime, 1))
+
+            if((elapsed_runtime != self._inst_elapsed_runtime) or
+                (total_runtime != self._inst_total_runtime)):
+                wx.CallAfter(self._inst_runtime_ctrl.SetLabel,
+                    '{}/{}'.format(elapsed_runtime, total_runtime))
+                self._inst_elapsed_runtime =  elapsed_runtime
+                self._inst_total_runtime =  total_runtime
+
             pump_status = val['pump_status']
             pump1_flow_target = str(round(float(pump_status['target_flow1']),3))
             pump1_flow_accel = str(round(float(pump_status['flow_accel1']),3))
@@ -6334,7 +6393,7 @@ if __name__ == '__main__':
         'name'  : 'SEC-SAXS',
         'args'  : ['AgilentHPLC', 'net.pipe://localhost/Agilent/OpenLAB/'],
         'kwargs': {'instrument_name': 'SEC-SAXS', 'project_name': 'Demo',
-                    'get_inst_method_on_start': True}
+                    'get_inst_method_on_start': True, 'use_angi': False,}
         }
 
     selector_valve_args = {
