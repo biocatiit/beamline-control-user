@@ -138,7 +138,7 @@ class WellPlate(object):
         return self.plate_params.keys()
 
 
-class Autosampler(object):
+class Old_Autosampler(object):
 
     def __init__(self, settings):
 
