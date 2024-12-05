@@ -3309,7 +3309,7 @@ class KPHM100Pump(M50Pump):
     with stepper motor, using the MForce controller.
     """
 
-    def __init__(self, name, device, comm_lock=None, flow_cal=353):
+    def __init__(self, name, device, comm_lock=None, flow_cal=319.2):
         """
         This makes the initial serial connection, and then sets the MForce
         controller parameters to the correct values.
@@ -4621,6 +4621,10 @@ known_syringes = {
                                 'max_rate': 11},
     '1.0 mL, Hamilton Glass': {'diameter': 4.61, 'max_volume': 1.0,
                                 'max_rate': 11},
+    '0.1 mL, Hamilton Glass': {'diameter': 1.46, 'max_volume': 0.1,
+                                'max_rate': 1},
+    '0.05 mL, Hamilton Glass': {'diameter': 1.03, 'max_volume': 0.05,
+                                'max_rate': 1},
     }
 
 
@@ -5794,12 +5798,24 @@ if __name__ == '__main__':
     #         'ctrl_args': {'flow_rate': 1}},
     #     ]
 
-    # # Peristaltic batch mode pumps
+    # Batch mode pumps
     # setup_devices = [
-    #     {'name': 'water', 'args': ['KPHM100', 'COM6'],
-    #         'kwargs': {'flow_cal': '353',},
-    #         'ctrl_args': {'flow_rate': 1}},
-    #     ]
+        # {'name': 'water', 'args': ['KPHM100', 'COM3'],
+        #     'kwargs': {'flow_cal': '319.2',},
+        #     'ctrl_args': {'flow_rate': 1}},
+        # {'name': 'ethanol', 'args': ['KPHM100', 'COM5'],
+        #     'kwargs': {'flow_cal': '319.2',},
+        #     'ctrl_args': {'flow_rate': 1}},
+        # {'name': 'hellmanex', 'args': ['KPHM100', 'COM6'],
+        #     'kwargs': {'flow_cal': '319.2',},
+        #     'ctrl_args': {'flow_rate': 1}},
+    setup_devices = [
+        {'name': 'Sample', 'args': ['Hamilton PSD6', 'COM4'],
+            'kwargs': {'syringe_id': '0.1 mL, Hamilton Glass',
+             'pump_address': '1', 'dual_syringe': 'False'},
+            'ctrl_args': {'flow_rate' : '1', 'refill_rate' : '1'}},
+        ]
+
 
 
     # # Coflow with OB1
@@ -5917,12 +5933,12 @@ if __name__ == '__main__':
     #     ]
 
     # # Batch mode Hamilton PSD6 pump
-    setup_devices = [
-        {'name': 'Sample', 'args': ['Hamilton PSD6', 'COM4'],
-            'kwargs': {'syringe_id': '1 mL, Medline P.C.',
-             'pump_address': '1', 'dual_syringe': 'False'},
-            'ctrl_args': {'flow_rate' : '1', 'refill_rate' : '1'}},
-        ]
+    # setup_devices = [
+    #     {'name': 'Sample', 'args': ['Hamilton PSD6', 'COM4'],
+    #         'kwargs': {'syringe_id': '1 mL, Medline P.C.',
+    #          'pump_address': '1', 'dual_syringe': 'False'},
+    #         'ctrl_args': {'flow_rate' : '1', 'refill_rate' : '1'}},
+    #     ]
 
     # # Simulated pumps
     # setup_devices = [

@@ -890,3 +890,5 @@ if __name__ == '__main__':
     if com_thread is not None:
         com_thread.stop()
         com_thread.join()
+
+
