@@ -261,7 +261,7 @@ class EPICSEigerDetector(object):
         if status == 10:
             status = 0
 
-        return status 
+        return status
 
     def get_data_dir(self):
         return self.det.get('cam1:FilePath', as_string=True)
@@ -278,7 +278,7 @@ class EPICSEigerDetector(object):
 
     def set_exp_time(self, exp_time):
         trig_mode = self.det.get('cam1:TriggerMode_RBV', as_string=True)
-        
+
         if trig_mode == 'Internal Enable':
             self.det.put('cam1:TriggerExposure', exp_time, wait=True, timeout=1)
         else:

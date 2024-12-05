@@ -38,6 +38,7 @@ logger = logging.getLogger(__name__)
 
 import wx
 from wx.lib.wordwrap import wordwrap
+import wx.lib.mixins.listctrl
 from wx.lib.stattext import GenStaticText as StaticText
 import wx.lib.mixins.listctrl
 from matplotlib.backends.backend_wxagg import NavigationToolbar2WxAgg
@@ -91,6 +92,8 @@ class CharValidator(wx.Validator):
             elif self.flag == 'float_neg' and key not in string.digits+'.-':
                 return
             elif self.flag == 'float_pos_te' and key not in string.digits+'.\n\r':
+                return
+            elif self.flag == 'float_list_pos_te' and key not in string.digits+', .\n\r':
                 return
 
         event.Skip()
@@ -292,11 +295,11 @@ class IntSpinCtrl(wx.Panel):
         if platform.system() != 'Windows':
             self.Scale = wx.TextCtrl(self, value=str(my_min),
                 size=self._FromDIP((TextLength,-1)), style=wx.TE_PROCESS_ENTER,
-                validator=CharValidator('int'))
+                validator=CharValidator('int_te'))
         else:
             self.Scale = wx.TextCtrl(self, value=str(my_min),
                 size=self._FromDIP((TextLength,22)), style=wx.TE_PROCESS_ENTER,
-                validator=CharValidator('int'))
+                validator=CharValidator('int_te'))
 
         self.Scale.Bind(wx.EVT_KILL_FOCUS, self.OnScaleChange)
         self.Scale.Bind(wx.EVT_TEXT_ENTER, self.OnScaleChange)
@@ -1666,7 +1669,7 @@ class BufferEntryDialog(wx.Dialog):
         self._buffer_ctrl.Bind(wx.EVT_CHOICE, self._on_buffer_choice)
 
         self._buffer_volume = wx.TextCtrl(parent, size=self._FromDIP((100,-1)),
-            validator=utils.CharValidator('float'))
+            validator=CharValidator('float'))
         self._buffer_contents = wx.TextCtrl(parent,
             style=wx.TE_MULTILINE|wx.TE_BESTWRAP)
 
@@ -1730,3 +1733,32 @@ class BufferList(wx.ListCtrl, wx.lib.mixins.listctrl.ListCtrlAutoWidthMixin):
         self.SetColumnWidth(1, 50)
 
         wx.lib.mixins.listctrl.ListCtrlAutoWidthMixin.__init__(self)
+
+
+def set_best_size(window, shrink=False):
+
+    best_size = window.GetBestSize()
+    current_size = window.GetSize()
+
+    client_display = wx.GetClientDisplayRect()
+
+    best_width = min(best_size.GetWidth(), client_display.Width)
+    best_height = min(best_size.GetHeight(), client_display.Height)
+
+    if best_size.GetWidth() > current_size.GetWidth():
+        best_size.SetWidth(best_width)
+    else:
+        if not shrink:
+            best_size.SetWidth(current_size.GetWidth())
+        else:
+            best_size.SetWidth(best_width)
+
+    if best_size.GetHeight() > current_size.GetHeight():
+        best_size.SetHeight(best_height)
+    else:
+        if not shrink:
+            best_size.SetHeight(current_size.GetHeight())
+        else:
+            best_size.SetHeight(best_height)
+
+    window.SetSize(best_size)

@@ -42,10 +42,9 @@ from matplotlib.figure import Figure
 matplotlib.rcParams['backend'] = 'WxAgg'
 
 
-# import fmcon
 import client
-import pumpcon
-import fmcon
+# import pumpcon
+# import fmcon
 import utils
 
 class CoflowControl(object):
@@ -84,7 +83,7 @@ class CoflowControl(object):
             self.overflow_connected = True
             self.session = requests.Session()
 
-        self._buffer_monitor1 = utils.BufferMonitor(self._get_buffer_monitor_flow_rate)
+        self._buffer_monitor = utils.BufferMonitor(self._get_buffer_monitor_flow_rate)
 
     def init_connections(self):
         self.coflow_pump_cmd_q = deque()
@@ -918,7 +917,7 @@ class CoflowPanel(wx.Panel):
         flow_rate_sizer.Add(self.change_flow_button, flag=wx.ALIGN_CENTER_VERTICAL)
 
         self.start_flow_button = wx.Button(control_box, label='Start Coflow')
-        self.stop_flow_button = wx.Button(control_box, label='Stop Coflow')
+        self.stop_flow_button = wx.Button(control_box, label='Coflow')
         self.change_buffer_button = wx.Button(control_box, label='Change Buffer')
 
         self.auto_flow = wx.CheckBox(control_box, label='Start/stop coflow automatically with exposure')
@@ -1163,7 +1162,7 @@ class CoflowPanel(wx.Panel):
         button1_sizer.Add(self._remove_buffer1_btn)
 
         buffer_sizer = wx.StaticBoxSizer(buffer_box, wx.VERTICAL)
-        buffer_sizer.Add(self._buffer1_list, flag=wx.EXPAND|wx.ALL,
+        buffer_sizer.Add(self._buffer_list, flag=wx.EXPAND|wx.ALL,
             proportion=1, border=self._FromDIP(5))
         buffer_sizer.Add(button1_sizer, flag=wx.LEFT|wx.RIGHT|wx.BOTTOM,
             border=self._FromDIP(5))
@@ -1206,11 +1205,14 @@ class CoflowPanel(wx.Panel):
 
     def _on_change_buffer(self, evt):
         self.stop_flow_timer()
-        self.verbose_buffer_change = True
 
-        self.change_buffer()
+        self.change_buffer(interactive=True)
 
-    def change_buffer(self, target_valve_pos=1, change_valve_pos=False, interactive=True):
+    def get_flow_rate(self):
+        return self.flow_rate.GetValue()
+
+    def change_buffer(self, target_valve_pos=1, change_valve_pos=False,
+        interactive=True):
         #Stop flow
         self.stop_flow()
 
@@ -1219,7 +1221,7 @@ class CoflowPanel(wx.Panel):
 
         valve_pos = self.get_sheath_valve_position()
 
-
+        self.verbose_buffer_change = interactive
 
         if interactive:
             if int(valve_pos) != int(target_valve_pos):
@@ -1268,14 +1270,17 @@ class CoflowPanel(wx.Panel):
             self.change_buffer(next_buffer, True, False)
 
     def _on_put_in_water(self, evt):
-        self.stop_flow_timer()
-        self.verbose_buffer_change = False
+        self._put_in_water()
 
+    def _put_in_water(self):
+        self.stop_flow_timer()
         self.change_buffer(self.settings['sheath_valve_water_pos'], True, False)
 
     def _on_put_in_ethanol(self, evt):
+        self._put_in_ethanol()
+
+    def _put_in_ethanol(self):
         self.stop_flow_timer()
-        self.verbose_buffer_change = False
 
         self.buffer_change_sequence = [self.settings['sheath_valve_water_pos'],
             self.settings['sheath_valve_ethanol_pos'],
@@ -1284,8 +1289,10 @@ class CoflowPanel(wx.Panel):
         self._next_buffer_change()
 
     def _on_put_in_hellmanex(self, evt):
+        self._put_in_hellmanex()
+
+    def _put_in_hellmanex(self):
         self.stop_flow_timer()
-        self.verbose_buffer_change = False
 
         self.buffer_change_sequence = [self.settings['sheath_valve_water_pos'],
             self.settings['sheath_valve_hellmanex_pos'],
@@ -1294,8 +1301,10 @@ class CoflowPanel(wx.Panel):
         self._next_buffer_change()
 
     def _on_clean(self, evt):
+        self._clean_cell()
+
+    def _clean_cell(self):
         self.stop_flow_timer()
-        self.verbose_buffer_change = False
 
         self.buffer_change_sequence = [self.settings['sheath_valve_water_pos'],
             self.settings['sheath_valve_hellmanex_pos'],
@@ -1349,7 +1358,7 @@ class CoflowPanel(wx.Panel):
             title = 'Flow time not set'
             style=wx.OK|wx.ICON_WARNING
 
-            wx.CallAfter(self._show_message_dialog, msg, title, style)
+            wx.CallAfter(self.showMessageDialog, self, msg, title, style)
 
             flow_time = None
 
@@ -1362,7 +1371,7 @@ class CoflowPanel(wx.Panel):
 
         self.set_flow_timer_time_remaining(self.flow_timer_run_time)
 
-        self.flow_timer.Start(5000)
+        wx.CallAfter(self.flow_timer.Start, 5000)
 
         wx.CallAfter(self.stop_flow_timer_btn.Enable)
         wx.CallAfter(self.start_flow_timer_btn.Disable)
@@ -1482,19 +1491,19 @@ class CoflowPanel(wx.Panel):
                 self._start_flow()
 
     def _start_flow(self, start_monitor=True):
-        self.start_flow_button.Disable()
-        self.change_buffer_button.Disable()
-        self.stop_flow_button.Enable()
-        self.change_flow_button.Enable()
+        wx.CallAfter(self.start_flow_button.Disable)
+        wx.CallAfter(self.change_buffer_button.Disable)
+        wx.CallAfter(self.stop_flow_button.Enable)
+        wx.CallAfter(self.change_flow_button.Enable)
 
         self.coflow_control.start_flow()
 
-        self.status.SetLabel('Coflow on')
+        wx.CallAfter(self.status.SetLabel, 'Coflow on')
 
         if start_monitor:
-            self.monitor_timer.Start(self.settings['settling_time'])
+            wx.CallAfter(self.monitor_timer.Start, self.settings['settling_time'])
 
-    def stop_flow(self):
+    def stop_flow(self, verbose=True):
         logger.debug('Stopping flow')
 
         stop_coflow = True
@@ -1505,7 +1514,7 @@ class CoflowPanel(wx.Panel):
         else:
             exposure_running = False
 
-        if exposure_running:
+        if exposure_running and verbose:
             msg = ('The exposure is still running. Are you sure you want '
                 'to stop the coflow?')
 
@@ -1635,7 +1644,7 @@ class CoflowPanel(wx.Panel):
         pos = self.get_sheath_valve_position()
 
         if self.current_sheath_valve_position != int(pos):
-            wx.CallAfter(self.sheath_valve_pos.SaveChangeValue, int(pos))
+            wx.CallAfter(self.sheath_valve_pos.SafeChangeValue, int(pos))
             self.current_sheath_valve_position = int(pos)
 
     def _get_flow_rates(self):
@@ -1761,6 +1770,9 @@ class CoflowPanel(wx.Panel):
 
             if time.time() - long_cycle_time > 5:
                 wx.CallAfter(self.check_sheath_valve_pos)
+
+                buffers = self.coflow_control.get_all_buffer_info()
+                wx.CallAfter(self._update_all_buffers, buffers)
 
                 long_cycle_time = time.time()
 
@@ -1920,27 +1932,19 @@ class CoflowPanel(wx.Panel):
 
         if vol is not None:
             vol = vol*1000
-            cmd = ['set_buffer_info', [self.name, pos, vol, descrip, flow_path],
-                {}]
-            self._send_cmd(cmd, False)
+            self.coflow_control.set_buffer_info(pos, vol, descrip)
 
     def _on_remove_buffer(self, evt):
         evt_obj = evt.GetEventObject()
 
-        if self._remove_buffer1_btn == evt_obj:
-            flow_path = 1
-            buffer_info = self._buffer1_info
-        elif self._remove_buffer1_btn == evt_obj:
-            buffer_info = self._buffer2_info
-            flow_path = 2
+        buffer_info = self._buffer_info
 
         choices = ['{} - {}'.format(key, buffer_info[key]['descrip'])
             for key in buffer_info]
         choice_pos = [key for key in buffer_info]
 
         choice_dlg = wx.MultiChoiceDialog(self,
-            'Select pump {} buffer(s) to remove'.format(flow_path),
-            'Remove Buffer', choices)
+            'Select buffer(s) to remove', 'Remove Buffer', choices)
         result = choice_dlg.ShowModal()
 
         if result == wx.ID_OK:
@@ -1954,13 +1958,146 @@ class CoflowPanel(wx.Panel):
             remove_pos = [choice_pos[i] for i in sel_items]
 
             for pos in remove_pos:
-                cmd = ['remove_buffer', [self.name, pos, flow_path], {}]
-                self._send_cmd(cmd, True)
+                self.coflow_control.remove_buffer(pos)
 
-                self._remove_buffer_from_list(flow_path, pos)
+                self._remove_buffer_from_list(pos)
+
+    def _update_all_buffers(self, buffers):
+        for key, value in buffers.items():
+            pos = key
+            vol = value['vol']
+            descrip = value['descrip']
+            self._update_buffer_list(pos, vol, descrip)
+
+        self._buffer_info = buffers
+
+    def _update_buffer_list(self, pos, vol, descrip):
+        buffer_list = self._buffer_list
+        buffer_info = self._buffer_info
+
+        vol = round(vol,1)
+
+        update = True
+        new_item = False
+        if pos in buffer_info:
+            cur_vol = buffer_info[pos]['vol']
+            cur_descrip = buffer_info[pos]['descrip']
+
+            if round(cur_vol,1) == vol and cur_descrip == descrip:
+                update = False
+
+        else:
+            new_item = True
+
+        vol = round(vol/1000., 4)
+
+        if update:
+            new_insert_pos = -1
+
+            for i in range(buffer_list.GetItemCount()):
+                item = buffer_list.GetItem(i)
+                item_pos = buffer_list.GetItemData(i)
+
+                if new_item and item_pos > int(pos):
+                    new_insert_pos = i
+                    break
+
+                elif not new_item and item_pos == int(pos):
+                    modif_pos = i
+                    break
+
+            if new_item:
+                if new_insert_pos == -1:
+                    new_insert_pos = buffer_list.GetItemCount()
+
+                buffer_list.InsertItem(new_insert_pos, str(pos))
+                buffer_list.SetItem(new_insert_pos, 1, str(vol))
+                buffer_list.SetItem(new_insert_pos, 2, descrip)
+                buffer_list.SetItemData(new_insert_pos, int(pos))
+            else:
+                buffer_list.SetItem(modif_pos, 1, str(vol))
+                buffer_list.SetItem(modif_pos, 2, descrip)
+
+    def _remove_buffer_from_list(self, pos):
+        buffer_list = self._buffer_list
+
+
+        for i in range(buffer_list.GetItemCount()):
+            item = buffer_list.GetItem(i)
+            item_pos = buffer_list.GetItemData(i)
+
+            if item_pos == int(pos):
+                buffer_list.DeleteItem(i)
+                break
+
+    def _get_automator_state(self):
+        if self.doing_buffer_change:
+            state = 'change_buf'
+
+        elif self.coflow_control.coflow_on:
+            state = 'idle'
+
+        else:
+            state = 'idle'
+
+        return state
 
     def automator_callback(self, cmd_name, cmd_args, cmd_kwargs):
-        pass
+        success = True
+
+        if cmd_name == 'status':
+            state = self._get_automator_state()
+
+        elif cmd_name == 'abort':
+            if self.doing_buffer_change:
+                self.stop_flow(False)
+            state = 'idle'
+
+        elif cmd_name == 'start':
+            flow_rate = float(cmd_kwargs['flow_rate'])
+            self._change_flow_rate(flow_rate)
+            self._start_flow()
+            state = 'idle'
+
+        elif cmd_name == 'stop':
+            self.stop_flow(False)
+            state = 'idle'
+
+        elif cmd_name == 'change_flow':
+            flow_rate = float(cmd_kwargs['flow_rate'])
+            self._change_flow_rate(flow_rate)
+            state = self._get_automator_state()
+
+        elif cmd_name == 'change_buf':
+            buffer_pos = int(cmd_kwargs['buffer_pos'])
+            self.change_buffer(buffer_pos, True, False)
+            state = 'change_buf'
+
+        elif cmd_name == 'clean':
+            self._clean_cell()
+            state = 'change_buf'
+
+        elif cmd_name == 'into_hellmanex':
+            self._put_in_hellmanex()
+            state = 'change_buf'
+
+        elif cmd_name == 'into_ethanol':
+            self._put_in_ethanol()
+            state = 'change_buf'
+
+        elif cmd_name == 'into_water':
+            self._put_in_water()
+            state = 'change_buf'
+
+        elif cmd_name == 'overflow_on':
+            self.coflow_control.start_overflow()
+            state = self._get_automator_state()
+
+        elif cmd_name == 'overflow_off':
+            self.coflow_control.stop_overflow()
+            state = self._get_automator_state()
+
+        return state, success
 
     def on_exit(self):
         if self.connected:
@@ -1972,7 +2109,7 @@ class CoflowPanel(wx.Panel):
 
             if not self.coflow_control.timeout_event.is_set():
                 self.get_fr_thread.join()
-                self.stop_flow()
+                # self.stop_flow()
 
             try:
                 plot_window = wx.FindWindowByName('CoflowPlot')
@@ -2361,7 +2498,7 @@ class CoflowFrame(wx.Frame):
         self.coflow_sizer.Add(self.coflow_panel, proportion=1, flag=wx.EXPAND)
 
         top_sizer = wx.BoxSizer(wx.VERTICAL)
-        top_sizer.Add(self.coflow_sizer, proportion=1, flag=wx.EXPAND|wx.ALL, border=5)
+        top_sizer.Add(self.coflow_sizer, proportion=1, flag=wx.EXPAND)
 
         self.SetSizer(top_sizer)
 
@@ -2410,22 +2547,22 @@ if __name__ == '__main__':
                                         'kwargs': {'flow_cal': '627.72',
                                         'backlash_cal': '9.814'},
                                         'ctrl_args': {'flow_rate': 1}},
-        'outlet_pump'               : {'name': 'outlet', 'args': ['VICI M50', 'COM4'],
-                                        'kwargs': {'flow_cal': '628.68',
-                                        'backlash_cal': '9.962'},
-                                        'ctrl_args': {'flow_rate': 1}},
-        # 'outlet_pump'               : {'name': 'outlet', 'args': ['OB1 Pump', 'COM8'],
-        #                                 'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
-        #                                 'min_pressure': -1000, 'max_pressure': 1000, 'P': 5, 'I': 0.00015,
-        #                                 'D': 0, 'bfs_instr_ID': None, 'comm_lock': None,
-        #                                 'calib_path': './resources/ob1_calib.txt'},
-        #                                 'ctrl_args': {}},
-        'sheath_fm'                 : {'name': 'sheath', 'args': ['BFS', 'COM5'],
+        # 'outlet_pump'               : {'name': 'outlet', 'args': ['VICI M50', 'COM4'],
+        #                                 'kwargs': {'flow_cal': '628.68',
+        #                                 'backlash_cal': '9.962'},
+        #                                 'ctrl_args': {'flow_rate': 1}},
+        'outlet_pump'               : {'name': 'outlet', 'args': ['OB1 Pump', 'COM8'],
+                                        'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
+                                        'min_pressure': -1000, 'max_pressure': 1000, 'P': 5, 'I': 0.00015,
+                                        'D': 0, 'bfs_instr_ID': None, 'comm_lock': None,
+                                        'calib_path': './resources/ob1_calib.txt'},
+                                        'ctrl_args': {}},
+        'sheath_fm'                 : {'name': 'sheath', 'args': ['BFS', 'COM6'],
                                         'kwargs':{}},
-        'outlet_fm'                 : {'name': 'outlet', 'args': ['BFS', 'COM6'],
+        'outlet_fm'                 : {'name': 'outlet', 'args': ['BFS', 'COM5'],
                                         'kwargs':{}},
         'sheath_valve'              : {'name': 'Coflow Sheath',
-                                        'args':['Cheminert', 'COM7'],
+                                        'args':['Cheminert', 'COM4'],
                                         'kwargs': {'positions' : 10}},
         # 'sheath_pump'               : {'name': 'sheath', 'args': ['Soft', None], # Simulated devices for testing
         #                                 'kwargs': {}},

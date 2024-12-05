@@ -49,6 +49,12 @@ sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\python_64')#add the p
 sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\DLL32\\DLL32') #add the path of the library here
 sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\python_32')#add the path of the LoadElveflow.py
 
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_08_06\\DLL\\DLL64') #add the path of the library here
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_08_06\\DLL\\Python\\Python_64')#add the path of the LoadElveflow.py
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_08_06\\DLL\\DLL32') #add the path of the library here
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_08_06\\DLL\\Python\\Python_32')#add the path of the LoadElveflow.py
+
+
 try:
     import Elveflow64 as Elveflow
 except Exception:
@@ -5593,13 +5599,13 @@ class PumpPanel(utils.DevicePanel):
                 self.run_button.SetLabel('Start')
                 if self.pump_type != 'Hamilton PSD6':
                     self.fr_button.Hide()
-                self._set_status_label('Done')
+                    self._set_status_label('Done')
 
-                self._current_move_status = val
+                    self._current_move_status = val
 
-                if self.pump_mode == 'syringe':
-                    stop_cmd = ['stop', [self.name,], {}]
-                    self._send_cmd(stop_cmd)
+                    if self.pump_mode == 'syringe':
+                        stop_cmd = ['stop', [self.name,], {}]
+                        self._send_cmd(stop_cmd)
 
         elif cmd == 'get_volume':
             if val is not None and val != self._current_volume:
@@ -5790,10 +5796,10 @@ if __name__ == '__main__':
 
     # Coflow pumps
     # setup_devices = [
-    #     {'name': 'sheath', 'args': ['VICI M50', 'COM3'],
+    #     {'name': 'sheath', 'args': ['VICI M50', 'COM4'],
     #         'kwargs': {'flow_cal': '627.72', 'backlash_cal': '9.814'},
     #         'ctrl_args': {'flow_rate': 1}},
-    #     {'name': 'outlet', 'args': ['VICI M50', 'COM4'],
+    #     {'name': 'outlet', 'args': ['VICI M50', 'COM5'],
     #         'kwargs': {'flow_cal': '628.68', 'backlash_cal': '9.962'},
     #         'ctrl_args': {'flow_rate': 1}},
     #     ]
@@ -5836,19 +5842,19 @@ if __name__ == '__main__':
     #         'ctrl_args': {}}
     #     ]
 
-    # # OB1 by itself
-    # bfs = fmcon.BFS('outlet_fm', 'COM5')
+    # OB1 by itself
+    bfs = fmcon.BFS('outlet_fm', 'COM5')
 
-    # ob1_comm_lock = threading.RLock()
+    ob1_comm_lock = threading.RLock()
 
-    # setup_devices = [
-    #     {'name': 'outlet', 'args': ['OB1 Pump', 'COM3'],
-    #         'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
-    #         'min_pressure': -1000, 'max_pressure': 1000, 'P': 8, 'I': 2,
-    #         'D': 0, 'bfs_instr_ID': bfs.instr_ID, 'comm_lock': ob1_comm_lock,
-    #         'calib_path': './resources/ob1_calib.txt'},
-    #         'ctrl_args': {}}
-    #     ]
+    setup_devices = [
+        {'name': 'outlet', 'args': ['OB1 Pump', 'COM8'],
+            'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
+            'min_pressure': -1000, 'max_pressure': 1000, 'P': 8, 'I': 2,
+            'D': 0, 'bfs_instr_ID': bfs.instr_ID, 'comm_lock': ob1_comm_lock,
+            'calib_path': './resources/ob1_calib.txt'},
+            'ctrl_args': {}}
+        ]
 
     # # TR-SAXS PHD 4400 pumps
     # setup_devices = [
@@ -5890,7 +5896,7 @@ if __name__ == '__main__':
     #         'kwargs': {'flow_rate_scale': 1.0478,
     #         'flow_rate_offset': -72.82/1000,'scale_type': 'up'},
     #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-    #     ]
+         # ]
 
     # # Teledyne SSI Reaxus pumps without scaling
     # setup_devices = [
