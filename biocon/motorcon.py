@@ -49,21 +49,10 @@ import utils
 
 class Motor(object):
     """
-    This class contains the settings and communication for a generic pump.
-    It is intended to be subclassed by other pump classes, which contain
-    specific information for communicating with a given pump. A pump object
-    can be wrapped in a thread for using a GUI, implimented in :py:class:`PumpCommThread`
-    or it can be used directly from the command line. The :py:class:`M5Pump`
-    documentation contains an example.
     """
 
     def __init__(self, device, name):
         """
-        :param device: The device comport as sent to pyserial
-        :type device: str
-
-        :param name: A unique identifier for the pump
-        :type name: str
         """
 
         self.device = device
@@ -200,21 +189,10 @@ class Motor(object):
 
 class NewportXPSMotor(Motor):
     """
-    This class contains the settings and communication for a generic pump.
-    It is intended to be subclassed by other pump classes, which contain
-    specific information for communicating with a given pump. A pump object
-    can be wrapped in a thread for using a GUI, implimented in :py:class:`PumpCommThread`
-    or it can be used directly from the command line. The :py:class:`M5Pump`
-    documentation contains an example.
     """
 
     def __init__(self, name, xps, ip_address, port, timeout, group, num_axes):
         """
-        :param device: The device comport as sent to pyserial
-        :type device: str
-
-        :param name: A unique identifier for the pump
-        :type name: str
         """
 
         Motor.__init__(self, '{}:{}'.format(ip_address, port), name)
