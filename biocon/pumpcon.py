@@ -531,9 +531,10 @@ class Pump(object):
         old_units = self._units
 
         if units in ['nL/s', 'nL/min', 'uL/s', 'uL/min', 'mL/s', 'mL/min']:
-            self._units = units
+            if units != old_units:
+                self._units = units
 
-            logger.info("Changed pump %s units from %s to %s", self.name, old_units, units)
+                logger.info("Changed pump %s units from %s to %s", self.name, old_units, units)
         else:
             logger.warning("Failed to change pump %s units, units supplied were invalid: %s", self.name, units)
 
@@ -3774,6 +3775,19 @@ class SoftSyringePump(SyringePump):
         self.connected = False
         self.sim_thread.join()
 
+known_pumps = {
+    'VICI M50'      : M50Pump,
+    'PHD 4400'      : PHD4400Pump,
+    'Pico Plus'     : PicoPlusPump,
+    'NE 500'        : NE500Pump,
+    'Hamilton PSD6' : HamiltonPSD6Pump,
+    'SSI Next Gen'  : SSINextGenPump,
+    'OB1'           : OB1,
+    'OB1 Pump'      : OB1Pump,
+    'KPHM100'       : KPHM100Pump,
+    'Soft'          : SoftPump,
+    'Soft Syringe'  : SoftSyringePump,
+    }
 
 class PumpCommThread(utils.CommManager):
     """
@@ -3866,19 +3880,7 @@ class PumpCommThread(utils.CommManager):
             'set_valve_pos'     : self._set_valve_pos,
             }
 
-        self.known_devices = {
-            'VICI M50'      : M50Pump,
-            'PHD 4400'      : PHD4400Pump,
-            'Pico Plus'     : PicoPlusPump,
-            'NE 500'        : NE500Pump,
-            'Hamilton PSD6' : HamiltonPSD6Pump,
-            'SSI Next Gen'  : SSINextGenPump,
-            'OB1'           : OB1,
-            'OB1 Pump'      : OB1Pump,
-            'KPHM100'       : KPHM100Pump,
-            'Soft'          : SoftPump,
-            'Soft Syringe'  : SoftSyringePump,
-            }
+        self.known_devices = known_pumps
 
     def _get_flow_rate(self, name, **kwargs):
 
