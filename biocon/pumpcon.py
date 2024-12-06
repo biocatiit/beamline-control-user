@@ -883,7 +883,7 @@ class SyringePump(Pump):
         :param units: Volume units, defaults to mL, also accepts uL or nL
         :type units: str
         """
-
+        orig_vol = copy.copy(vol)
         vol = self._convert_volume(vol, units, self._pump_base_units.split('/')[0])
 
         if self._is_flowing:
@@ -905,7 +905,7 @@ class SyringePump(Pump):
             cont = False
 
         if cont:
-            logger.info("Pump %s refilling %f %s at %f %s", self.name, vol, units,
+            logger.info("Pump %s refilling %f %s at %f %s", self.name, orig_vol, units,
                 self.refill_rate, self.units)
 
             self._send_aspirate_cmd(vol)
@@ -1938,7 +1938,8 @@ class HamiltonPSD6Pump(SyringePump):
 
     def _send_dispense_cmd(self, vol):
         vol = self.round(vol)
-        cur_vol = self.volume
+        cur_vol = self._convert_volume(self.volume, self.units.split('/')[0],
+            self._pump_base_units.split('/')[0])
         new_vol = cur_vol - vol
 
         new_pos = self._convert_volume_to_steps(new_vol)
@@ -1949,7 +1950,8 @@ class HamiltonPSD6Pump(SyringePump):
 
     def _send_aspirate_cmd(self, vol):
         vol = self.round(vol)
-        cur_vol = self.volume
+        cur_vol = self._convert_volume(self.volume, self.units.split('/')[0],
+            self._pump_base_units.split('/')[0])
         new_vol = cur_vol + vol
 
         new_pos = self._convert_volume_to_steps(new_vol)
@@ -5601,13 +5603,14 @@ class PumpPanel(utils.DevicePanel):
                 self.run_button.SetLabel('Start')
                 if self.pump_type != 'Hamilton PSD6':
                     self.fr_button.Hide()
-                    self._set_status_label('Done')
 
-                    self._current_move_status = val
+                self._set_status_label('Done')
 
-                    if self.pump_mode == 'syringe':
-                        stop_cmd = ['stop', [self.name,], {}]
-                        self._send_cmd(stop_cmd)
+                self._current_move_status = val
+
+                if self.pump_mode == 'syringe':
+                    stop_cmd = ['stop', [self.name,], {}]
+                    self._send_cmd(stop_cmd)
 
         elif cmd == 'get_volume':
             if val is not None and val != self._current_volume:
@@ -5807,17 +5810,16 @@ if __name__ == '__main__':
     #     ]
 
     # Batch mode pumps
-    # setup_devices = [
-        # {'name': 'water', 'args': ['KPHM100', 'COM3'],
-        #     'kwargs': {'flow_cal': '319.2',},
-        #     'ctrl_args': {'flow_rate': 1}},
-        # {'name': 'ethanol', 'args': ['KPHM100', 'COM5'],
-        #     'kwargs': {'flow_cal': '319.2',},
-        #     'ctrl_args': {'flow_rate': 1}},
-        # {'name': 'hellmanex', 'args': ['KPHM100', 'COM6'],
-        #     'kwargs': {'flow_cal': '319.2',},
-        #     'ctrl_args': {'flow_rate': 1}},
     setup_devices = [
+        {'name': 'water', 'args': ['KPHM100', 'COM3'],
+            'kwargs': {'flow_cal': '319.2',},
+            'ctrl_args': {'flow_rate': 1}},
+        {'name': 'ethanol', 'args': ['KPHM100', 'COM5'],
+            'kwargs': {'flow_cal': '319.2',},
+            'ctrl_args': {'flow_rate': 1}},
+        {'name': 'hellmanex', 'args': ['KPHM100', 'COM6'],
+            'kwargs': {'flow_cal': '319.2',},
+            'ctrl_args': {'flow_rate': 1}},
         {'name': 'Sample', 'args': ['Hamilton PSD6', 'COM4'],
             'kwargs': {'syringe_id': '0.1 mL, Hamilton Glass',
              'pump_address': '1', 'dual_syringe': 'False'},
@@ -5845,18 +5847,18 @@ if __name__ == '__main__':
     #     ]
 
     # OB1 by itself
-    bfs = fmcon.BFS('outlet_fm', 'COM5')
+    # bfs = fmcon.BFS('outlet_fm', 'COM5')
 
-    ob1_comm_lock = threading.RLock()
+    # ob1_comm_lock = threading.RLock()
 
-    setup_devices = [
-        {'name': 'outlet', 'args': ['OB1 Pump', 'COM8'],
-            'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
-            'min_pressure': -1000, 'max_pressure': 1000, 'P': 8, 'I': 2,
-            'D': 0, 'bfs_instr_ID': bfs.instr_ID, 'comm_lock': ob1_comm_lock,
-            'calib_path': './resources/ob1_calib.txt'},
-            'ctrl_args': {}}
-        ]
+    # setup_devices = [
+    #     {'name': 'outlet', 'args': ['OB1 Pump', 'COM8'],
+    #         'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
+    #         'min_pressure': -1000, 'max_pressure': 1000, 'P': 8, 'I': 2,
+    #         'D': 0, 'bfs_instr_ID': bfs.instr_ID, 'comm_lock': ob1_comm_lock,
+    #         'calib_path': './resources/ob1_calib.txt'},
+    #         'ctrl_args': {}}
+    #     ]
 
     # # TR-SAXS PHD 4400 pumps
     # setup_devices = [
