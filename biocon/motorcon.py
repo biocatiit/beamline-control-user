@@ -49,21 +49,10 @@ import utils
 
 class Motor(object):
     """
-    This class contains the settings and communication for a generic pump.
-    It is intended to be subclassed by other pump classes, which contain
-    specific information for communicating with a given pump. A pump object
-    can be wrapped in a thread for using a GUI, implimented in :py:class:`PumpCommThread`
-    or it can be used directly from the command line. The :py:class:`M5Pump`
-    documentation contains an example.
     """
 
     def __init__(self, device, name):
         """
-        :param device: The device comport as sent to pyserial
-        :type device: str
-
-        :param name: A unique identifier for the pump
-        :type name: str
         """
 
         self.device = device
@@ -200,21 +189,10 @@ class Motor(object):
 
 class NewportXPSMotor(Motor):
     """
-    This class contains the settings and communication for a generic pump.
-    It is intended to be subclassed by other pump classes, which contain
-    specific information for communicating with a given pump. A pump object
-    can be wrapped in a thread for using a GUI, implimented in :py:class:`PumpCommThread`
-    or it can be used directly from the command line. The :py:class:`M5Pump`
-    documentation contains an example.
     """
 
     def __init__(self, name, xps, ip_address, port, timeout, group, num_axes):
         """
-        :param device: The device comport as sent to pyserial
-        :type device: str
-
-        :param name: A unique identifier for the pump
-        :type name: str
         """
 
         Motor.__init__(self, '{}:{}'.format(ip_address, port), name)
@@ -1325,6 +1303,133 @@ class ZaberMotor(object):
         _, success = self.send_cmd(23)
 
         return success
+
+    def disconnect(self):
+        """Close any communication connections"""
+        pass #Should be implimented in each subclass
+
+class EpicsMotor(Motor):
+    """
+    """
+
+    def __init__(self, name, epics_pv):
+        """
+        """
+
+        Motor.__init__(self, epics_pv, name)
+
+        self.epics_motor = epics.Motor(epics_pv)
+
+        self._offset = [0. for i in range(num_axes)]
+        self._scale = 1
+        self._units = 'mm/s'
+
+    @property
+    def position(self):
+        pos = self.epics_motor.get_position()
+        return float(pos)
+
+    @position.setter
+    def position(self, position):
+        self.epics_motor.set_position(position)
+
+    @property
+    def units(self):
+        return self._units
+
+    @units.setter
+    def units(self, units):
+        old_units = self._units
+
+        if units in ['um/s', 'um/min', 'mm/s', 'mm/min', 'm/s', 'm/min']:
+            self._units = units
+            old_vu, old_tu = old_units.split('/')
+            new_vu, new_tu = self._units.split('/')
+            if old_vu != new_vu:
+                if (old_vu == 'um' and new_vu == 'mm') or (old_vu == 'mm' and new_vu == 'm'):
+                    self._scale = self._scale/1000.
+                elif old_vu == 'um' and new_vu == 'm':
+                    self._scale = self._scale/1000000.
+                elif (old_vu == 'm' and new_vu == 'mm') or (old_vu == 'mm' and new_vu == 'um'):
+                    self._scale = self._scale*1000.
+                elif old_vu == 'm' and new_vu == 'um':
+                    self._scale = self._scale*1000000.
+            if old_tu != new_tu:
+                if old_tu == 'min':
+                    self._scale = self._scale/60
+                else:
+                    self._scale = self._scale*60
+
+            logger.info("Changed motor %s units from %s to %s", self.name, old_units, units)
+        else:
+            logger.warning("Failed to change motor %s units, units supplied were invalid: %s", self.name, units)
+
+
+    def send_cmd(self, cmd, get_response=True):
+        pass #Should be implimented in each subclass
+
+
+    def is_moving(self):
+        """
+        Queries the pump about whether or not it's moving.
+
+        :returns: True if the pump is moving, False otherwise
+        :rtype: bool
+        """
+        mov = self.epics_motor.get('moving')
+        return mov
+
+    def move_relative(self, displacement):
+        self.epics_motor.move(displacement, relative=True)
+
+    def move_absolute(self, position):
+        self.epics_motor.move(position)
+
+    def home(self):
+        pass #should be implimented in each subclass
+
+    def get_high_limit(self):
+        hlim = self.epics_motor.get('high_limit')
+        return float(hlim)
+
+    def set_high_limit(self, limit):
+        self.epics_motor.set('high_limit_set', limit)
+
+    def get_low_limit(self):
+        llim = self.epics_motor.get('low_limit')
+        return float(llim)
+
+    def set_low_limit(self, limit):
+        self.epics_motor.put('low_limit_set', limit)
+
+    def get_limits(self):
+        llim = self.get_low_limit()
+        hlim = self.get_high_limit()
+        return llim, hlim
+
+    def set_limits(self, low_lim, high_lim):
+        self.set_low_limit(low_lim)
+        self.set_high_limit(high_lim)
+
+    def get_velocity(self):
+        speed = self.epics_motor.get('slew_speed')
+        return speed
+
+    def set_velocity(self, velocity):
+        self.epics_motor.put('slew_speed', velocity)
+
+    def get_acceleration(self):
+        accel_time = self.epics_motor.get('acceleration')
+        speed = self.get_velocity()
+        return speed/accel_time
+
+    def set_acceleration(self, acceleration):
+        speed = self.get_velocity()
+        accel_time = speed/acceleration
+        return accel_time
+
+    def stop(self):
+        self.epics_motor.put('stop', 1)
 
     def disconnect(self):
         """Close any communication connections"""
