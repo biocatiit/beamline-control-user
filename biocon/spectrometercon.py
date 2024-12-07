@@ -1143,8 +1143,8 @@ class StellarnetUVVis(Spectrometer):
     Stellarnet black comet UV-Vis spectrometer
     """
 
-    def __init__(self, name, device, shutter_pv_name='18ID:LJT4:2:DI11',
-        trigger_pv_name='18ID:LJT4:2:DI12', out1_pv_name='18ID:E1608:Ao1',
+    def __init__(self, name, device, shutter_pv_name='18ID:LJT4:2:Bi11',
+        trigger_pv_name='18ID:LJT4:2:Bi12', out1_pv_name='18ID:E1608:Ao1',
         out2_pv_name='18ID:E1608:Ao2', trigger_in_pv_name='18ID_E1608:Bi8'):
 
         Spectrometer.__init__(self, name, device)
@@ -2883,7 +2883,7 @@ class UVPanel(utils.DevicePanel):
             try:
                 wav_start = self.settings['wavelength_range'][0]
                 wav_end = self.settings['wavelength_range'][1]
-            except Exeption:
+            except Exception:
                 wav_start = None
 
         update = False
@@ -4538,6 +4538,7 @@ if __name__ == '__main__':
         'analog_out_v_max'      : 10.,
         'analog_out_au_max'     : 10000, #mAu
         'analog_out_wav'        : {'out1': 280, 'out2': 260},
+        'do_ao'                 : True,
         'remote_ip'             : '164.54.204.53',
         'remote_port'           : '5559',
         'remote'                : False,
