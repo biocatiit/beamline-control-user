@@ -37,7 +37,10 @@ if __name__ != '__main__':
 import wx
 import wx.lib.buttons as buttons
 import numpy as np
-import serial.tools.list_ports as list_ports
+try:
+    import serial.tools.list_ports as list_ports
+except ModuleNotFoundError:
+    pass
 try:
     import zaber.serial as zaber #pip install zaber.serial
 except ModuleNotFoundError:

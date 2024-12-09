@@ -43,7 +43,10 @@ from wx.lib.stattext import GenStaticText as StaticText
 import wx.lib.mixins.listctrl
 from matplotlib.backends.backend_wxagg import NavigationToolbar2WxAgg
 import numpy as np
-import serial.tools.list_ports as list_ports
+try:
+    import serial.tools.list_ports as list_ports
+except ModuleNotFoundError:
+    pass
 
 import client
 
@@ -869,6 +872,8 @@ class DevicePanel(wx.Panel):
         self.cmd_q = deque()
         self.return_q = deque()
         self.status_q = deque()
+
+        print(self.remote)
 
         if not self.remote:
             self.com_thread = settings['com_thread']

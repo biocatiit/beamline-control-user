@@ -3151,7 +3151,7 @@ class ExpPanel(wx.Panel):
             uv_panel.on_exposure_stop(self)
 
     def set_status(self, status):
-        Wx.CallAfter(self.status.SetLabel, status)
+        wx.CallAfter(self.status.SetLabel, status)
         self._exp_status = status
 
     def set_time_remaining(self, tr):
@@ -3746,6 +3746,7 @@ class ExpPanel(wx.Panel):
     def _get_metadata(self, metadata_vals=None, verbose=True):
 
         metadata = self.metadata()
+        print(metadata)
 
         column = None
         flow_rate = None
@@ -3754,6 +3755,8 @@ class ExpPanel(wx.Panel):
         if 'coflow' in self.settings['components']:
             coflow_panel = wx.FindWindowByName('coflow')
             coflow_metadata = coflow_panel.metadata()
+
+            print(coflow_metadata)
 
             for key, value in coflow_metadata.items():
                 metadata[key] = value

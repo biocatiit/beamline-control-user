@@ -35,7 +35,10 @@ if __name__ != '__main__':
     logger = logging.getLogger(__name__)
 
 import wx
-import serial.tools.list_ports as list_ports
+try:
+    import serial.tools.list_ports as list_ports
+except ModuleNotFoundError:
+    pass
 
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_03_00\\DLL64\\Elveflow64DLL') #add the path of the library here
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_03_00\\python_64')#add the path of the LoadElveflow.py
@@ -56,7 +59,7 @@ sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\Python_32')#add the p
 try:
     import Elveflow64 as Elveflow
 except Exception:
-    traceback.print_exc()
+    # traceback.print_exc()
     try:
         import Elveflow32 as Elveflow
     except Exception:
