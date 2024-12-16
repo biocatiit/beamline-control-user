@@ -89,8 +89,7 @@ class SpectraData(object):
             self.trans_spectrum = spectrum[:,1]
         elif spec_type == 'abs':
             self.abs_spectrum = spectrum[:,1]
-
-            self._calculate_absorbances()
+            self._calculate_all_abs_single_wavelength()
 
     def get_timestamp(self):
         logger.debug('SpectraData: Getting timestamp')
@@ -1033,6 +1032,9 @@ class Spectrometer(object):
             self.name, window_size)
         self._absorbance_window = window_size
 
+        self._calculate_all_abs_single_wavelength()
+
+    def _calculate_all_abs_single_wavelength(self):
         for wavelength in self._absorbance_wavelengths:
             self._calculate_absorbance_range(wavelength)
 
@@ -1123,6 +1125,7 @@ class Spectrometer(object):
 
         self._reference_spectrum = None
         self._dark_spectrum = None
+        self._calculate_all_abs_single_wavelength()
 
     def get_wavelength_range(self):
         logger.debug('Sepctrometer %s: Getting wavelength range', self.name)
@@ -4544,7 +4547,7 @@ if __name__ == '__main__':
         'abs_wav'               : [280, 260],
         'abs_window'            : 1,
         'int_t_scale'           : 2,
-        'wavelength_range'      : [200, 838.39],
+        'wavelength_range'      : [225, 838.39],
         'analog_out_v_max'      : 10.,
         'analog_out_au_max'     : 10000, #mAu
         'analog_out_wav'        : {'out1': 280, 'out2': 260},
