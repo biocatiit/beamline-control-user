@@ -3859,7 +3859,7 @@ class UVPlot(wx.Panel):
             self.t_window.Enable()
             self.zero_time.Enable()
 
-        self.plot_data()
+        wx.CallAfter(self.plot_data)
 
     def _on_spectrum_type(self, evt):
         stype = self.spectrum_type_ctrl.GetStringSelection()
@@ -3874,13 +3874,13 @@ class UVPlot(wx.Panel):
             self.spectrum_type = 'raw'
             self.subplot.set_ylabel('Raw')
 
-        self.plot_data()
+        wx.CallAfter(self.plot_data)
 
     def _on_twindow_change(self, obj, val):
         self._time_window = float(val)
 
         self.canvas.mpl_disconnect(self.cid)
-        self.updatePlot()
+        wx.CallAfter(self.updatePlot)
         self.cid = self.canvas.mpl_connect('draw_event', self.ax_redraw)
 
     def _on_zero_time(self, evt):
@@ -3894,7 +3894,7 @@ class UVPlot(wx.Panel):
         # a = time.time()
         if self._needs_refresh:
             if time.time() - self._last_refresh > self._refresh_time:
-                self.plot_data()
+                wx.CallAfter(self.plot_data)
                 self._last_refresh = time.time()
                 self._needs_refresh = False
         # print(time.time()-a)
@@ -3928,7 +3928,7 @@ class UVPlot(wx.Panel):
         if not force_refresh:
             self._needs_refresh = True
         else:
-            self.plot_data()
+            wx.CallAfter(self.plot_data)
 
     def ax_redraw(self, widget=None):
         ''' Redraw plots on window resize event '''
