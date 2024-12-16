@@ -2177,6 +2177,9 @@ class UVPanel(utils.DevicePanel):
         else:
             self.inline = False
 
+        if settings['device_communication'] == 'remote':
+            settings['remote'] = True
+
         self._dark_spectrum = None
         self._reference_spectrum = None
         self._current_spectrum = None
