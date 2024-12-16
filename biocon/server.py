@@ -383,7 +383,7 @@ if __name__ == '__main__':
     if exp_type == 'coflow':
         # Coflow
 
-        has_uv = False
+        has_uv = True
 
         ip = '164.54.204.53'
         # ip = '164.54.204.253'
@@ -419,8 +419,8 @@ if __name__ == '__main__':
 
         setup_uv = [
             {'name': 'CoflowUV', 'args': ['StellarNet', None], 'kwargs':
-            {'shutter_pv_name': '18ID:LJT4:2:Bi11',
-            'trigger_pv_name' : '18ID:LJT4:2:Bi12'}},
+            {'shutter_pv_name': '18ID:LJT4:2:Bo11',
+            'trigger_pv_name' : '18ID:LJT4:2:Bo12'}},
             ]
 
         outlet_fm_comm_lock = threading.Lock()

@@ -38,6 +38,7 @@ import wx
 import wx.lib.buttons as buttons
 import numpy as np
 import serial.tools.list_ports as list_ports
+import epics
 try:
     import zaber.serial as zaber #pip install zaber.serial
 except ModuleNotFoundError:
@@ -1320,8 +1321,8 @@ class EpicsMotor(Motor):
 
         self.epics_motor = epics.Motor(epics_pv)
 
-        self._offset = [0. for i in range(num_axes)]
-        self._scale = 1
+        self._offset = 0.
+        self._scale = 1.
         self._units = 'mm/s'
 
     @property

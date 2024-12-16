@@ -834,21 +834,21 @@ if __name__ == '__main__':
     #         'kwargs': {'positions' : 6}},
     #     ]
 
-    # New HPLC
-    setup_devices = [
-        {'name': 'Selector', 'args': ['Cheminert', 'COM5'],
-            'kwargs': {'positions' : 2}},
-        {'name': 'Outlet', 'args': ['Cheminert', 'COM3'],
-            'kwargs': {'positions' : 2}},
-        {'name': 'Purge 1', 'args': ['Cheminert', 'COM9'],
-            'kwargs': {'positions' : 4}},
-        {'name': 'Purge 2', 'args': ['Cheminert', 'COM6'],
-            'kwargs': {'positions' : 4}},
-        {'name': 'Buffer 1', 'args': ['Cheminert', 'COM7'],
-            'kwargs': {'positions' : 10}},
-        {'name': 'Buffer 2', 'args': ['Cheminert', 'COM4'],
-            'kwargs': {'positions' : 10}},
-        ]
+    # # New HPLC
+    # setup_devices = [
+    #     {'name': 'Selector', 'args': ['Cheminert', 'COM5'],
+    #         'kwargs': {'positions' : 2}},
+    #     {'name': 'Outlet', 'args': ['Cheminert', 'COM3'],
+    #         'kwargs': {'positions' : 2}},
+    #     {'name': 'Purge 1', 'args': ['Cheminert', 'COM9'],
+    #         'kwargs': {'positions' : 4}},
+    #     {'name': 'Purge 2', 'args': ['Cheminert', 'COM6'],
+    #         'kwargs': {'positions' : 4}},
+    #     {'name': 'Buffer 1', 'args': ['Cheminert', 'COM7'],
+    #         'kwargs': {'positions' : 10}},
+    #     {'name': 'Buffer 2', 'args': ['Cheminert', 'COM4'],
+    #         'kwargs': {'positions' : 10}},
+    #     ]
 
     #  # SEC-MALS
     # setup_devices = [
@@ -864,6 +864,12 @@ if __name__ == '__main__':
     # setup_devices = [
     #     {'name': 'Coflow Sheath', 'args': ['Soft', None], 'kwargs': {'positions': 10}}
     #     ]
+
+    # Autosampler needle
+    setup_devices = [
+        {'name': 'Needle', 'args': ['Cheminert', 'COM11'],
+            'kwargs': {'positions': 10}},
+        ]
 
     # Local
     com_thread = ValveCommThread('ValveComm')

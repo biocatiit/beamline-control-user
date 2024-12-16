@@ -54,7 +54,8 @@ class WellPlate(object):
                 'num_rows'      : 8,
                 'col_step'      : 9.00, # mm
                 'row_step'      : 9.00, # mm
-                'height'        : 4.2, # bottom of well above top of chiller base plate
+                'height'        : 1, # bottom of well from chiller base plate
+                'plate_height'  : 10, # top of plate from chiller base plate
                 },
 
             'Thermo-Fast 96 well PCR' : {
@@ -63,13 +64,15 @@ class WellPlate(object):
                 'num_rows'      : 8,
                 'col_step'      : 9.00, # mm
                 'row_step'      : 9.00, # mm
-                'height'        : 0.8, # bottom of well above top of chiller base plate
+                'height'        : 0.7, # bottom of well from chiller base plate
+                'plate_height'  : 15.5, # top of plate from chiller base plate
                 }
         }
 
         #Values for height depend on well. 0.8 for A1, 1.0 for H1, 0.8 for A12, 1.0 for H12
         self.x_slope = 0
-        self.y_slope = 0.20/7.
+        self.y_slope = 0
+        # self.y_slope = 0.20/7.
 
         self.update_plate_type(plate_type)
 
@@ -87,6 +90,7 @@ class WellPlate(object):
         self.col_step = self.plate_params[self.plate_type]['col_step']
         self.row_step = self.plate_params[self.plate_type]['row_step']
         self.height = self.plate_params[self.plate_type]['height']
+        self.plate_height = self.plate_params[self.plate_type]['plate_height']
 
     def get_relative_well_position(self, row, column):
         """
@@ -102,7 +106,7 @@ class WellPlate(object):
         row = int(row)-1
 
         return np.array([column*(self.col_step), row*(self.row_step),
-            -(self.height+column*self.x_slope+row*self.y_slope)], dtype=np.float_)
+            (self.height+column*self.x_slope+row*self.y_slope)], dtype=np.float_)
 
     def set_well_volume(self, volume, row, column):
         """
@@ -152,13 +156,15 @@ class Autosampler(object):
         self.process_event = threading.Event()
         self.process_event.clear()
 
+        self.set_clean_offsets(self.settings['clean_offsets']['plate_x'],
+            self.settings['clean_offsets']['plate_z'],
+            self.settings['clean_offsets']['needle_y'])
+
         self._init_motors()
         self._init_valves()
         self._init_pumps()
 
         self.set_well_plate(self.settings['plate_type'])
-        self.set_clean_sequence(self.settings['clean_buffer_seq'], 'buffer')
-        self.set_clean_sequence(self.settings['clean_sample_seq'], 'sample')
 
     def _init_motors(self):
         logger.info('Initializing autosampler motors')
@@ -179,12 +185,8 @@ class Autosampler(object):
             *plate_z_args, **plate_z_kwargs)
 
         self.set_base_position(self.settings['base_position']['plate_x'],
-            self.settings['base_position']['plate_z'], self.settings['base_position']['needle_y'])
-
-        self.set_clean_position(self.settings['clean_position']['plate_x'],
-            self.settings['clean_position']['plate_z'], self.settings['clean_position']['needle_y'])
-
-        self.set_needle_out_position(self.settings['needle_out_position'])
+            self.settings['base_position']['plate_z'],
+            self.settings['base_position']['needle_y'])
 
         self.set_needle_in_position(self.settings['needle_in_position'])
 
@@ -198,32 +200,37 @@ class Autosampler(object):
     def _init_valves(self):
         logger.info('Initializing autosampler valves')
 
-        needle_args = self.settings['needle_valve']['args']
+        device =  self.settings['needle_valve']['args'][0]
+        needle_args = self.settings['needle_valve']['args'][1:]
         needle_kwargs = self.settings['needle_valve']['kwargs']
-        self.needle_valve = valvecon.known_valves[needle_args[0]](self.settings['needle_valve']['name'],
+        self.needle_valve = valvecon.known_valves[device](self.settings['needle_valve']['name'],
             *needle_args, **needle_kwargs)
 
     def _init_pumps(self):
         logger.info('Initializing autosampler pumps')
 
-        sample_args = self.settings['sample_pump']['args']
+        device = self.settings['sample_pump']['args'][0]
+        sample_args = self.settings['sample_pump']['args'][1:]
         sample_kwargs = self.settings['sample_pump']['kwargs']
-        self.sample_pump = pumpcon.known_pumps[sample_args[0]](self.settings['sample_pump']['name'],
+        self.sample_pump = pumpcon.known_pumps[device](self.settings['sample_pump']['name'],
             *sample_args, **sample_kwargs)
 
-        clean1_args = self.settings['clean1_pump']['args']
+        device = self.settings['clean1_pump']['args'][0]
+        clean1_args = self.settings['clean1_pump']['args'][1:]
         clean1_kwargs = self.settings['clean1_pump']['kwargs']
-        self.clean1_pump = pumpcon.known_pumps[clean1_args[0]](self.settings['clean1_pump']['name'],
+        self.clean1_pump = pumpcon.known_pumps[device](self.settings['clean1_pump']['name'],
             *clean1_args, **clean1_kwargs)
 
-        clean2_args = self.settings['clean2_pump']['args']
+        device = self.settings['clean2_pump']['args'][0]
+        clean2_args = self.settings['clean2_pump']['args'][1:]
         clean2_kwargs = self.settings['clean2_pump']['kwargs']
-        self.clean2_pump = pumpcon.known_pumps[clean2_args[0]](self.settings['clean2_pump']['name'],
+        self.clean2_pump = pumpcon.known_pumps[device](self.settings['clean2_pump']['name'],
             *clean2_args, **clean2_kwargs)
 
-        clean3_args = self.settings['clean3_pump']['args']
+        device = self.settings['clean3_pump']['args'][0]
+        clean3_args = self.settings['clean3_pump']['args'][1:]
         clean3_kwargs = self.settings['clean3_pump']['kwargs']
-        self.clean3_pump = pumpcon.known_pumps[clean3_args[0]](self.settings['clean3_pump']['name'],
+        self.clean3_pump = pumpcon.known_pumps[device](self.settings['clean3_pump']['name'],
             *clean3_args, **clean3_kwargs)
 
     # def home_motors(self, motor='all'):
@@ -303,9 +310,9 @@ class Autosampler(object):
 
         if not abort:
             if motor == 'all':
-                self.plate_z_motor.move_absolute(position[2])
                 self.plate_x_motor.move_absolute(position[0])
-                self.needle_y_motor.move_absolute(position[1])
+                self.plate_z_motor.move_absolute(position[1])
+                self.needle_y_motor.move_absolute(position[2])
 
                 while self.plate_x_motor.is_moving() or self.needle_y_motor.is_moving() or self.plate_z_motor.is_moving():
                     time.sleep(0.05)
@@ -477,15 +484,30 @@ class Autosampler(object):
 
         This should be the position with the needle centered in the A1 well
         and tip height at the top of the lower chiller plate.
+
+        Zero plates: Z (upsteam/downstream): to downstream limit, positive is
+        downstream. X: to inboard limit, positive is outboard.
         """
 
         self.base_position = np.array([plate_x, plate_z, needle_y], dtype=np.float_)
 
-    def set_clean_position(self, plate_x, plate_z, needle_y):
-        self.clean_position = np.array([plate_x, plate_z, needle_y], dtype=np.float_)
+        self.set_clean_position()
 
-    def set_needle_out_position(self, needle_y):
-        self.needle_out_position = needle_y
+    def set_clean_offsets(self, clean_x, clean_z, clean_y):
+        self.clean_x_off = clean_x
+        self.clean_z_off = clean_z
+        self.clean_y_off = clean_y
+
+    def set_clean_position(self):
+        clean_x = self.base_position[0] + self.clean_x_off
+        clean_z = self.base_position[1] + self.clean_z_off
+        clean_y = self.base_position[2] + self.clean_y_off
+
+        self.clean_position = np.array([clean_x, clean_z, clean_y], dtype=np.float_)
+
+    def set_needle_out_position(self):
+        self.needle_out_position = (self.base_position[2] + self.well_plate.plate_height
+            + self.settings['needle_out_offset'])
 
     def set_needle_in_position(self, needle_y):
         self.needle_in_position = needle_y
@@ -500,6 +522,8 @@ class Autosampler(object):
 
     def set_well_plate(self, plate_type):
         self.well_plate = WellPlate(plate_type)
+
+        self.set_needle_out_position()
 
     def set_well_volume(self, volume, row, column):
         """
@@ -530,6 +554,10 @@ class Autosampler(object):
 
         delta_position = self.well_plate.get_relative_well_position(row, column)
         well_position = self.base_position + delta_position
+
+        print(self.base_position)
+        print(delta_position)
+        print(well_position)
 
         success = self.move_motors_absolute(self.needle_out_position, 'needle_y')
         if success:
@@ -587,10 +615,16 @@ class Autosampler(object):
 
         logger.info('Moving to out position')
 
-        success = self.move_needle_out()
+        cur_plate_x = self.plate_x_motor.position
+
+        if cur_plate_x != self.plate_x_load:
+            success = self.move_needle_out()
+        else:
+            success =  True
+
         if success:
             self._sleep(2)
-            success = self.move_motors_absolute(self.plate_y_out, 'plate_z')
+            success = self.move_motors_absolute(self.plate_x_out, 'plate_x')
 
         self.process_event.clear()
 
@@ -601,9 +635,9 @@ class Autosampler(object):
 
         logger.info('Moving to load position')
 
-        cur_plate_z = self.plate_z_motor.get_position()
+        cur_plate_x = self.plate_x_motor.position
 
-        if cur_plate_z != self.plate_y_out and cur_plate_z != self.plate_z_load:
+        if cur_plate_x != self.plate_x_out:
             success = self.move_motors_absolute(self.needle_out_position, 'needle_y')
             if success:
                 self._sleep(2)
@@ -612,7 +646,7 @@ class Autosampler(object):
 
         if success:
             success = self.move_motors_absolute([self.plate_x_load,
-                self.plate_z_load, self.needle_y_motor.get_position()])
+                self.plate_z_load, self.needle_y_motor.position])
 
         self.process_event.clear()
 
@@ -859,6 +893,9 @@ class Autosampler(object):
 
         success = self.move_to_clean()
 
+        self.sample_pump.set_valve_position('Output')
+        self.sample_pump.dispense_all()
+
         if success:
             for clean_step in self.settings['clean_seq']:
                 pump = clean_step[0]
@@ -880,6 +917,7 @@ class Autosampler(object):
                     break
 
             self.set_valve_positions(self.settings['valve_positions']['sample'])
+            self.sample_pump.set_valve_position('Input')
 
         self.move_needle_out()
 
@@ -2045,30 +2083,32 @@ if __name__ == '__main__':
         'plate_z_motor'         : {'name': 'plate_z', 'args': ['18ID_DMC_E03:23'],
                                         'kwargs': {}},
         'needle_valve'          : {'name': 'Needle',
-                                        'args':['Cheminert', 'COM4'],
-                                        'kwargs': {'positions' : 10}},
-        'sample_pump'           : {'name': 'sample', 'args': ['Hamilton PSD6', 'COM4'],
+                                        'args':['Cheminert', 'COM11'],
+                                        'kwargs': {'positions' : 6}},
+        'sample_pump'           : {'name': 'sample', 'args': ['Hamilton PSD6', 'COM12'],
                                     'kwargs': {'syringe_id': '0.1 mL, Hamilton Glass',
-                                    'pump_address': '1', 'dual_syringe': 'False'},},
-        'clean1_pump'           : {'name': 'water', 'args': ['KPHM100', 'COM3'],
+                                    'pump_address': '1', 'dual_syringe': 'False',
+                                    'diameter': 1.46, 'max_volume': 0.1,
+                                    'max_rate': 1},},
+        'clean1_pump'           : {'name': 'water', 'args': ['KPHM100', 'COM10'],
                                     'kwargs': {'flow_cal': '319.2',},
                                     'ctrl_args': {'flow_rate': 1}},
-        'clean2_pump'           : {'name': 'ethanol', 'args': ['KPHM100', 'COM5'],
+        'clean2_pump'           : {'name': 'ethanol', 'args': ['KPHM100', 'COM8'],
                                     'kwargs': {'flow_cal': '319.2',},
                                     'ctrl_args': {'flow_rate': 1}},
-        'clean3_pump'           : {'name': 'hellmanex', 'args': ['KPHM100', 'COM6'],
+        'clean3_pump'           : {'name': 'hellmanex', 'args': ['KPHM100', 'COM9'],
                                     'kwargs': {'flow_cal': '319.2',},
                                     'ctrl_args': {'flow_rate': 1}},
         # 'motor_home_velocity'   : {'x': 10, 'y': 10, 'z': 10},
         # 'motor_velocity'        : {'x': 75, 'y': 75, 'z': 75},
         # 'motor_acceleration'    : {'x': 500, 'y': 500, 'z': 500},
-        'base_position'         : {'plate_x': 5.5, 'plate_z': 86.3, 'needle_y': 74.5},
-        'clean_position'        : {'plate_x': 5.5, 'plate_z': 86.3, 'needle_y': 74.5},
-        'needle_out_position'   : 150,
+        'base_position'         : {'plate_x': 295.5, 'plate_z': -75, 'needle_y': 102.0},
+        'clean_offsets'         : {'plate_x': 5.5, 'plate_z': 86.3, 'needle_y': 74.5}, # Relative to base position
+        'needle_out_offset'     : 5, # mm
         'needle_in_position'    : 0,
-        'plate_out_position'    : {'plate_x': 5.5, 'plate_z': 86.3},
-        'plate_load_position'   : {'plate_x': 5.5, 'plate_z': 86.3},
-        # # 'plate_type'            : 'Thermo-Fast 96 well PCR',
+        'plate_out_position'    : {'plate_x': 265.5, 'plate_z': -75},
+        'plate_load_position'   : {'plate_x': 0, 'plate_z': -75},
+        'plate_type'            : 'Thermo-Fast 96 well PCR',
         # 'plate_type'            : 'Abgene 96 well deepwell storage',
         'valve_positions'       : {'sample': 5, 'clean1': 1, 'clean2': 2, 'clean3': 3, 'clean4': 4},
         'clean_seq'             : [('clean1', 'dispense', 5, 1), #A set of (a, b, c, d) a is the valve position, b is the command, and c and d are input params for the command

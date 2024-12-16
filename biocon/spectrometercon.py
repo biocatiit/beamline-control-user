@@ -1143,8 +1143,8 @@ class StellarnetUVVis(Spectrometer):
     Stellarnet black comet UV-Vis spectrometer
     """
 
-    def __init__(self, name, device, shutter_pv_name='18ID:LJT4:2:Bi11',
-        trigger_pv_name='18ID:LJT4:2:Bi12', out1_pv_name='18ID:E1608:Ao1',
+    def __init__(self, name, device, shutter_pv_name='18ID:LJT4:2:Bo11',
+        trigger_pv_name='18ID:LJT4:2:Bo12', out1_pv_name='18ID:E1608:Ao1',
         out2_pv_name='18ID:E1608:Ao2', trigger_in_pv_name='18ID_E1608:Bi8'):
 
         Spectrometer.__init__(self, name, device)
@@ -1156,9 +1156,11 @@ class StellarnetUVVis(Spectrometer):
         self._model = None
         self._device_id = None
 
-        self._external_trigger = False
+        self._ext_trig = False
 
         self.connected = False
+
+        print(trigger_pv_name)
 
         self.shutter_pv = epics.get_pv(shutter_pv_name)
         self.trigger_pv = epics.get_pv(trigger_pv_name)
@@ -1277,7 +1279,7 @@ class StellarnetUVVis(Spectrometer):
         logger.debug('Spectrometer %s: Collecting spectrum', self.name)
         self._taking_data = True
 
-        if self._external_trigger and int_trigger:
+        if self._ext_trig and int_trigger:
             trigger_ext = True
             self.set_external_trigger(False)
         else:
@@ -1376,11 +1378,11 @@ class StellarnetUVVis(Spectrometer):
         self._device_id = params['device_id']
 
     def set_external_trigger(self, trigger):
-        self.ext_trig = trigger
+        self._ext_trig = trigger
         sn.ext_trig(self.spectrometer, trigger)
 
     def get_external_trigger(self):
-        return self.ext_trig
+        return self._ext_trig
 
     def _set_analog_output(self, output, val):
         """
@@ -2812,11 +2814,11 @@ class UVPanel(utils.DevicePanel):
             try:
                 self.abs_wavs.SafeChangeValue(', '.join(map(str, self.settings['abs_wav'])))
             except Exception:
-                traceback.print_exc()
+                pass
             try:
                 self.abs_window.SafeChangeValue('{}'.format(self.settings['abs_window']))
             except Exception:
-                traceback.print_exc()
+                pass
 
 
     def _on_settings_change(self, obj, val):
@@ -3994,6 +3996,11 @@ class UVPlot(wx.Panel):
                     redraw = True
 
             for i, ydata in enumerate(abs_ydata):
+                if len(ydata) != len(xdata):
+                    if len(ydata) > len(xdata):
+                        ydata = ydata[:len(xdata)]
+                    else:
+                        xdata = xdata[:len(ydata)]
                 if i < len(self.abs_lines):
                     line = self.abs_lines[i]
                     line.set_xdata(xdata)
@@ -4510,8 +4517,8 @@ if __name__ == '__main__':
 
     spectrometer_settings = {
         'device_init'           : [{'name': 'CoflowUV', 'args': ['StellarNet', None],
-                                    'kwargs': {'shutter_pv_name': '18ID:LJT4:2:Bi11',
-                                    'trigger_pv_name' : '18ID:LJT4:2:Bi12',
+                                    'kwargs': {'shutter_pv_name': '18ID:LJT4:2:Bo11',
+                                    'trigger_pv_name' : '18ID:LJT4:2:Bo12',
                                     'out1_pv_name' : '18ID:E1608:Ao1',
                                     'out2_pv_name' : '18ID:E1608:Ao2',
                                     'trigger_in_pv_name' : '18ID:E1608:Bi8'}}],
@@ -4550,7 +4557,7 @@ if __name__ == '__main__':
     }
 
     #initialized epics ca context in the main thread first as recommended
-    epics.get_pv(spectrometer_settings['device_init'][0]['kwargs']['shutter_pv_name'])
+    # epics.get_pv(spectrometer_settings['device_init'][0]['kwargs']['shutter_pv_name'])
 
     app = wx.App()
     logger.debug('Setting up wx app')
