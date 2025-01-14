@@ -888,6 +888,13 @@ class AutoPanel(wx.Panel):
 
         self.settings = settings
 
+        if self.settings['automator_thread'] is None:
+            self.automator = Automator()
+            self.automator.start()
+            self.settings['automator_thread'] = self.automator
+        else:
+            self.automator = self.settings['automator_thread']
+
         self._create_layout()
         self._init_values()
 
@@ -901,8 +908,6 @@ class AutoPanel(wx.Panel):
             return size
 
     def _init_values(self):
-        self.automator = self.settings['automator_thread']
-
         for inst, inst_settings in self.settings['instruments'].items():
             if inst.startswith('hplc'):
                 num_paths = inst_settings['num_paths']
@@ -929,6 +934,10 @@ class AutoPanel(wx.Panel):
             border=self._FromDIP(5), flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM)
 
         self.SetSizer(self.top_sizer)
+
+    def on_exit(self):
+        self.automator.stop()
+        self.automator.join()
 
 class AutoStatusPanel(wx.Panel):
     def __init__(self, settings, *args, **kwargs):

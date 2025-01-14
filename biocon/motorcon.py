@@ -37,15 +37,13 @@ if __name__ != '__main__':
 import wx
 import wx.lib.buttons as buttons
 import numpy as np
-<<<<<<< HEAD
-import serial.tools.list_ports as list_ports
 import epics
-=======
+
 try:
     import serial.tools.list_ports as list_ports
 except ModuleNotFoundError:
     pass
->>>>>>> 0db2ac76e174ce90060edf71525d399e6b8bdda6
+
 try:
     import zaber.serial as zaber #pip install zaber.serial
 except ModuleNotFoundError:

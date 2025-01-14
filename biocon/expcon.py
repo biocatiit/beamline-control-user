@@ -142,8 +142,7 @@ class ExpCommThread(threading.Thread):
             logger.debug('Getting epics detector')
             record_name = self._settings['detector'].rstrip('_epics')
 
-            det_args = self._settings['det_args']
-
+            det_args = self._settings['det_args']            
             det = detectorcon.EPICSEigerDetector(record_name, **det_args)
 
         logger.debug("Got detector records")
@@ -4278,7 +4277,7 @@ default_exposure_settings = {
     'base_data_dir'         : '/nas_data/Eiger2x/2024_Run3', #CHANGE ME and pipeline local_basedir
     }
 
-default_exposure_settings['data_dir'] = default_exposuer_settings['base_data_dir']
+default_exposure_settings['data_dir'] = default_exposure_settings['base_data_dir']
 
 
 if __name__ == '__main__':

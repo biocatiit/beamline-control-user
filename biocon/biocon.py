@@ -86,7 +86,13 @@ class BioFrame(wx.Frame):
         else:
             self._create_auto_layout()
 
-    def _create_standard_layout()
+        if ('exposure' in self.component_panels
+            and 'pipeline' in self.component_controls):
+
+            self.component_panels['exposure'].set_pipeline_ctrl(
+                self.component_controls['pipeline'])
+
+    def _create_standard_layout(self):
         top_panel = wx.Panel(self)
 
         panel_sizer = wx.BoxSizer(wx.VERTICAL)
@@ -156,42 +162,50 @@ class BioFrame(wx.Frame):
         top_panel.SetSizer(panel_sizer)
 
         top_sizer = wx.BoxSizer(wx.VERTICAL)
-        top_sizer.Add(top_panel, flag=wx.EXPAND)
+        top_sizer.Add(top_panel, flag=wx.EXPAND, proportion=1)
 
         self.SetSizer(top_sizer)
 
-        if ('exposure' in self.component_panels
-            and 'pipeline' in self.component_controls):
-
-            self.component_panels['exposure'].set_pipeline_ctrl(
-                self.component_controls['pipeline'])
+        
 
     def _create_auto_layout(self):
-        self.top_notebook = wx.Notebook(self, style=wx.NB_TOP)
+        top_panel = wx.Panel(self)
+        self.top_notebook = wx.Notebook(top_panel, style=wx.NB_TOP)
 
-        component_sizers = self._generate_component_sizers(self.top_notebook)
+        component_sizers = self._generate_component_sizers(self.top_notebook,
+            notebook=True)
 
-        if 'exposure' in component_sizers and 'metadata' in component_sizers:
-            exp_sizer = wx.BoxSizer(wx.HORIZONTAL)
-            msizer = component_sizers.pop('metadata')
-            esizer = component_sizers.pop('exposure')
-            exp_sizer.Add(msizer, proportion=1,
-                border=self._FromDIP(10), flag=wx.EXPAND|wx.ALL)
-            exp_sizer.Add(esizer, proportion=2,
-                border=self._FromDIP(10), flag=wx.EXPAND|wx.ALL)
+        # if 'exposure' in component_sizers and 'metadata' in component_sizers:
+        #     exp_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        #     msizer = component_sizers.pop('metadata')
+        #     esizer = component_sizers.pop('exposure')
+        #     exp_sizer.Add(msizer, proportion=1,
+        #         border=self._FromDIP(10), flag=wx.EXPAND|wx.ALL)
+        #     exp_sizer.Add(esizer, proportion=2,
+        #         border=self._FromDIP(10), flag=wx.EXPAND|wx.ALL)
 
-            component_sizers['exposure'] = exp_sizer
+        #     component_sizers['exposure'] = exp_sizer
 
         automator_sizer = component_sizers.pop('automator')
 
-        self.top_notebook.InsertPage(0, automator_sizer, text='Automator',
+        self.top_notebook.AddPage(automator_sizer, text='Automator',
             select=True)
 
-        for key, index in enumerate(component_sizers.keys()):
-            self.top_notebook.InsertPage(index+1, component_sizer[key],
-                text=key.capitalize())
+        for key, page in component_sizers.items():
+            self.top_notebook.AddPage(page, text=key.capitalize())
 
-    def _generate_component_sizers(self, top_panel):
+        panel_sizer = wx.BoxSizer(wx.VERTICAL)
+        panel_sizer.Add(self.top_notebook, flag=wx.EXPAND, proportion=1)
+        top_panel.SetSizer(panel_sizer)
+
+        top_sizer = wx.BoxSizer(wx.VERTICAL)
+        top_sizer.Add(top_panel, flag=wx.EXPAND, proportion=1)
+
+        self.SetSizer(top_sizer)
+
+    def _generate_component_sizers(self, top_panel, notebook=False):
+        component_sizers = {}
+
         for key in self.settings['components']:
 
             if key != 'pipeline':
@@ -208,7 +222,12 @@ class BioFrame(wx.Frame):
                 else:
                     label = key.capitalize()
 
-                box = wx.StaticBox(top_panel, label=label)
+                if notebook:
+                    box_panel = wx.Panel(top_panel)
+                else:
+                    box_panel = top_panel
+
+                box = wx.StaticBox(box_panel, label=label)
                 # box.SetOwnForegroundColour(wx.Colour('firebrick'))
 
                 if key != 'uv':
@@ -222,7 +241,13 @@ class BioFrame(wx.Frame):
                 component_sizer.Add(component_panel, proportion=1,
                     border=self._FromDIP(2), flag=wx.EXPAND|wx.ALL)
 
-                component_sizers[key] = component_sizer
+                if notebook:
+                    box_panel.SetSizer(component_sizer)
+                    component_sizers[key] = box_panel
+                else:
+                    component_sizers[key] = component_sizer
+
+                
                 self.component_panels[key] = component_panel
 
             else:
@@ -277,14 +302,14 @@ if __name__ == '__main__':
 
     exposure_settings['det_args'] =  {'use_tiff_writer': False,
         'use_file_writer': True, 'photon_energy' : 12.0,
-        'images_per_file': 300}, #1 image/file for TR, 300 for eq SAXS, 1000 for muscle
+        'images_per_file': 300} #1 image/file for TR, 300 for eq SAXS, 1000 for muscle
 
     # Muscle settings
     exposure_settings['struck_measurement_time'] = '0.001'
-    exposure_settings['tr_muscle_exp'] = False,
+    exposure_settings['tr_muscle_exp'] = False
 
     #Other settings
-    exposure_settings['wait_for_trig'] = True,
+    exposure_settings['wait_for_trig'] = True
     exposure_settings['struck_log_vals'] = [
         # Format: (mx_record_name, struck_channel, header_name,
         # scale, offset, use_dark_current, normalize_by_exp_time)
@@ -304,12 +329,12 @@ if __name__ == '__main__':
         # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
         # {'mx_record': 'mcs13', 'channel': 12, 'name': 'Force',
         # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
-        ],
+        ]
     exposure_settings['warnings'] = {'shutter' : True, 'col_vac' : {'check': True,
         'thresh': 0.04}, 'guard_vac' : {'check': True, 'thresh': 0.04},
         'sample_vac': {'check': True, 'thresh': 0.04}, 'sc_vac':
-        {'check': True, 'thresh':0.04}},
-    exposure_settings['base_data_dir'] = '/nas_data/Eiger2x/2025_Run1', #CHANGE ME and pipeline local_basedir
+        {'check': True, 'thresh':0.04}}
+    exposure_settings['base_data_dir'] = '/nas_data/Eiger2x/2025_Run1' #CHANGE ME and pipeline local_basedir
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']
 
 
@@ -687,14 +712,14 @@ if __name__ == '__main__':
 
 
     hplc_settings = biohplccon.default_hplc_2pump_settings
-    hplc_settings['com_thread'] = com_thread
+    hplc_settings['com_thread'] = None
     hplc_settings['remote'] = True
     hplc_settings['remote_device'] = 'hplc'
     hplc_settings['remote_ip'] = '164.54.204.113'
     hplc_settings['remote_port'] = '5556'
 
 
-    automator_settings = autcon.default_automator_settings
+    automator_settings = autocon.default_automator_settings
 
 
 
@@ -709,8 +734,8 @@ if __name__ == '__main__':
         ('metadata', metadata.ParamPanel),
         # ('pipeline', pipeline_ctrl.PipelineControl),
         # ('uv', spectrometercon.UVPanel),
-        ('hplc', biohplccon.HPLCPanel),
-        ('automator', autocon.AutoFrame)
+        # ('hplc', biohplccon.HPLCPanel),
+        ('automator', autocon.AutoPanel)
         ])
 
     settings = {
@@ -722,6 +747,8 @@ if __name__ == '__main__':
         'metadata'      : metadata_settings,
         'pipeline'      : pipeline_settings,
         'uv'            : spectrometer_settings,
+        'hplc'          : hplc_settings,
+        'automator'     : automator_settings,
         'components'    : components,
         'biocon'        : biocon_settings,
         }
