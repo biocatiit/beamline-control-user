@@ -253,7 +253,7 @@ if __name__ == '__main__':
         'remote_dir_root'       : '/nas_data/Eiger2x',
         'detector'              : '18ID:EIG2:_epics',
         'det_args'              :  {'use_tiff_writer': False, 'use_file_writer': True,
-                                    'photon_energy' : 12.0, 'images_per_file': 300}, #1 image/file for TR, 300 for equilibrium
+                                    'photon_energy' : 12.0, 'images_per_file': 1000}, #1 image/file for TR, 300 for equilibrium
         'add_file_postfix'      : False,
 
         # 'shutter_speed_open'    : 0.004, #in s      NM vacuum shutter, broken
@@ -280,7 +280,7 @@ if __name__ == '__main__':
         'tr_muscle_exp'         : False,
         'slow_mode_thres'       : 0.1,
         'fast_mode_max_exp_time': 2000,
-        'wait_for_trig'         : True,
+        'wait_for_trig'         : False,
         'num_trig'              : '1',
         'show_advanced_options' : True,
         'fe_shutter_pv'         : 'FE:18:ID:FEshutter',
@@ -710,13 +710,13 @@ if __name__ == '__main__':
 
     components = OrderedDict([
         ('exposure', expcon.ExpPanel),
-        ('coflow', coflowcon.CoflowPanel),
+        # ('coflow', coflowcon.CoflowPanel),
         # ('trsaxs_scan', trcon.TRScanPanel),
         # ('trsaxs_flow', trcon.TRFlowPanel),
         # ('scan',    scancon.ScanPanel),
         ('metadata', metadata.ParamPanel),
-        ('pipeline', pipeline_ctrl.PipelineControl),
-        ('uv', spectrometercon.UVPanel),
+        # ('pipeline', pipeline_ctrl.PipelineControl),
+        # ('uv', spectrometercon.UVPanel),
         ])
 
     settings = {
