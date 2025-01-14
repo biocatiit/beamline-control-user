@@ -6581,14 +6581,19 @@ if __name__ == '__main__':
     #     }
     #     ]
 
-    # Local
-    com_thread = HPLCCommThread('HPLCComm')
-    com_thread.start()
+    # # Local
+    # com_thread = HPLCCommThread('HPLCComm')
+    # com_thread.start()
+    # default_hplc_2pump_settings['com_thread'] = com_thread
 
-    # # Remote
-    # com_thread = None
-
+    # Remote
+    com_thread = None
     default_hplc_2pump_settings['com_thread'] = com_thread
+    default_hplc_2pump_settings['remote'] = True
+    default_hplc_2pump_settings['remote_device'] = 'hplc'
+    default_hplc_2pump_settings['remote_ip'] = '164.54.204.113'
+    default_hplc_2pump_settings['remote_port'] = '5556'
+
 
     app = wx.App()
     logger.debug('Setting up wx app')
