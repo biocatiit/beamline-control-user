@@ -1786,6 +1786,8 @@ class AgilentHPLCStandard(AgilentHPLC):
         success: bool
             True if successful
         """
+        self._submitting_sample = True
+
         flow_rate = float(flow_rate)
         flow_accel = float(flow_accel)
         high_pressure_lim = float(high_pressure_lim)
@@ -1842,7 +1844,7 @@ class AgilentHPLCStandard(AgilentHPLC):
         logger.info(('HPLC %s starting to submit sample %s on active flow '
             'path %s'), self.name, name, self._active_flow_path)
 
-        self._submitting_sample = True
+
         self._abort_submit.clear()
         self._monitor_submit_evt.set()
 
@@ -1882,6 +1884,15 @@ class AgilentHPLCStandard(AgilentHPLC):
                 self.submit_sequence(name, [sequence_vals], result_path, name)
 
             if len(self._submit_queue) == 0:
+                if self.get_run_queue_status() == 'Default':
+                    while True:
+                        status = self.get_instrument_status()
+                        if (status != 'Run' and status != 'Injecting'
+                            and status != 'PostRun' and status != 'PreRun'):
+                            time.sleep(0.1)
+                        else:
+                            break
+
                 self._submitting_sample = False
                 self._monitor_submit_evt.clear()
 
@@ -2512,6 +2523,8 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
         success: bool
             True if successful
         """
+        self._submitting_sample = True
+
         flow_rate = float(flow_rate)
         flow_accel = float(flow_accel)
         high_pressure_lim = float(high_pressure_lim)
@@ -2576,7 +2589,7 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
         logger.info(('HPLC %s starting to submit sample %s on active flow '
             'path %s'), self.name, name, self._active_flow_path)
 
-        self._submitting_sample = True
+
         self._abort_submit.clear()
         self._monitor_submit_evt.set()
 
