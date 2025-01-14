@@ -5811,16 +5811,16 @@ if __name__ == '__main__':
 
     # Batch mode pumps
     setup_devices = [
-        {'name': 'water', 'args': ['KPHM100', 'COM3'],
+        {'name': 'water', 'args': ['KPHM100', 'COM10'],
             'kwargs': {'flow_cal': '319.2',},
             'ctrl_args': {'flow_rate': 1}},
-        {'name': 'ethanol', 'args': ['KPHM100', 'COM5'],
+        {'name': 'ethanol', 'args': ['KPHM100', 'COM8'],
             'kwargs': {'flow_cal': '319.2',},
             'ctrl_args': {'flow_rate': 1}},
-        {'name': 'hellmanex', 'args': ['KPHM100', 'COM6'],
+        {'name': 'hellmanex', 'args': ['KPHM100', 'COM9'],
             'kwargs': {'flow_cal': '319.2',},
             'ctrl_args': {'flow_rate': 1}},
-        {'name': 'Sample', 'args': ['Hamilton PSD6', 'COM4'],
+        {'name': 'Sample', 'args': ['Hamilton PSD6', 'COM12'],
             'kwargs': {'syringe_id': '0.1 mL, Hamilton Glass',
              'pump_address': '1', 'dual_syringe': 'False'},
             'ctrl_args': {'flow_rate' : '1', 'refill_rate' : '1'}},

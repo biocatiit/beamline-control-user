@@ -3242,7 +3242,8 @@ class ExpPanel(wx.Panel):
                     else:
                         exp_type = 'Batch'
 
-                elif md_exp_type == 'SEC-SAXS' or md_exp_type == 'SEC-MALS-SAXS':
+                elif (md_exp_type == 'SEC-SAXS' or md_exp_type == 'SEC-MALS-SAXS'
+                    or md_exp_type == 'AF4-MALS-SAXS'):
                     exp_type = 'SEC'
 
                 elif md_exp_type == 'TR-SAXS':
