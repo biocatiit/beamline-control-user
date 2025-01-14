@@ -2133,6 +2133,17 @@ def test_cmd_func(name, args, kwargs):
     return 'idle', True
 
 
+
+#######################################################
+default_automator_settings = {
+        'automator_thread'  : None,
+        'instruments'       : {},
+        'exp_elut_scale'    : 0.95,
+        'hplc_inst'         : '',
+        }
+
+
+
 if __name__ == '__main__':
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
@@ -2387,18 +2398,15 @@ if __name__ == '__main__':
     # hplc_automator_callback = hplc_frame.devices[0].automator_callback
     # coflow_automator_callback = coflow_frame.coflow_panel.automator_callback
 
-    automator_settings = {
-        'automator_thread'  : automator,
-        # 'instruments'       :
-        #         {'hplc1'    : {'num_paths': 1,
-        #             'automator_callback': hplc_automator_callback},
-        #         'coflow'    : {'automator_callback': coflow_automator_callback},
-        #         'exp'       : {'automator_callback': test_cmd_func}
-        #         }
-        'instruments'       : {},
-        'exp_elut_scale'    : 0.95,
-        'hplc_inst'         : 'hplc1',
-        }
+    automator_settings = default_automator_settings
+    automator_settings['automator_thread'] = automator
+    automator_settings['hplc_inst'] = 'hplc1'
+    # automator_settings['instruments'] = {
+    #     'hplc1'    : {'num_paths': 1,
+    #                 'automator_callback': hplc_automator_callback},
+    #     'coflow'    : {'automator_callback': coflow_automator_callback},
+    #     'exp'       : {'automator_callback': test_cmd_func}
+    #     }
 
 
     app = wx.App()
