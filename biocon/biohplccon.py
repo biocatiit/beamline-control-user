@@ -6588,11 +6588,11 @@ if __name__ == '__main__':
     # # Remote
     # com_thread = None
 
-    hplc_2pump_settings['com_thread'] = com_thread
+    default_hplc_2pump_settings['com_thread'] = com_thread
 
     app = wx.App()
     logger.debug('Setting up wx app')
-    frame = HPLCFrame('HPLCFrame', hplc_settings, parent=None,
+    frame = HPLCFrame('HPLCFrame', default_hplc_2pump_settings, parent=None,
         title='HPLC Control')
     frame.Show()
 

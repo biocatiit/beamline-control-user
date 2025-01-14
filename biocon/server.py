@@ -755,11 +755,15 @@ if __name__ == '__main__':
             start_hplc=True)
         control_server_hplc.start()
 
+        time.sleep(1)
+        hplc_comm_thread = control_server_hplc.get_comm_thread('hplc')
+
         hplc_settings['remote'] = False
-        hplc_settings['com_thread'] = control_server_hplc
+        hplc_settings['com_thread'] = hplc_comm_thread
 
         hplc_frame = biohplccon.HPLCFrame('HPLCFrame', hplc_settings, parent=None,
             title='HPLC Control')
+        hplc_frame.Show()
 
 
     app.MainLoop()
@@ -769,17 +773,22 @@ if __name__ == '__main__':
             time.sleep(1)
     except KeyboardInterrupt:
         print('stopping stuff')
-        control_server_pump.stop()
-        control_server_pump.join()
+        if exp_type != 'hplc':
+            control_server_pump.stop()
+            control_server_pump.join()
 
-        control_server_fm.stop()
-        control_server_fm.join()
+            control_server_fm.stop()
+            control_server_fm.join()
 
-        control_server_valve.stop()
-        control_server_valve.join()
+            control_server_valve.stop()
+            control_server_valve.join()
 
-        if exp_type == 'coflow' and has_uv:
-            control_server_uv.stop()
-            control_server_uv.join()
+            if exp_type == 'coflow' and has_uv:
+                control_server_uv.stop()
+                control_server_uv.join()
+
+        elif exp_type == 'hplc':
+            control_server_hplc.stop()
+            control_server_hplc.join()
 
     logger.info("Quitting server")
