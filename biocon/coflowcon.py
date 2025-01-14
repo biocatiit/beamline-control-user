@@ -38,6 +38,7 @@ import wx
 import matplotlib
 from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg
 from matplotlib.figure import Figure
+import epics.wx
 
 matplotlib.rcParams['backend'] = 'WxAgg'
 
@@ -917,7 +918,7 @@ class CoflowPanel(wx.Panel):
         flow_rate_sizer.Add(self.change_flow_button, flag=wx.ALIGN_CENTER_VERTICAL)
 
         self.start_flow_button = wx.Button(control_box, label='Start Coflow')
-        self.stop_flow_button = wx.Button(control_box, label='Coflow')
+        self.stop_flow_button = wx.Button(control_box, label='Stop Coflow')
         self.change_buffer_button = wx.Button(control_box, label='Change Buffer')
 
         self.auto_flow = wx.CheckBox(control_box, label='Start/stop coflow automatically with exposure')
@@ -1096,6 +1097,9 @@ class CoflowPanel(wx.Panel):
         self.outlet_flow = wx.StaticText(status_panel, label='0', style=wx.ST_NO_AUTORESIZE,
             size=self._FromDIP((50,-1)))
 
+        self.cell_temp = epics.wx.PVText(status_panel, '18ID:ETC:Ti1',
+            auto_units=False, fg='black', style=wx.ST_NO_AUTORESIZE, size=self._FromDIP((50,-1)))
+
         self.status = wx.StaticText(status_panel, label='Coflow off', style=wx.ST_NO_AUTORESIZE,
             size=self._FromDIP((125, -1)))
         self.status.SetForegroundColour(wx.RED)
@@ -1106,14 +1110,17 @@ class CoflowPanel(wx.Panel):
         status_label = wx.StaticText(status_panel, label='Status:')
         sheath_label = wx.StaticText(status_panel, label='Sheath flow [{}]:'.format(units))
         outlet_label = wx.StaticText(status_panel, label='Outlet flow [{}]:'.format(units))
+        temp_label = wx.StaticText(status_panel, label='Cell Temp. [C]:')
 
-        status_grid_sizer = wx.FlexGridSizer(cols=2, rows=3, vgap=self._FromDIP(5), hgap=self._FromDIP(2))
+        status_grid_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(5), hgap=self._FromDIP(2))
         status_grid_sizer.Add(status_label, flag=wx.ALIGN_CENTER_VERTICAL)
         status_grid_sizer.Add(self.status, flag=wx.ALIGN_CENTER_VERTICAL)
         status_grid_sizer.Add(sheath_label, flag=wx.ALIGN_CENTER_VERTICAL)
         status_grid_sizer.Add(self.sheath_flow, flag=wx.ALIGN_CENTER_VERTICAL)
         status_grid_sizer.Add(outlet_label, flag=wx.ALIGN_CENTER_VERTICAL)
         status_grid_sizer.Add(self.outlet_flow, flag=wx.ALIGN_CENTER_VERTICAL)
+        status_grid_sizer.Add(temp_label, flag=wx.ALIGN_CENTER_VERTICAL)
+        status_grid_sizer.Add(self.cell_temp, flag=wx.ALIGN_CENTER_VERTICAL)
 
         coflow_buffer_sizer = self._create_buffer_ctrls(status_panel)
 
@@ -1900,6 +1907,7 @@ class CoflowPanel(wx.Panel):
         if self.coflow_control.coflow_on or self.auto_flow.GetValue():
             metadata['Coflow on:'] = True
             metadata['LC flow rate [{}]:'.format(self.settings['flow_units'])] = self.coflow_control.lc_flow_rate
+            metadata['Sample cell temperature [T]:'] = self.cell_temp.GetValue()
             metadata['Outlet flow rate [{}]:'.format(self.settings['flow_units'])] = self.coflow_control.outlet_setpoint
             metadata['Sheath ratio:'] = self.settings['sheath_ratio']
             metadata['Sheath excess ratio:'] = self.settings['sheath_excess']

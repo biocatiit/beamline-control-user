@@ -100,7 +100,7 @@ class BioFrame(wx.Frame):
                     label = key.capitalize()
 
                 box = wx.StaticBox(top_panel, label=label)
-                box.SetOwnForegroundColour(wx.Colour('firebrick'))
+                # box.SetOwnForegroundColour(wx.Colour('firebrick'))
 
                 if key != 'uv':
                     component_panel = self.settings['components'][key](self.settings[key],
@@ -249,11 +249,11 @@ if __name__ == '__main__':
         'nframes_max'           : 15000, # For Eiger: 2000000000, for Struck: 15000 (set by maxChannels in the driver configuration)
         'nparams_max'           : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
         'exp_period_delta'      : 0.000000200,
-        'local_dir_root'        : '/nas_data/Eiger2xe9M',
-        'remote_dir_root'       : '/nas_data/Eiger2xe9M',
+        'local_dir_root'        : '/nas_data/Eiger2x',
+        'remote_dir_root'       : '/nas_data/Eiger2x',
         'detector'              : '18ID:EIG2:_epics',
         'det_args'              :  {'use_tiff_writer': False, 'use_file_writer': True,
-                                    'photon_energy' : 12.0, 'images_per_file': 1},
+                                    'photon_energy' : 12.0, 'images_per_file': 300}, #1 image/file for TR, 300 for equilibrium
         'add_file_postfix'      : False,
 
         # 'shutter_speed_open'    : 0.004, #in s      NM vacuum shutter, broken
@@ -303,8 +303,8 @@ if __name__ == '__main__':
             # 'offset': 0, 'dark': True, 'norm_time': False},
             # {'mx_record': 'mcs6', 'channel': 5, 'name': 'I3', 'scale': 1,
             # 'offset': 0, 'dark': True, 'norm_time': False},
-            {'mx_record': 'mcs11', 'channel': 10, 'name': 'Beam_current',
-            'scale': 5000, 'offset': 0.5, 'dark': False, 'norm_time': True},
+            # {'mx_record': 'mcs11', 'channel': 10, 'name': 'Beam_current',
+            # 'scale': 5000, 'offset': 0.5, 'dark': False, 'norm_time': True},
             # {'mx_record': 'mcs12', 'channel': 11, 'name': 'Flow_rate',
             # 'scale': 10e6, 'offset': 0, 'dark': True, 'norm_time': True},
             # {'mx_record': 'mcs7', 'channel': 6, 'name': 'Detector_Enable',
@@ -324,15 +324,15 @@ if __name__ == '__main__':
             # 'norm_time': False},
             # {'mx_record': 'j6', 'name': 'I3', 'scale': 1, 'offset': 0,
             # 'norm_time': False},
-            {'mx_record': 'j11', 'name': 'Beam_current', 'scale': 5000,
-            'offset': 0.5, 'norm_time': True}
+            # {'mx_record': 'j11', 'name': 'Beam_current', 'scale': 5000,
+            # 'offset': 0.5, 'norm_time': True}
             ],
         'warnings'              : {'shutter' : True, 'col_vac' : {'check': True,
             'thresh': 0.04}, 'guard_vac' : {'check': True, 'thresh': 0.04},
-            'sample_vac': {'check': False, 'thresh': 0.04}, 'sc_vac':
+            'sample_vac': {'check': True, 'thresh': 0.04}, 'sc_vac':
             {'check': True, 'thresh':0.04}},
         # 'base_data_dir'         : '/nas_data/Pilatus1M/2022_Run2', #CHANGE ME
-        'base_data_dir'         : '/nas_data/Eiger2x/2023_Run1', #CHANGE ME and pipeline local_basedir
+        'base_data_dir'         : '/nas_data/Eiger2x/2024_Run3', #CHANGE ME and pipeline local_basedir
         }
 
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']
@@ -348,26 +348,26 @@ if __name__ == '__main__':
         'remote_valve_ip'           : '164.54.204.53',
         'remote_valve_port'         : '5558',
         'flow_units'                : 'mL/min',
-        'sheath_pump'               : {'name': 'sheath', 'args': ['VICI M50', 'COM3'],
+        'sheath_pump'               : {'name': 'sheath', 'args': ['VICI M50', 'COM6'],
                                         'kwargs': {'flow_cal': '627.72',
                                         'backlash_cal': '9.814'},
                                         'ctrl_args': {'flow_rate': 1}},
-        'outlet_pump'               : {'name': 'outlet', 'args': ['VICI M50', 'COM4'],
-                                        'kwargs': {'flow_cal': '628.68',
-                                        'backlash_cal': '9.962'},
-                                        'ctrl_args': {'flow_rate': 1}},
-        # 'outlet_pump'               : {'name': 'outlet', 'args': ['OB1 Pump', 'COM8'],
-        #                                 'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
-        #                                 'min_pressure': -1000, 'max_pressure': 1000, 'P': 5, 'I': 0.00015,
-        #                                 'D': 0, 'bfs_instr_ID': None, 'comm_lock': None,
-        #                                 'calib_path': './resources/ob1_calib.txt'},
-        #                                 'ctrl_args': {}},
+        # 'outlet_pump'               : {'name': 'outlet', 'args': ['VICI M50', 'COM4'],
+        #                                 'kwargs': {'flow_cal': '628.68',
+        #                                 'backlash_cal': '9.962'},
+        #                                 'ctrl_args': {'flow_rate': 1}},
+        'outlet_pump'               : {'name': 'outlet', 'args': ['OB1 Pump', 'COM7'],
+                                        'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
+                                        'min_pressure': -1000, 'max_pressure': 1000, 'P': -2, 'I': -0.15,
+                                        'D': 0, 'bfs_instr_ID': None, 'comm_lock': None,
+                                        'calib_path': './resources/ob1_calib.txt'},
+                                        'ctrl_args': {}},
         'sheath_fm'                 : {'name': 'sheath', 'args': ['BFS', 'COM5'],
                                         'kwargs':{}},
-        'outlet_fm'                 : {'name': 'outlet', 'args': ['BFS', 'COM6'],
+        'outlet_fm'                 : {'name': 'outlet', 'args': ['BFS', 'COM3'],
                                         'kwargs':{}},
         'sheath_valve'              : {'name': 'Coflow Sheath',
-                                        'args':['Cheminert', 'COM7'],
+                                        'args':['Cheminert', 'COM4'],
                                         'kwargs': {'positions' : 10}},
         # 'sheath_pump'               : {'name': 'sheath', 'args': ['Soft', None], # Simulated devices for testing
         #                                 'kwargs': {}},
@@ -384,21 +384,21 @@ if __name__ == '__main__':
         'sheath_excess'             : 1.5,
         'sheath_warning_threshold_low'  : 0.8,
         'sheath_warning_threshold_high' : 1.2,
-        'outlet_warning_threshold_low'  : 0.8,
-        'outlet_warning_threshold_high' : 1.2,
-        # 'outlet_warning_threshold_low'  : 0.98,
-        # 'outlet_warning_threshold_high' : 1.02,
+        # 'outlet_warning_threshold_low'  : 0.8,
+        # 'outlet_warning_threshold_high' : 1.2,
+        'outlet_warning_threshold_low'  : 0.98,
+        'outlet_warning_threshold_high' : 1.02,
         'sheath_fr_mult'            : 1,
         'outlet_fr_mult'            : 1,
         # 'outlet_fr_mult'            : -1,
-        'settling_time'             : 5000, #in ms
-        # 'settling_time'             : 120000, #in ms
+        # 'settling_time'             : 5000, #in ms
+        'settling_time'             : 120000, #in ms
         'lc_flow_rate'              : '0.6',
         'show_sheath_warning'       : True,
         'show_outlet_warning'       : True,
         'use_overflow_control'      : True,
-        'buffer_change_fr'          : 2., #in ml/min
-        'buffer_change_vol'         : 25., #in ml
+        'buffer_change_fr'          : 1.19, #in ml/min
+        'buffer_change_vol'         : 12., #in ml
         'air_density_thresh'        : 700, #g/L
         'sheath_valve_water_pos'    : 10,
         'sheath_valve_hellmanex_pos': 8,
@@ -654,20 +654,23 @@ if __name__ == '__main__':
     pipeline_settings = {
         'components'    : ['pipeline'],
         'server_port'   : '5556',
-        'server_ip'     : '164.54.204.142',
-        # 'server_ip'     : '164.54.204.82',
+        'server_ip'     : '164.54.204.142', #EPU
+        # 'server_ip'     : '164.54.204.144', #Marvin
         # 'raw_settings'  : '/nas_data/Pilatus1M/2021_Run1/20210129_Hopkins/setup/calibration/pipeline_SAXS.cfg',
         'local_basedir' : '/nas_data/Eiger2x',
         'data_basedir'  : '/nas_data/Eiger2x',
         'output_basedir': '/nas_data/SAXS',
-        'data_source'   : 'File', #File or stream
+        'data_source'   : 'Stream', #File or stream
         'detector'      : 'Eiger',
         }
 
     spectrometer_settings = {
         'device_init'           : [{'name': 'CoflowUV', 'args': ['StellarNet', None],
-                                    'kwargs': {'shutter_pv_name': '18ID:LJT4:2:DO11',
-                                    'trigger_pv_name' : '18ID:LJT4:2:DO12'}}],
+                                    'kwargs': {'shutter_pv_name': '18ID:LJT4:2:Bo11',
+                                    'trigger_pv_name' : '18ID:LJT4:2:Bo12',
+                                    'out1_pv_name' : '18ID:E1608:Ao1',
+                                    'out2_pv_name' : '18ID:E1608:Ao2',
+                                    'trigger_in_pv_name' : '18ID:E1608:Bi8'}}],
         'max_int_t'             : 0.025, # in s
         'scan_avg'              : 1,
         'smoothing'             : 0,
@@ -676,39 +679,44 @@ if __name__ == '__main__':
         'dark_correct'          : True,
         'auto_dark'             : True,
         'auto_dark_t'           : 60*60, #in s
-        'dark_avgs'             : 9,
-        'ref_avgs'              : 9,
+        'dark_avgs'             : 3,
+        'ref_avgs'              : 2,
         'history_t'             : 60*60*24, #in s
         'save_subdir'           : 'UV',
         'save_type'             : 'Absorbance',
         'series_ref_at_start'   : True,
-        'drift_correct'         : True,
+        'drift_correct'         : False,
         'drift_window'          : [750, 800],
         'abs_wav'               : [280, 260],
-        'abs_window'            : 1,
+        'abs_window'            : 3,
         'int_t_scale'           : 2,
-        'wavelength_range'      : [200, 838.39],
+        'wavelength_range'      : [225, 838.39],
+        'analog_out_v_max'      : 10.,
+        'analog_out_au_max'     : 10000, #mAu
+        'analog_out_wav'        : {'out1': 280, 'out2': 260},
+        'do_ao'                 : True,
         'remote_ip'             : '164.54.204.53',
         'remote_port'           : '5559',
-        'remote'                : True,
+        'remote'                : False,
         'remote_device'         : 'uv',
         'com_thread'            : None,
         'remote_dir_prefix'     : {'local' : '/nas_data', 'remote' : 'Y:\\'},
         'inline_panel'          : True,
         'plot_refresh_t'        : 1, #in s
+        'device_communication'      : 'remote',
     }
 
     biocon_settings = {}
 
     components = OrderedDict([
         ('exposure', expcon.ExpPanel),
-        # ('coflow', coflowcon.CoflowPanel),
-        ('trsaxs_scan', trcon.TRScanPanel),
-        ('trsaxs_flow', trcon.TRFlowPanel),
+        ('coflow', coflowcon.CoflowPanel),
+        # ('trsaxs_scan', trcon.TRScanPanel),
+        # ('trsaxs_flow', trcon.TRFlowPanel),
         # ('scan',    scancon.ScanPanel),
         ('metadata', metadata.ParamPanel),
         ('pipeline', pipeline_ctrl.PipelineControl),
-        # ('uv', spectrometercon.UVPanel),
+        ('uv', spectrometercon.UVPanel),
         ])
 
     settings = {

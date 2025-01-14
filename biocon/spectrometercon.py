@@ -89,8 +89,7 @@ class SpectraData(object):
             self.trans_spectrum = spectrum[:,1]
         elif spec_type == 'abs':
             self.abs_spectrum = spectrum[:,1]
-
-            self._calculate_absorbances()
+            self._calculate_all_abs_single_wavelength()
 
     def get_timestamp(self):
         logger.debug('SpectraData: Getting timestamp')
@@ -1033,6 +1032,9 @@ class Spectrometer(object):
             self.name, window_size)
         self._absorbance_window = window_size
 
+        self._calculate_all_abs_single_wavelength()
+
+    def _calculate_all_abs_single_wavelength(self):
         for wavelength in self._absorbance_wavelengths:
             self._calculate_absorbance_range(wavelength)
 
@@ -1123,6 +1125,7 @@ class Spectrometer(object):
 
         self._reference_spectrum = None
         self._dark_spectrum = None
+        self._calculate_all_abs_single_wavelength()
 
     def get_wavelength_range(self):
         logger.debug('Sepctrometer %s: Getting wavelength range', self.name)
@@ -1143,8 +1146,8 @@ class StellarnetUVVis(Spectrometer):
     Stellarnet black comet UV-Vis spectrometer
     """
 
-    def __init__(self, name, device, shutter_pv_name='18ID:LJT4:2:DI11',
-        trigger_pv_name='18ID:LJT4:2:DI12', out1_pv_name='18ID:E1608:Ao1',
+    def __init__(self, name, device, shutter_pv_name='18ID:LJT4:2:Bo11',
+        trigger_pv_name='18ID:LJT4:2:Bo12', out1_pv_name='18ID:E1608:Ao1',
         out2_pv_name='18ID:E1608:Ao2', trigger_in_pv_name='18ID_E1608:Bi8'):
 
         Spectrometer.__init__(self, name, device)
@@ -1156,9 +1159,11 @@ class StellarnetUVVis(Spectrometer):
         self._model = None
         self._device_id = None
 
-        self._external_trigger = False
+        self._ext_trig = False
 
         self.connected = False
+
+        print(trigger_pv_name)
 
         self.shutter_pv = epics.get_pv(shutter_pv_name)
         self.trigger_pv = epics.get_pv(trigger_pv_name)
@@ -1277,7 +1282,7 @@ class StellarnetUVVis(Spectrometer):
         logger.debug('Spectrometer %s: Collecting spectrum', self.name)
         self._taking_data = True
 
-        if self._external_trigger and int_trigger:
+        if self._ext_trig and int_trigger:
             trigger_ext = True
             self.set_external_trigger(False)
         else:
@@ -1376,11 +1381,11 @@ class StellarnetUVVis(Spectrometer):
         self._device_id = params['device_id']
 
     def set_external_trigger(self, trigger):
-        self.ext_trig = trigger
+        self._ext_trig = trigger
         sn.ext_trig(self.spectrometer, trigger)
 
     def get_external_trigger(self):
-        return self.ext_trig
+        return self._ext_trig
 
     def _set_analog_output(self, output, val):
         """
@@ -2175,6 +2180,9 @@ class UVPanel(utils.DevicePanel):
         else:
             self.inline = False
 
+        if settings['device_communication'] == 'remote':
+            settings['remote'] = True
+
         self._dark_spectrum = None
         self._reference_spectrum = None
         self._current_spectrum = None
@@ -2812,11 +2820,11 @@ class UVPanel(utils.DevicePanel):
             try:
                 self.abs_wavs.SafeChangeValue(', '.join(map(str, self.settings['abs_wav'])))
             except Exception:
-                traceback.print_exc()
+                pass
             try:
                 self.abs_window.SafeChangeValue('{}'.format(self.settings['abs_window']))
             except Exception:
-                traceback.print_exc()
+                pass
 
 
     def _on_settings_change(self, obj, val):
@@ -2883,7 +2891,7 @@ class UVPanel(utils.DevicePanel):
             try:
                 wav_start = self.settings['wavelength_range'][0]
                 wav_end = self.settings['wavelength_range'][1]
-            except Exeption:
+            except Exception:
                 wav_start = None
 
         update = False
@@ -3851,7 +3859,7 @@ class UVPlot(wx.Panel):
             self.t_window.Enable()
             self.zero_time.Enable()
 
-        self.plot_data()
+        wx.CallAfter(self.plot_data)
 
     def _on_spectrum_type(self, evt):
         stype = self.spectrum_type_ctrl.GetStringSelection()
@@ -3866,13 +3874,13 @@ class UVPlot(wx.Panel):
             self.spectrum_type = 'raw'
             self.subplot.set_ylabel('Raw')
 
-        self.plot_data()
+        wx.CallAfter(self.plot_data)
 
     def _on_twindow_change(self, obj, val):
         self._time_window = float(val)
 
         self.canvas.mpl_disconnect(self.cid)
-        self.updatePlot()
+        wx.CallAfter(self.updatePlot)
         self.cid = self.canvas.mpl_connect('draw_event', self.ax_redraw)
 
     def _on_zero_time(self, evt):
@@ -3886,7 +3894,7 @@ class UVPlot(wx.Panel):
         # a = time.time()
         if self._needs_refresh:
             if time.time() - self._last_refresh > self._refresh_time:
-                self.plot_data()
+                wx.CallAfter(self.plot_data)
                 self._last_refresh = time.time()
                 self._needs_refresh = False
         # print(time.time()-a)
@@ -3920,7 +3928,7 @@ class UVPlot(wx.Panel):
         if not force_refresh:
             self._needs_refresh = True
         else:
-            self.plot_data()
+            wx.CallAfter(self.plot_data)
 
     def ax_redraw(self, widget=None):
         ''' Redraw plots on window resize event '''
@@ -3994,6 +4002,11 @@ class UVPlot(wx.Panel):
                     redraw = True
 
             for i, ydata in enumerate(abs_ydata):
+                if len(ydata) != len(xdata):
+                    if len(ydata) > len(xdata):
+                        ydata = ydata[:len(xdata)]
+                    else:
+                        xdata = xdata[:len(ydata)]
                 if i < len(self.abs_lines):
                     line = self.abs_lines[i]
                     line.set_xdata(xdata)
@@ -4510,8 +4523,8 @@ if __name__ == '__main__':
 
     spectrometer_settings = {
         'device_init'           : [{'name': 'CoflowUV', 'args': ['StellarNet', None],
-                                    'kwargs': {'shutter_pv_name': '18ID:LJT4:2:Bi11',
-                                    'trigger_pv_name' : '18ID:LJT4:2:Bi12',
+                                    'kwargs': {'shutter_pv_name': '18ID:LJT4:2:Bo11',
+                                    'trigger_pv_name' : '18ID:LJT4:2:Bo12',
                                     'out1_pv_name' : '18ID:E1608:Ao1',
                                     'out2_pv_name' : '18ID:E1608:Ao2',
                                     'trigger_in_pv_name' : '18ID:E1608:Bi8'}}],
@@ -4534,10 +4547,11 @@ if __name__ == '__main__':
         'abs_wav'               : [280, 260],
         'abs_window'            : 1,
         'int_t_scale'           : 2,
-        'wavelength_range'      : [200, 838.39],
+        'wavelength_range'      : [225, 838.39],
         'analog_out_v_max'      : 10.,
         'analog_out_au_max'     : 10000, #mAu
         'analog_out_wav'        : {'out1': 280, 'out2': 260},
+        'do_ao'                 : True,
         'remote_ip'             : '164.54.204.53',
         'remote_port'           : '5559',
         'remote'                : False,
@@ -4549,7 +4563,7 @@ if __name__ == '__main__':
     }
 
     #initialized epics ca context in the main thread first as recommended
-    epics.get_pv(spectrometer_settings['device_init'][0]['kwargs']['shutter_pv_name'])
+    # epics.get_pv(spectrometer_settings['device_init'][0]['kwargs']['shutter_pv_name'])
 
     app = wx.App()
     logger.debug('Setting up wx app')

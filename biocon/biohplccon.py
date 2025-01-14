@@ -6391,6 +6391,113 @@ class HPLCFrame(utils.DeviceFrame):
         self._init_devices()
 
 
+######################################################
+# Default settings
+
+# SEC-SAXS 2 pump
+hplc_args = {
+    'name'  : 'SEC-SAXS',
+    'args'  : ['AgilentHPLC', 'net.pipe://localhost/Agilent/OpenLAB/'],
+    'kwargs': {'instrument_name': 'SEC-SAXS', 'project_name': 'Demo',
+                'get_inst_method_on_start': True, 'use_angi': False,}
+    }
+
+default_selector_valve_args = {
+    'name'  : 'Selector',
+    'args'  : ['Cheminert', 'COM5'],
+    'kwargs': {'positions' : 2}
+    }
+
+default_outlet_valve_args = {
+    'name'  : 'Outlet',
+    'args'  : ['Cheminert', 'COM3'],
+    'kwargs': {'positions' : 2}
+    }
+
+default_purge1_valve_args = {
+    'name'  : 'Purge 1',
+    'args'  : ['Cheminert', 'COM6'],
+    'kwargs': {'positions' : 4}
+    }
+
+default_purge2_valve_args = {
+    'name'  : 'Purge 2',
+    'args'  : ['Cheminert', 'COM9'],
+    'kwargs': {'positions' : 4}
+    }
+
+default_buffer1_valve_args = {
+    'name'  : 'Buffer 1',
+    'args'  : ['Cheminert', 'COM7'],
+    'kwargs': {'positions' : 10}
+    }
+
+default_buffer2_valve_args = {
+    'name'  : 'Buffer 2',
+    'args'  : ['Cheminert', 'COM4'],
+    'kwargs': {'positions' : 10}
+    }
+
+# 2 pump HPLC for SEC-SAXS
+setup_devices = [
+    {'name': 'SEC-SAXS', 'args': ['AgilentHPLC2Pumps', None],
+        'kwargs': {'hplc_args' : hplc_args,
+        'selector_valve_args' : default_selector_valve_args,
+        'outlet_valve_args' : default_outlet_valve_args,
+        'purge1_valve_args' : default_purge1_valve_args,
+        'purge2_valve_args' : default_purge2_valve_args,
+        'buffer1_valve_args' : default_buffer1_valve_args,
+        'buffer2_valve_args' : default_buffer2_valve_args,
+        'pump1_id' : 'quat. pump 1#1c#1',
+        'pump2_id' : 'quat. pump 2#1c#2'},
+        }
+    ]
+
+default_hplc_2pump_settings = {
+    # Connection settings for hplc
+    'remote'        : False,
+    'remote_device' : 'hplc',
+    'device_init'   : setup_devices,
+    'remote_ip'     : '192.168.1.16',
+    'remote_port'   : '5558',
+    'com_thread'    : None,
+    # Default settings for hplc
+    'purge_volume'              : 20,
+    'purge_rate'                : 5,
+    'purge_accel'               : 10,
+    'purge_max_pressure'        : 250,
+    'restore_flow_after_purge'  : True,
+    'purge_with_sample'         : False,
+    'stop_before_purge'         : True,
+    'stop_after_purge'          : True,
+    'equil_volume'              : 48,
+    'equil_rate'                : 0.6,
+    'equil_accel'               : 0.1,
+    'equil_purge'               : True,
+    'equil_with_sample'         : False,
+    'stop_after_equil'          : True,
+    'switch_purge_active'       : True,
+    'switch_purge_volume'       : 1,
+    'switch_purge_rate'         : 1,
+    'switch_purge_accel'        : 10,
+    'switch_with_sample'        : False,
+    'switch_stop_flow1'         : True,
+    'switch_stop_flow2'         : True,
+    'restore_flow_after_switch' : True,
+    'acq_method'                : 'SECSAXS_test',
+    # 'acq_method'                : 'SEC-MALS',
+    'sample_loc'                : 'D2F-A1',
+    'inj_vol'                   : 10.0,
+    'flow_rate'                 : 0.6,
+    'flow_accel'                : 0.1,
+    'elution_vol'               : 30,
+    'sample_pressure_lim'       : 60.0,
+    'result_path'               : '',
+    'sp_method'                 : '',
+    'wait_for_flow_ramp'        : True,
+    'settle_time'               : 0.0,
+    }
+
 if __name__ == '__main__':
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
@@ -6401,49 +6508,7 @@ if __name__ == '__main__':
     h1.setFormatter(formatter)
     logger.addHandler(h1)
 
-    # SEC-SAXS 2 pump
-    hplc_args = {
-        'name'  : 'SEC-SAXS',
-        'args'  : ['AgilentHPLC', 'net.pipe://localhost/Agilent/OpenLAB/'],
-        'kwargs': {'instrument_name': 'SEC-SAXS', 'project_name': 'Demo',
-                    'get_inst_method_on_start': True, 'use_angi': False,}
-        }
 
-    selector_valve_args = {
-        'name'  : 'Selector',
-        'args'  : ['Cheminert', 'COM5'],
-        'kwargs': {'positions' : 2}
-        }
-
-    outlet_valve_args = {
-        'name'  : 'Outlet',
-        'args'  : ['Cheminert', 'COM3'],
-        'kwargs': {'positions' : 2}
-        }
-
-    purge1_valve_args = {
-        'name'  : 'Purge 1',
-        'args'  : ['Cheminert', 'COM6'],
-        'kwargs': {'positions' : 4}
-        }
-
-    purge2_valve_args = {
-        'name'  : 'Purge 2',
-        'args'  : ['Cheminert', 'COM9'],
-        'kwargs': {'positions' : 4}
-        }
-
-    buffer1_valve_args = {
-        'name'  : 'Buffer 1',
-        'args'  : ['Cheminert', 'COM7'],
-        'kwargs': {'positions' : 10}
-        }
-
-    buffer2_valve_args = {
-        'name'  : 'Buffer 2',
-        'args'  : ['Cheminert', 'COM4'],
-        'kwargs': {'positions' : 10}
-        }
 
 
     # # SEC-MALS HPLC-1
@@ -6503,20 +6568,7 @@ if __name__ == '__main__':
     #     0.05, 0.1, 0.1, 60.0, result_path='api_test', )
 
 
-    # 2 pump HPLC for SEC-SAXS
-    setup_devices = [
-        {'name': 'SEC-SAXS', 'args': ['AgilentHPLC2Pumps', None],
-            'kwargs': {'hplc_args' : hplc_args,
-            'selector_valve_args' : selector_valve_args,
-            'outlet_valve_args' : outlet_valve_args,
-            'purge1_valve_args' : purge1_valve_args,
-            'purge2_valve_args' : purge2_valve_args,
-            'buffer1_valve_args' : buffer1_valve_args,
-            'buffer2_valve_args' : buffer2_valve_args,
-            'pump1_id' : 'quat. pump 1#1c#1',
-            'pump2_id' : 'quat. pump 2#1c#2'},
-            }
-        ]
+
 
     # # Standard stack for SEC-MALS
     # setup_devices = [
@@ -6536,50 +6588,7 @@ if __name__ == '__main__':
     # # Remote
     # com_thread = None
 
-    hplc_settings = {
-        # Connection settings for hplc
-        'remote'        : False,
-        'remote_device' : 'hplc',
-        'device_init'   : setup_devices,
-        'remote_ip'     : '192.168.1.16',
-        'remote_port'   : '5558',
-        'com_thread'    : com_thread,
-        # Default settings for hplc
-        'purge_volume'              : 20,
-        'purge_rate'                : 5,
-        'purge_accel'               : 10,
-        'purge_max_pressure'        : 250,
-        'restore_flow_after_purge'  : True,
-        'purge_with_sample'         : False,
-        'stop_before_purge'         : True,
-        'stop_after_purge'          : True,
-        'equil_volume'              : 48,
-        'equil_rate'                : 0.6,
-        'equil_accel'               : 0.1,
-        'equil_purge'               : True,
-        'equil_with_sample'         : False,
-        'stop_after_equil'          : True,
-        'switch_purge_active'       : True,
-        'switch_purge_volume'       : 1,
-        'switch_purge_rate'         : 1,
-        'switch_purge_accel'        : 10,
-        'switch_with_sample'        : False,
-        'switch_stop_flow1'         : True,
-        'switch_stop_flow2'         : True,
-        'restore_flow_after_switch' : True,
-        'acq_method'                : 'SECSAXS_test',
-        # 'acq_method'                : 'SEC-MALS',
-        'sample_loc'                : 'D2F-A1',
-        'inj_vol'                   : 10.0,
-        'flow_rate'                 : 0.6,
-        'flow_accel'                : 0.1,
-        'elution_vol'               : 30,
-        'sample_pressure_lim'       : 60.0,
-        'result_path'               : '',
-        'sp_method'                 : '',
-        'wait_for_flow_ramp'        : True,
-        'settle_time'               : 0.0,
-        }
+    hplc_2pump_settings['com_thread'] = com_thread
 
     app = wx.App()
     logger.debug('Setting up wx app')

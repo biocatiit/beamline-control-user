@@ -41,6 +41,7 @@ import pumpcon
 import fmcon
 import valvecon
 import spectrometercon
+import biohplccon
 import utils
 
 
@@ -51,7 +52,7 @@ class ControlServer(threading.Thread):
 
     def __init__(self, ip, port, name='ControlServer', pump_comm_locks = None,
         valve_comm_locks=None, start_pump=False, start_fm=False,
-        start_valve=False, start_uv=False,):
+        start_valve=False, start_uv=False, start_hplc=False):
         """
         Initializes the custom thread. Important parameters here are the
         list of known commands ``_commands`` and known pumps ``known_pumps``.
@@ -80,6 +81,7 @@ class ControlServer(threading.Thread):
         self._start_fm = start_fm
         self._start_valve = start_valve
         self._start_uv = start_uv
+        self._start_hplc = start_hplc
 
     def run(self):
         """
@@ -171,6 +173,25 @@ class ControlServer(threading.Thread):
                 }
 
             self._device_control['uv'] = uv_ctrl
+
+        if self._start_hplc:
+            hplc_cmd_q = deque()
+            hplc_return_q = deque()
+            hplc_status_q = deque()
+            hplc_con = biohplccon.HPLCCommThread('HPLCCon')
+            hplc_con.start()
+
+            hplc_con.add_new_communication('zmq_server', hplc_cmd_q, hplc_return_q,
+                hplc_status_q)
+
+            hplc_ctrl = {
+                'queue'     : hplc_cmd_q,
+                'answer_q'  : hplc_return_q,
+                'status_q'  : hplc_status_q,
+                'thread'    : hplc_con,
+                }
+
+            self._device_control['hplc'] = hplc_ctrl
 
         while True:
             try:
@@ -375,15 +396,16 @@ if __name__ == '__main__':
     port3 = '5558'
     port4 = '5559'
 
-    exp_type = 'coflow' #coflow or trsaxs_laminar or trsaxs_chaotic
+    # exp_type = 'coflow' #coflow or trsaxs_laminar or trsaxs_chaotic or hplc
     # exp_type = 'trsaxs_chaotic'
     # exp_type = 'trsaxs_laminar'
+    exp_type = 'hplc'
 
 
     if exp_type == 'coflow':
         # Coflow
 
-        has_uv = False
+        has_uv = True
 
         ip = '164.54.204.53'
         # ip = '164.54.204.253'
@@ -401,10 +423,10 @@ if __name__ == '__main__':
         ob1_comm_lock = threading.RLock()
 
         setup_pumps = [
-            {'name': 'sheath', 'args': ['VICI M50', 'COM3'],
+            {'name': 'sheath', 'args': ['VICI M50', 'COM6'],
                 'kwargs': {'flow_cal': '627.72', 'backlash_cal': '9.814'},
                 'ctrl_args': {'flow_rate': 1}},
-            {'name': 'outlet', 'args': ['OB1 Pump', 'COM8'],
+            {'name': 'outlet', 'args': ['OB1 Pump', 'COM7'],
                 'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
                 'min_pressure': -900, 'max_pressure': 1000, 'P': -2, 'I': -0.15,
                 'D': 0, 'bfs_instr_ID': None, 'comm_lock': ob1_comm_lock,
@@ -419,15 +441,15 @@ if __name__ == '__main__':
 
         setup_uv = [
             {'name': 'CoflowUV', 'args': ['StellarNet', None], 'kwargs':
-            {'shutter_pv_name': '18ID:LJT4:2:Bi11',
-            'trigger_pv_name' : '18ID:LJT4:2:Bi12'}},
+            {'shutter_pv_name': '18ID:LJT4:2:Bo11',
+            'trigger_pv_name' : '18ID:LJT4:2:Bo12'}},
             ]
 
         outlet_fm_comm_lock = threading.Lock()
 
         setup_fms = [
-            {'name': 'sheath', 'args' : ['BFS', 'COM6'], 'kwargs': {}},
-            {'name': 'outlet', 'args' : ['BFS', 'COM5'], 'kwargs':
+            {'name': 'sheath', 'args' : ['BFS', 'COM5'], 'kwargs': {}},
+            {'name': 'outlet', 'args' : ['BFS', 'COM3'], 'kwargs':
                 {'comm_lock': outlet_fm_comm_lock}}
             ]
 
@@ -619,108 +641,126 @@ if __name__ == '__main__':
             #         'kwargs': {'positions': 6}},
             #     ]
 
+    elif exp_type == 'hplc':
+        # HPLC control
 
+        ip = '164.54.204.113' # Dual pump system
+
+        hplc_settings = biohplccon.default_hplc_2pump_settings
 
 
     # Both
 
 
-    control_server_pump = ControlServer(ip, port1, name='PumpControlServer',
-        start_pump=True)
-    control_server_pump.start()
+    if exp_type != 'hplc':
+        control_server_pump = ControlServer(ip, port1, name='PumpControlServer',
+            start_pump=True)
+        control_server_pump.start()
 
-    control_server_fm = ControlServer(ip, port2, name='FMControlServer',
-        start_fm=True)
-    control_server_fm.start()
+        control_server_fm = ControlServer(ip, port2, name='FMControlServer',
+            start_fm=True)
+        control_server_fm.start()
 
-    control_server_valve = ControlServer(ip, port3, name='ValveControlServer',
-        start_valve=True)
-    control_server_valve.start()
-
-    time.sleep(1)
-
-    fm_comm_thread = control_server_fm.get_comm_thread('fm')
-
-    fm_settings = {
-        'remote'        : False,
-        'device_init'   : setup_fms,
-        'com_thread'    : fm_comm_thread,
-        }
-
-    fm_frame = fmcon.FlowMeterFrame('FMFrame', fm_settings, parent=None,
-        title='Flow Meter Control')
-    fm_frame.Show()
-
-
-    if exp_type == 'coflow':
-        # For OB1 with feedback
-        fm_local_cmd_q = deque()
-        fm_local_ret_q = deque()
-        fm_local_status_q = deque()
-
-        fm_comm_thread.add_new_communication('local', fm_local_cmd_q,
-            fm_local_ret_q, fm_local_status_q)
-
-        cmd = ['get_bfs_instr_id', [setup_fms[1]['name'],], {}]
-
-        bfs_instr_id = utils.send_cmd(cmd, fm_local_cmd_q, fm_local_ret_q,
-            threading.Event(), threading.Lock(), False, 'fm', True)
-
-        # cmd = ['start_remote', [setup_fms[1]['name'],], {}]
-
-        # utils.send_cmd(cmd, fm_local_cmd_q, fm_local_ret_q, threading.Event(),
-        #     threading.Lock(), False, 'fm', False)
-
-        fm_comm_thread.remove_communication('local')
-
-        setup_pumps[1]['kwargs']['bfs_instr_ID'] = bfs_instr_id
-        setup_pumps[1]['kwargs']['fm_comm_lock'] = outlet_fm_comm_lock
-
-    pump_comm_thread = control_server_pump.get_comm_thread('pump')
-
-    pump_settings = {
-        'remote'        : False,
-        'device_init'   : setup_pumps,
-        'com_thread'    : pump_comm_thread,
-        }
-
-    pump_frame = pumpcon.PumpFrame('PumpFrame', pump_settings, parent=None,
-        title='Pump Control')
-    pump_frame.Show()
-
-
-    valve_comm_thread = control_server_valve.get_comm_thread('valve')
-
-    valve_settings = {
-        'remote'        : False,
-        'device_init'   : setup_valves,
-        'com_thread'    : valve_comm_thread,
-        }
-
-    valve_frame = valvecon.ValveFrame('valveFrame', valve_settings, parent=None,
-        title='Valve Control')
-    valve_frame.Show()
-
-    if exp_type == 'coflow' and has_uv:
-        # Coflow only
-        control_server_uv = ControlServer(ip, port4, name='UVControlServer',
-            start_uv=True)
-        control_server_uv.start()
+        control_server_valve = ControlServer(ip, port3, name='ValveControlServer',
+            start_valve=True)
+        control_server_valve.start()
 
         time.sleep(1)
-        uv_comm_thread = control_server_uv.get_comm_thread('uv')
 
-        uv_settings = {
+        fm_comm_thread = control_server_fm.get_comm_thread('fm')
+
+        fm_settings = {
             'remote'        : False,
-            'device_init'   : setup_uv,
-            'com_thread'    : uv_comm_thread,
-            'inline_panel'  : False,
-            'plot_refresh_t': 0.1, #in s
+            'device_init'   : setup_fms,
+            'com_thread'    : fm_comm_thread,
             }
 
-        uv_frame = spectrometercon.UVFrame('UVFrame', uv_settings,
-            parent=None, title='UV Spectrometer Control')
-        uv_frame.Show()
+        fm_frame = fmcon.FlowMeterFrame('FMFrame', fm_settings, parent=None,
+            title='Flow Meter Control')
+        fm_frame.Show()
+
+
+        if exp_type == 'coflow':
+            # For OB1 with feedback
+            fm_local_cmd_q = deque()
+            fm_local_ret_q = deque()
+            fm_local_status_q = deque()
+
+            fm_comm_thread.add_new_communication('local', fm_local_cmd_q,
+                fm_local_ret_q, fm_local_status_q)
+
+            cmd = ['get_bfs_instr_id', [setup_fms[1]['name'],], {}]
+
+            bfs_instr_id = utils.send_cmd(cmd, fm_local_cmd_q, fm_local_ret_q,
+                threading.Event(), threading.Lock(), False, 'fm', True)
+
+            # cmd = ['start_remote', [setup_fms[1]['name'],], {}]
+
+            # utils.send_cmd(cmd, fm_local_cmd_q, fm_local_ret_q, threading.Event(),
+            #     threading.Lock(), False, 'fm', False)
+
+            fm_comm_thread.remove_communication('local')
+
+            setup_pumps[1]['kwargs']['bfs_instr_ID'] = bfs_instr_id
+            setup_pumps[1]['kwargs']['fm_comm_lock'] = outlet_fm_comm_lock
+
+        pump_comm_thread = control_server_pump.get_comm_thread('pump')
+
+        pump_settings = {
+            'remote'        : False,
+            'device_init'   : setup_pumps,
+            'com_thread'    : pump_comm_thread,
+            }
+
+        pump_frame = pumpcon.PumpFrame('PumpFrame', pump_settings, parent=None,
+            title='Pump Control')
+        pump_frame.Show()
+
+
+        valve_comm_thread = control_server_valve.get_comm_thread('valve')
+
+        valve_settings = {
+            'remote'        : False,
+            'device_init'   : setup_valves,
+            'com_thread'    : valve_comm_thread,
+            }
+
+        valve_frame = valvecon.ValveFrame('valveFrame', valve_settings, parent=None,
+            title='Valve Control')
+        valve_frame.Show()
+
+        if exp_type == 'coflow' and has_uv:
+            # Coflow only
+            control_server_uv = ControlServer(ip, port4, name='UVControlServer',
+                start_uv=True)
+            control_server_uv.start()
+
+            time.sleep(1)
+            uv_comm_thread = control_server_uv.get_comm_thread('uv')
+
+            uv_settings = {
+                'remote'        : False,
+                'device_init'   : setup_uv,
+                'com_thread'    : uv_comm_thread,
+                'inline_panel'  : False,
+                'plot_refresh_t': 0.1, #in s
+                }
+
+            uv_frame = spectrometercon.UVFrame('UVFrame', uv_settings,
+                parent=None, title='UV Spectrometer Control')
+            uv_frame.Show()
+
+    elif exp_type == 'hplc':
+        control_server_hplc = ControlServer(ip, port1, name='HPLCControlServer',
+            start_hplc=True)
+        control_server_hplc.start()
+
+        hplc_settings['remote'] = False
+        hplc_settings['com_thread'] = control_server_hplc
+
+        hplc_frame = biohplccon.HPLCFrame('HPLCFrame', hplc_settings, parent=None,
+            title='HPLC Control')
+
 
     app.MainLoop()
 

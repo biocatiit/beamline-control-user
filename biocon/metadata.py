@@ -129,13 +129,13 @@ class SAXSPanel(wx.Panel):
         self.experiment_type.SetStringSelection(defaults['exp_type'])
         self.buffer.SetValue(defaults['buffer'])
         self.sample.SetValue(defaults['sample'])
-        self.temperature.SetValue(str(defaults['temp']))
         self.volume.SetValue(str(defaults['volume']))
         self.concentration.SetValue(str(defaults['conc']))
         self.lc_column_choice.SetStringSelection(defaults['column'])
         self.mixer_type.SetStringSelection(defaults['mixer'])
         self.notes.SetValue(defaults['notes'])
         self.separate_buffer.SetValue(defaults['separate_buffer'])
+        self.temperature.SetValue(str(defaults['temp']))
 
         self._set_experiment_type()
 
@@ -149,13 +149,15 @@ class SAXSPanel(wx.Panel):
         self.top_sizer = wx.StaticBoxSizer(wx.VERTICAL, top_parent, "SAXS Parameters")
         ctrl_parent = self.top_sizer.GetStaticBox()
 
-        self.experiment_type = wx.Choice(ctrl_parent, choices=['Batch mode SAXS',
-            'IEC-SAXS', 'SEC-SAXS', 'SEC-MALS-SAXS', 'TR-SAXS', 'Other'])
+        self.experiment_type = wx.Choice(ctrl_parent, choices=['AF4-MALS-SAXS',
+            'Batch mode SAXS', 'IEC-SAXS', 'SEC-SAXS', 'SEC-MALS-SAXS',
+            'TR-SAXS', 'Other'])
         self.experiment_type.Bind(wx.EVT_CHOICE, self._on_experiment_type)
 
         self.sample = wx.TextCtrl(ctrl_parent)
         self.buffer = wx.TextCtrl(ctrl_parent)
 
+        self.temp_label = wx.StaticText(ctrl_parent, label='Temperature [C]:')
         self.temperature = wx.TextCtrl(ctrl_parent, size=(80, -1),
             validator=utils.CharValidator('float_neg'))
 
@@ -164,35 +166,36 @@ class SAXSPanel(wx.Panel):
         self.concentration = wx.TextCtrl(ctrl_parent, size=(80, -1),
             validator=utils.CharValidator('float'))
 
-        exp_const_sizer = wx.FlexGridSizer(cols=2, vgap=5, hgap=5)
-        exp_const_sizer.Add(wx.StaticText(ctrl_parent, label='Experiment type:'),
+        self.exp_const_sizer = wx.FlexGridSizer(cols=2, vgap=5, hgap=5)
+        self.exp_const_sizer.Add(wx.StaticText(ctrl_parent, label='Experiment type:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
-        exp_const_sizer.Add(self.experiment_type, flag=wx.ALIGN_CENTER_VERTICAL)
-        exp_const_sizer.Add(wx.StaticText(ctrl_parent, label='Sample:'),
+        self.exp_const_sizer.Add(self.experiment_type, flag=wx.ALIGN_CENTER_VERTICAL)
+        self.exp_const_sizer.Add(wx.StaticText(ctrl_parent, label='Sample:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
-        exp_const_sizer.Add(self.sample, flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
-        exp_const_sizer.Add(wx.StaticText(ctrl_parent, label='Buffer:'),
+        self.exp_const_sizer.Add(self.sample, flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
+        self.exp_const_sizer.Add(wx.StaticText(ctrl_parent, label='Buffer:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
-        exp_const_sizer.Add(self.buffer, flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
-        exp_const_sizer.Add(wx.StaticText(ctrl_parent, label='Temperature [C]:'),
+        self.exp_const_sizer.Add(self.buffer, flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
+        self.exp_const_sizer.Add(self.temp_label, flag=wx.ALIGN_CENTER_VERTICAL)
+        self.exp_const_sizer.Add(self.temperature, flag=wx.ALIGN_CENTER_VERTICAL)
+        self.exp_const_sizer.Add(wx.StaticText(ctrl_parent, label='Loaded volume [uL]:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
-        exp_const_sizer.Add(self.temperature, flag=wx.ALIGN_CENTER_VERTICAL)
-        exp_const_sizer.Add(wx.StaticText(ctrl_parent, label='Loaded volume [uL]:'),
+        self.exp_const_sizer.Add(self.volume, flag=wx.ALIGN_CENTER_VERTICAL)
+        self.exp_const_sizer.Add(wx.StaticText(ctrl_parent, label='Concentration [mg/ml]:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
-        exp_const_sizer.Add(self.volume, flag=wx.ALIGN_CENTER_VERTICAL)
-        exp_const_sizer.Add(wx.StaticText(ctrl_parent, label='Concentration [mg/ml]:'),
-            flag=wx.ALIGN_CENTER_VERTICAL)
-        exp_const_sizer.Add(self.concentration, flag=wx.ALIGN_CENTER_VERTICAL)
+        self.exp_const_sizer.Add(self.concentration, flag=wx.ALIGN_CENTER_VERTICAL)
 
-        exp_const_sizer.AddGrowableCol(1)
+        self.exp_const_sizer.AddGrowableCol(1)
+
 
         column_choices = ['Superdex 200 10/300 Increase', 'Superdex 75 10/300 Increase',
             'Superose 6 10/300 Increase', 'Superdex 200 5/150 Increase',
             'Superdex 75 5/150 Increase', 'Superose 6 5/150 Increase',
+            'Superdex 30 10/300 Increase', 'Wyatt 010S5', 'Wyatt 015S5',
+            'Wyatt 030S5', 'Capto HiRes Q 5/50', 'Capto HiRes S 5/50',
             'Superdex 200 10/300', 'Superdex 75 10/300', 'Superose 6 10/300',
             'Superdex 200 5/150', 'Superdex 75 5/150', 'Superose 6 5/150',
-            'Wyatt 010S5', 'Wyatt 015S5', 'Wyatt 030S5', 'HiTrap Q FF, 5 ml',
-            'HiTrap SP FF, 5 ml', 'Other']
+            'Other']
 
         self.lc_column_choice = wx.Choice(ctrl_parent, choices=column_choices)
 
@@ -223,6 +226,33 @@ class SAXSPanel(wx.Panel):
         self.tr_sizer.Add(self.mixer_type, flag=wx.ALIGN_CENTER_VERTICAL)
 
 
+        channel_choices = ['Short', 'Long', 'Dispersion Inlet']
+
+        self.af4_channel_choice = wx.Choice(ctrl_parent, choices=channel_choices)
+
+        membrane_choices = ['PES, 5 kDa cutoff', 'PES, 10 kDa cutoff',
+            'PES, 30 kDa cutoff', 'Cellulose, 2 kDa cutoff',
+            'Cellulose, 5 kDa cutoff', 'Cellulose, 10 kDa cutoff',
+            'Cellulose, 30 kDa cutoff']
+
+        self.af4_membrane_choice = wx.Choice(ctrl_parent, choices=membrane_choices)
+
+        spacer_choices = ['275', '400', '525']
+
+        self.af4_spacer_choice = wx.Choice(ctrl_parent, choices=spacer_choices)
+
+        self.af4_sizer = wx.FlexGridSizer(cols=2, vgap=5, hgap=5)
+        self.af4_sizer.Add(wx.StaticText(ctrl_parent, label='Channel:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        self.af4_sizer.Add(self.af4_channel_choice, flag=wx.ALIGN_CENTER_VERTICAL)
+        self.af4_sizer.Add(wx.StaticText(ctrl_parent, label='Membrane:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        self.af4_sizer.Add(self.af4_membrane_choice, flag=wx.ALIGN_CENTER_VERTICAL)
+        self.af4_sizer.Add(wx.StaticText(ctrl_parent, label='Spacer:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        self.af4_sizer.Add(self.af4_spacer_choice, flag=wx.ALIGN_CENTER_VERTICAL)
+
+
         self.notes = wx.TextCtrl(ctrl_parent, style=wx.TE_MULTILINE, size=(100, 100))
 
         notes_sizer = wx.BoxSizer(wx.HORIZONTAL)
@@ -230,11 +260,12 @@ class SAXSPanel(wx.Panel):
         notes_sizer.Add(self.notes, proportion=1, border=5,
             flag=wx.EXPAND|wx.LEFT)
 
-        self.top_sizer.Add(exp_const_sizer, border=5,
+        self.top_sizer.Add(self.exp_const_sizer, border=5,
             flag=wx.LEFT|wx.RIGHT|wx.TOP|wx.EXPAND)
         self.top_sizer.Add(self.lc_sizer, border=5, flag=wx.LEFT|wx.RIGHT|wx.TOP)
         self.top_sizer.Add(self.batch_sizer, border=5, flag=wx.LEFT|wx.RIGHT|wx.TOP)
         self.top_sizer.Add(self.tr_sizer, border=5, flag=wx.LEFT|wx.RIGHT|wx.TOP)
+        self.top_sizer.Add(self.af4_sizer, border=5, flag=wx.LEFT|wx.RIGHT|wx.TOP)
         self.top_sizer.Add(notes_sizer, proportion=1, border=5,
             flag=wx.ALL|wx.EXPAND)
 
@@ -250,19 +281,43 @@ class SAXSPanel(wx.Panel):
             self.top_sizer.Show(self.batch_sizer, recursive=True)
             self.top_sizer.Hide(self.lc_sizer, recursive=True)
             self.top_sizer.Hide(self.tr_sizer, recursive=True)
+            self.top_sizer.Hide(self.af4_sizer, recursive=True)
+            self.exp_const_sizer.Hide(self.temp_label, recursive=True)
+            self.exp_const_sizer.Hide(self.temperature, recursive=True)
+
         elif exp_type == 'TR-SAXS':
             self.top_sizer.Hide(self.batch_sizer, recursive=True)
             self.top_sizer.Hide(self.lc_sizer, recursive=True)
             self.top_sizer.Show(self.tr_sizer, recursive=True)
+            self.top_sizer.Hide(self.af4_sizer, recursive=True)
+            self.exp_const_sizer.Show(self.temp_label, recursive=True)
+            self.exp_const_sizer.Show(self.temperature, recursive=True)
+
         elif (exp_type == 'SEC-SAXS' or exp_type == 'SEC-MALS-SAXS' or
             exp_type == 'IEC-SAXS'):
             self.top_sizer.Hide(self.batch_sizer, recursive=True)
             self.top_sizer.Show(self.lc_sizer, recursive=True)
             self.top_sizer.Hide(self.tr_sizer, recursive=True)
+            self.top_sizer.Hide(self.af4_sizer, recursive=True)
+            self.exp_const_sizer.Hide(self.temp_label, recursive=True)
+            self.exp_const_sizer.Hide(self.temperature, recursive=True)
+
         elif exp_type == 'Other':
             self.top_sizer.Hide(self.batch_sizer, recursive=True)
             self.top_sizer.Hide(self.lc_sizer, recursive=True)
             self.top_sizer.Hide(self.tr_sizer, recursive=True)
+            self.top_sizer.Hide(self.af4_sizer, recursive=True)
+            self.exp_const_sizer.Show(self.temp_label, recursive=True)
+            self.exp_const_sizer.Show(self.temperature, recursive=True)
+
+        elif exp_type == 'AF4-MALS-SAXS':
+            self.top_sizer.Hide(self.batch_sizer, recursive=True)
+            self.top_sizer.Hide(self.lc_sizer, recursive=True)
+            self.top_sizer.Hide(self.tr_sizer, recursive=True)
+            self.top_sizer.Show(self.af4_sizer, recursive=True)
+            self.exp_const_sizer.Hide(self.temp_label, recursive=True)
+            self.exp_const_sizer.Hide(self.temperature, recursive=True)
+
 
         self.Layout()
 
@@ -274,7 +329,6 @@ class SAXSPanel(wx.Panel):
         metadata['Experiment type:'] = exp_type
         metadata['Sample:'] = self.sample.GetValue()
         metadata['Buffer:'] = self.buffer.GetValue()
-        metadata['Temperature [C]:'] = self.temperature.GetValue()
         metadata['Loaded volume [uL]:'] = self.volume.GetValue()
         metadata['Concentration [mg/ml]:'] = self.concentration.GetValue()
 
@@ -289,16 +343,20 @@ class SAXSPanel(wx.Panel):
 
         elif exp_type == 'TR-SAXS':
             metadata['Mixer:'] = self.mixer_type.GetStringSelection()
+            metadata['Temperature [C]:'] = self.temperature.GetValue()
 
         elif (exp_type == 'SEC-SAXS' or exp_type == 'SEC-MALS-SAXS' or
             exp_type == 'IEC-SAXS'):
             metadata['Column:'] = self.lc_column_choice.GetStringSelection()
 
+        elif exp_type == 'Other':
+            metadata['Temperature [C]:'] = self.temperature.GetValue()
+
         metadata['Notes:'] = self.notes.GetValue()
 
         return metadata
 
-    def set_metadata(self new_metadata):
+    def set_metadata(self, new_metadata):
         if 'Experment type:' in new_metadata:
             self.experiment_type.SetStringSelection(new_metadata['Experment type:'])
             self._set_experiment_type()
