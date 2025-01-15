@@ -2076,11 +2076,11 @@ if __name__ == '__main__':
         # 'remote_fm_port'        : '5557',
         'volume_units'          : 'uL',
         'components'            : ['autosampler'],
-        'needle_motor'          : {'name': 'needle_y', 'args': ['18ID_DMC_E01:8'],
+        'needle_motor'          : {'name': 'needle_y', 'args': ['18ID_DMC_E05:33'],
                                         'kwargs': {}},
-        'plate_x_motor'         : {'name': 'plate_x', 'args': ['18ID_DMC_E05:33'],
+        'plate_x_motor'         : {'name': 'plate_x', 'args': ['18ID_DMC_E05:37'],
                                         'kwargs': {}},
-        'plate_z_motor'         : {'name': 'plate_z', 'args': ['18ID_DMC_E03:23'],
+        'plate_z_motor'         : {'name': 'plate_z', 'args': ['18ID_DMC_E05:34'],
                                         'kwargs': {}},
         'needle_valve'          : {'name': 'Needle',
                                         'args':['Cheminert', 'COM11'],
@@ -2100,14 +2100,14 @@ if __name__ == '__main__':
                                     'kwargs': {'flow_cal': '319.2',},
                                     'ctrl_args': {'flow_rate': 1}},
         # 'motor_home_velocity'   : {'x': 10, 'y': 10, 'z': 10},
-        # 'motor_velocity'        : {'x': 75, 'y': 75, 'z': 75},
+        # 'motor_velocity'        : {'x': 75, 'y': 75, 'z': 75}, #112
         # 'motor_acceleration'    : {'x': 500, 'y': 500, 'z': 500},
-        'base_position'         : {'plate_x': 295.5, 'plate_z': -75, 'needle_y': 102.0},
-        'clean_offsets'         : {'plate_x': 5.5, 'plate_z': 86.3, 'needle_y': 74.5}, # Relative to base position
+        'base_position'         : {'plate_x': 271.4, 'plate_z': -73.6, 'needle_y': 93.55}, # A1 well position, needle height at chiller plate top
+        'clean_offsets'         : {'plate_x': -16, 'plate_z': -117, 'needle_y': 6.45}, # Relative to base position
         'needle_out_offset'     : 5, # mm
         'needle_in_position'    : 0,
-        'plate_out_position'    : {'plate_x': 265.5, 'plate_z': -75},
-        'plate_load_position'   : {'plate_x': 0, 'plate_z': -75},
+        'plate_out_position'    : {'plate_x': 241.4, 'plate_z': -73.6},
+        'plate_load_position'   : {'plate_x': 0, 'plate_z': -73.6},
         'plate_type'            : 'Thermo-Fast 96 well PCR',
         # 'plate_type'            : 'Abgene 96 well deepwell storage',
         'valve_positions'       : {'sample': 5, 'clean1': 1, 'clean2': 2, 'clean3': 3, 'clean4': 4},
