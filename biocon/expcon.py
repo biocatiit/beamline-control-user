@@ -142,8 +142,7 @@ class ExpCommThread(threading.Thread):
             logger.debug('Getting epics detector')
             record_name = self._settings['detector'].rstrip('_epics')
 
-            det_args = self._settings['det_args']
-
+            det_args = self._settings['det_args']            
             det = detectorcon.EPICSEigerDetector(record_name, **det_args)
 
         logger.debug("Got detector records")
@@ -4163,6 +4162,124 @@ class ExpFrame(wx.Frame):
         self.Destroy()
 
 
+
+############################################################################
+default_exposure_settings = {
+    'data_dir'              : '',
+    'filename'              : '',
+    'run_num'               : 1,
+    'exp_time'              : '0.5',
+    'exp_period'            : '1',
+    'exp_num'               : '2',
+
+    # 'exp_time_min'          : 0.00105,  # For Pilatus3 X 1M
+    # 'exp_time_max'          : 5184000,
+    # 'exp_period_min'        : 0.002,
+    # 'exp_period_max'        : 5184000,
+    # 'nframes_max'           : 15000, # For Pilatus: 999999, for Struck: 15000 (set by maxChannels in the driver configuration)
+    # 'nparams_max'           : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
+    # 'exp_period_delta'      : 0.00095,
+    # 'local_dir_root'        : '/nas_data/Pilatus1M',
+    # 'remote_dir_root'       : '/nas_data',
+    # 'detector'              : 'pilatus_mx',
+    # 'det_args'              : {}, #Allows detector specific keyword arguments
+    # 'add_file_postfix'      : True,
+
+    'exp_time_min'          : 0.000000050, #Eiger2 XE 9M
+    'exp_time_max'          : 3600,
+    'exp_period_min'        : 0.001785714286, #There's an 8bit undocumented mode that can go faster, in theory
+    'exp_period_max'        : 5184000, # Not clear there is a maximum, so left it at this
+    'nframes_max'           : 15000, # For Eiger: 2000000000, for Struck: 15000 (set by maxChannels in the driver configuration)
+    'nparams_max'           : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
+    'exp_period_delta'      : 0.000000200,
+    'local_dir_root'        : '/nas_data/Eiger2x',
+    'remote_dir_root'       : '/nas_data/Eiger2x',
+    'detector'              : '18ID:EIG2:_epics',
+    'det_args'              :  {'use_tiff_writer': False, 'use_file_writer': True,
+                                'photon_energy' : 12.0, 'images_per_file': 1000}, #1 image/file for TR, 300 for equilibrium
+    'add_file_postfix'      : False,
+
+    # 'shutter_speed_open'    : 0.004, #in s      NM vacuum shutter, broken
+    # 'shutter_speed_close'   : 0.004, # in s
+    # 'shutter_pad'           : 0.002, #padding for shutter related values
+    # 'shutter_cycle'         : 0.02, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
+
+    # 'shutter_speed_open'    : 0.001, #in s    Fast shutters
+    # 'shutter_speed_close'   : 0.001, # in s
+    # 'shutter_pad'           : 0.00, #padding for shutter related values
+    # 'shutter_cycle'         : 0.002, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
+
+    # 'shutter_speed_open'    : 0.075, #in s      Slow vacuum shutter
+    # 'shutter_speed_close'   : 0.075, # in s
+    # 'shutter_pad'           : 0.01, #padding for shutter related values
+    # 'shutter_cycle'         : 0.2, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
+
+    'shutter_speed_open'    : 0.0045, #in s      Normal vacuum shutter
+    'shutter_speed_close'   : 0.004, # in s
+    'shutter_pad'           : 0.002, #padding for shutter related values
+    'shutter_cycle'         : 0.1, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
+
+    'struck_measurement_time' : '0.001', #in s
+    'tr_muscle_exp'         : False,
+    'slow_mode_thres'       : 0.1,
+    'fast_mode_max_exp_time': 2000,
+    'wait_for_trig'         : True,
+    'num_trig'              : '1',
+    'show_advanced_options' : True,
+    'fe_shutter_pv'         : 'FE:18:ID:FEshutter',
+    'd_shutter_pv'          : 'PA:18ID:STA_D_SDS_OPEN_PL.VAL',
+    'col_vac_pv'            : '18ID:VAC:D:Cols',
+    'guard_vac_pv'          : '18ID:VAC:D:Guards',
+    'sample_vac_pv'         : '18ID:VAC:D:Sample',
+    'sc_vac_pv'             : '18ID:VAC:D:ScatterChamber',
+    'use_old_i0_gain'       : True,
+    'i0_gain_pv'            : '18ID_D_BPM_Gain:Level-SP',
+
+    'struck_log_vals'       : [
+        # Format: (mx_record_name, struck_channel, header_name,
+        # scale, offset, use_dark_current, normalize_by_exp_time)
+        {'mx_record': 'mcs3', 'channel': 2, 'name': 'I0',
+        'scale': 1, 'offset': 0, 'dark': True, 'norm_time': False},
+        {'mx_record': 'mcs4', 'channel': 3, 'name': 'I1', 'scale': 1,
+        'offset': 0, 'dark': True, 'norm_time': False},
+        # {'mx_record': 'mcs5', 'channel': 4, 'name': 'I2', 'scale': 1,
+        # 'offset': 0, 'dark': True, 'norm_time': False},
+        # {'mx_record': 'mcs6', 'channel': 5, 'name': 'I3', 'scale': 1,
+        # 'offset': 0, 'dark': True, 'norm_time': False},
+        # {'mx_record': 'mcs11', 'channel': 10, 'name': 'Beam_current',
+        # 'scale': 5000, 'offset': 0.5, 'dark': False, 'norm_time': True},
+        # {'mx_record': 'mcs12', 'channel': 11, 'name': 'Flow_rate',
+        # 'scale': 10e6, 'offset': 0, 'dark': True, 'norm_time': True},
+        # {'mx_record': 'mcs7', 'channel': 6, 'name': 'Detector_Enable',
+        # 'scale': 1e5, 'offset': 0, 'dark': True, 'norm_time': True},
+        # {'mx_record': 'mcs12', 'channel': 11, 'name': 'Length_Out',
+        # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
+        # {'mx_record': 'mcs13', 'channel': 13, 'name': 'Length_In',
+        # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
+        # {'mx_record': 'mcs13', 'channel': 12, 'name': 'Force',
+        # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
+        ],
+    'joerger_log_vals'      : [{'mx_record': 'j3', 'name': 'I0',
+        'scale': 1, 'offset': 0, 'norm_time': False}, #Format: (mx_record_name, struck_channel, header_name, scale, offset, use_dark_current, normalize_by_exp_time)
+        {'mx_record': 'j4', 'name': 'I1', 'scale': 1, 'offset': 0,
+        'norm_time': False},
+        # {'mx_record': 'j5', 'name': 'I2', 'scale': 1, 'offset': 0,
+        # 'norm_time': False},
+        # {'mx_record': 'j6', 'name': 'I3', 'scale': 1, 'offset': 0,
+        # 'norm_time': False},
+        # {'mx_record': 'j11', 'name': 'Beam_current', 'scale': 5000,
+        # 'offset': 0.5, 'norm_time': True}
+        ],
+    'warnings'              : {'shutter' : True, 'col_vac' : {'check': True,
+        'thresh': 0.04}, 'guard_vac' : {'check': True, 'thresh': 0.04},
+        'sample_vac': {'check': True, 'thresh': 0.04}, 'sc_vac':
+        {'check': True, 'thresh':0.04}},
+    'base_data_dir'         : '/nas_data/Eiger2x/2024_Run3', #CHANGE ME and pipeline local_basedir
+    }
+
+default_exposure_settings['data_dir'] = default_exposure_settings['base_data_dir']
+
+
 if __name__ == '__main__':
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
@@ -4175,115 +4292,9 @@ if __name__ == '__main__':
 
     logger.addHandler(h1)
 
-    #Settings for Pilatus 3X 1M
-    settings = {
-        'data_dir'              : '',
-        'filename'              : '',
-        'run_num'               : 1,
-        'exp_time'              : '0.5',
-        'exp_period'            : '1',
-        'exp_num'               : '2',
+    settings = default_exposure_settings
 
-        # 'exp_time_min'          : 0.00105,  # For Pilatus3 X 1M
-        # 'exp_time_max'          : 5184000,
-        # 'exp_period_min'        : 0.002,
-        # 'exp_period_max'        : 5184000,
-        # 'nframes_max'           : 15000, # For Pilatus: 999999, for Struck: 15000 (set by maxChannels in the driver configuration)
-        # 'nparams_max'           : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
-        # 'exp_period_delta'      : 0.00095,
 
-        'exp_time_min'          : 0.000000050, #Eiger2 XE 9M
-        'exp_time_max'          : 3600,
-        'exp_period_min'        : 0.001785714286, #There's an 8bit undocumented mode that can go faster, in theory
-        'exp_period_max'        : 5184000, # Not clear there is a maximum, so left it at this
-        'nframes_max'           : 15000, # For Eiger: 2000000000, for Struck: 15000 (set by maxChannels in the driver configuration)
-        'nparams_max'           : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
-        'exp_period_delta'      : 0.000000200,
-
-        # 'shutter_speed_open'    : 0.004, #in s      NM vacuum shutter, broken
-        # 'shutter_speed_close'   : 0.004, # in s
-        # 'shutter_pad'           : 0.002, #padding for shutter related values
-        # 'shutter_cycle'         : 0.02, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
-
-        'shutter_speed_open'    : 0.001, #in s    Fast shutters
-        'shutter_speed_close'   : 0.001, # in s
-        'shutter_pad'           : 0.00, #padding for shutter related values
-        'shutter_cycle'         : 0.002, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
-
-        # 'shutter_speed_open'    : 0.075, #in s      Slow vacuum shutter
-        # 'shutter_speed_close'   : 0.075, # in s
-        # 'shutter_pad'           : 0.01, #padding for shutter related values
-        # 'shutter_cycle'         : 0.2, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
-
-        # 'shutter_speed_open'    : 0.0045, #in s      Normal vacuum shutter
-        # 'shutter_speed_close'   : 0.004, # in s
-        # 'shutter_pad'           : 0.002, #padding for shutter related values
-        # 'shutter_cycle'         : 0.1, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
-
-        'struck_measurement_time' : '0.001', #in s
-        'tr_muscle_exp'         : True,
-        'slow_mode_thres'       : 0.1,
-        'fast_mode_max_exp_time': 2000,
-        'wait_for_trig'         : True,
-        'num_trig'              : '1',
-        'show_advanced_options' : True,
-        'fe_shutter_pv'         : 'FE:18:ID:FEshutter',
-        'd_shutter_pv'          : 'PA:18ID:STA_D_SDS_OPEN_PL.VAL',
-        'col_vac_pv'            : '18ID:VAC:D:Cols',
-        'guard_vac_pv'          : '18ID:VAC:D:Guards',
-        'sample_vac_pv'         : '18ID:VAC:D:Sample',
-        'sc_vac_pv'             : '18ID:VAC:D:ScatterChamber',
-        'use_old_i0_gain'       : True,
-        'i0_gain_pv'            : '18ID_D_BPM_Gain:Level-SP',
-        # 'local_dir_root'        : '/nas_data/Pilatus1M',
-        'local_dir_root'        : '/nas_data/Eiger2xe9M',
-        'remote_dir_root'       : '/nas_data',
-        # 'detector'              : 'pilatus_mx',
-        # 'det_args'              : {}, #Allows detector specific keyword arguments
-        # 'add_file_postfix'      : True,
-        'detector'              :  '18ID:EIG2:_epics',
-        'det_args'              :  {'use_tiff_writer': False, 'use_file_writer': True,
-            'photon_energy' : 12.0,},
-        'add_file_postfix'      : False,
-        'struck_log_vals'       : [{'mx_record': 'mcs3', 'channel': 2, 'name': 'I0',
-            'scale': 1, 'offset': 0, 'dark': True, 'norm_time': False}, #Format: (mx_record_name, struck_channel, header_name, scale, offset, use_dark_current, normalize_by_exp_time)
-            {'mx_record': 'mcs4', 'channel': 3, 'name': 'I1', 'scale': 1,
-            'offset': 0, 'dark': True, 'norm_time': False},
-            # {'mx_record': 'mcs5', 'channel': 4, 'name': 'I2', 'scale': 1,
-            # 'offset': 0, 'dark': True, 'norm_time': False},
-            # {'mx_record': 'mcs6', 'channel': 5, 'name': 'I3', 'scale': 1,
-            # 'offset': 0, 'dark': True, 'norm_time': False},
-            {'mx_record': 'mcs11', 'channel': 10, 'name': 'Beam_current',
-            'scale': 5000, 'offset': 0.5, 'dark': False, 'norm_time': True},
-            # {'mx_record': 'mcs12', 'channel': 11, 'name': 'Flow_rate',
-            # 'scale': 10e6, 'offset': 0, 'dark': True, 'norm_time': True},
-            # {'mx_record': 'mcs7', 'channel': 6, 'name': 'Detector_Enable',
-            # 'scale': 1e5, 'offset': 0, 'dark': True, 'norm_time': True},
-            # {'mx_record': 'mcs12', 'channel': 11, 'name': 'Length',
-            # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
-            # {'mx_record': 'mcs13', 'channel': 12, 'name': 'Force',
-            # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
-            ],
-        'joerger_log_vals'      : [{'mx_record': 'j3', 'name': 'I0',
-            'scale': 1, 'offset': 0, 'norm_time': False}, #Format: (mx_record_name, struck_channel, header_name, scale, offset, use_dark_current, normalize_by_exp_time)
-            {'mx_record': 'j4', 'name': 'I1', 'scale': 1, 'offset': 0,
-            'norm_time': False},
-            # {'mx_record': 'j5', 'name': 'I2', 'scale': 1, 'offset': 0,
-            # 'norm_time': False},
-            # {'mx_record': 'j6', 'name': 'I3', 'scale': 1, 'offset': 0,
-            # 'norm_time': False},
-            {'mx_record': 'j11', 'name': 'Beam_current', 'scale': 5000,
-            'offset': 0.5, 'norm_time': True}
-            ],
-        'warnings'              : {'shutter' : True, 'col_vac' : {'check': True,
-            'thresh': 0.04}, 'guard_vac' : {'check': True, 'thresh': 0.04},
-            'sample_vac': {'check': True, 'thresh': 0.04}, 'sc_vac':
-            {'check': True, 'thresh':0.04}},
-        # 'base_data_dir'         : '/nas_data/Pilatus1M/2021_Run3', #CHANGE ME
-        'base_data_dir'         : '/nas_data/Eiger2xe9M/2021_Run3', #CHANGE ME
-        }
-
-    settings['data_dir'] = settings['base_data_dir']
 
     app = wx.App()
 

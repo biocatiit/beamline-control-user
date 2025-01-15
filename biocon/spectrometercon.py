@@ -40,7 +40,10 @@ if __name__ != '__main__':
 
 import numpy as np
 import wx
-import epics
+try:
+    import epics
+except ImportError:
+    pass
 import matplotlib
 from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg
 from matplotlib.figure import Figure

@@ -42,6 +42,8 @@ import metadata
 import scancon
 import pipeline_ctrl
 import spectrometercon
+import biohplccon
+import autocon
 
 class BioFrame(wx.Frame):
     """
@@ -77,48 +79,25 @@ class BioFrame(wx.Frame):
 
     def _create_layout(self):
         """Creates the layout"""
+
+        if 'automator' not in self.settings['components']:
+            self._create_standard_layout()
+
+        else:
+            self._create_auto_layout()
+
+        if ('exposure' in self.component_panels
+            and 'pipeline' in self.component_controls):
+
+            self.component_panels['exposure'].set_pipeline_ctrl(
+                self.component_controls['pipeline'])
+
+    def _create_standard_layout(self):
         top_panel = wx.Panel(self)
 
         panel_sizer = wx.BoxSizer(wx.VERTICAL)
 
-        component_sizers = {}
-
-        for key in self.settings['components']:
-
-            if key != 'pipeline':
-                logger.info('Setting up %s panel', key)
-                if key == 'trsaxs_scan':
-                    label = 'TRSAXS Scan'
-
-                elif key == 'trsaxs_flow':
-                    label ='TRSAXS Flow'
-
-                elif key == 'uv':
-                    label = 'UV'
-
-                else:
-                    label = key.capitalize()
-
-                box = wx.StaticBox(top_panel, label=label)
-                # box.SetOwnForegroundColour(wx.Colour('firebrick'))
-
-                if key != 'uv':
-                    component_panel = self.settings['components'][key](self.settings[key],
-                        box, name=key)
-                else:
-                    component_panel = self.settings['components'][key](box, wx.ID_ANY,
-                        self.settings[key], name=key)
-
-                component_sizer = wx.StaticBoxSizer(box, wx.VERTICAL)
-                component_sizer.Add(component_panel, proportion=1,
-                    border=self._FromDIP(2), flag=wx.EXPAND|wx.ALL)
-
-                component_sizers[key] = component_sizer
-                self.component_panels[key] = component_panel
-
-            else:
-                ctrl = self.settings['components'][key](self.settings[key])
-                self.component_controls[key] = ctrl
+        component_sizers = self._generate_component_sizers(top_panel)
 
         if ('exposure' in component_sizers or 'coflow' in component_sizers
             or 'trsaxs_scan' in component_sizers or 'scan' in component_sizers):
@@ -183,15 +162,99 @@ class BioFrame(wx.Frame):
         top_panel.SetSizer(panel_sizer)
 
         top_sizer = wx.BoxSizer(wx.VERTICAL)
-        top_sizer.Add(top_panel, flag=wx.EXPAND)
+        top_sizer.Add(top_panel, flag=wx.EXPAND, proportion=1)
 
         self.SetSizer(top_sizer)
 
-        if ('exposure' in self.component_panels
-            and 'pipeline' in self.component_controls):
+        
 
-            self.component_panels['exposure'].set_pipeline_ctrl(
-                self.component_controls['pipeline'])
+    def _create_auto_layout(self):
+        top_panel = wx.Panel(self)
+        self.top_notebook = wx.Notebook(top_panel, style=wx.NB_TOP)
+
+        component_sizers = self._generate_component_sizers(self.top_notebook,
+            notebook=True)
+
+        # if 'exposure' in component_sizers and 'metadata' in component_sizers:
+        #     exp_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        #     msizer = component_sizers.pop('metadata')
+        #     esizer = component_sizers.pop('exposure')
+        #     exp_sizer.Add(msizer, proportion=1,
+        #         border=self._FromDIP(10), flag=wx.EXPAND|wx.ALL)
+        #     exp_sizer.Add(esizer, proportion=2,
+        #         border=self._FromDIP(10), flag=wx.EXPAND|wx.ALL)
+
+        #     component_sizers['exposure'] = exp_sizer
+
+        automator_sizer = component_sizers.pop('automator')
+
+        self.top_notebook.AddPage(automator_sizer, text='Automator',
+            select=True)
+
+        for key, page in component_sizers.items():
+            self.top_notebook.AddPage(page, text=key.capitalize())
+
+        panel_sizer = wx.BoxSizer(wx.VERTICAL)
+        panel_sizer.Add(self.top_notebook, flag=wx.EXPAND, proportion=1)
+        top_panel.SetSizer(panel_sizer)
+
+        top_sizer = wx.BoxSizer(wx.VERTICAL)
+        top_sizer.Add(top_panel, flag=wx.EXPAND, proportion=1)
+
+        self.SetSizer(top_sizer)
+
+    def _generate_component_sizers(self, top_panel, notebook=False):
+        component_sizers = {}
+
+        for key in self.settings['components']:
+
+            if key != 'pipeline':
+                logger.info('Setting up %s panel', key)
+                if key == 'trsaxs_scan':
+                    label = 'TRSAXS Scan'
+
+                elif key == 'trsaxs_flow':
+                    label ='TRSAXS Flow'
+
+                elif key == 'uv':
+                    label = 'UV'
+
+                else:
+                    label = key.capitalize()
+
+                if notebook:
+                    box_panel = wx.Panel(top_panel)
+                else:
+                    box_panel = top_panel
+
+                box = wx.StaticBox(box_panel, label=label)
+                # box.SetOwnForegroundColour(wx.Colour('firebrick'))
+
+                if key != 'uv':
+                    component_panel = self.settings['components'][key](self.settings[key],
+                        box, name=key)
+                else:
+                    component_panel = self.settings['components'][key](box, wx.ID_ANY,
+                        self.settings[key], name=key)
+
+                component_sizer = wx.StaticBoxSizer(box, wx.VERTICAL)
+                component_sizer.Add(component_panel, proportion=1,
+                    border=self._FromDIP(2), flag=wx.EXPAND|wx.ALL)
+
+                if notebook:
+                    box_panel.SetSizer(component_sizer)
+                    component_sizers[key] = box_panel
+                else:
+                    component_sizers[key] = component_sizer
+
+                
+                self.component_panels[key] = component_panel
+
+            else:
+                ctrl = self.settings['components'][key](self.settings[key])
+                self.component_controls[key] = ctrl
+
+        return component_sizers
 
     def _on_exit(self, evt):
         """Stops all current pump motions and then closes the frame."""
@@ -220,122 +283,63 @@ if __name__ == '__main__':
 
     logger.addHandler(h1)
 
-    #Settings for Pilatus 3X 1M
-    exposure_settings = {
-        'data_dir'              : '',
-        'filename'              : '',
-        'run_num'               : 1,
-        'exp_time'              : '0.5',
-        'exp_period'            : '1',
-        'exp_num'               : '2',
 
-        # 'exp_time_min'          : 0.00105,  # For Pilatus3 X 1M
-        # 'exp_time_max'          : 5184000,
-        # 'exp_period_min'        : 0.002,
-        # 'exp_period_max'        : 5184000,
-        # 'nframes_max'           : 15000, # For Pilatus: 999999, for Struck: 15000 (set by maxChannels in the driver configuration)
-        # 'nparams_max'           : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
-        # 'exp_period_delta'      : 0.00095,
-        # 'local_dir_root'        : '/nas_data/Pilatus1M',
-        # 'remote_dir_root'       : '/nas_data',
-        # 'detector'              : 'pilatus_mx',
-        # 'det_args'              : {}, #Allows detector specific keyword arguments
-        # 'add_file_postfix'      : True,
+    ###################################################################
+    # Exposure
+    exposure_settings = expcon.default_exposure_settings
 
-        'exp_time_min'          : 0.000000050, #Eiger2 XE 9M
-        'exp_time_max'          : 3600,
-        'exp_period_min'        : 0.001785714286, #There's an 8bit undocumented mode that can go faster, in theory
-        'exp_period_max'        : 5184000, # Not clear there is a maximum, so left it at this
-        'nframes_max'           : 15000, # For Eiger: 2000000000, for Struck: 15000 (set by maxChannels in the driver configuration)
-        'nparams_max'           : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
-        'exp_period_delta'      : 0.000000200,
-        'local_dir_root'        : '/nas_data/Eiger2x',
-        'remote_dir_root'       : '/nas_data/Eiger2x',
-        'detector'              : '18ID:EIG2:_epics',
-        'det_args'              :  {'use_tiff_writer': False, 'use_file_writer': True,
-                                    'photon_energy' : 12.0, 'images_per_file': 300}, #1 image/file for TR, 300 for equilibrium
-        'add_file_postfix'      : False,
+    # # Fast in-air shutters
+    # exposure_settings['shutter_speed_open'] = 0.001
+    # exposure_settings['shutter_speed_close'] = 0.001
+    # exposure_settings['shutter_speed_pad'] = 0.00
+    # exposure_settings['shutter_speed_cycle'] = 0.002
 
-        # 'shutter_speed_open'    : 0.004, #in s      NM vacuum shutter, broken
-        # 'shutter_speed_close'   : 0.004, # in s
-        # 'shutter_pad'           : 0.002, #padding for shutter related values
-        # 'shutter_cycle'         : 0.02, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
+    # Normal vacuum shutter (uniblitz)
+    exposure_settings['shutter_speed_open'] = 0.0045
+    exposure_settings['shutter_speed_close'] = 0.004
+    exposure_settings['shutter_speed_pad'] = 0.002
+    exposure_settings['shutter_speed_cycle'] = 0.1
 
-        # 'shutter_speed_open'    : 0.001, #in s    Fast shutters
-        # 'shutter_speed_close'   : 0.001, # in s
-        # 'shutter_pad'           : 0.00, #padding for shutter related values
-        # 'shutter_cycle'         : 0.002, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
+    exposure_settings['det_args'] =  {'use_tiff_writer': False,
+        'use_file_writer': True, 'photon_energy' : 12.0,
+        'images_per_file': 300} #1 image/file for TR, 300 for eq SAXS, 1000 for muscle
 
-        # 'shutter_speed_open'    : 0.075, #in s      Slow vacuum shutter
-        # 'shutter_speed_close'   : 0.075, # in s
-        # 'shutter_pad'           : 0.01, #padding for shutter related values
-        # 'shutter_cycle'         : 0.2, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
+    # Muscle settings
+    exposure_settings['struck_measurement_time'] = '0.001'
+    exposure_settings['tr_muscle_exp'] = False
 
-        'shutter_speed_open'    : 0.0045, #in s      Normal vacuum shutter
-        'shutter_speed_close'   : 0.004, # in s
-        'shutter_pad'           : 0.002, #padding for shutter related values
-        'shutter_cycle'         : 0.1, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
-
-        'struck_measurement_time' : '0.001', #in s
-        'tr_muscle_exp'         : False,
-        'slow_mode_thres'       : 0.1,
-        'fast_mode_max_exp_time': 2000,
-        'wait_for_trig'         : True,
-        'num_trig'              : '1',
-        'show_advanced_options' : True,
-        'fe_shutter_pv'         : 'FE:18:ID:FEshutter',
-        'd_shutter_pv'          : 'PA:18ID:STA_D_SDS_OPEN_PL.VAL',
-        'col_vac_pv'            : '18ID:VAC:D:Cols',
-        'guard_vac_pv'          : '18ID:VAC:D:Guards',
-        'sample_vac_pv'         : '18ID:VAC:D:Sample',
-        'sc_vac_pv'             : '18ID:VAC:D:ScatterChamber',
-        'use_old_i0_gain'       : True,
-        'i0_gain_pv'            : '18ID_D_BPM_Gain:Level-SP',
-
-        'struck_log_vals'       : [
-            # Format: (mx_record_name, struck_channel, header_name,
-            # scale, offset, use_dark_current, normalize_by_exp_time)
-            {'mx_record': 'mcs3', 'channel': 2, 'name': 'I0',
-            'scale': 1, 'offset': 0, 'dark': True, 'norm_time': False},
-            {'mx_record': 'mcs4', 'channel': 3, 'name': 'I1', 'scale': 1,
-            'offset': 0, 'dark': True, 'norm_time': False},
-            # {'mx_record': 'mcs5', 'channel': 4, 'name': 'I2', 'scale': 1,
-            # 'offset': 0, 'dark': True, 'norm_time': False},
-            # {'mx_record': 'mcs6', 'channel': 5, 'name': 'I3', 'scale': 1,
-            # 'offset': 0, 'dark': True, 'norm_time': False},
-            # {'mx_record': 'mcs11', 'channel': 10, 'name': 'Beam_current',
-            # 'scale': 5000, 'offset': 0.5, 'dark': False, 'norm_time': True},
-            # {'mx_record': 'mcs12', 'channel': 11, 'name': 'Flow_rate',
-            # 'scale': 10e6, 'offset': 0, 'dark': True, 'norm_time': True},
-            # {'mx_record': 'mcs7', 'channel': 6, 'name': 'Detector_Enable',
-            # 'scale': 1e5, 'offset': 0, 'dark': True, 'norm_time': True},
-            # {'mx_record': 'mcs12', 'channel': 11, 'name': 'Length_Out',
-            # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
-            # {'mx_record': 'mcs13', 'channel': 13, 'name': 'Length_In',
-            # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
-            # {'mx_record': 'mcs13', 'channel': 12, 'name': 'Force',
-            # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
-            ],
-        'joerger_log_vals'      : [{'mx_record': 'j3', 'name': 'I0',
-            'scale': 1, 'offset': 0, 'norm_time': False}, #Format: (mx_record_name, struck_channel, header_name, scale, offset, use_dark_current, normalize_by_exp_time)
-            {'mx_record': 'j4', 'name': 'I1', 'scale': 1, 'offset': 0,
-            'norm_time': False},
-            # {'mx_record': 'j5', 'name': 'I2', 'scale': 1, 'offset': 0,
-            # 'norm_time': False},
-            # {'mx_record': 'j6', 'name': 'I3', 'scale': 1, 'offset': 0,
-            # 'norm_time': False},
-            # {'mx_record': 'j11', 'name': 'Beam_current', 'scale': 5000,
-            # 'offset': 0.5, 'norm_time': True}
-            ],
-        'warnings'              : {'shutter' : True, 'col_vac' : {'check': True,
-            'thresh': 0.04}, 'guard_vac' : {'check': True, 'thresh': 0.04},
-            'sample_vac': {'check': True, 'thresh': 0.04}, 'sc_vac':
-            {'check': True, 'thresh':0.04}},
-        # 'base_data_dir'         : '/nas_data/Pilatus1M/2022_Run2', #CHANGE ME
-        'base_data_dir'         : '/nas_data/Eiger2x/2024_Run3', #CHANGE ME and pipeline local_basedir
-        }
-
+    #Other settings
+    exposure_settings['wait_for_trig'] = True
+    exposure_settings['struck_log_vals'] = [
+        # Format: (mx_record_name, struck_channel, header_name,
+        # scale, offset, use_dark_current, normalize_by_exp_time)
+        {'mx_record': 'mcs3', 'channel': 2, 'name': 'I0',
+        'scale': 1, 'offset': 0, 'dark': True, 'norm_time': False},
+        {'mx_record': 'mcs4', 'channel': 3, 'name': 'I1', 'scale': 1,
+        'offset': 0, 'dark': True, 'norm_time': False},
+        # {'mx_record': 'mcs5', 'channel': 4, 'name': 'I2', 'scale': 1,
+        # 'offset': 0, 'dark': True, 'norm_time': False},
+        # {'mx_record': 'mcs6', 'channel': 5, 'name': 'I3', 'scale': 1,
+        # 'offset': 0, 'dark': True, 'norm_time': False},
+        # {'mx_record': 'mcs7', 'channel': 6, 'name': 'Detector_Enable',
+        # 'scale': 1e5, 'offset': 0, 'dark': True, 'norm_time': True},
+        # {'mx_record': 'mcs12', 'channel': 11, 'name': 'Length_Out',
+        # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
+        # {'mx_record': 'mcs13', 'channel': 13, 'name': 'Length_In',
+        # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
+        # {'mx_record': 'mcs13', 'channel': 12, 'name': 'Force',
+        # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
+        ]
+    exposure_settings['warnings'] = {'shutter' : True, 'col_vac' : {'check': True,
+        'thresh': 0.04}, 'guard_vac' : {'check': True, 'thresh': 0.04},
+        'sample_vac': {'check': True, 'thresh': 0.04}, 'sc_vac':
+        {'check': True, 'thresh':0.04}}
+    exposure_settings['base_data_dir'] = '/nas_data/Eiger2x/2025_Run1' #CHANGE ME and pipeline local_basedir
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']
+
+
+    ###################################################################
+    # Coflow
 
     coflow_settings = {
         'show_advanced_options'     : False,
@@ -706,17 +710,32 @@ if __name__ == '__main__':
         'device_communication'      : 'remote',
     }
 
+
+    hplc_settings = biohplccon.default_hplc_2pump_settings
+    hplc_settings['com_thread'] = None
+    hplc_settings['remote'] = True
+    hplc_settings['remote_device'] = 'hplc'
+    hplc_settings['remote_ip'] = '164.54.204.113'
+    hplc_settings['remote_port'] = '5556'
+
+
+    automator_settings = autocon.default_automator_settings
+
+
+
     biocon_settings = {}
 
     components = OrderedDict([
         ('exposure', expcon.ExpPanel),
-        ('coflow', coflowcon.CoflowPanel),
+        # ('coflow', coflowcon.CoflowPanel),
         # ('trsaxs_scan', trcon.TRScanPanel),
         # ('trsaxs_flow', trcon.TRFlowPanel),
         # ('scan',    scancon.ScanPanel),
         ('metadata', metadata.ParamPanel),
-        ('pipeline', pipeline_ctrl.PipelineControl),
-        ('uv', spectrometercon.UVPanel),
+        # ('pipeline', pipeline_ctrl.PipelineControl),
+        # ('uv', spectrometercon.UVPanel),
+        # ('hplc', biohplccon.HPLCPanel),
+        ('automator', autocon.AutoPanel)
         ])
 
     settings = {
@@ -728,6 +747,8 @@ if __name__ == '__main__':
         'metadata'      : metadata_settings,
         'pipeline'      : pipeline_settings,
         'uv'            : spectrometer_settings,
+        'hplc'          : hplc_settings,
+        'automator'     : automator_settings,
         'components'    : components,
         'biocon'        : biocon_settings,
         }
