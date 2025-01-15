@@ -875,6 +875,31 @@ class SwitchPumpsCommand(AutoCommand):
 
         self._post_initialize_cmd()
 
+class ExposureCommand(AutoCommand):
+    """
+    A command for running a SEC sample and collecting SAXS data
+    """
+    def __init__(self, *args, **kwargs):
+        AutoCommand.__init__(self, *args, **kwargs)
+
+    def _initialize_cmd(self, cmd_info):
+        """
+        Notes:
+        Should synchronize start and finish of exp, hplc, and coflow
+        """
+        # Something like this. Arguments need refining, needs testing
+
+
+        finish_wait_id = self.automator.get_wait_id()
+        finish_wait_cmd = 'wait_sync_{}'.format(finish_wait_id)
+        finish_conds = [['exp', [finish_wait_cmd,]],]
+
+        self._add_automator_cmd('exp', 'expose', [], cmd_info)
+        self._add_automator_cmd('exp', finish_wait_cmd, [], {'condition': 'status',
+            'inst_conds': finish_conds})
+
+        self._post_initialize_cmd()
+
 class AutoPanel(wx.Panel):
     """
     This creates the automator panel.
@@ -1162,7 +1187,7 @@ class AutoList(utils.ItemList):
         dialog = wx.SingleChoiceDialog(self, 'Pick an action to add:',
             'Pick an action to add to the queue',
             ['Run SEC-SAXS sample', 'Equilibrate column',
-            'Switch pumps'])
+            'Switch pumps', '----Staff Methods----', 'Standalone Exposure'])
 
         dialog.SetSize(self._FromDIP((300,250)))
 
@@ -1177,8 +1202,6 @@ class AutoList(utils.ItemList):
         dialog.Destroy()
 
         if choice is not None:
-            # Stands in for getting info from a dialog or other location
-
             if choice == 'Run SEC-SAXS sample':
                 exp_panel = wx.FindWindowByName('exposure')
                 default_exp_settings, _ = exp_panel._get_exp_values(False)
@@ -1324,6 +1347,36 @@ class AutoList(utils.ItemList):
                 cmd_dialog = SwitchDialog(self, default_settings,
                     title='Switch Pump Settings')
 
+            if choice == 'Standalone Exposure':
+                exp_panel = wx.FindWindowByName('exposure')
+                default_exp_settings, _ = exp_panel._get_exp_values(False)
+
+                default_settings = {
+                    # General parameters
+                    'item_type'     : 'exposure',
+                    'inst'          : 'exp',
+                    'notes'         : '',
+                    'conc'          : '',
+                    'buf'           : '',
+                    'sample_name'   : '',
+                    'column'        : 'Superdex 200 10/300 Incease',
+                    'temp'          : '20',
+
+                    # Exposure parameters
+                    'num_frames'    : default_exp_settings['num_frames'],
+                    'exp_time'      : default_exp_settings['exp_time'],
+                    'exp_period'    : default_exp_settings['exp_period'],
+                    'data_dir'      : exp_panel.settings['base_data_dir'],
+                    'filename'      : '',
+                    'wait_for_trig' : default_exp_settings['wait_for_trig'],
+                    'num_trig'      : default_exp_settings['num_trig'],
+                    #Not used, for completeness
+                    'musc_samp'     : default_exp_settings['struck_measurement_time'],
+                    }
+
+                cmd_dialog = ExposureCmdDialog(self, default_settings,
+                    title='Standalone Exposure Settings')
+
             res = cmd_dialog.ShowModal()
 
             if res == wx.ID_OK:
@@ -1362,6 +1415,10 @@ class AutoList(utils.ItemList):
                     # Do switch verification here
                     pass
 
+                elif cmd_settings['item_type'] == 'exposure':
+                    # Do exposure verification here
+                    pass
+
 
                 self._add_item(item_info)
 
@@ -1374,23 +1431,6 @@ class AutoList(utils.ItemList):
         item_type = item_info['item_type']
 
         new_item = AutoListItem(self, item_type, command)
-
-        # This should be moved into the list item?
-        if item_type == 'sec_sample':
-            name = item_info['sample_name']
-            descrip = item_info['descrip']
-            conc = item_info['conc']
-            buf = item_info['buf']
-            new_item.set_name(name)
-            new_item.set_description(descrip)
-            new_item.set_concentration(conc)
-            new_item.set_buffer(buf)
-
-        elif item_type == 'equilibrate':
-            buf = item_info['buf']
-            new_item.set_buffer(buf)
-
-        new_item.set_status_label('Queued')
 
         self.add_items([new_item])
 
@@ -1547,6 +1587,8 @@ class AutoListItem(utils.ListItem):
 
         if self.item_type == 'sec_sample':
             item_label = 'SEC sample'
+        elif self.item_type == 'exposure':
+            item_label == 'Standalone Exposure'
         else:
             item_label = self.item_type.capitalize()
 
@@ -1620,9 +1662,44 @@ class AutoListItem(utils.ListItem):
         elif self.item_type == 'switch_pumps':
             item_sizer = wx.BoxSizer()
 
+        elif self.item_type == 'exposure':
+            name_label = wx.StaticText(item_parent, label='Filename:')
+            self.name_ctrl = wx.StaticText(item_parent, label='')
+
+            item_sizer = wx.BoxSizer(wx.HORIZONTAL)
+            item_sizer.Add(name_label, flag=wx.RIGHT|wx.LEFT, border=self._FromDIP(5))
+            item_sizer.Add(self.name_ctrl, flag=wx.RIGHT, border=self._FromDIP(5))
+
+
+
         top_sizer = wx.BoxSizer(wx.VERTICAL)
         top_sizer.Add(std_sizer, flag=wx.TOP|wx.BOTTOM, border=self._FromDIP(5))
         top_sizer.Add(item_sizer, flag=wx.BOTTOM, border=self._FromDIP(5))
+
+
+        # This should be moved into the list item?
+        if self.item_type == 'sec_sample':
+            name = item_info['sample_name']
+            descrip = item_info['descrip']
+            conc = item_info['conc']
+            buf = item_info['buf']
+            new_item.set_name(name)
+            new_item.set_description(descrip)
+            new_item.set_concentration(conc)
+            new_item.set_buffer(buf)
+
+        elif self.item_type == 'equilibrate':
+            buf = item_info['buf']
+            new_item.set_buffer(buf)
+
+        elif self.item_type == 'switch_pumps':
+            pass
+
+        elif self.item_type == 'exposure':
+            name = item_info['filename']
+            new_item.set_name(name)
+
+        self.set_status_label('Queued')
 
         self.SetSizer(top_sizer)
 
@@ -2076,6 +2153,96 @@ class SwitchDialog(AutoCmdDialog):
         cmd_sizer.Add(switch_sizer, flag=wx.TOP|wx.RIGHT|wx.BOTTOM|wx.EXPAND,
             border=self._FromDIP(5))
         cmd_sizer.Add(coflow_sizer, flag=wx.TOP|wx.RIGHT|wx.BOTTOM|wx.EXPAND,
+            border=self._FromDIP(5))
+
+        top_sizer = wx.BoxSizer(wx.VERTICAL)
+        top_sizer.Add(cmd_sizer, proportion=1, flag=wx.EXPAND|wx.ALL,
+            border=self._FromDIP(5))
+        top_sizer.Add(button_sizer ,flag=wx.BOTTOM|wx.RIGHT|wx.LEFT|wx.ALIGN_RIGHT,
+            border=self._FromDIP(5))
+
+        self.SetSizer(top_sizer)
+
+class ExposureCmdDialog(AutoCmdDialog):
+    """
+    Allows addition/editing of the buffer info in the buffer list
+    """
+    def __init__(self, default_settings, acq_methods, sample_methods, *args, **kwargs):
+        self.acq_methods = acq_methods
+        self.sample_methods = sample_methods
+
+        AutoCmdDialog.__init__(self, default_settings, *args, **kwargs)
+
+    def _create_layout(self):
+        parent = self
+
+        ################ Metadata #################
+        column_choices = ['Superdex 200 10/300 Increase', 'Superdex 75 10/300 Increase',
+            'Superose 6 10/300 Increase', 'Superdex 200 5/150 Increase',
+            'Superdex 75 5/150 Increase', 'Superose 6 5/150 Increase',
+            'Superdex 200 10/300', 'Superdex 75 10/300', 'Superose 6 10/300',
+            'Superdex 200 5/150', 'Superdex 75 5/150', 'Superose 6 5/150',
+            'Wyatt 010S5', 'Wyatt 015S5', 'Wyatt 030S5', 'Capto HiRes Q 5/50',
+            'Capto HiRes S 5/50', 'Other']
+
+        metadata_settings = {
+            'sample_name'   : ['Sample:', self.ctrl_ids['sample_name'], 'text'],
+            'buf'           : ['Buffer:', self.ctrl_ids['buf'], 'text'],
+            'temp'          : ['Temperature [C]:', self.ctrl_ids['temp'], 'float'],
+            'conc'          : ['Concentration [mg/ml]:', self.ctrl_ids['conc'], 'float'],
+            'column'        : ['Column:', self.ctrl_ids['column'], 'choice', column_choices],
+            }
+
+        metadata_box = wx.StaticBox(parent, label='Metadata')
+        md_sizer1 = self._create_sizer(metadata_settings, metadata_box)
+
+        notes = wx.TextCtrl(metadata_box, self.ctrl_ids['notes'],
+            style=wx.TE_MULTILINE, size=(100, 100))
+        md_sizer2 = wx.BoxSizer(wx.HORIZONTAL)
+        md_sizer2.Add(wx.StaticText(metadata_box, label='Notes:'))
+        md_sizer2.Add(notes, proportion=1, border=5,
+            flag=wx.EXPAND|wx.LEFT)
+
+        metadata_sizer = wx.StaticBoxSizer(metadata_box, wx.VERTICAL)
+        metadata_sizer.Add(md_sizer1, flag=wx.EXPAND)
+        metadata_sizer.Add(md_sizer2, proportion=1, flag=wx.EXPAND|wx.TOP,
+            border=self._FromDIP(5))
+
+
+        ################ Exposure #################
+        exp_settings = {
+            'filename'      : ['File prefix:', self.ctrl_ids['filename'], 'text'],
+            'exp_time'      : ['Exposure time [s]:', self.ctrl_ids['exp_time'], 'float'],
+            'exp_period'    : ['Exposure time [s]:', self.ctrl_ids['exp_period'], 'float'],
+            }
+
+        exp_adv_settings = {
+            'num_frames'    : ['Number of frames:', self.ctrl_ids['num_frames'], 'int'],
+            'wait_for_trig' : ['Wait for external trigger', self.ctrl_ids['wait_for_trig'], 'bool'],
+            'num_trig'      : ['Number of triggers:', self.ctrl_ids['num_trig'], 'int'],
+            }
+
+        exp_box = wx.StaticBox(parent, label='Exposure Settings')
+
+        exp_adv_pane = wx.CollapsiblePane(exp_box, label="Advanced Settings")
+        exp_adv_win = exp_adv_pane.GetPane()
+
+        exp_sizer1 = self._create_sizer(exp_settings, exp_box)
+        exp_sizer2 = self._create_sizer(exp_adv_settings, exp_adv_win)
+
+        exp_adv_win.SetSizer(exp_sizer2)
+        exp_adv_pane.Collapse()
+
+        exp_sizer = wx.StaticBoxSizer(exp_box, wx.VERTICAL)
+        exp_sizer.Add(exp_sizer1, flag=wx.EXPAND)
+        exp_sizer.Add(exp_adv_pane, flag=wx.EXPAND|wx.TOP, border=self._FromDIP(5))
+
+        button_sizer = self.CreateButtonSizer(wx.OK | wx.CANCEL)
+
+        cmd_sizer=wx.BoxSizer(wx.HORIZONTAL)
+        cmd_sizer.Add(exp_sizer, flag=wx.TOP|wx.RIGHT|wx.BOTTOM|wx.EXPAND,
+            border=self._FromDIP(5))
+        cmd_sizer.Add(metadata_sizer, proportion=1, flag=wx.ALL|wx.EXPAND,
             border=self._FromDIP(5))
 
         top_sizer = wx.BoxSizer(wx.VERTICAL)
