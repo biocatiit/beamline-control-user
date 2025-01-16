@@ -819,7 +819,7 @@ class SyringePump(Pump):
         vol = copy.copy(self.volume)
 
         if vol > 0:
-            self.dispense(vol, self._pump_base_units.split('/')[0],
+            self.dispense(vol, self.units.split('/')[0],
                 blocking=blocking)
 
     def dispense(self, vol, units='mL', blocking=True):
