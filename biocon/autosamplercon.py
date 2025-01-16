@@ -313,40 +313,39 @@ class Autosampler(object):
                 self.plate_x_motor.move_absolute(position[0])
                 self.plate_z_motor.move_absolute(position[1])
                 self.needle_y_motor.move_absolute(position[2])
+                self._sleep(0.05)
 
-                while self.plate_x_motor.is_moving() or self.needle_y_motor.is_moving() or self.plate_z_motor.is_moving():
-                    time.sleep(0.05)
-                    abort = self._check_abort()
+                while (self.plate_x_motor.is_moving()
+                    or self.needle_y_motor.is_moving()
+                    or self.plate_z_motor.is_moving()):
+                    abort = self._sleep(0.02)
                     if abort:
                         break
 
             elif motor == 'plate_x':
                 self.plate_x_motor.move_absolute(position)
-                time.sleep(0.05)
+                self._sleep(0.05)
 
                 while self.plate_x_motor.is_moving():
-                    time.sleep(0.01)
-                    abort = self._check_abort()
+                    abort = self._sleep(0.02)
                     if abort:
                         break
 
             elif motor == 'plate_z':
                 self.plate_z_motor.move_absolute(position)
-                time.sleep(0.05)
+                self._sleep(0.05)
 
                 while self.plate_z_motor.is_moving():
-                    time.sleep(0.01)
-                    abort = self._check_abort()
+                    abort = self._sleep(0.02)
                     if abort:
                         break
 
             elif motor == 'needle_y':
                 self.needle_y_motor.move_absolute(position)
-                time.sleep(0.05)
+                self._sleep(0.05)
 
                 while self.needle_y_motor.is_moving():
-                    time.sleep(0.01)
-                    abort = self._check_abort()
+                    abort = self._sleep(0.02)
                     if abort:
                         break
 
@@ -365,40 +364,37 @@ class Autosampler(object):
                 self.plate_x_motor.move_relative(position[0])
                 self.plate_z_motor.move_relative(position[1])
                 self.needle_y_motor.move_relative(position[2])
+                self._sleep(0.05)
 
                 while self.plate_x_motor.is_moving() or self.needle_y_motor.is_moving() or self.plate_z_motor.is_moving():
-                    time.sleep(0.05)
-                    abort = self._check_abort()
+                    abort = self._sleep(0.02)
                     if abort:
                         break
 
             elif motor == 'plate_x':
                 self.plate_x_motor.move_relative(position)
-                time.sleep(0.05)
+                self._sleep(0.05)
 
                 while self.plate_x_motor.is_moving():
-                    time.sleep(0.01)
-                    abort = self._check_abort()
+                    abort = self._sleep(0.02)
                     if abort:
                         break
 
             elif motor == 'plate_z':
                 self.plate_z_motor.move_relative(position)
-                time.sleep(0.05)
+                self._sleep(0.05)
 
                 while self.plate_z_motor.is_moving():
-                    time.sleep(0.01)
-                    abort = self._check_abort()
+                    abort = self._sleep(0.02)
                     if abort:
                         break
 
             elif motor == 'needle_y':
                 self.needle_y_motor.move_relative(position)
-                time.sleep(0.05)
+                self._sleep(0.05)
 
                 while self.needle_y_motor.is_moving():
-                    time.sleep(0.01)
-                    abort = self._check_abort()
+                    abort = self._sleep(0.02)
                     if abort:
                         break
 
@@ -406,50 +402,50 @@ class Autosampler(object):
 
         return not abort
 
-    # def set_motor_velocity(self, velocity, motor='all'):
-    #     if motor == 'all':
-    #         self.x_velocity = float(velocity[0])
-    #         self.y_velocity = float(velocity[1])
-    #         self.z_velocity = float(velocity[2])
+    def set_motor_velocity(self, velocity, motor='all'):
+        if motor == 'all':
+            self.x_velocity = float(velocity[0])
+            self.y_velocity = float(velocity[1])
+            self.z_velocity = float(velocity[2])
 
-    #         self.motor_x.set_velocity(self.x_velocity)
-    #         self.motor_y.set_velocity(self.y_velocity)
-    #         self.motor_z.set_velocity(self.z_velocity)
+            self.plate_x_motor.set_velocity(self.x_velocity)
+            self.needle_y_motor.set_velocity(self.y_velocity)
+            self.plate_z_motor.set_velocity(self.z_velocity)
 
-    #     elif motor == 'x':
-    #         self.x_velocity = float(velocity)
-    #         self.motor_x.set_velocity(self.x_velocity)
+        elif motor == 'plate_x':
+            self.x_velocity = float(velocity)
+            self.plate_x_motor.set_velocity(self.x_velocity)
 
-    #     elif motor == 'y':
-    #         self.y_velocity = float(velocity)
-    #         self.motor_y.set_velocity(self.y_velocity)
+        elif motor == 'needle_y':
+            self.y_velocity = float(velocity)
+            self.needle_y_motor.set_velocity(self.y_velocity)
 
-    #     elif motor == 'z':
-    #         self.z_velocity = float(velocity)
-    #         self.motor_z.set_velocity(self.z_velocity)
+        elif motor == 'plate_z':
+            self.z_velocity = float(velocity)
+            self.plate_z_motor.set_velocity(self.z_velocity)
 
 
-    # def set_motor_acceleration(self, accel, motor='all'):
-    #     if motor == 'all':
-    #         self.x_accel = float(accel[0])
-    #         self.y_accel = float(accel[1])
-    #         self.z_accel = float(accel[2])
+    def set_motor_acceleration(self, accel, motor='all'):
+        if motor == 'all':
+            self.x_accel = float(accel[0])
+            self.y_accel = float(accel[1])
+            self.z_accel = float(accel[2])
 
-    #         self.motor_x.set_acceleration(self.x_accel)
-    #         self.motor_y.set_acceleration(self.y_accel)
-    #         self.motor_z.set_acceleration(self.z_accel)
+            self.plate_x_motor.set_acceleration(self.x_accel)
+            self.needle_y_motor.set_acceleration(self.y_accel)
+            self.plate_z_motor.set_acceleration(self.z_accel)
 
-    #     elif motor == 'x':
-    #         self.x_accel = float(accel)
-    #         self.motor_x.set_acceleration(self.x_accel)
+        elif motor == 'plate_x':
+            self.x_accel = float(accel)
+            self.plate_x_motor.set_acceleration(self.x_accel)
 
-    #     elif motor == 'y':
-    #         self.y_accel = float(accel)
-    #         self.motor_y.set_acceleration(self.y_accel)
+        elif motor == 'needle_y':
+            self.y_accel = float(accel)
+            self.needle_y_motor.set_acceleration(self.y_accel)
 
-    #     elif motor == 'z':
-    #         self.z_accel = float(accel)
-    #         self.motor_z.set_acceleration(self.z_accel)
+        elif motor == 'plate_z':
+            self.z_accel = float(accel)
+            self.plate_z_motor.set_acceleration(self.z_accel)
 
     def _check_abort(self):
         if self.abort_event.is_set():
@@ -555,17 +551,13 @@ class Autosampler(object):
         delta_position = self.well_plate.get_relative_well_position(row, column)
         well_position = self.base_position + delta_position
 
-        print(self.base_position)
-        print(delta_position)
-        print(well_position)
-
         success = self.move_motors_absolute(self.needle_out_position, 'needle_y')
         if success:
             self._check_abort()
             success = self.move_motors_absolute([well_position[0], well_position[1],
                 self.needle_out_position])
         if success:
-            self._sleep(2)
+            self._sleep(1)
             success = self.move_motors_absolute(well_position[2], 'needle_y')
 
         return success
@@ -577,11 +569,12 @@ class Autosampler(object):
 
         success = self.move_motors_absolute(self.needle_out_position, 'needle_y')
         if success:
-            self._sleep(2)
+            self._sleep(1)
             success = self.move_motors_absolute([self.clean_position[0],
                 self.clean_position[1], self.needle_out_position])
+
         if success:
-            self._sleep(2)
+            self._sleep(1)
             success = self.move_motors_absolute(self.clean_position[2], 'needle_y')
 
         self.process_event.clear()
@@ -604,6 +597,8 @@ class Autosampler(object):
 
         logger.info('Moving to out position')
 
+        self.move_plate_out()
+
         success = self.move_motors_absolute(self.needle_in_position, 'needle_y')
 
         self.process_event.clear()
@@ -623,7 +618,7 @@ class Autosampler(object):
             success =  True
 
         if success:
-            self._sleep(2)
+            self._sleep(1)
             success = self.move_motors_absolute(self.plate_x_out, 'plate_x')
 
         self.process_event.clear()
@@ -640,7 +635,7 @@ class Autosampler(object):
         if cur_plate_x != self.plate_x_out:
             success = self.move_motors_absolute(self.needle_out_position, 'needle_y')
             if success:
-                self._sleep(2)
+                self._sleep(1)
         else:
             success = True
 
@@ -658,7 +653,7 @@ class Autosampler(object):
         self.running_event.clear()
 
     def set_pump_aspirate_rates(self, rates, units='uL/min', pump='all'):
-        rates = pumpcon.convert_volume(rates, units, 'uL/min')
+        rates = pumpcon.convert_flow_rate(rates, units, 'uL/min')
         if pump == 'all':
             self.sample_pump.units = 'uL/min'
             self.sample_pump.refill_rate = rates[0]
@@ -670,7 +665,7 @@ class Autosampler(object):
             self.clean3_pump.refill_rate = rates[3]
         elif pump == 'sample':
             self.sample_pump.units = 'uL/min'
-            self.sample_pump.refill_rate == rates
+            self.sample_pump.refill_rate = rates
         elif pump == 'clean1':
             self.clean1_pump.units = 'uL/min'
             self.clean1_pump.refill_rate = rates
@@ -694,7 +689,7 @@ class Autosampler(object):
             self.clean3_pump.flow_rate = rates[3]
         elif pump == 'sample':
             self.sample_pump.units = 'uL/min'
-            self.sample_pump.flow_rate == rates
+            self.sample_pump.flow_rate = rates
         elif pump == 'clean1':
             self.clean1_pump.units = 'uL/min'
             self.clean1_pump.flow_rate = rates
@@ -728,7 +723,7 @@ class Autosampler(object):
         abort = False
 
         if pump == 'sample':
-            selected_pump = self.pump_sample
+            selected_pump = self.sample_pump
         elif pump == 'clean1':
             selected_pump = self.clean1_pump
         elif pump == 'clean2':
@@ -742,8 +737,7 @@ class Autosampler(object):
 
         if blocking:
             while selected_pump.is_moving():
-                time.sleep(0.05)
-                abort = self._check_abort()
+                abort = self._sleep(0.05)
                 if abort:
                     break
 
@@ -768,7 +762,7 @@ class Autosampler(object):
         abort = False
 
         if pump == 'sample':
-            selected_pump = self.pump_sample
+            selected_pump = self.sample_pump
         elif pump == 'clean1':
             selected_pump = self.clean1_pump
         elif pump == 'clean2':
@@ -776,29 +770,26 @@ class Autosampler(object):
         elif pump == 'clean3':
             selected_pump = self.clean3_pump
 
-        initial_volume = selected_pump.volume
+        # initial_volume = selected_pump.volume
 
         selected_pump.dispense(volume, units=units)
 
         if blocking:
             while selected_pump.is_moving():
-                time.sleep(0.05)
-                abort = self._check_abort()
-                if abort:
-                    break
+                abort = self.sleep(0.05)
 
-            self.running_event.clear()
+            # final_volume = selected_pump.volume
 
-            final_volume = selected_pump.volume
-
-            if round(initial_volume - final_volume, 4) != round(volume, 4):
-                logger.error('Pump %s failed to dispense requested '
-                    'volume! Volume requested: %f, volume dispensed: %f',
-                    pump, volume, initial_volume - final_volume)
-                raise Exception('Pump dispense failed!')
+            # if round(initial_volume - final_volume, 4) != round(volume, 4):
+            #     logger.error('Pump %s failed to dispense requested '
+            #         'volume! Volume requested: %f, volume dispensed: %f',
+            #         pump, volume, initial_volume - final_volume)
+            #     raise Exception('Pump dispense failed!')
 
         else:
             abort = False
+
+        self.running_event.clear()
 
         return not abort
 
@@ -808,10 +799,13 @@ class Autosampler(object):
         logger.info("Starting sample load")
 
         self.set_valve_position(self.settings['valve_positions']['sample'])
+        self.sample_pump.set_valve_position('Input')
 
         success = self.move_to_load(row, column)
 
         if success:
+            rate = self.settings['pump_rates']['sample'][0]
+            self.set_pump_aspirate_rates(rate, 'mL/min', 'sample')
             success = self.aspirate(volume, 'sample', units)
 
         if success:
@@ -852,19 +846,18 @@ class Autosampler(object):
 
         self.set_pump_dispense_rates(rate, rate_units, 'sample')
 
-        load_vol = pumpcon.convert_volume(volume, units, 'uL')
+        load_vol = pumpcon.convert_volume(volume, vol_units, 'uL')
         self.dispense(load_vol - self.settings['reserve_vol'], 'sample',
             units='uL', blocking=False)
 
 
         self.running_event.set()
         while self.sample_pump.is_moving():
-            time.sleep(0.01)
-            abort = self._check_abort()
+            abort = self._sleep(0.02)
             if abort:
                 break
 
-            self.running_event.clear()
+        self.running_event.clear()
 
         self.process_event.clear()
 
@@ -894,7 +887,9 @@ class Autosampler(object):
         success = self.move_to_clean()
 
         self.sample_pump.set_valve_position('Output')
-        self.sample_pump.dispense_all()
+        rate = self.settings['pump_rates']['purge'][1]
+        self.set_pump_dispense_rates(rate, 'mL/min', 'sample')
+        self.sample_pump.dispense_all(blocking=False)
 
         if success:
             for clean_step in self.settings['clean_seq']:
@@ -916,8 +911,15 @@ class Autosampler(object):
                 if not success:
                     break
 
-            self.set_valve_positions(self.settings['valve_positions']['sample'])
-            self.sample_pump.set_valve_position('Input')
+            self.set_valve_position(self.settings['valve_positions']['sample'])
+
+        while self.sample_pump.is_moving():
+            abort = self._sleep(0.02)
+            if abort:
+                success = not abort
+                break
+
+        self.sample_pump.set_valve_position('Input')
 
         self.move_needle_out()
 
@@ -2076,11 +2078,11 @@ if __name__ == '__main__':
         # 'remote_fm_port'        : '5557',
         'volume_units'          : 'uL',
         'components'            : ['autosampler'],
-        'needle_motor'          : {'name': 'needle_y', 'args': ['18ID_DMC_E01:8'],
+        'needle_motor'          : {'name': 'needle_y', 'args': ['18ID_DMC_E05:33'],
                                         'kwargs': {}},
-        'plate_x_motor'         : {'name': 'plate_x', 'args': ['18ID_DMC_E05:33'],
+        'plate_x_motor'         : {'name': 'plate_x', 'args': ['18ID_DMC_E05:37'],
                                         'kwargs': {}},
-        'plate_z_motor'         : {'name': 'plate_z', 'args': ['18ID_DMC_E03:23'],
+        'plate_z_motor'         : {'name': 'plate_z', 'args': ['18ID_DMC_E05:34'],
                                         'kwargs': {}},
         'needle_valve'          : {'name': 'Needle',
                                         'args':['Cheminert', 'COM11'],
@@ -2100,26 +2102,26 @@ if __name__ == '__main__':
                                     'kwargs': {'flow_cal': '319.2',},
                                     'ctrl_args': {'flow_rate': 1}},
         # 'motor_home_velocity'   : {'x': 10, 'y': 10, 'z': 10},
-        # 'motor_velocity'        : {'x': 75, 'y': 75, 'z': 75},
+        # 'motor_velocity'        : {'x': 75, 'y': 75, 'z': 75}, #112
         # 'motor_acceleration'    : {'x': 500, 'y': 500, 'z': 500},
-        'base_position'         : {'plate_x': 295.5, 'plate_z': -75, 'needle_y': 102.0},
-        'clean_offsets'         : {'plate_x': 5.5, 'plate_z': 86.3, 'needle_y': 74.5}, # Relative to base position
+        'base_position'         : {'plate_x': 271.4, 'plate_z': -73.6, 'needle_y': 93.55}, # A1 well position, needle height at chiller plate top
+        'clean_offsets'         : {'plate_x': 96, 'plate_z': -17, 'needle_y': 0.7}, # Relative to base position
         'needle_out_offset'     : 5, # mm
         'needle_in_position'    : 0,
-        'plate_out_position'    : {'plate_x': 265.5, 'plate_z': -75},
-        'plate_load_position'   : {'plate_x': 0, 'plate_z': -75},
+        'plate_out_position'    : {'plate_x': 241.4, 'plate_z': -73.6},
+        'plate_load_position'   : {'plate_x': 0, 'plate_z': -73.6},
         'plate_type'            : 'Thermo-Fast 96 well PCR',
         # 'plate_type'            : 'Abgene 96 well deepwell storage',
         'valve_positions'       : {'sample': 5, 'clean1': 1, 'clean2': 2, 'clean3': 3, 'clean4': 4},
         'clean_seq'             : [('clean1', 'dispense', 5, 1), #A set of (a, b, c, d) a is the valve position, b is the command, and c and d are input params for the command
-                                    ('clean2', 'dispense', 5, 1), # rate, volume in ml/min and ml
                                     ('clean3', 'dispense', 5, 1),
+                                    ('clean1', 'dispense', 5, 1),
+                                    ('clean2', 'dispense', 5, 1), # rate, volume in ml/min and ml
                                     ('clean4', 'wait', 60, 0),], #wait time in s, N/A
-        'pump_rates'            : {'sample': (0.1, 0.5), 'buffer': (0.1, 0.1)}, # (refill, infuse) rates in ml/min
-        'swept_volumes'         : {'sample': 0.210, 'buffer': 0.219},  #Swept volumes/volume offset to be used when loading.
+        'pump_rates'            : {'sample': (0.1, 0.1), 'buffer': (0.1, 0.1), 'purge': (1, 1)}, # (refill, infuse) rates in ml/min
         'loop_volume'           : 0.1,
         'load_dwell_time'       : 3, #Time to wait in well after aspirating
-        'inject_connect_vol'    : 1, #Volume to eject from the needle after loading before re-entering the cell, to ensure a wet-to-wet entry for the needle and prevent bubbles, uL
+        'inject_connect_vol'    : 0, #Volume to eject from the needle after loading before re-entering the cell, to ensure a wet-to-wet entry for the needle and prevent bubbles, uL
         'inject_connect_rate'   : 100, #Rate to eject the inject connect volume at, in uL/min
         'reserve_vol'           : 1, #Volume to reserve from dispensing when measuring sample, to avoid bubbles, uL
         }

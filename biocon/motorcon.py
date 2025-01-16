@@ -1382,7 +1382,7 @@ class EpicsMotor(Motor):
         :returns: True if the pump is moving, False otherwise
         :rtype: bool
         """
-        mov = self.epics_motor.get('moving')
+        mov = not self.epics_motor.get('done_moving')
         return mov
 
     def move_relative(self, displacement):
