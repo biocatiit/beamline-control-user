@@ -3746,7 +3746,6 @@ class ExpPanel(wx.Panel):
     def _get_metadata(self, metadata_vals=None, verbose=True):
 
         metadata = self.metadata()
-        print(metadata)
 
         column = None
         flow_rate = None
@@ -3755,8 +3754,6 @@ class ExpPanel(wx.Panel):
         if 'coflow' in self.settings['components']:
             coflow_panel = wx.FindWindowByName('coflow')
             coflow_metadata = coflow_panel.metadata()
-
-            print(coflow_metadata)
 
             for key, value in coflow_metadata.items():
                 metadata[key] = value
@@ -3972,14 +3969,14 @@ class ExpPanel(wx.Panel):
             self.exp_period.ChangeValue(str(exp_settings['exp_period']))
         if 'num_trig' in exp_settings:
             self.num_trig.ChangeValue(str(exp_settings['num_trig']))
-        if 'data_dir' in exp_settings:
-            self.data_dir.ChangeValue(str(exp_settings['data_dir']))
+        if 'local_data_dir' in exp_settings:
+            self.data_dir.ChangeValue(str(exp_settings['local_data_dir']))
         if 'filename' in exp_settings:
             self.filename.ChangeValue(str(exp_settings['filename']))
         if 'run_num' in exp_settings:
             self.run_num.ChangeValue(str(exp_settings['run_num']))
         if 'wait_for_trig' in exp_settings:
-            self.wait_for_trig.ChangeValue(str(exp_settings['wait_for_trig']))
+            self.wait_for_trig.SetValue(exp_settings['wait_for_trig'])
 
     def set_pipeline_ctrl(self, pipeline_ctrl):
         self.pipeline_ctrl = pipeline_ctrl
@@ -4012,6 +4009,9 @@ class ExpPanel(wx.Panel):
                 state = 'preparing'
 
             elif self._exp_status == 'Ready':
+                state = 'idle'
+
+            else:
                 state = 'idle'
 
         elif cmd_name == 'abort':
@@ -4063,13 +4063,20 @@ class ExpPanel(wx.Panel):
                 'struck_log_vals'           : struck_log_vals,
                 'struck_measurement_time'   : struck_measurement_time,
                 'struck_num_meas'           : struck_num_meas,
+                'filename'                  : filename,
                 }
 
             if cmd_kwargs['item_type'] == 'sec_sample':
                 exp_type = 'SEC-SAXS'
+
+            elif cmd_kwargs['item_type'] == 'exposure':
+                exp_type = cmd_kwargs['exp_type']
+
+            if (exp_type == 'SEC-SAXS' or exp_type == 'SEC-MALS-SAXS' or
+                exp_type == 'IEC-SAXS'):
                 column = cmd_kwargs['column']
 
-            sample = cmd_kwargs['sample']
+            sample = cmd_kwargs['sample_name']
             buf = cmd_kwargs['buf']
             temperature = cmd_kwargs['temp']
             vol = cmd_kwargs['inj_vol']
@@ -4080,9 +4087,9 @@ class ExpPanel(wx.Panel):
                 'Experiment type:'      : exp_type,
                 'Sample:'               : sample,
                 'Buffer:'               : buf,
-                'Temperature [C]'       : temperature,
-                'Loaded volume [uL]'    : vol,
-                'Concentration [mg/ml]' : conc,
+                'Temperature [C]:'      : temperature,
+                'Loaded volume [uL]:'   : vol,
+                'Concentration [mg/ml]:': conc,
                 }
 
             if (exp_type == 'SEC-SAXS' or exp_type == 'SEC-MALS-SAXS' or
@@ -4094,9 +4101,20 @@ class ExpPanel(wx.Panel):
             wx.CallAfter(self.set_exp_settings, exp_values)
 
             params_panel = wx.FindWindowByName('metadata')
-            wx.CallAfter(params_panel.set_metadata(metadata))
+            if params_panel is not None:
+                if params_panel.saxs_panel.IsShown():
+                    wx.CallAfter(params_panel.saxs_panel.set_metadata, metadata)
+                else:
+                    wx.CallAfter(params_panel.muscle_panel.set_metadata, metadata)
 
-            self._start_exp(True, exp_values, metadata, False)
+            else:
+                metadata = None
+
+            if not os.path.exists(exp_values['local_data_dir']):
+                os.makedirs(exp_values['local_data_dir'])
+
+
+            self.start_exp(True, exp_values, metadata, False)
 
             state = 'exposing'
 

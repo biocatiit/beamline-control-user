@@ -186,9 +186,48 @@ class BioFrame(wx.Frame):
 
         #     component_sizers['exposure'] = exp_sizer
 
-        automator_sizer = component_sizers.pop('automator')
+        # Make automator sizer at the end, because automator settings need the callbacks
+        # from the other panels
+        logger.info('Setting up autmator panel')
+        key = 'automator'
 
-        self.top_notebook.AddPage(automator_sizer, text='Automator',
+        inst_settings = {}
+
+        if 'hplc' in self.settings['components']:
+            hplc_panel = self.component_panels['hplc']
+            hplc_automator_callback = hplc_panel.automator_callback
+            if hplc_panel._device_type == 'AgilentHPLC2Pumps':
+                num_paths = 2
+            else:
+                num_paths = 1
+            inst_settings['hplc1'] = {'num_paths': num_paths,
+                'automator_callback': hplc_automator_callback}
+        if 'coflow' in self.settings['components']:
+            coflow_panel = self.component_panels['coflow']
+            coflow_automator_callback = coflow_panel.automator_callback
+            inst_settings['coflow'] = {'automator_callback': coflow_automator_callback}
+
+        if 'exposure' in self.settings['components']:
+            exposure_panel = self.component_panels['exposure']
+            exposure_automator_callback = exposure_panel.automator_callback
+            inst_settings['exp'] = {'automator_callback': exposure_automator_callback}
+
+        self.settings[key]['instruments'] = inst_settings
+
+        label = key.capitalize()
+        box_panel = wx.Panel(self.top_notebook)
+        box = wx.StaticBox(box_panel, label=label)
+        component_panel = self.settings['components'][key](self.settings[key],
+            box, name=key)
+        self.component_panels[key] = component_panel
+
+        automator_sizer = wx.StaticBoxSizer(box, wx.VERTICAL)
+        automator_sizer.Add(component_panel, proportion=1,
+            border=self._FromDIP(2), flag=wx.EXPAND|wx.ALL)
+
+        box_panel.SetSizer(automator_sizer)
+
+        self.top_notebook.AddPage(box_panel, text='Automator',
             select=True)
 
         for key, page in component_sizers.items():
@@ -208,7 +247,7 @@ class BioFrame(wx.Frame):
 
         for key in self.settings['components']:
 
-            if key != 'pipeline':
+            if key != 'pipeline' and key != 'automator':
                 logger.info('Setting up %s panel', key)
                 if key == 'trsaxs_scan':
                     label = 'TRSAXS Scan'
@@ -250,9 +289,12 @@ class BioFrame(wx.Frame):
                 
                 self.component_panels[key] = component_panel
 
-            else:
+            elif key == 'pipeline':
+                logger.info('Setting up pipeline')
                 ctrl = self.settings['components'][key](self.settings[key])
                 self.component_controls[key] = ctrl
+            else:
+                pass
 
         return component_sizers
 
@@ -334,7 +376,7 @@ if __name__ == '__main__':
         'thresh': 0.04}, 'guard_vac' : {'check': True, 'thresh': 0.04},
         'sample_vac': {'check': True, 'thresh': 0.04}, 'sc_vac':
         {'check': True, 'thresh':0.04}}
-    exposure_settings['base_data_dir'] = '/nas_data/Eiger2x/2025_Run1' #CHANGE ME and pipeline local_basedir
+    exposure_settings['base_data_dir'] = '/nas_data/Eiger2x/2025_Run1/2025_01_15_Hopkins' #CHANGE ME and pipeline local_basedir
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']
 
 
@@ -720,8 +762,6 @@ if __name__ == '__main__':
 
 
     automator_settings = autocon.default_automator_settings
-
-
 
     biocon_settings = {}
 
