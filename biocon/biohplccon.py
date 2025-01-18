@@ -4637,6 +4637,9 @@ class HPLCPanel(utils.DevicePanel):
         elif self._pump2_stop_btn == evt_obj:
             flow_path = 2
 
+        self._stop_flow(flow_path)
+
+    def _stop_flow(self, flow_path):
         cmd = ['stop_pump{}'.format(flow_path), [self.name,], {}]
         self._send_cmd(cmd, False)
 
@@ -4645,7 +4648,7 @@ class HPLCPanel(utils.DevicePanel):
                     wx.CallAfter(self._pump1_flow_target_ctrl.SetLabel, '0.0')
                     self._pump1_flow_target = '0.0'
 
-        elif flow_path == 1:
+        elif flow_path == 2:
             if '0.0' != self._pump2_flow_target:
                     wx.CallAfter(self._pump2_flow_target_ctrl.SetLabel, '0.0')
                     self._pump2_flow_target = '0.0'
@@ -4666,7 +4669,7 @@ class HPLCPanel(utils.DevicePanel):
                     wx.CallAfter(self._pump1_flow_target_ctrl.SetLabel, '0.0')
                     self._pump1_flow_target = '0.0'
 
-        elif flow_path == 1:
+        elif flow_path == 2:
             if '0.0' != self._pump2_flow_target:
                     wx.CallAfter(self._pump2_flow_target_ctrl.SetLabel, '0.0')
                     self._pump2_flow_target = '0.0'
@@ -4733,7 +4736,7 @@ class HPLCPanel(utils.DevicePanel):
         cmd = ['stop_purge', [self.name, flow_path,], {}]
         self._send_cmd(cmd, False)
 
-    def get_defauilt_equil_settings(self):
+    def get_default_equil_settings(self):
         default_equil_settings = {
             'equil_vol'     : self.settings['equil_volume'],
             'equil_rate'    : self.settings['equil_rate'],
@@ -4756,7 +4759,7 @@ class HPLCPanel(utils.DevicePanel):
         elif self._pump2_eq_btn == evt_obj:
             flow_path = 2
 
-        default_equil_settings = self.get_defauilt_equil_settings()
+        default_equil_settings = self.get_default_equil_settings()
 
         equil_dialog = EquilDialog(self, default_equil_settings,
             title='Equilibration {} settings'.format(flow_path))
@@ -4983,6 +4986,8 @@ class HPLCPanel(utils.DevicePanel):
                         self._pump2_flow_target = str(val)
 
     def get_default_sample_settings(self):
+
+
         default_sample_settings = {
             'acq_method'    : self.settings['acq_method'],
             'sample_loc'    : self.settings['sample_loc'],
@@ -4998,6 +5003,27 @@ class HPLCPanel(utils.DevicePanel):
             'all_acq_methods'       : self._methods,
             'all_sample_methods'    : self._sp_methods,
             }
+
+        default_method = default_sample_settings['acq_method']
+        if default_method not in default_sample_settings['all_acq_methods']:
+            default_method = os.path.splitext(default_method)[0]+'.amx'
+
+            if default_method not in default_sample_settings['all_acq_methods']:
+                default_method ='.\\{}'.format(default_method)
+
+            default_sample_settings['acq_method'] = default_method
+
+        default_sp_method = default_sample_settings['sp_method']
+        if default_sp_method not in default_sample_settings['all_sample_methods']:
+            if default_sp_method != '':
+                default_sp_method = os.path.splitext(default_sp_method)[0]+'.smx'
+
+                if default_method not in default_sample_settings['all_sample_methods']:
+                    default_method ='.\\{}'.format(default_method)
+            else:
+                default_sp_method = 'None'
+
+            default_sample_settings['sp_method'] = default_sp_method
 
         return default_sample_settings
 
@@ -5730,29 +5756,35 @@ class HPLCPanel(utils.DevicePanel):
             state = 'equil'
 
         elif cmd_name == 'switch_pumps':
-            flow_path = cmd_kwargs.pop('flow_path')
-            success = self._validate_and_switch(flow_path, cmd_kwargs)
+            flow_path = int(cmd_kwargs.pop('flow_path'))
 
-            state = 'switch'
+            if flow_path != int(self._flow_path):
+                success = self._validate_and_switch(flow_path, cmd_kwargs)
+                state = 'switch'
+            else:
+                state = self._get_automator_state(flow_path)
+
+        elif cmd_name == 'stop_flow':
+            flow_path = cmd_kwargs['flow_path']
+            self._stop_flow(flow_path)
+
+            state = 'idle'
 
         elif cmd_name == 'abort':
             state = 'idle'
+            inst_name = cmd_kwargs['inst_name']
+            abort_flow_path = int(inst_name.split('_')[-1].lstrip('pump'))
 
-            if (self._inst_status == 'Run' or self._inst_status == 'Injecting'
-                or self._inst_status == 'PostRun' or self._inst_status == 'PreRun'):
+            if ((self._inst_status == 'Run' or self._inst_status == 'Injecting'
+                or self._inst_status == 'PostRun' or self._inst_status == 'PreRun')
+                and abort_flow_path == int(self._flow_path)):
                 self._on_abort_current_run(None)
 
             else:
-                inst_name = cmd_kwargs['inst_name']
-                flow_path = int(inst_name.split('_')[-1].lstrip('pump'))
-
                 if self._flow_path_status.lower() == 'true':
                     self._on_stop_switch(None)
 
-                elif self._sampler_submitting.lower() == 'true':
-                    self._on_stop_submission(None)
-
-                elif flow_path == 1:
+                elif abort_flow_path == 1:
                     if self._pump1_eq.lower() == 'true':
                         self._stop_eq(1)
 
@@ -5760,7 +5792,11 @@ class HPLCPanel(utils.DevicePanel):
                         and self._pump1_purge.lower() == 'true'):
                         self._stop_purge(1)
 
-                elif flow_path == 2:
+                    elif (self._sampler_submitting.lower() == 'true'
+                        and int(self._flow_path) == 1):
+                        self._on_stop_submission(None)
+
+                elif abort_flow_path == 2:
                     if self._pump2_eq.lower() == 'true':
                         self._stop_eq(2)
 
@@ -5768,7 +5804,14 @@ class HPLCPanel(utils.DevicePanel):
                         and self._pump2_purge.lower() == 'true'):
                         self._stop_purge(2)
 
+                    elif (self._sampler_submitting.lower() == 'true'
+                        and int(self._flow_path) == 2):
+                        self._on_stop_submission(None)
+
         return state, success
+
+    def on_exit(self):
+        pass
 
 
 
@@ -6475,7 +6518,7 @@ default_hplc_2pump_settings = {
     'equil_accel'               : 0.1,
     'equil_purge'               : True,
     'equil_with_sample'         : False,
-    'stop_after_equil'          : True,
+    'stop_after_equil'          : False,
     'switch_purge_active'       : True,
     'switch_purge_volume'       : 1,
     'switch_purge_rate'         : 1,

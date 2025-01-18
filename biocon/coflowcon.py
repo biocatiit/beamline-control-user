@@ -1188,6 +1188,8 @@ class CoflowPanel(wx.Panel):
         try:
             wx.FindWindowByName('biocon').Layout()
             wx.FindWindowByName('biocon').Fit()
+            wx.FindWindowByName('biocon').Refresh()
+            wx.FindWindowByName('biocon').SendSizeEvent()
         except Exception:
             pass
 
@@ -2065,7 +2067,8 @@ class CoflowPanel(wx.Panel):
             flow_rate = float(cmd_kwargs['flow_rate'])
             self._change_flow_rate(flow_rate)
             self._start_flow()
-            state = 'idle'
+            state = self._get_automator_state()
+            wx.CallAfter(self.flow_rate.ChangeValue, str(flow_rate))
 
         elif cmd_name == 'stop':
             self.stop_flow(False)
@@ -2075,6 +2078,7 @@ class CoflowPanel(wx.Panel):
             flow_rate = float(cmd_kwargs['flow_rate'])
             self._change_flow_rate(flow_rate)
             state = self._get_automator_state()
+            wx.CallAfter(self.flow_rate.ChangeValue, str(flow_rate))
 
         elif cmd_name == 'change_buf':
             buffer_pos = int(cmd_kwargs['buffer_pos'])

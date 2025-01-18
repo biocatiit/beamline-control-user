@@ -34,6 +34,7 @@ if __name__ != '__main__':
     logger = logging.getLogger(__name__)
 
 import wx
+import wx.lib.scrolledpanel as scrolled
 
 import expcon
 import coflowcon
@@ -194,13 +195,14 @@ class BioFrame(wx.Frame):
         inst_settings = {}
 
         if 'hplc' in self.settings['components']:
+            self.settings[key]['hplc_inst'] = 'hplc'
             hplc_panel = self.component_panels['hplc']
             hplc_automator_callback = hplc_panel.automator_callback
             if hplc_panel._device_type == 'AgilentHPLC2Pumps':
                 num_paths = 2
             else:
                 num_paths = 1
-            inst_settings['hplc1'] = {'num_paths': num_paths,
+            inst_settings['hplc'] = {'num_paths': num_paths,
                 'automator_callback': hplc_automator_callback}
         if 'coflow' in self.settings['components']:
             coflow_panel = self.component_panels['coflow']
@@ -231,7 +233,11 @@ class BioFrame(wx.Frame):
             select=True)
 
         for key, page in component_sizers.items():
-            self.top_notebook.AddPage(page, text=key.capitalize())
+            if key == 'hplc' or key == 'uv':
+                label = key.upper()
+            else:
+                label = key.capitalize()
+            self.top_notebook.AddPage(page, text=label)
 
         panel_sizer = wx.BoxSizer(wx.VERTICAL)
         panel_sizer.Add(self.top_notebook, flag=wx.EXPAND, proportion=1)
@@ -255,21 +261,21 @@ class BioFrame(wx.Frame):
                 elif key == 'trsaxs_flow':
                     label ='TRSAXS Flow'
 
-                elif key == 'uv':
-                    label = 'UV'
-
                 else:
-                    label = key.capitalize()
+                    if key == 'hplc' or key == 'uv':
+                        label = key.upper()
+                    else:
+                        label = key.capitalize()
 
                 if notebook:
-                    box_panel = wx.Panel(top_panel)
+                    box_panel = scrolled.ScrolledPanel(top_panel)
                 else:
                     box_panel = top_panel
 
                 box = wx.StaticBox(box_panel, label=label)
                 # box.SetOwnForegroundColour(wx.Colour('firebrick'))
 
-                if key != 'uv':
+                if key != 'uv' and key != 'hplc':
                     component_panel = self.settings['components'][key](self.settings[key],
                         box, name=key)
                 else:
@@ -282,6 +288,7 @@ class BioFrame(wx.Frame):
 
                 if notebook:
                     box_panel.SetSizer(component_sizer)
+                    box_panel.SetupScrolling()
                     component_sizers[key] = box_panel
                 else:
                     component_sizers[key] = component_sizer
@@ -759,6 +766,7 @@ if __name__ == '__main__':
     hplc_settings['remote_device'] = 'hplc'
     hplc_settings['remote_ip'] = '164.54.204.113'
     hplc_settings['remote_port'] = '5556'
+    hplc_settings['device_data'] = hplc_settings['device_init'][0]
 
 
     automator_settings = autocon.default_automator_settings
@@ -767,14 +775,14 @@ if __name__ == '__main__':
 
     components = OrderedDict([
         ('exposure', expcon.ExpPanel),
-        # ('coflow', coflowcon.CoflowPanel),
+        ('coflow', coflowcon.CoflowPanel),
         # ('trsaxs_scan', trcon.TRScanPanel),
         # ('trsaxs_flow', trcon.TRFlowPanel),
         # ('scan',    scancon.ScanPanel),
         ('metadata', metadata.ParamPanel),
         # ('pipeline', pipeline_ctrl.PipelineControl),
         # ('uv', spectrometercon.UVPanel),
-        # ('hplc', biohplccon.HPLCPanel),
+        ('hplc', biohplccon.HPLCPanel),
         ('automator', autocon.AutoPanel)
         ])
 

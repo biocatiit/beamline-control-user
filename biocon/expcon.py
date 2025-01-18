@@ -4015,7 +4015,9 @@ class ExpPanel(wx.Panel):
                 state = 'idle'
 
         elif cmd_name == 'abort':
-            self.stop_exp()
+            if (self._exp_status == 'Exposing'
+                or self._exp_status == 'Waiting for Trigger'):
+                self.stop_exp()
 
             state = 'idle'
 
