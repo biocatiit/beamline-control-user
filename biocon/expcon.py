@@ -142,7 +142,7 @@ class ExpCommThread(threading.Thread):
             logger.debug('Getting epics detector')
             record_name = self._settings['detector'].rstrip('_epics')
 
-            det_args = self._settings['det_args']            
+            det_args = self._settings['det_args']
             det = detectorcon.EPICSEigerDetector(record_name, **det_args)
 
         logger.debug("Got detector records")
@@ -3480,6 +3480,35 @@ class ExpPanel(wx.Panel):
         joerger_log_vals = self.settings['joerger_log_vals']
         struck_measurement_time = self.muscle_sampling.GetValue()
 
+        (num_frames, exp_time, exp_period, data_dir, filename,
+            wait_for_trig, num_trig, valid, errors) = self._validate_exp_values(
+            num_frames, exp_time, exp_period, data_dir, filename,
+            wait_for_trig, num_trig, verbose=verbose)
+
+        exp_values = {
+            'num_frames'                : num_frames,
+            'exp_time'                  : exp_time,
+            'exp_period'                : exp_period,
+            'data_dir'                  : data_dir,
+            'local_data_dir'            : local_data_dir,
+            'fprefix'                   : filename+run_num,
+            'wait_for_trig'             : wait_for_trig,
+            'num_trig'                  : num_trig,
+            'shutter_speed_open'        : shutter_speed_open,
+            'shutter_speed_close'       : shutter_speed_close,
+            'shutter_cycle'             : shutter_cycle,
+            'shutter_pad'               : shutter_pad,
+            'joerger_log_vals'          : joerger_log_vals,
+            'struck_log_vals'           : struck_log_vals,
+            'struck_measurement_time'   : struck_measurement_time,
+            'struck_num_meas'           : struck_num_meas,
+            }
+
+        return exp_values, valid
+
+    def _validate_exp_values(self, num_frames, exp_time, exp_period, data_dir,
+        filename, wait_for_trig, num_trig, verbose=True):
+
         errors = []
 
         try:
@@ -3516,7 +3545,8 @@ class ExpPanel(wx.Panel):
 
         if isinstance(num_frames, int):
             if num_frames < 1 or num_frames > self.settings['nframes_max']:
-                errors.append('Number of frames (between 1 and {}'.format(self.settings['nframes_max']))
+                errors.append('Number of frames (between 1 and {}'.format(
+                    self.settings['nframes_max']))
 
         if isinstance(exp_time, float):
             if (exp_time < self.settings['exp_time_min']
@@ -3579,7 +3609,6 @@ class ExpPanel(wx.Panel):
             wx.CallAfter(wx.MessageBox, msg, 'Error in exposure parameters',
                 style=wx.OK|wx.ICON_ERROR)
 
-            exp_values = {}
             valid = False
 
         else:
@@ -3593,28 +3622,12 @@ class ExpPanel(wx.Panel):
             else:
                 struck_num_meas = 0
 
-            exp_values = {
-                'num_frames'                : num_frames,
-                'exp_time'                  : exp_time,
-                'exp_period'                : exp_period,
-                'data_dir'                  : data_dir,
-                'local_data_dir'            : local_data_dir,
-                'fprefix'                   : filename+run_num,
-                'wait_for_trig'             : wait_for_trig,
-                'num_trig'                  : num_trig,
-                'shutter_speed_open'        : shutter_speed_open,
-                'shutter_speed_close'       : shutter_speed_close,
-                'shutter_cycle'             : shutter_cycle,
-                'shutter_pad'               : shutter_pad,
-                'joerger_log_vals'          : joerger_log_vals,
-                'struck_log_vals'           : struck_log_vals,
-                'struck_measurement_time'   : struck_measurement_time,
-                'struck_num_meas'           : struck_num_meas,
-                }
+
 
             valid = True
 
-        return exp_values, valid
+        return (num_frames, exp_time, exp_period, data_dir, filename,
+            wait_for_trig, num_trig, valid, errors)
 
     def _check_components(self, exp_only, verbose=True):
         comp_settings = {}
@@ -3811,11 +3824,11 @@ class ExpPanel(wx.Panel):
             if metadata['Coflow on:']:
                 if column is not None and flow_rate is not None:
                     if '10/300' in column:
-                        flow_range = (0.5, 0.8)
+                        flow_range = (0.4, 0.8)
                     elif '5/150' in column:
-                        flow_range = (0.25, 0.5)
+                        flow_range = (0.2, 0.5)
                     elif 'Wyatt' in column:
-                        flow_range = (0.5, 0.8)
+                        flow_range = (0.4, 0.8)
                     else:
                         flow_range = None
 

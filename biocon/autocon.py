@@ -1455,6 +1455,15 @@ class AutoList(utils.ItemList):
                     if cmd_settings['coflow_from_fr']:
                         cmd_settings['coflow_fr'] = float(cmd_settings['flow_rate'])
 
+                    cmd_settings, exp_valid, exp_errors = self._validate_exp_params(
+                        cmd_settings)
+
+                    cmd_settings, coflow_valid, coflow_errors = self._validate_coflow_params(
+                        cmd_settings)
+
+                    #### Add hplc setting verification here
+
+
                 elif cmd_settings['item_type'] == 'equilibrate':
                     # Do equilibration verification here
 
@@ -1470,8 +1479,92 @@ class AutoList(utils.ItemList):
                     cmd_settings['data_dir'] = os.path.join(cmd_settings['data_dir'],
                         cmd_settings['filename'])
 
+                    cmd_settings, exp_valid, exp_errors = self._validate_exp_params(
+                        cmd_settings)
+
 
                 self._add_item(cmd_settings)
+
+    def _validate_exp_params(self, cmd_settings, sec_saxs=True):
+        exp_panel = wx.FindWindowByName('exposure')
+        'num_frames'    : default_exp_settings['num_frames'],
+                    'exp_time'      : default_exp_settings['exp_time'],
+                    'exp_period'    : default_exp_settings['exp_period'],
+                    'data_dir'      : exp_panel.settings['base_data_dir'],
+                    'filename'      : '',
+                    'wait_for_trig' : default_exp_settings['wait_for_trig'],
+                    'num_trig'      : default_exp_settings['num_trig'],
+                    #Not used, for completeness
+                    'musc_samp'     : default_exp_settings['struck_measurement_time'],
+
+
+        num_frames = cmd_settings['num_frames']
+        exp_time = cmd_settings['exp_time']
+        exp_period = cmd_settings['exp_period']
+        data_dir = cmd_settings['data_dir']
+        filename = cmd_settings['filename']
+        wait_for_trig = cmd_settings['wait_for_trig']
+        num_trig = cmd_settings['num_trig']
+
+        (num_frames, exp_time, exp_period, data_dir, filename,
+            wait_for_trig, num_trig, valid, errors) = self._validate_exp_values(
+            num_frames, exp_time, exp_period, data_dir, filename,
+            wait_for_trig, num_trig, verbose=False)
+
+        if sec_saxs:
+            if exp_time < 0.125:
+                errors.append('Exposure time with UV data collection must be >= 0.125 s')
+
+            if (exp_period - exp_time < 0.01):
+                errors.append(('Exposure period must be at least 0.01 s longer '
+                    'than exposure time with UV data collection'))
+
+        cmd_settings['num_frames'] = num_frames
+        cmd_settings['exp_time'] = exp_time
+        cmd_settings['exp_period'] = exp_period
+        cmd_settings['data_dir'] = data_dir
+        cmd_settings['filename'] = filename
+        cmd_settings['wait_for_trig'] = wait_for_trig
+        cmd_settings['num_trig'] = num_trig
+
+        if len(errors) > 0:
+            valid = False
+
+        return cmd_settings, valid, errors
+
+    def _validate_coflow_parms(self, cmd_settings):
+        errors = []
+
+        column = cmd_settings['column']
+        try:
+            flow_rate = float(cmd_settings['flow_rate'])
+        except ValueError:
+            flow_rate = None
+
+        if column is not None and flow_rate is not None:
+            if '10/300' in column:
+                flow_range = (0.4, 0.8)
+            elif '5/150' in column:
+                flow_range = (0.2, 0.5)
+            elif 'Wyatt' in column:
+                flow_range = (0.4, 0.8)
+            else:
+                flow_range = None
+
+            if flow_range is not None:
+                if flow_rate < flow_range[0] or flow_rate > flow_range[1]:
+                    msg = ('Flow rate of {} is not in the usual '
+                        'range of {} to {} for column {}'.format(flow_rate,
+                        flow_range[0], flow_range[1], column))
+
+                    errors.append(msg)
+
+        if len(errors) > 0:
+            valid = False
+        else:
+            valid = True
+
+        return cmd_settings, valid, errors
 
     def _add_item(self, item_info):
 
