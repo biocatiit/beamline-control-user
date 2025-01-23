@@ -4508,26 +4508,70 @@ class HPLCPanel(utils.DevicePanel):
         if switch_settings is not None:
             self._validate_and_switch(flow_path, switch_settings)
 
-    def _validate_and_switch(self, flow_path, switch_settings):
-        do_switch = True
+    def _validate_and_switch(self, flow_path, switch_settings, verbose=True):
+        valid, errors = self.validate_switch_params(switch_settings)
 
-        if switch_settings['purge_active']:
-            try:
-                switch_settings['purge_volume'] = float(switch_settings['purge_volume'])
-                switch_settings['purge_rate'] = float(switch_settings['purge_rate'])
-                switch_settings['purge_accel'] = float(switch_settings['purge_accel'])
-                switch_settings['purge_max_pressure'] = self.settings['purge_max_pressure']
-            except Exception:
-                do_switch = False
-
-        if do_switch:
-            if switch_settings['purge_volume'] == 0:
-                switch_settings['purge_active'] = False
+        if valid:
+            switch_settings['purge_max_pressure'] = self.settings['purge_max_pressure']
 
             cmd = ['set_active_flow_path', [self.name, flow_path], switch_settings]
             self._send_cmd(cmd, False)
 
+            do_switch = True
+
+        else:
+            do_switch = False
+
+            if verbose:
+                msg = 'The following field(s) have invalid values:'
+                for err in errors:
+                    msg = msg + '\n- ' + err
+                msg = msg + ('\n\nPlease correct these errors, then start the '
+                    'switch.')
+
+                wx.CallAfter(wx.MessageBox, msg, 'Error in switch parameters',
+                    style=wx.OK|wx.ICON_ERROR)
+
         return do_switch
+
+    def validate_switch_params(self, switch_settings):
+        errors = []
+
+        if switch_settings['purge_active']:
+            try:
+                switch_settings['purge_volume'] = float(switch_settings['purge_volume'])
+            except Exception:
+                errors.append('Purge volume (must be >0)')
+
+            try:
+                switch_settings['purge_rate'] = float(switch_settings['purge_rate'])
+            except Exception:
+                errors.append('Purge rate (must be >0)')
+
+            try:
+                switch_settings['purge_accel'] = float(switch_settings['purge_accel'])
+            except Exception:
+                errors.append('Purge acceleration (must be >0)')
+
+        if switch_settings['purge_active']:
+            if isinstance(switch_settings['purge_volume'], float):
+                if switch_settings['purge_volume'] <= 0:
+                    errors.append('Purge volume (must be >0)')
+
+            if isinstance(switch_settings['purge_rate'], float):
+                if switch_settings['purge_rate'] <= 0:
+                    errors.append('Purge rate (must be >0)')
+
+            if isinstance(switch_settings['purge_accel'], float):
+                if switch_settings['purge_accel'] <= 0:
+                    errors.append('Purge acceleration (must be >0)')
+
+        if len(errors) > 0:
+            valid = False
+        else:
+            valid =  True
+
+        return valid, errors
 
     def _on_stop_all(self, evt):
         cmd = ['stop_all', [self.name,], {}]
@@ -4775,23 +4819,16 @@ class HPLCPanel(utils.DevicePanel):
         if equil_settings is not None:
             self._validate_and_equilibrate(flow_path, equil_settings)
 
-    def _validate_and_equilibrate(self, flow_path, equil_settings):
-        equil_vol = equil_settings.pop('equil_vol')
-        equil_rate = equil_settings.pop('equil_rate')
-        equil_accel = equil_settings.pop('equil_accel')
+    def _validate_and_equilibrate(self, flow_path, equil_settings, verbose=True):
+        valid, errors = self.validate_equil_params(equil_settings)
 
-        try:
-            equil_vol = float(equil_vol)
-            equil_rate = float(equil_rate)
-            equil_accel = float(equil_accel)
-            equil_settings['purge_volume'] = float(equil_settings['purge_volume'])
-            equil_settings['purge_rate'] = float(equil_settings['purge_rate'])
-            equil_settings['purge_accel'] = float(equil_settings['purge_accel'])
+        if valid:
+            equil_vol = equil_settings.pop('equil_vol')
+            equil_rate = equil_settings.pop('equil_rate')
+            equil_accel = equil_settings.pop('equil_accel')
+
             equil_settings['purge_max_pressure'] = self.settings['purge_max_pressure']
-        except Exception:
-            equil_vol = None
 
-        if equil_vol is not None:
             cmd = ['equil_flow_path', [self.name, flow_path, equil_vol,
                 equil_rate, equil_accel], equil_settings]
             self._send_cmd(cmd, False)
@@ -4801,7 +4838,93 @@ class HPLCPanel(utils.DevicePanel):
         else:
             run_equil = False
 
+            if verbose:
+                msg = 'The following field(s) have invalid values:'
+                for err in errors:
+                    msg = msg + '\n- ' + err
+                msg = msg + ('\n\nPlease correct these errors, then start the '
+                    'equilibration.')
+
+                wx.CallAfter(wx.MessageBox, msg, 'Error in equilibration parameters',
+                    style=wx.OK|wx.ICON_ERROR)
+
         return run_equil
+
+    def validate_equil_params(self, equil_settings):
+        equil_vol = equil_settings['equil_vol']
+        equil_rate = equil_settings['equil_rate']
+        equil_accel = equil_settings['equil_accel']
+
+        errors = []
+
+        try:
+            equil_vol = float(equil_vol)
+        except Exception:
+            errors.append('Equilibration volume (must be >0)')
+
+        try:
+            equil_rate = float(equil_rate)
+        except Exception:
+            errors.append('Equilibration rate (must be >0)')
+
+        try:
+            equil_accel = float(equil_accel)
+        except Exception:
+            errors.append('Equilibration acceleration (must be >0)')
+
+        if equil_settings['purge']:
+            try:
+                equil_settings['purge_volume'] = float(equil_settings['purge_volume'])
+            except Exception:
+                errors.append('Purge volume (must be >0)')
+
+            try:
+                equil_settings['purge_rate'] = float(equil_settings['purge_rate'])
+            except Exception:
+                errors.append('Purge rate (must be >0)')
+
+            try:
+                equil_settings['purge_accel'] = float(equil_settings['purge_accel'])
+            except Exception:
+                errors.append('Purge acceleration (must be >0)')
+
+        if isinstance(equil_vol, float):
+            if equil_vol <= 0:
+                errors.append('Equilibration volume (must be >0)')
+
+        if isinstance(equil_rate, float):
+            if equil_rate <= 0:
+                errors.append('Equilibration rate (must be >0)')
+
+        if isinstance(equil_accel, float):
+            if equil_accel <= 0:
+                errors.append('Equilibration acceleration (must be >0)')
+
+        if equil_settings['purge']:
+            if isinstance(equil_settings['purge_volume'], float):
+                if equil_settings['purge_volume'] <= 0:
+                    errors.append('Purge volume (must be >0)')
+
+            if isinstance(equil_settings['purge_rate'], float):
+                if equil_settings['purge_rate'] <= 0:
+                    errors.append('Purge rate (must be >0)')
+
+            if isinstance(equil_settings['purge_accel'], float):
+                if equil_settings['purge_accel'] <= 0:
+                    errors.append('Purge acceleration (must be >0)')
+
+        if len(errors) > 0:
+            valid = False
+        else:
+            valid =  True
+
+        if valid:
+            equil_settings['equil_vol'] = equil_vol
+            equil_settings['equil_rate'] = equil_rate
+            equil_settings['equil_accel'] = equil_accel
+
+        return valid, errors
+
 
     def _on_stop_eq(self, evt):
         evt_obj = evt.GetEventObject()
@@ -5044,30 +5167,20 @@ class HPLCPanel(utils.DevicePanel):
         if sample_settings is not None:
             self._validate_and_submit_sample(sample_settings)
 
-    def _validate_and_submit_sample(self, sample_settings):
-        sample_name = sample_settings.pop('sample_name')
-        acq_method = sample_settings.pop('acq_method')
-        sample_loc = sample_settings.pop('sample_loc')
-        inj_vol = sample_settings.pop('inj_vol')
-        flow_rate = sample_settings.pop('flow_rate')
-        flow_accel = sample_settings.pop('flow_accel')
-        elution_vol = sample_settings.pop('elution_vol')
-        pressure_lim = sample_settings.pop('pressure_lim')
+    def _validate_and_submit_sample(self, sample_settings, verbose=True):
+        valid, errors = self.validate_injection_params(sample_settings)
 
-        try:
-            inj_vol = float(inj_vol)
-            flow_rate = float(flow_rate)
-            flow_accel = float(flow_accel)
-            elution_vol = float(elution_vol)
-            pressure_lim = float(pressure_lim)
+        if valid:
 
-            if sample_settings['wait_for_flow_ramp']:
-                sample_settings['settle_time'] = float(sample_settings['settle_time'])
+            sample_name = sample_settings.pop('sample_name')
+            acq_method = sample_settings.pop('acq_method')
+            sample_loc = sample_settings.pop('sample_loc')
+            inj_vol = sample_settings.pop('inj_vol')
+            flow_rate = sample_settings.pop('flow_rate')
+            flow_accel = sample_settings.pop('flow_accel')
+            elution_vol = sample_settings.pop('elution_vol')
+            pressure_lim = sample_settings.pop('pressure_lim')
 
-        except Exception:
-            inj_vol = None
-
-        if inj_vol is not None:
             cmd = ['submit_sample', [self.name, sample_name, acq_method,
                 sample_loc, inj_vol, flow_rate, flow_accel, elution_vol,
                 pressure_lim], sample_settings]
@@ -5078,7 +5191,122 @@ class HPLCPanel(utils.DevicePanel):
         else:
             run_sample = False
 
+            if verbose:
+                msg = 'The following field(s) have invalid values:'
+                for err in errors:
+                    msg = msg + '\n- ' + err
+                msg = msg + ('\n\nPlease correct these errors, then start the run.')
+
+                wx.CallAfter(wx.MessageBox, msg, 'Error in injection parameters',
+                    style=wx.OK|wx.ICON_ERROR)
+
         return run_sample
+
+    def validate_injection_params(self, sample_settings):
+        sample_name = sample_settings['sample_name']
+        acq_method = sample_settings['acq_method']
+        sample_loc = sample_settings['sample_loc']
+        inj_vol = sample_settings['inj_vol']
+        flow_rate = sample_settings['flow_rate']
+        flow_accel = sample_settings['flow_accel']
+        elution_vol = sample_settings['elution_vol']
+        pressure_lim = sample_settings['pressure_lim']
+
+        errors = []
+
+        if len(sample_name) == 0:
+            errors.append('Sample name (must not be blank)')
+
+        if len(acq_method) == 0:
+            errors.append('Acquisition method (must not be blank)')
+
+        if '-' in sample_loc:
+            drawer, spot = sample_loc.split('-')
+            if drawer not in ['D1F', 'D1B', 'D2F', 'D2B', 'D3F', 'D3B']:
+                errors.append('Drawer (not a valid drawer location)')
+
+            if not spot[0].isalpha():
+                errors.append('Sample well/position not valid')
+
+            elif not spot[1:].isdigit():
+                errors.append('Sample well/position not valid')
+
+        else:
+            if not sample_loc.isdigit():
+                errors.append('Sample well/position not valid')
+
+        try:
+            inj_vol = float(inj_vol)
+        except Exception:
+            errors.append('Injection volume (between 1 and {} uL)'.format(
+                self.settings['max_inj_vol']))
+
+        try:
+            flow_rate = float(flow_rate)
+        except Exception:
+            errors.append('Flow rate (must be >0)')
+
+        try
+            flow_accel = float(flow_accel)
+        except Exception:
+            errors.append('Flow acceleration (must be >0)')
+
+        try:
+            elution_vol = float(elution_vol)
+        except Exception:
+            errors.append('Elution volume (must be >0)')
+
+        try:
+            pressure_lim = float(pressure_lim)
+        except Exception:
+            errors.append('Pressure limit (must be >0)')
+
+        try:
+            if sample_settings['wait_for_flow_ramp']:
+                sample_settings['settle_time'] = float(sample_settings['settle_time'])
+        except Exception:
+            errors.append('Settling time (must be >=0)')
+
+        if isinstance(inj_vol, float):
+            if inj_vol < 1 or in_vol > self.settings['max_inj_vol']:
+                errors.append('Injection volume (between 1 and {} uL)'.format(
+                    self.settings['max_inj_vol']))
+
+        if isinstance(flow_rate, float):
+            if flow_rate <= 0:
+                errors.append('Flow rate (must be >0)')
+
+        if isinstance(flow_accel, float):
+            if flow_accel <= 0:
+                errors.append('Flow acceleration (must be >0)')
+
+        if isinstance(elution_vol, float):
+            if elution_vol <= 0:
+                errors.append('Elution volume (must be >0)')
+
+        if isinstance(pressure_lim, float):
+            if pressure_lim <= 0:
+                errors.append('Pressure limit (must be >0)')
+
+        if sample_settings['wait_for_flow_ramp']:
+            if isinstance(sample_settings['settle_time'], float):
+                if sample_settings['settle_time'] < 0:
+                    errors.append('Settling time (must be >=0)')
+
+        if len(errors) > 0:
+            valid = False
+        else:
+            valid =  True
+
+        if valid:
+            sample_settings['inj_vol'] = inj_vol
+            sample_settings['flow_rate'] = flow_rate
+            sample_settings['flow_accel'] = flow_accel
+            sample_settings['elution_vol'] = elution_vol
+            sample_settings['pressure_lim'] = pressure_lim
+
+        return valid, errors
+
 
     def _on_stop_submission(self, evt):
         cmd = ['stop_sample_submission', [self.name,], {}]
@@ -5742,7 +5970,7 @@ class HPLCPanel(utils.DevicePanel):
 
             if (acq_method in self._methods and (sp_method is None
                 or sp_method in self._sp_methods)):
-                success = self._validate_and_submit_sample(cmd_kwargs)
+                success = self._validate_and_submit_sample(cmd_kwargs, False)
 
             else:
                 success = False
@@ -5751,7 +5979,7 @@ class HPLCPanel(utils.DevicePanel):
 
         elif cmd_name == 'equilibrate':
             flow_path = cmd_kwargs.pop('flow_path')
-            success = self._validate_and_equilibrate(flow_path, cmd_kwargs)
+            success = self._validate_and_equilibrate(flow_path, cmd_kwargs, False)
 
             state = 'equil'
 
@@ -5759,7 +5987,7 @@ class HPLCPanel(utils.DevicePanel):
             flow_path = int(cmd_kwargs.pop('flow_path'))
 
             if flow_path != int(self._flow_path):
-                success = self._validate_and_switch(flow_path, cmd_kwargs)
+                success = self._validate_and_switch(flow_path, cmd_kwargs, False)
                 state = 'switch'
             else:
                 state = self._get_automator_state(flow_path)
@@ -6535,6 +6763,7 @@ default_hplc_2pump_settings = {
     'flow_accel'                : 0.1,
     'elution_vol'               : 30,
     'sample_pressure_lim'       : 60.0,
+    'max_inj_vol'               : 400.0,
     'result_path'               : '',
     'sp_method'                 : '',
     'wait_for_flow_ramp'        : True,

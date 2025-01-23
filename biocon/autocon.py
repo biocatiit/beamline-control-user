@@ -1212,86 +1212,126 @@ class AutoList(utils.ItemList):
 
     def _on_add_item(self, evt):
         # Call a dialog to get item information
-        dialog = wx.SingleChoiceDialog(self, 'Pick an action to add:',
-            'Pick an action to add to the queue',
-            ['Run SEC-SAXS sample', 'Equilibrate column',
-            'Switch pumps', '----Staff Methods----', 'Standalone Exposure'])
+        self._add_item()
 
-        dialog.SetSize(self._FromDIP((300,250)))
+    def _add_item(self, settings=None):
 
-        res = dialog.ShowModal()
+        if settings is None:
+            dialog = wx.SingleChoiceDialog(self, 'Pick an action to add:',
+                'Pick an action to add to the queue',
+                ['Run SEC-SAXS sample', 'Equilibrate column',
+                'Switch pumps', '----Staff Methods----', 'Standalone Exposure'])
 
-        if res == wx.ID_OK:
-            choice = dialog.GetStringSelection()
+            dialog.SetSize(self._FromDIP((300,250)))
+
+            res = dialog.ShowModal()
+
+            if res == wx.ID_OK:
+                choice = dialog.GetStringSelection()
+
+            else:
+                choice = None
+
+            dialog.Destroy()
 
         else:
-            choice = None
+            if settings['item_type'] == 'sec_sample':
+                choice = 'Run SEC-SAXS sample'
+            elif settings['item_type'] == 'equilibrate':
+                choice = 'Equilibrate column'
+            elif settings['item_type'] == 'switch_pumps':
+                choice = 'Switch pumps'
+            elif settings['item_type'] == 'exposure':
+                choice = 'Standalone Exposure'
 
-        dialog.Destroy()
+        cmd_settings = self._get_cmd_settings(choice)
 
+        if cmd_settings is not None:
+
+            valid, err_msg = self._validate_cmd(cmd_settings)
+
+            if valid:
+                self._add_item(cmd_settings)
+            else:
+                with wx.MessageDialog(self, err_msg,
+                    caption='Action Parameter Errors',
+                    style=wx.OK|wx.CANCEL|wx.OK_DEFAULT) as err_dialog:
+
+                    err_dialog.SetOKLabel('Fix errors')
+
+                    ret = err_dialog.ShowModal()
+
+                    if ret == wx.ID_OK:
+                        wx.CallAfter(self._add_item, cmd_settings)
+
+    def _get_cmd_settings(self, choice):
         if choice is not None and choice != '----Staff Methods----':
             if choice == 'Run SEC-SAXS sample':
-                exp_panel = wx.FindWindowByName('exposure')
-                default_exp_settings, _ = exp_panel.get_exp_values(False)
+                if settings is None:
+                    exp_panel = wx.FindWindowByName('exposure')
+                    default_exp_settings, _ = exp_panel.get_exp_values(False)
 
-                hplc_panel = wx.FindWindowByName('hplc')
-                default_inj_settings = hplc_panel.get_default_sample_settings()
+                    hplc_panel = wx.FindWindowByName('hplc')
+                    default_inj_settings = hplc_panel.get_default_sample_settings()
 
-                coflow_panel = wx.FindWindowByName('coflow')
-                coflow_fr = coflow_panel.get_flow_rate()
-                try:
-                    coflow_fr = float(coflow_fr)
-                except ValueError:
-                    coflow_fr = float(coflow_panel.settings['lc_flow_rate'])
+                    coflow_panel = wx.FindWindowByName('coflow')
+                    coflow_fr = coflow_panel.get_flow_rate()
+                    try:
+                        coflow_fr = float(coflow_fr)
+                    except ValueError:
+                        coflow_fr = float(coflow_panel.settings['lc_flow_rate'])
 
-                default_settings = {
-                    # General parameters
-                    'item_type'     : 'sec_sample',
-                    'notes'         : '',
-                    'conc'          : '',
-                    'buf'           : '',
-                    'inst'          : '{}_pump'.format(self.auto_panel.settings['hplc_inst']),
-                    'sample_name'   : '',
-                    'column'        : 'Superdex 200 10/300 Increase',
-                    'temp'          : '20',
+                    default_settings = {
+                        # General parameters
+                        'item_type'     : 'sec_sample',
+                        'notes'         : '',
+                        'conc'          : '',
+                        'buf'           : '',
+                        'inst'          : '{}_pump'.format(self.auto_panel.settings['hplc_inst']),
+                        'sample_name'   : '',
+                        'column'        : 'Superdex 200 10/300 Increase',
+                        'temp'          : '20',
 
-                    # Injection parameters
-                    'acq_method'    : default_inj_settings['acq_method'],
-                    'sample_loc'    : default_inj_settings['sample_loc'],
-                    'inj_vol'       : default_inj_settings['inj_vol'],
-                    'flow_rate'     : default_inj_settings['flow_rate'],
-                    'elution_vol'   : default_inj_settings['elution_vol'],
-                    'flow_accel'    : default_inj_settings['flow_accel'],
-                    'pressure_lim'  : default_inj_settings['pressure_lim'],
-                    'result_path'   : default_inj_settings['result_path'],
-                    'sp_method'     : default_inj_settings['sp_method'],
-                    'wait_for_flow_ramp'    : default_inj_settings['wait_for_flow_ramp'],
-                    'settle_time'   : default_inj_settings['settle_time'],
-                    'flow_path'     : 1,
-                    'stop_flow'     : False,
+                        # Injection parameters
+                        'acq_method'    : default_inj_settings['acq_method'],
+                        'sample_loc'    : default_inj_settings['sample_loc'],
+                        'inj_vol'       : default_inj_settings['inj_vol'],
+                        'flow_rate'     : default_inj_settings['flow_rate'],
+                        'elution_vol'   : default_inj_settings['elution_vol'],
+                        'flow_accel'    : default_inj_settings['flow_accel'],
+                        'pressure_lim'  : default_inj_settings['pressure_lim'],
+                        'result_path'   : default_inj_settings['result_path'],
+                        'sp_method'     : default_inj_settings['sp_method'],
+                        'wait_for_flow_ramp'    : default_inj_settings['wait_for_flow_ramp'],
+                        'settle_time'   : default_inj_settings['settle_time'],
+                        'flow_path'     : 1,
+                        'stop_flow'     : False,
 
-                    # Exposure parameters
-                    'frames_by_elut': True,
-                    'num_frames'    : default_exp_settings['num_frames'],
-                    'exp_time'      : default_exp_settings['exp_time'],
-                    'exp_period'    : default_exp_settings['exp_period'],
-                    'data_dir'      : exp_panel.settings['base_data_dir'],
-                    'filename'      : '',
-                    'wait_for_trig' : default_exp_settings['wait_for_trig'],
-                    'num_trig'      : default_exp_settings['num_trig'],
-                    #Not used, for completeness
-                    'musc_samp'     : default_exp_settings['struck_measurement_time'],
+                        # Exposure parameters
+                        'frames_by_elut': True,
+                        'num_frames'    : default_exp_settings['num_frames'],
+                        'exp_time'      : default_exp_settings['exp_time'],
+                        'exp_period'    : default_exp_settings['exp_period'],
+                        'data_dir'      : exp_panel.settings['base_data_dir'],
+                        'filename'      : '',
+                        'wait_for_trig' : default_exp_settings['wait_for_trig'],
+                        'num_trig'      : default_exp_settings['num_trig'],
+                        #Not used, for completeness
+                        'musc_samp'     : default_exp_settings['struck_measurement_time'],
 
-                    #Coflow parameters
-                    'coflow_from_fr': True,
-                    'start_coflow'  : True,
-                    'stop_coflow'   : False,
-                    'coflow_fr'     : coflow_fr,
-                    }
+                        #Coflow parameters
+                        'coflow_from_fr': True,
+                        'start_coflow'  : True,
+                        'stop_coflow'   : False,
+                        'coflow_fr'     : coflow_fr,
+                        }
 
-                inst = self.auto_panel.settings['hplc_inst']
-                num_flow_paths = self.auto_panel.settings['instruments'][inst]['num_paths']
-                default_settings['num_flow_paths'] = num_flow_paths
+                    inst = self.auto_panel.settings['hplc_inst']
+                    num_flow_paths = self.auto_panel.settings['instruments'][inst]['num_paths']
+                    default_settings['num_flow_paths'] = num_flow_paths
+
+                else:
+                    default_settings = settings
 
                 cmd_dialog = SecSampleCmdDialog(self, default_settings,
                     default_inj_settings['all_acq_methods'],
@@ -1299,123 +1339,135 @@ class AutoList(utils.ItemList):
                     title='SEC-SAXS Sample Settings')
 
             elif choice == 'Equilibrate column':
-                hplc_panel = wx.FindWindowByName('hplc')
-                default_equil_settings = hplc_panel.get_default_equil_settings()
+                if settings is None:
+                    hplc_panel = wx.FindWindowByName('hplc')
+                    default_equil_settings = hplc_panel.get_default_equil_settings()
 
-                coflow_panel = wx.FindWindowByName('coflow')
-                coflow_fr = coflow_panel.get_flow_rate()
-                try:
-                    coflow_fr = float(coflow_fr)
-                except ValueError:
-                    coflow_fr = float(coflow_panel.settings['lc_flow_rate'])
+                    coflow_panel = wx.FindWindowByName('coflow')
+                    coflow_fr = coflow_panel.get_flow_rate()
+                    try:
+                        coflow_fr = float(coflow_fr)
+                    except ValueError:
+                        coflow_fr = float(coflow_panel.settings['lc_flow_rate'])
 
-                default_settings = {
-                    # General parameterss
-                    'item_type' : 'equilibrate',
-                    'buf'       : '',
-                    'inst'      : '{}_pump'.format(self.auto_panel.settings['hplc_inst']),
+                    default_settings = {
+                        # General parameterss
+                        'item_type' : 'equilibrate',
+                        'buf'       : '',
+                        'inst'      : '{}_pump'.format(self.auto_panel.settings['hplc_inst']),
 
-                    # HPLC equilibrate parameters
-                    'equil_rate'        : default_equil_settings['equil_rate'],
-                    'equil_vol'         : default_equil_settings['equil_vol'],
-                    'equil_accel'       : default_equil_settings['equil_accel'],
-                    'purge'             : default_equil_settings['purge'],
-                    'purge_rate'        : default_equil_settings['purge_rate'],
-                    'purge_volume'      : default_equil_settings['purge_vol'],
-                    'purge_accel'       : default_equil_settings['purge_accel'],
-                    'equil_with_sample' : False,
-                    'stop_after_equil'  : default_equil_settings['stop_after_equil'],
-                    'flow_path'         : 1,
-                    'buffer_position'   : 1,
+                        # HPLC equilibrate parameters
+                        'equil_rate'        : default_equil_settings['equil_rate'],
+                        'equil_vol'         : default_equil_settings['equil_vol'],
+                        'equil_accel'       : default_equil_settings['equil_accel'],
+                        'purge'             : default_equil_settings['purge'],
+                        'purge_rate'        : default_equil_settings['purge_rate'],
+                        'purge_volume'      : default_equil_settings['purge_vol'],
+                        'purge_accel'       : default_equil_settings['purge_accel'],
+                        'equil_with_sample' : False,
+                        'stop_after_equil'  : default_equil_settings['stop_after_equil'],
+                        'flow_path'         : 1,
+                        'buffer_position'   : 1,
 
-                    # Coflow equilibrate parameters
-                    'coflow_equil'      : True,
-                    'coflow_buf_pos'    : 1,
-                    'coflow_restart'    : True,
-                    'coflow_rate'       : coflow_fr,
-                    }
+                        # Coflow equilibrate parameters
+                        'coflow_equil'      : True,
+                        'coflow_buf_pos'    : 1,
+                        'coflow_restart'    : True,
+                        'coflow_rate'       : coflow_fr,
+                        }
 
-                inst = self.auto_panel.settings['hplc_inst']
-                num_flow_paths = self.auto_panel.settings['instruments'][inst]['num_paths']
-                default_settings['num_flow_paths'] = num_flow_paths
+                    inst = self.auto_panel.settings['hplc_inst']
+                    num_flow_paths = self.auto_panel.settings['instruments'][inst]['num_paths']
+                    default_settings['num_flow_paths'] = num_flow_paths
 
-                if num_flow_paths == 1:
-                    default_settings['coflow_equil'] = True
+                    if num_flow_paths == 1:
+                        default_settings['coflow_equil'] = True
+                    else:
+                        default_settings['coflow_equil'] = False
+
                 else:
-                    default_settings['coflow_equil'] = False
+                    default_settings = settings
 
                 cmd_dialog = EquilibrateDialog(self, default_settings,
                     title='Equilibration Settings', size=self._FromDIP((200,200)))
 
             elif choice == 'Switch pumps':
-                hplc_panel = wx.FindWindowByName('hplc')
-                default_switch_settings = hplc_panel.get_default_switch_flow_path_settings()
+                if settings is None:
+                    hplc_panel = wx.FindWindowByName('hplc')
+                    default_switch_settings = hplc_panel.get_default_switch_flow_path_settings()
 
-                coflow_panel = wx.FindWindowByName('coflow')
-                coflow_fr = coflow_panel.get_flow_rate()
-                try:
-                    coflow_fr = float(coflow_fr)
-                except ValueError:
-                    coflow_fr = float(coflow_panel.settings['lc_flow_rate'])
+                    coflow_panel = wx.FindWindowByName('coflow')
+                    coflow_fr = coflow_panel.get_flow_rate()
+                    try:
+                        coflow_fr = float(coflow_fr)
+                    except ValueError:
+                        coflow_fr = float(coflow_panel.settings['lc_flow_rate'])
 
-                default_settings = {
-                    'item_type' : 'switch_pumps',
-                    'inst'      : self.auto_panel.settings['hplc_inst'],
+                    default_settings = {
+                        'item_type' : 'switch_pumps',
+                        'inst'      : self.auto_panel.settings['hplc_inst'],
 
-                    #Switch parameters
-                    'purge_rate'    : default_switch_settings['purge_rate'],
-                    'purge_volume'  : default_switch_settings['purge_vol'],
-                    'purge_accel'   : default_switch_settings['purge_accel'],
-                    'restore_flow_after_switch' : default_switch_settings['restore_flow_after_switch'],
-                    'switch_with_sample'    : False,
-                    'stop_flow1'    : default_switch_settings['stop_flow1'],
-                    'stop_flow2'    : default_switch_settings['stop_flow2'],
-                    'purge_active'  : default_switch_settings['purge_active'],
-                    'flow_path'     : 1,
+                        #Switch parameters
+                        'purge_rate'    : default_switch_settings['purge_rate'],
+                        'purge_volume'  : default_switch_settings['purge_vol'],
+                        'purge_accel'   : default_switch_settings['purge_accel'],
+                        'restore_flow_after_switch' : default_switch_settings['restore_flow_after_switch'],
+                        'switch_with_sample'    : False,
+                        'stop_flow1'    : default_switch_settings['stop_flow1'],
+                        'stop_flow2'    : default_switch_settings['stop_flow2'],
+                        'purge_active'  : default_switch_settings['purge_active'],
+                        'flow_path'     : 1,
 
-                    #Coflow switch parameters
-                    'coflow_equil'      : True,
-                    'coflow_buf_pos'    : 1,
-                    'coflow_restart'    : True,
-                    'coflow_rate'       : coflow_fr,
-                    }
+                        #Coflow switch parameters
+                        'coflow_equil'      : True,
+                        'coflow_buf_pos'    : 1,
+                        'coflow_restart'    : True,
+                        'coflow_rate'       : coflow_fr,
+                        }
 
-                inst = self.auto_panel.settings['hplc_inst']
-                num_flow_paths = self.auto_panel.settings['instruments'][inst]['num_paths']
-                # num_flow_paths = 2
-                default_settings['num_flow_paths'] = num_flow_paths
+                    inst = self.auto_panel.settings['hplc_inst']
+                    num_flow_paths = self.auto_panel.settings['instruments'][inst]['num_paths']
+                    # num_flow_paths = 2
+                    default_settings['num_flow_paths'] = num_flow_paths
+
+                else:
+                    default_settings = settings
 
                 cmd_dialog = SwitchDialog(self, default_settings,
                     title='Switch Pump Settings')
 
             if choice == 'Standalone Exposure':
-                exp_panel = wx.FindWindowByName('exposure')
-                default_exp_settings, _ = exp_panel.get_exp_values(False)
+                if settings is None:
+                    exp_panel = wx.FindWindowByName('exposure')
+                    default_exp_settings, _ = exp_panel.get_exp_values(False)
 
-                default_settings = {
-                    # General parameters
-                    'item_type'     : 'exposure',
-                    'inst'          : 'exp',
-                    'notes'         : '',
-                    'conc'          : '',
-                    'buf'           : '',
-                    'sample_name'   : '',
-                    'column'        : 'Superdex 200 10/300 Increase',
-                    'temp'          : '20',
-                    'inj_vol'       : '',
-                    'exp_type'      : 'SEC-SAXS',
+                    default_settings = {
+                        # General parameters
+                        'item_type'     : 'exposure',
+                        'inst'          : 'exp',
+                        'notes'         : '',
+                        'conc'          : '',
+                        'buf'           : '',
+                        'sample_name'   : '',
+                        'column'        : 'Superdex 200 10/300 Increase',
+                        'temp'          : '20',
+                        'inj_vol'       : '',
+                        'exp_type'      : 'SEC-SAXS',
 
-                    # Exposure parameters
-                    'num_frames'    : default_exp_settings['num_frames'],
-                    'exp_time'      : default_exp_settings['exp_time'],
-                    'exp_period'    : default_exp_settings['exp_period'],
-                    'data_dir'      : exp_panel.settings['base_data_dir'],
-                    'filename'      : '',
-                    'wait_for_trig' : default_exp_settings['wait_for_trig'],
-                    'num_trig'      : default_exp_settings['num_trig'],
-                    #Not used, for completeness
-                    'musc_samp'     : default_exp_settings['struck_measurement_time'],
-                    }
+                        # Exposure parameters
+                        'num_frames'    : default_exp_settings['num_frames'],
+                        'exp_time'      : default_exp_settings['exp_time'],
+                        'exp_period'    : default_exp_settings['exp_period'],
+                        'data_dir'      : exp_panel.settings['base_data_dir'],
+                        'filename'      : '',
+                        'wait_for_trig' : default_exp_settings['wait_for_trig'],
+                        'num_trig'      : default_exp_settings['num_trig'],
+                        #Not used, for completeness
+                        'musc_samp'     : default_exp_settings['struck_measurement_time'],
+                        }
+
+                else:
+                    default_settings = settings
 
                 cmd_dialog = ExposureCmdDialog(self, default_settings,
                     title='Standalone Exposure Settings')
@@ -1430,73 +1482,109 @@ class AutoList(utils.ItemList):
 
             cmd_dialog.Destroy()
 
-            # Need to add a item specific section here to update a few settings
+        else:
+            cmd_settings = None
 
-            # Need to move these to the cmd_settings
+        return cmd_settings
 
-            if cmd_settings is not None:
-                if cmd_settings['item_type'] == 'sec_sample':
-                    # Do exposure verification and hplc param verification here
-                    cmd_settings['inst'] = '{}{}'.format(cmd_settings['inst'],
-                        cmd_settings['flow_path'])
+    def _validate_cmd(self, cmd_settings):
+        err_msg = ''
 
-                    cmd_settings['data_dir'] = os.path.join(cmd_settings['data_dir'],
-                        cmd_settings['filename'])
+        if cmd_settings['item_type'] == 'sec_sample':
+            # Do exposure verification and hplc param verification here
+            cmd_settings['inst'] = '{}{}'.format(cmd_settings['inst'],
+                cmd_settings['flow_path'])
 
-                    if cmd_settings['sp_method'] == 'None':
-                        cmd_settings['sp_method'] = ''
+            cmd_settings['data_dir'] = os.path.join(cmd_settings['data_dir'],
+                cmd_settings['filename'])
 
-                    if cmd_settings['frames_by_elut']:
-                        elution_time = float(cmd_settings['elution_vol'])/float(cmd_settings['flow_rate'])*60
-                        exp_time = elution_time*self.auto_panel.settings['exp_elut_scale']
-                        num_frames = int(round(exp_time/float(cmd_settings['exp_period'])+0.5))
-                        cmd_settings['num_frames'] = num_frames
+            if cmd_settings['sp_method'] == 'None':
+                cmd_settings['sp_method'] = ''
 
-                    if cmd_settings['coflow_from_fr']:
-                        cmd_settings['coflow_fr'] = float(cmd_settings['flow_rate'])
+            if cmd_settings['frames_by_elut']:
+                elution_time = float(cmd_settings['elution_vol'])/float(cmd_settings['flow_rate'])*60
+                exp_time = elution_time*self.auto_panel.settings['exp_elut_scale']
+                num_frames = int(round(exp_time/float(cmd_settings['exp_period'])+0.5))
+                cmd_settings['num_frames'] = num_frames
 
-                    cmd_settings, exp_valid, exp_errors = self._validate_exp_params(
-                        cmd_settings)
+            if cmd_settings['coflow_from_fr']:
+                cmd_settings['coflow_fr'] = float(cmd_settings['flow_rate'])
 
-                    cmd_settings, coflow_valid, coflow_errors = self._validate_coflow_params(
-                        cmd_settings)
+            cmd_settings, exp_valid, exp_errors = self._validate_exp_params(
+                cmd_settings)
 
-                    #### Add hplc setting verification here
+            cmd_settings, coflow_valid, coflow_errors = self._validate_coflow_params(
+                cmd_settings)
 
+            cmd_settings, hplc_valid, hplc_errors = self._validate_hplc_injection_params(
+                cmd_settings)
 
-                elif cmd_settings['item_type'] == 'equilibrate':
-                    # Do equilibration verification here
+            if not exp_valid or not coflow_valid or not hplc_valid:
+                err_msg = 'The following field(s) have invalid values:'
 
-                    cmd_settings['inst'] = '{}{}'.format(cmd_settings['inst'],
-                        cmd_settings['flow_path'])
+                if not exp_valid:
+                    err_msg += '\nExposure settings:'
+                    for err in exp_errors:
+                        err_msg = err_msg + '\n- ' + err
 
-                elif cmd_settings['item_type'] == 'switch_pumps':
-                    # Do switch verification here
-                    pass
+                if not coflow_valid:
+                    err_msg += '\nCoflow settings:'
+                    for err in coflow_errors:
+                        err_msg = err_msg + '\n- ' + err
 
-                elif cmd_settings['item_type'] == 'exposure':
-                    # Do exposure verification here
-                    cmd_settings['data_dir'] = os.path.join(cmd_settings['data_dir'],
-                        cmd_settings['filename'])
+                if not hplc_valid > 0:
+                    err_msg += '\nInjection settings:'
+                    for err in hplc_errors:
+                        err_msg = err_msg + '\n- ' + err
 
-                    cmd_settings, exp_valid, exp_errors = self._validate_exp_params(
-                        cmd_settings)
+        elif cmd_settings['item_type'] == 'equilibrate':
+            # Do equilibration verification here
 
+            cmd_settings['inst'] = '{}{}'.format(cmd_settings['inst'],
+                cmd_settings['flow_path'])
 
-                self._add_item(cmd_settings)
+            cmd_settings, hplc_valid, hplc_errors = self._validate_hplc_equil_params(
+                cmd_settings)
+
+            if not hplc_valid:
+                err_msg = 'The following field(s) have invalid values:'
+
+                for err in hplc_errors:
+                    err_msg = err_msg + '\n- ' + err
+
+        elif cmd_settings['item_type'] == 'switch_pumps':
+            cmd_settings, hplc_valid, hplc_errors = self._validate_hplc_switch_params(
+                cmd_settings)
+
+            if not hplc_valid:
+                err_msg = 'The following field(s) have invalid values:'
+
+                for err in hplc_errors:
+                    err_msg = err_msg + '\n- ' + err
+
+        elif cmd_settings['item_type'] == 'exposure':
+            # Do exposure verification here
+            cmd_settings['data_dir'] = os.path.join(cmd_settings['data_dir'],
+                cmd_settings['filename'])
+
+            cmd_settings, exp_valid, exp_errors = self._validate_exp_params(
+                cmd_settings)
+
+            if not exp_valid:
+                err_msg = 'The following field(s) have invalid values:'
+
+                for err in exp_errors:
+                    err_msg = err_msg + '\n- ' + err
+
+        if len(err_msg) > 0:
+            valid = False
+        else:
+            valid = True
+
+        return valid, err_msg
 
     def _validate_exp_params(self, cmd_settings, sec_saxs=True):
         exp_panel = wx.FindWindowByName('exposure')
-        'num_frames'    : default_exp_settings['num_frames'],
-                    'exp_time'      : default_exp_settings['exp_time'],
-                    'exp_period'    : default_exp_settings['exp_period'],
-                    'data_dir'      : exp_panel.settings['base_data_dir'],
-                    'filename'      : '',
-                    'wait_for_trig' : default_exp_settings['wait_for_trig'],
-                    'num_trig'      : default_exp_settings['num_trig'],
-                    #Not used, for completeness
-                    'musc_samp'     : default_exp_settings['struck_measurement_time'],
-
 
         num_frames = cmd_settings['num_frames']
         exp_time = cmd_settings['exp_time']
@@ -1507,7 +1595,7 @@ class AutoList(utils.ItemList):
         num_trig = cmd_settings['num_trig']
 
         (num_frames, exp_time, exp_period, data_dir, filename,
-            wait_for_trig, num_trig, valid, errors) = self._validate_exp_values(
+            wait_for_trig, num_trig, valid, errors) = self.exp_panel._validate_exp_values(
             num_frames, exp_time, exp_period, data_dir, filename,
             wait_for_trig, num_trig, verbose=False)
 
@@ -1563,6 +1651,27 @@ class AutoList(utils.ItemList):
             valid = False
         else:
             valid = True
+
+        return cmd_settings, valid, errors
+
+    def _validate_hplc_injection_params(self, cmd_settings):
+        hplc_panel = wx.FindWindowByName('hplc')
+
+        valid, errors = self.hplc_panel.validate_injection_params(cmd_settings)
+
+        return cmd_settings, valid, errors
+
+    def _validate_hplc_equil_params(self, cmd_settings):
+        hplc_panel = wx.FindWindowByName('hplc')
+
+        valid, errors = self.hplc_panel.validate_equil_params(cmd_settings)
+
+        return cmd_settings, valid, errors
+
+    def _validate_hplc_switch_params(self, cmd_settings):
+        hplc_panel = wx.FindWindowByName('hplc')
+
+        valid, errors = self.hplc_panel.validate_switch_params(cmd_settings)
 
         return cmd_settings, valid, errors
 
