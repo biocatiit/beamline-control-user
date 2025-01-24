@@ -2124,7 +2124,7 @@ class CoflowPanel(wx.Panel):
 
             state = {
                 'status'    : status,
-                'fr'        : copy.copy(self.coflow_control.lc_flow_rate),
+                'fr'        : str(self.coflow_control.lc_flow_rate),
             }
 
         return state, success

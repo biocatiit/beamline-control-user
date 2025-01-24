@@ -989,6 +989,7 @@ class AutoPanel(wx.Panel):
     def on_exit(self):
         self.automator.stop()
         self.automator.join()
+        self.status_panel.status_timer.Stop()
 
 class AutoStatusPanel(wx.Panel):
     def __init__(self, settings, *args, **kwargs):
@@ -1039,9 +1040,9 @@ class AutoStatusPanel(wx.Panel):
 
         auto_status_sizer = wx.StaticBoxSizer(queue_status_box, wx.HORIZONTAL)
         auto_status_sizer.Add(wx.StaticText(queue_status_box, label='Queue status:'),
-            flag=wx.ALL, border=self._FromDIP(5))
-        auto_status_sizer.Add(self.automator_state, flag=wx.TOP|wx.BOTTOM|wx.RIGHT,
-            border=self._FromDIP(5))
+            flag=wx.ALL|wx.ALIGN_CENTER_VERTICAL, border=self._FromDIP(5))
+        auto_status_sizer.Add(self.automator_state, border=self._FromDIP(5),
+            flag=wx.TOP|wx.BOTTOM|wx.RIGHT|wx.ALIGN_CENTER_VERTICAL)
 
         self.pause_btn = wx.Button(queue_status_box, label='Pause')
         self.resume_btn = wx.Button(queue_status_box, label='Resume')
@@ -1051,12 +1052,12 @@ class AutoStatusPanel(wx.Panel):
         self.resume_btn.Bind(wx.EVT_BUTTON, self._on_resume_queue)
         self.stop_btn.Bind(wx.EVT_BUTTON, self._on_stop_queue)
 
-        auto_status_sizer.Add(self.pause_btn, flag=wx.TOP|wx.BOTTOM|wx.RIGHT,
-            border=self._FromDIP(5))
-        auto_status_sizer.Add(self.resume_btn, flag=wx.TOP|wx.BOTTOM|wx.RIGHT,
-            border=self._FromDIP(5))
-        auto_status_sizer.Add(self.stop_btn, flag=wx.TOP|wx.BOTTOM|wx.RIGHT,
-            border=self._FromDIP(5))
+        auto_status_sizer.Add(self.pause_btn, border=self._FromDIP(5),
+            flag=wx.TOP|wx.BOTTOM|wx.RIGHT|wx.ALIGN_CENTER_VERTICAL)
+        auto_status_sizer.Add(self.resume_btn, border=self._FromDIP(5),
+            flag=wx.TOP|wx.BOTTOM|wx.RIGHT|wx.ALIGN_CENTER_VERTICAL)
+        auto_status_sizer.Add(self.stop_btn, border=self._FromDIP(5),
+            flag=wx.TOP|wx.BOTTOM|wx.RIGHT|wx.ALIGN_CENTER_VERTICAL)
 
 
         if 'hplc' in self.settings['instruments']:
@@ -1136,7 +1137,7 @@ class AutoStatusPanel(wx.Panel):
 
             exp_stop_btn = wx.Button(exp_status_box, label='Stop Exposure')
 
-            self.exp_status = wx.StaticText(exp_status_box, size=self._FromDIP((60,-1)),
+            self.exp_status = wx.StaticText(exp_status_box, size=self._FromDIP((80,-1)),
                 style=wx.ST_NO_AUTORESIZE)
             self.exp_runtime = wx.StaticText(exp_status_box, size=self._FromDIP((60,-1)),
                 style=wx.ST_NO_AUTORESIZE)
@@ -1144,7 +1145,7 @@ class AutoStatusPanel(wx.Panel):
             if 'coflow' in self.settings['instruments']:
                 coflow_stop_btn = wx.Button(exp_status_box, label='Stop Coflow')
 
-                self.coflow_status = wx.StaticText(exp_status_box, size=self._FromDIP((60,-1)),
+                self.coflow_status = wx.StaticText(exp_status_box, size=self._FromDIP((100,-1)),
                     style=wx.ST_NO_AUTORESIZE)
                 self.coflow_fr = wx.StaticText(exp_status_box, size=self._FromDIP((60,-1)),
                     style=wx.ST_NO_AUTORESIZE)
@@ -1155,7 +1156,7 @@ class AutoStatusPanel(wx.Panel):
                 flag=wx.ALIGN_CENTER_VERTICAL)
             exp_sub_sizer1.Add(self.exp_status, border=self._FromDIP(5),
                 flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT)
-            exp_sub_sizer1.Add(wx.StaticText(exp_status_box, label='Runtime:'),
+            exp_sub_sizer1.Add(wx.StaticText(exp_status_box, label='Runtime (min):'),
                 flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT)
             exp_sub_sizer1.Add(self.exp_runtime, border=self._FromDIP(5),
                 flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT)
@@ -1245,14 +1246,14 @@ class AutoStatusPanel(wx.Panel):
 
         if 'exp' in self.settings['instruments']:
             exp_callback = self.settings['instruments']['exp']['automator_callback']
-            status, success = exp_callback('full_status')
+            status, success = exp_callback('full_status', [], {})
 
             self.exp_status.SetLabel(status['status'])
             self.exp_runtime.SetLabel(status['runtime'])
 
             if 'coflow' in self.settings['instruments']:
                 coflow_callback = self.settings['instruments']['coflow']['automator_callback']
-                status, success = coflow_callback('full_status')
+                status, success = coflow_callback('full_status', [], {})
 
                 self.coflow_status.SetLabel(status['status'])
                 self.coflow_fr.SetLabel(status['fr'])
@@ -1387,15 +1388,26 @@ class AutoList(utils.ItemList):
 
     def _on_add_item(self, evt):
         # Call a dialog to get item information
-        self._add_item()
+        self._add_action()
 
-    def _add_item(self, settings=None):
+    def _add_action(self, settings=None):
 
         if settings is None:
+            actions = []
+
+            if ('hplc' in self.settings['instruments'] and
+                'exp' in self.settings['instruments'] and
+                'coflow' in self.settings['instruments']):
+                actions.extend(['Run SEC-SAXS sample', 'Equilibrate column',
+                'Switch pumps'])
+
+            actions.append('----Staff Methods----')
+
+            if 'exp' in self.settings['instruments']:
+                actions.extend(['Standalone Exposure'])
+
             dialog = wx.SingleChoiceDialog(self, 'Pick an action to add:',
-                'Pick an action to add to the queue',
-                ['Run SEC-SAXS sample', 'Equilibrate column',
-                'Switch pumps', '----Staff Methods----', 'Standalone Exposure'])
+                'Pick an action to add to the queue', actions)
 
             dialog.SetSize(self._FromDIP((300,250)))
 
@@ -1419,7 +1431,7 @@ class AutoList(utils.ItemList):
             elif settings['item_type'] == 'exposure':
                 choice = 'Standalone Exposure'
 
-        cmd_settings = self._get_cmd_settings(choice)
+        cmd_settings = self._get_cmd_settings(choice, settings)
 
         if cmd_settings is not None:
 
@@ -1437,9 +1449,9 @@ class AutoList(utils.ItemList):
                     ret = err_dialog.ShowModal()
 
                     if ret == wx.ID_OK:
-                        wx.CallAfter(self._add_item, cmd_settings)
+                        wx.CallAfter(self._add_action, cmd_settings)
 
-    def _get_cmd_settings(self, choice):
+    def _get_cmd_settings(self, choice, settings):
         if choice is not None and choice != '----Staff Methods----':
             if choice == 'Run SEC-SAXS sample':
                 if settings is None:
@@ -1492,7 +1504,7 @@ class AutoList(utils.ItemList):
                         'wait_for_trig' : default_exp_settings['wait_for_trig'],
                         'num_trig'      : default_exp_settings['num_trig'],
                         #Not used, for completeness
-                        'musc_samp'     : default_exp_settings['struck_measurement_time'],
+                        'struck_measurement_time' : default_exp_settings['struck_measurement_time'],
 
                         #Coflow parameters
                         'coflow_from_fr': True,
@@ -1638,7 +1650,7 @@ class AutoList(utils.ItemList):
                         'wait_for_trig' : default_exp_settings['wait_for_trig'],
                         'num_trig'      : default_exp_settings['num_trig'],
                         #Not used, for completeness
-                        'musc_samp'     : default_exp_settings['struck_measurement_time'],
+                        'struck_measurement_time': default_exp_settings['struck_measurement_time'],
                         }
 
                 else:
@@ -1743,7 +1755,7 @@ class AutoList(utils.ItemList):
                 cmd_settings['filename'])
 
             cmd_settings, exp_valid, exp_errors = self._validate_exp_params(
-                cmd_settings)
+                cmd_settings, sec_saxs=False)
 
             if not exp_valid:
                 err_msg = 'The following field(s) have invalid values:'
@@ -1768,24 +1780,28 @@ class AutoList(utils.ItemList):
         filename = cmd_settings['filename']
         wait_for_trig = cmd_settings['wait_for_trig']
         num_trig = cmd_settings['num_trig']
+        struck_measurement_time = cmd_settings['struck_measurement_time']
 
         (num_frames, exp_time, exp_period, data_dir, filename,
-            wait_for_trig, num_trig, valid, errors) = self.exp_panel._validate_exp_values(
+            wait_for_trig, num_trig, local_data_dir, struck_num_meas, valid,
+            errors) = exp_panel._validate_exp_values(
             num_frames, exp_time, exp_period, data_dir, filename,
-            wait_for_trig, num_trig, verbose=False)
+            wait_for_trig, num_trig, struck_measurement_time, verbose=False,
+            automator=True)
 
         if sec_saxs:
-            if exp_time < 0.125:
+            if isinstance(exp_time, float) and exp_time < 0.125:
                 errors.append('Exposure time with UV data collection must be >= 0.125 s')
 
-            if (exp_period - exp_time < 0.01):
+            if (isinstance(exp_time, float) and isinstance(exp_period, float) and
+                ((exp_period - exp_time) < 0.01)):
                 errors.append(('Exposure period must be at least 0.01 s longer '
                     'than exposure time with UV data collection'))
 
         cmd_settings['num_frames'] = num_frames
         cmd_settings['exp_time'] = exp_time
         cmd_settings['exp_period'] = exp_period
-        cmd_settings['data_dir'] = data_dir
+        cmd_settings['data_dir'] = local_data_dir
         cmd_settings['filename'] = filename
         cmd_settings['wait_for_trig'] = wait_for_trig
         cmd_settings['num_trig'] = num_trig
@@ -1832,21 +1848,21 @@ class AutoList(utils.ItemList):
     def _validate_hplc_injection_params(self, cmd_settings):
         hplc_panel = wx.FindWindowByName('hplc')
 
-        valid, errors = self.hplc_panel.validate_injection_params(cmd_settings)
+        valid, errors = hplc_panel.validate_injection_params(cmd_settings)
 
         return cmd_settings, valid, errors
 
     def _validate_hplc_equil_params(self, cmd_settings):
         hplc_panel = wx.FindWindowByName('hplc')
 
-        valid, errors = self.hplc_panel.validate_equil_params(cmd_settings)
+        valid, errors = hplc_panel.validate_equil_params(cmd_settings)
 
         return cmd_settings, valid, errors
 
     def _validate_hplc_switch_params(self, cmd_settings):
         hplc_panel = wx.FindWindowByName('hplc')
 
-        valid, errors = self.hplc_panel.validate_switch_params(cmd_settings)
+        valid, errors = hplc_panel.validate_switch_params(cmd_settings)
 
         return cmd_settings, valid, errors
 

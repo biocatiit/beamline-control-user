@@ -3483,9 +3483,10 @@ class ExpPanel(wx.Panel):
         struck_measurement_time = self.muscle_sampling.GetValue()
 
         (num_frames, exp_time, exp_period, data_dir, filename,
-            wait_for_trig, num_trig, valid, errors) = self._validate_exp_values(
+            wait_for_trig, num_trig, local_data_dir, struck_num_meas, valid,
+            errors) = self._validate_exp_values(
             num_frames, exp_time, exp_period, data_dir, filename,
-            wait_for_trig, num_trig, verbose=verbose)
+            wait_for_trig, num_trig, struck_measurement_time, verbose=verbose)
 
         exp_values = {
             'num_frames'                : num_frames,
@@ -3509,7 +3510,8 @@ class ExpPanel(wx.Panel):
         return exp_values, valid
 
     def _validate_exp_values(self, num_frames, exp_time, exp_period, data_dir,
-        filename, wait_for_trig, num_trig, verbose=True):
+        filename, wait_for_trig, num_trig, struck_measurement_time, verbose=True,
+        automator=False):
 
         errors = []
 
@@ -3594,7 +3596,7 @@ class ExpPanel(wx.Panel):
         if filename == '':
             errors.append('Filename (must not be blank)')
 
-        if data_dir == '' or not os.path.exists(data_dir):
+        if (data_dir == '' or not os.path.exists(data_dir)) and not automator:
             errors.append('Data directory (must exist, and not be blank)')
 
         if wait_for_trig:
@@ -3629,7 +3631,8 @@ class ExpPanel(wx.Panel):
             valid = True
 
         return (num_frames, exp_time, exp_period, data_dir, filename,
-            wait_for_trig, num_trig, valid, errors)
+            wait_for_trig, num_trig, local_data_dir, struck_num_meas, valid,
+            errors)
 
     def _check_components(self, exp_only, verbose=True):
         comp_settings = {}
@@ -4051,7 +4054,7 @@ class ExpPanel(wx.Panel):
             shutter_pad = self.settings['shutter_pad']
             struck_log_vals = self.settings['struck_log_vals']
             joerger_log_vals = self.settings['joerger_log_vals']
-            struck_measurement_time = float(cmd_kwargs['musc_samp'])
+            struck_measurement_time = float(cmd_kwargs['struck_measurement_time'])
 
             if self.settings['tr_muscle_exp']:
                 struck_num_meas = exp_period*num_frames/struck_measurement_time
@@ -4137,9 +4140,14 @@ class ExpPanel(wx.Panel):
 
         elif cmd_name == 'full_status':
             runtime = round(self._time_remaining/60,1)
+            if self._exp_status == 'Ready':
+                status = 'Idle'
+            else:
+                status = copy.copy(self._exp_status)
+
             state = {
-                'status'    : copy.copy(self._exp_status)
-                'runtime'   : copy.copy(runtime)
+                'status'    : status,
+                'runtime'   : str(runtime),
             }
 
         return state, success
@@ -4316,7 +4324,7 @@ default_exposure_settings = {
         'thresh': 0.04}, 'guard_vac' : {'check': True, 'thresh': 0.04},
         'sample_vac': {'check': True, 'thresh': 0.04}, 'sc_vac':
         {'check': True, 'thresh':0.04}},
-    'base_data_dir'         : '/nas_data/Eiger2x/2024_Run3', #CHANGE ME and pipeline local_basedir
+    'base_data_dir'         : '/nas_data/Eiger2x/2025_Run1', #CHANGE ME and pipeline local_basedir
     }
 
 default_exposure_settings['data_dir'] = default_exposure_settings['base_data_dir']
@@ -4335,8 +4343,7 @@ if __name__ == '__main__':
     logger.addHandler(h1)
 
     settings = default_exposure_settings
-
-
+    settings['components'] = ['exposure']
 
     app = wx.App()
 
