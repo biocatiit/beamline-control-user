@@ -2733,6 +2733,7 @@ class ExpPanel(wx.Panel):
 
         self.settings = settings
         self._exp_status = ''
+        self._time_remaining = 0
         self._run_number = '_{:03d}'.format(self.settings['run_num'])
 
         self.exp_cmd_q = deque()
@@ -3155,13 +3156,14 @@ class ExpPanel(wx.Panel):
 
     def set_time_remaining(self, tr):
         if tr < 3600:
-            tr = time.strftime('%M:%S', time.gmtime(tr))
+            tr_str = time.strftime('%M:%S', time.gmtime(tr))
         elif tr < 86400:
-            tr = time.strftime('%H:%M:%S', time.gmtime(tr))
+            tr_str = time.strftime('%H:%M:%S', time.gmtime(tr))
         else:
-            tr = time.strftime('%d:%H:%M:%S', time.gmtime(tr))
+            tr_str = time.strftime('%d:%H:%M:%S', time.gmtime(tr))
 
-        wx.CallAfter(self.time_remaining.SetLabel, tr)
+        self._time_remaining = tr
+        wx.CallAfter(self.time_remaining.SetLabel, tr_str)
 
     def set_scan_number(self, val):
         self.scan_number.SetLabel(str(val))
@@ -4132,6 +4134,13 @@ class ExpPanel(wx.Panel):
             self.start_exp(True, exp_values, metadata, False)
 
             state = 'exposing'
+
+        elif cmd_name == 'full_status':
+            runtime = round(self._time_remaining/60,1)
+            state = {
+                'status'    : copy.copy(self._exp_status)
+                'runtime'   : copy.copy(runtime)
+            }
 
         return state, success
 

@@ -979,8 +979,8 @@ class AutoPanel(wx.Panel):
         self.auto_list_panel = AutoListPanel(self.settings, ctrl_parent)
 
         self.top_sizer = wx.BoxSizer(wx.VERTICAL)
-        self.top_sizer.Add(self.status_panel, proportion=1,
-            border=self._FromDIP(5), flag=wx.EXPAND|wx.ALL)
+        self.top_sizer.Add(self.status_panel, border=self._FromDIP(5),
+            flag=wx.EXPAND|wx.ALL)
         self.top_sizer.Add(self.auto_list_panel, proportion=1,
             border=self._FromDIP(5), flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM)
 
@@ -998,6 +998,10 @@ class AutoStatusPanel(wx.Panel):
 
         self._create_layout()
         self._init_values()
+
+        self.status_timer = wx.Timer()
+        self.status_timer.Bind(wx.EVT_TIMER, self._on_status_timer)
+        self.status_timer.Start(5000)
 
     def _FromDIP(self, size):
         # This is a hack to provide easy back compatibility with wxpython < 4.1
@@ -1024,35 +1028,171 @@ class AutoStatusPanel(wx.Panel):
 
     def _create_layout(self):
 
-        ctrl_parent = self
+        status_box = wx.StaticBox(self, label='Status')
 
-        self.automator_state = wx.StaticText(ctrl_parent,
+        ctrl_parent = status_box
+
+        queue_status_box = wx.StaticBox(ctrl_parent, label='Automator')
+
+        self.automator_state = wx.StaticText(queue_status_box,
             size=self._FromDIP((60,-1)), style=wx.ST_NO_AUTORESIZE)
 
-        status_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        status_sizer.Add(wx.StaticText(ctrl_parent, label='Queue status:'),
+        auto_status_sizer = wx.StaticBoxSizer(queue_status_box, wx.HORIZONTAL)
+        auto_status_sizer.Add(wx.StaticText(queue_status_box, label='Queue status:'),
             flag=wx.ALL, border=self._FromDIP(5))
-        status_sizer.Add(self.automator_state, flag=wx.ALL,
+        auto_status_sizer.Add(self.automator_state, flag=wx.TOP|wx.BOTTOM|wx.RIGHT,
             border=self._FromDIP(5))
 
-        self.pause_btn = wx.Button(ctrl_parent, label='Pause queue')
-        self.resume_btn = wx.Button(ctrl_parent, label='Resume queue')
-        self.stop_btn = wx.Button(ctrl_parent, label='Stop current items')
+        self.pause_btn = wx.Button(queue_status_box, label='Pause')
+        self.resume_btn = wx.Button(queue_status_box, label='Resume')
+        self.stop_btn = wx.Button(queue_status_box, label='Stop current items')
 
         self.pause_btn.Bind(wx.EVT_BUTTON, self._on_pause_queue)
         self.resume_btn.Bind(wx.EVT_BUTTON, self._on_resume_queue)
         self.stop_btn.Bind(wx.EVT_BUTTON, self._on_stop_queue)
 
-        button_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        button_sizer.Add(self.pause_btn, flag=wx.ALL, border=self._FromDIP(5))
-        button_sizer.Add(self.resume_btn, flag=wx.ALL, border=self._FromDIP(5))
-        button_sizer.Add(self.stop_btn, flag=wx.ALL, border=self._FromDIP(5))
+        auto_status_sizer.Add(self.pause_btn, flag=wx.TOP|wx.BOTTOM|wx.RIGHT,
+            border=self._FromDIP(5))
+        auto_status_sizer.Add(self.resume_btn, flag=wx.TOP|wx.BOTTOM|wx.RIGHT,
+            border=self._FromDIP(5))
+        auto_status_sizer.Add(self.stop_btn, flag=wx.TOP|wx.BOTTOM|wx.RIGHT,
+            border=self._FromDIP(5))
 
-        self.top_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        self.top_sizer.Add(status_sizer, proportion=1,
-            flag=wx.RIGHT|wx.EXPAND, border=self._FromDIP(5))
-        self.top_sizer.Add(button_sizer, proportion=1,
-            flag=wx.EXPAND)
+
+        if 'hplc' in self.settings['instruments']:
+            num_paths = self.settings['instruments']['hplc']['num_paths']
+
+            hplc_status_box = wx.StaticBox(ctrl_parent, label='HPLC')
+
+            hplc_stop_btn = wx.Button(hplc_status_box, label='Stop')
+
+            self.hplc_flow_path = wx.StaticText(hplc_status_box, size=self._FromDIP((60,-1)),
+                style=wx.ST_NO_AUTORESIZE)
+            self.hplc_state = wx.StaticText(hplc_status_box, size=self._FromDIP((80,-1)),
+                style=wx.ST_NO_AUTORESIZE)
+            self.hplc_runtime = wx.StaticText(hplc_status_box, size=self._FromDIP((60,-1)),
+                style=wx.ST_NO_AUTORESIZE)
+            self.pump1_state = wx.StaticText(hplc_status_box, size=self._FromDIP((100,-1)),
+                style=wx.ST_NO_AUTORESIZE)
+            self.pump1_fr = wx.StaticText(hplc_status_box, size=self._FromDIP((60,-1)),
+                style=wx.ST_NO_AUTORESIZE)
+            self.pump1_pressure = wx.StaticText(hplc_status_box, size=self._FromDIP((60,-1)),
+                style=wx.ST_NO_AUTORESIZE)
+
+            num_cols = 11
+
+            if num_paths == 2:
+                self.pump2_state = wx.StaticText(hplc_status_box, size=self._FromDIP((100,-1)),
+                    style=wx.ST_NO_AUTORESIZE)
+                self.pump2_fr = wx.StaticText(hplc_status_box, size=self._FromDIP((60,-1)),
+                    style=wx.ST_NO_AUTORESIZE)
+                self.pump2_pressure = wx.StaticText(hplc_status_box, size=self._FromDIP((60,-1)),
+                    style=wx.ST_NO_AUTORESIZE)
+
+                num_cols = 10
+
+            hplc_sub_status_sizer = wx.FlexGridSizer(cols=num_cols, vgap=self._FromDIP(5),
+                hgap=self._FromDIP(5))
+            hplc_sub_status_sizer.Add(wx.StaticText(hplc_status_box, label='Status:'),
+                flag=wx.ALIGN_CENTER_VERTICAL)
+            hplc_sub_status_sizer.Add(self.hplc_state, flag=wx.ALIGN_CENTER_VERTICAL)
+            hplc_sub_status_sizer.Add(wx.StaticText(hplc_status_box, label='Runtime (min):'),
+                flag=wx.ALIGN_CENTER_VERTICAL)
+            hplc_sub_status_sizer.Add(self.hplc_runtime, flag=wx.ALIGN_CENTER_VERTICAL)
+            hplc_sub_status_sizer.Add(wx.StaticText(hplc_status_box, label='Pump1:'),
+                flag=wx.ALIGN_CENTER_VERTICAL)
+            hplc_sub_status_sizer.Add(self.pump1_state, flag=wx.ALIGN_CENTER_VERTICAL)
+            hplc_sub_status_sizer.Add(wx.StaticText(hplc_status_box, label='Pump1 flow (ml/min):'),
+                flag=wx.ALIGN_CENTER_VERTICAL)
+            hplc_sub_status_sizer.Add(self.pump1_fr, flag=wx.ALIGN_CENTER_VERTICAL)
+            hplc_sub_status_sizer.Add(wx.StaticText(hplc_status_box, label='Pump1 pressure (bar):'),
+                flag=wx.ALIGN_CENTER_VERTICAL)
+            hplc_sub_status_sizer.Add(self.pump1_pressure, flag=wx.ALIGN_CENTER_VERTICAL)
+
+            if num_paths == 2:
+                hplc_sub_status_sizer.AddSpacer(1)
+                hplc_sub_status_sizer.Add(hplc_stop_btn, flag=wx.ALIGN_CENTER_VERTICAL)
+                hplc_sub_status_sizer.Add(wx.StaticText(hplc_status_box, label='Flow path:'),
+                    flag=wx.ALIGN_CENTER_VERTICAL)
+                hplc_sub_status_sizer.Add(self.hplc_flow_path, flag=wx.ALIGN_CENTER_VERTICAL)
+                hplc_sub_status_sizer.Add(wx.StaticText(hplc_status_box, label='Pump2:'),
+                    flag=wx.ALIGN_CENTER_VERTICAL)
+                hplc_sub_status_sizer.Add(self.pump2_state, flag=wx.ALIGN_CENTER_VERTICAL)
+                hplc_sub_status_sizer.Add(wx.StaticText(hplc_status_box, label='Pump2 flow (ml/min):'),
+                    flag=wx.ALIGN_CENTER_VERTICAL)
+                hplc_sub_status_sizer.Add(self.pump2_fr, flag=wx.ALIGN_CENTER_VERTICAL)
+                hplc_sub_status_sizer.Add(wx.StaticText(hplc_status_box, label='Pump2 pressure (bar):'),
+                    flag=wx.ALIGN_CENTER_VERTICAL)
+                hplc_sub_status_sizer.Add(self.pump2_pressure, flag=wx.ALIGN_CENTER_VERTICAL)
+
+                hplc_sizer = wx.StaticBoxSizer(hplc_status_box, wx.HORIZONTAL)
+                hplc_sizer.Add(hplc_sub_status_sizer, proportion=1, flag=wx.ALL,
+                    border=self._FromDIP(5))
+
+
+
+        if 'exp' in self.settings['instruments']:
+            exp_status_box  = wx.StaticBox(ctrl_parent, label='Exposure')
+
+            exp_stop_btn = wx.Button(exp_status_box, label='Stop Exposure')
+
+            self.exp_status = wx.StaticText(exp_status_box, size=self._FromDIP((60,-1)),
+                style=wx.ST_NO_AUTORESIZE)
+            self.exp_runtime = wx.StaticText(exp_status_box, size=self._FromDIP((60,-1)),
+                style=wx.ST_NO_AUTORESIZE)
+
+            if 'coflow' in self.settings['instruments']:
+                coflow_stop_btn = wx.Button(exp_status_box, label='Stop Coflow')
+
+                self.coflow_status = wx.StaticText(exp_status_box, size=self._FromDIP((60,-1)),
+                    style=wx.ST_NO_AUTORESIZE)
+                self.coflow_fr = wx.StaticText(exp_status_box, size=self._FromDIP((60,-1)),
+                    style=wx.ST_NO_AUTORESIZE)
+
+
+            exp_sub_sizer1 = wx.BoxSizer(wx.HORIZONTAL)
+            exp_sub_sizer1.Add(wx.StaticText(exp_status_box, label='Status:'),
+                flag=wx.ALIGN_CENTER_VERTICAL)
+            exp_sub_sizer1.Add(self.exp_status, border=self._FromDIP(5),
+                flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT)
+            exp_sub_sizer1.Add(wx.StaticText(exp_status_box, label='Runtime:'),
+                flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT)
+            exp_sub_sizer1.Add(self.exp_runtime, border=self._FromDIP(5),
+                flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT)
+            exp_sub_sizer1.Add(exp_stop_btn, border=self._FromDIP(5),
+                flag=wx.ALIGN_CENTER_VERTICAL)
+
+            exp_sizer = wx.StaticBoxSizer(exp_status_box, wx.HORIZONTAL)
+            exp_sizer.Add(exp_sub_sizer1, flag=wx.ALL, border=self._FromDIP(5))
+
+            if 'coflow' in self.settings['instruments']:
+                exp_sub_sizer2 = wx.BoxSizer(wx.HORIZONTAL)
+                exp_sub_sizer2.Add(wx.StaticText(exp_status_box, label='Coflow status:'),
+                    flag=wx.ALIGN_CENTER_VERTICAL)
+                exp_sub_sizer2.Add(self.coflow_status, border=self._FromDIP(5),
+                    flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT)
+                exp_sub_sizer2.Add(wx.StaticText(exp_status_box, label='Setpoint (ml/min):'),
+                    flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT)
+                exp_sub_sizer2.Add(self.coflow_fr, border=self._FromDIP(5),
+                    flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT)
+                exp_sub_sizer2.Add(coflow_stop_btn, border=self._FromDIP(5),
+                    flag=wx.ALIGN_CENTER_VERTICAL)
+
+
+                exp_sizer.Add(exp_sub_sizer2, flag=wx.ALL, border=self._FromDIP(5))
+
+
+        self.top_sizer = wx.StaticBoxSizer(status_box, wx.VERTICAL)
+        self.top_sizer.Add(auto_status_sizer, flag=wx.EXPAND|wx.ALL,
+            border=self._FromDIP(5))
+
+        if 'hplc' in self.settings['instruments']:
+            self.top_sizer.Add(hplc_sizer, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM,
+                border=self._FromDIP(5))
+
+        if 'exp' in self.settings['instruments']:
+            self.top_sizer.Add(exp_sizer, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM,
+                border=self._FromDIP(5))
 
         self.SetSizer(self.top_sizer)
 
@@ -1070,7 +1210,6 @@ class AutoStatusPanel(wx.Panel):
         self._on_pause_queue(None)
         self.automator.stop_running_items()
 
-
     def _on_state_change(self, state):
         if state == 'run':
             wx.CallAfter(self.automator_state.SetLabel, 'Running')
@@ -1081,6 +1220,42 @@ class AutoStatusPanel(wx.Panel):
             wx.CallAfter(self.pause_btn.Disable)
             wx.CallAfter(self.resume_btn.Enable)
 
+    def _on_status_timer(self, evt):
+        wx.CallAfter(self._get_status)
+
+    def _get_status(self):
+        if 'hplc' in self.settings['instruments']:
+            hplc_callback = self.settings['instruments']['hplc']['automator_callback']
+            num_paths = self.settings['instruments']['hplc']['num_paths']
+
+            status, success = hplc_callback('full_status', [], {})
+
+            self.hplc_flow_path.SetLabel(status['flow_path'])
+            self.hplc_state.SetLabel(status['state'])
+            self.hplc_runtime.SetLabel(status['runtime'])
+            self.pump1_state.SetLabel(status['pump1_state'])
+            self.pump1_fr.SetLabel(status['pump1_fr'])
+            self.pump1_pressure.SetLabel(status['pump1_pressure'])
+
+            if num_paths == 2:
+                self.pump2_state.SetLabel(status['pump2_state'])
+                self.pump2_fr.SetLabel(status['pump2_fr'])
+                self.pump2_pressure.SetLabel(status['pump2_pressure'])
+
+
+        if 'exp' in self.settings['instruments']:
+            exp_callback = self.settings['instruments']['exp']['automator_callback']
+            status, success = exp_callback('full_status')
+
+            self.exp_status.SetLabel(status['status'])
+            self.exp_runtime.SetLabel(status['runtime'])
+
+            if 'coflow' in self.settings['instruments']:
+                coflow_callback = self.settings['instruments']['coflow']['automator_callback']
+                status, success = coflow_callback('full_status')
+
+                self.coflow_status.SetLabel(status['status'])
+                self.coflow_fr.SetLabel(status['fr'])
 
 
 class AutoListPanel(wx.Panel):
@@ -2790,53 +2965,14 @@ if __name__ == '__main__':
     # com_thread = biohplccon.HPLCCommThread('HPLCComm')
     # com_thread.start()
 
-    # # # Remote
-    # # com_thread = None
-
-    # hplc_settings = {
-    #     # Connection settings for hplc
-    #     'remote'        : False,
-    #     'remote_device' : 'hplc',
-    #     'device_init'   : setup_devices,
-    #     'remote_ip'     : '192.168.1.16',
-    #     'remote_port'   : '5558',
-    #     'com_thread'    : com_thread,
-    #     # Default settings for hplc
-    #     'purge_volume'              : 20,
-    #     'purge_rate'                : 5,
-    #     'purge_accel'               : 10,
-    #     'purge_max_pressure'        : 250,
-    #     'restore_flow_after_purge'  : True,
-    #     'purge_with_sample'         : False,
-    #     'stop_before_purge'         : True,
-    #     'stop_after_purge'          : True,
-    #     'equil_volume'              : 48,
-    #     'equil_rate'                : 0.6,
-    #     'equil_accel'               : 0.1,
-    #     'equil_purge'               : True,
-    #     'equil_with_sample'         : False,
-    #     'stop_after_equil'          : True,
-    #     'switch_purge_active'       : True,
-    #     'switch_purge_volume'       : 1,
-    #     'switch_purge_rate'         : 1,
-    #     'switch_purge_accel'        : 10,
-    #     'switch_with_sample'        : False,
-    #     'switch_stop_flow1'         : True,
-    #     'switch_stop_flow2'         : True,
-    #     'restore_flow_after_switch' : True,
-    #     'acq_method'                : 'SECSAXS_test',
-    #     # 'acq_method'                : 'SEC-MALS',
-    #     'sample_loc'                : 'D2F-A1',
-    #     'inj_vol'                   : 10.0,
-    #     'flow_rate'                 : 0.6,
-    #     'flow_accel'                : 0.1,
-    #     'elution_vol'               : 30,
-    #     'sample_pressure_lim'       : 60.0,
-    #     'result_path'               : '',
-    #     'sp_method'                 : '',
-    #     'wait_for_flow_ramp'        : True,
-    #     'settle_time'               : 0.0,
-    #     }
+    # Remote
+    hplc_settings = biohplccon.default_hplc_2pump_settings
+    hplc_settings['com_thread'] = None
+    hplc_settings['remote'] = True
+    hplc_settings['remote_device'] = 'hplc'
+    hplc_settings['remote_ip'] = '164.54.204.113'
+    hplc_settings['remote_port'] = '5556'
+    hplc_settings['device_data'] = hplc_settings['device_init'][0]
 
     # #Settings
     # coflow_settings = {
@@ -2909,32 +3045,32 @@ if __name__ == '__main__':
 
     # coflow_settings['components'] = ['coflow']
 
-    # app = wx.App()
+    app = wx.App()
     # logger.debug('Setting up wx app')
 
-    # hplc_frame = biohplccon.HPLCFrame('HPLCFrame', hplc_settings, parent=None,
-    #     title='HPLC Control')
-    # hplc_frame.Show()
+    hplc_frame = biohplccon.HPLCFrame('HPLCFrame', hplc_settings, parent=None,
+        title='HPLC Control')
+    hplc_frame.Show()
 
     # coflow_frame = coflowcon.CoflowFrame(coflow_settings, True, parent=None, title='Coflow Control')
     # coflow_frame.Show()
 
 
-    # hplc_automator_callback = hplc_frame.devices[0].automator_callback
+    hplc_automator_callback = hplc_frame.devices[0].automator_callback
     # coflow_automator_callback = coflow_frame.coflow_panel.automator_callback
 
     automator_settings = default_automator_settings
     automator_settings['automator_thread'] = automator
-    automator_settings['hplc_inst'] = 'hplc1'
-    # automator_settings['instruments'] = {
-    #     'hplc1'    : {'num_paths': 1,
-    #                 'automator_callback': hplc_automator_callback},
-    #     'coflow'    : {'automator_callback': coflow_automator_callback},
-    #     'exp'       : {'automator_callback': test_cmd_func}
-    #     }
+    automator_settings['hplc_inst'] = 'hplc'
+    automator_settings['instruments'] = {
+        'hplc'    : {'num_paths': 2,
+                    'automator_callback': hplc_automator_callback},
+        # 'coflow'    : {'automator_callback': coflow_automator_callback},
+        # 'exp'       : {'automator_callback': test_cmd_func}
+        }
 
 
-    app = wx.App()
+    # app = wx.App()
     logger.debug('Setting up wx app')
     frame = AutoFrame('AutoFrame', automator_settings, parent=None,
         title='Automator Control')

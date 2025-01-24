@@ -167,7 +167,7 @@ class BioFrame(wx.Frame):
 
         self.SetSizer(top_sizer)
 
-        
+
 
     def _create_auto_layout(self):
         top_panel = wx.Panel(self)
@@ -293,7 +293,7 @@ class BioFrame(wx.Frame):
                 else:
                     component_sizers[key] = component_sizer
 
-                
+
                 self.component_panels[key] = component_panel
 
             elif key == 'pipeline':
