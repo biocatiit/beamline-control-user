@@ -256,7 +256,12 @@ class AgilentHPLCStandard(AgilentHPLC):
             The valve position
         """
         valve = self._valves[valve_id]
-        position = valve.get_position()
+        position = None
+        retry = 5
+        while position is None and retry > 0:
+            position = valve.get_position()
+            retry -= 1
+
         return position
 
     def get_active_flow_path(self):
