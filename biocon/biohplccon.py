@@ -5246,7 +5246,7 @@ class HPLCPanel(utils.DevicePanel):
         except Exception:
             errors.append('Flow rate (must be >0)')
 
-        try
+        try:
             flow_accel = float(flow_accel)
         except Exception:
             errors.append('Flow acceleration (must be >0)')
@@ -5268,7 +5268,7 @@ class HPLCPanel(utils.DevicePanel):
             errors.append('Settling time (must be >=0)')
 
         if isinstance(inj_vol, float):
-            if inj_vol < 1 or in_vol > self.settings['max_inj_vol']:
+            if inj_vol < 1 or inj_vol > self.settings['max_inj_vol']:
                 errors.append('Injection volume (between 1 and {} uL)'.format(
                     self.settings['max_inj_vol']))
 
@@ -6853,18 +6853,18 @@ if __name__ == '__main__':
     #     }
     #     ]
 
-    # # Local
-    # com_thread = HPLCCommThread('HPLCComm')
-    # com_thread.start()
-    # default_hplc_2pump_settings['com_thread'] = com_thread
-
-    # Remote
-    com_thread = None
+    # Local
+    com_thread = HPLCCommThread('HPLCComm')
+    com_thread.start()
     default_hplc_2pump_settings['com_thread'] = com_thread
-    default_hplc_2pump_settings['remote'] = True
-    default_hplc_2pump_settings['remote_device'] = 'hplc'
-    default_hplc_2pump_settings['remote_ip'] = '164.54.204.113'
-    default_hplc_2pump_settings['remote_port'] = '5556'
+
+    # # Remote
+    # com_thread = None
+    # default_hplc_2pump_settings['com_thread'] = com_thread
+    # default_hplc_2pump_settings['remote'] = True
+    # default_hplc_2pump_settings['remote_device'] = 'hplc'
+    # default_hplc_2pump_settings['remote_ip'] = '164.54.204.113'
+    # default_hplc_2pump_settings['remote_port'] = '5556'
 
 
     app = wx.App()
