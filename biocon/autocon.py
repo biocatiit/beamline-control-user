@@ -35,6 +35,7 @@ if __name__ != '__main__':
     logger = logging.getLogger(__name__)
 
 import wx
+import wx.lib.scrolledpanel as scrolled
 
 import utils
 import biohplccon
@@ -949,7 +950,7 @@ class AutoPanel(wx.Panel):
         self._create_layout()
         self._init_values()
 
-        self.SetMinSize(self._FromDIP((1000, 400)))
+        self.SetMinSize(self._FromDIP((1100, 800)))
 
     def _FromDIP(self, size):
         # This is a hack to provide easy back compatibility with wxpython < 4.1
@@ -1259,6 +1260,500 @@ class AutoStatusPanel(wx.Panel):
                 self.coflow_fr.SetLabel(status['fr'])
 
 
+class AutoSettings(scrolled.ScrolledPanel):
+    def __init__(self, auto_panel, *args, **kwargs):
+        scrolled.ScrolledPanel.__init__(self, *args, **kwargs)
+
+        self.SetBackgroundColour('White')
+
+        self.auto_panel = auto_panel
+        self._sec_saxs_settings = copy.copy(default_sec_saxs_settings)
+        self._standalone_exp_settings = copy.copy(default_standalone_exp_settings)
+
+        self.ctrl_ids = {
+            'sec_sample'    : {},
+            'exposure'      : {},
+            }
+
+        for key in self._sec_saxs_settings.keys():
+            self.ctrl_ids['sec_saxs'][key] = wx.NewIdRef()
+
+        for key in self._standalone_exp_settings.keys():
+            self.ctrl_ids['exposure'][key] = wx.NewIdRef()
+
+        self._create_layout()
+        # self._init_values()
+
+        self.SetupScrolling()
+
+    def _FromDIP(self, size):
+        # This is a hack to provide easy back compatibility with wxpython < 4.1
+        try:
+            return self.FromDIP(size)
+        except Exception:
+            return size
+
+    def on_collapse(self, event):
+        self.Layout()
+        self.Refresh()
+        self.SendSizeEvent()
+
+    def _create_layout(self):
+        top_level = self
+        parent = self
+
+        if 'hplc' in self.auto_panel.settings['instruments']:
+            hplc_panel = self.auto_panel.settings['instruments']['hplc']['hplc_panel']
+            default_inj_settings = hplc_panel.get_default_sample_settings()
+            acq_methods = default_inj_settings['all_acq_methods']
+            sample_methods = default_inj_settings['all_sample_methods']
+            sample_methods.insert(0, 'None')
+            inst = self.auto_panel.settings['hplc_inst']
+            num_flow_paths = self.auto_panel.settings['instruments'][inst]['num_paths']
+
+        else:
+            acq_methods = []
+            sample_methods = []
+            num_flow_paths = 1
+
+        self.sec_saxs_panel = make_sec_saxs_info_panel(top_level, parent,
+            self.ctrl_ids['sec_sample'], 'vert', num_flow_paths, acq_methods,
+            sample_methods, read_only=True)
+
+        self.exp_panel = make_standalone_exp_panel(top_level, parent,
+            self.ctrl_ids['exposure'], 'vert', read_only=True)
+
+        self.top_sizer = wx.BoxSizer(wx.VERTICAL)
+        self.top_sizer.Add(self.sec_saxs_panel, flag=wx.EXPAND, proportion=1)
+        self.top_sizer.Add(self.exp_panel, flag=wx.EXPAND, proportion=1)
+
+        self.top_sizer.Hide(self.sec_saxs_panel, recursive=True)
+        self.top_sizer.Hide(self.exp_panel, recursive=True)
+
+        self.SetSizer(self.top_sizer)
+
+    def on_item_selection(self, settings):
+        item_type = settings['item_type']
+        for key, c_id in self.ctrl_ids[item_type].items():
+            default_val = settings[key]
+            ctrl = self.FindWindowById(c_id)
+
+            if ctrl is not None:
+                if isinstance(ctrl, wx.Choice):
+                    ctrl.SetStringSelection(str(default_val))
+                else:
+                    try:
+                        ctrl.SetValue(str(default_val))
+                    except TypeError:
+                        ctrl.SetValue(default_val)
+
+        if item_type == 'sec_sample':
+            self.top_sizer.Show(self.sec_saxs_panel, recursive=True)
+            self.top_sizer.Hide(self.exp_panel, recursive=True)
+
+        elif item_type == 'exposure':
+            self.top_sizer.Hide(self.sec_saxs_panel, recursive=True)
+            self.top_sizer.Show(self.exp_panel, recursive=True)
+
+default_sec_saxs_settings = {
+    # General parameters
+    'item_type'     : 'sec_sample',
+    'notes'         : '',
+    'conc'          : '',
+    'buf'           : '',
+    'inst'          : '',
+    'sample_name'   : '',
+    'column'        : 'Superdex 200 10/300 Increase',
+    'temp'          : '20',
+
+    # Injection parameters
+    'acq_method'    : '',
+    'sample_loc'    : '',
+    'inj_vol'       : 0.,
+    'flow_rate'     : 0.,
+    'elution_vol'   : 0.,
+    'flow_accel'    : 0.,
+    'pressure_lim'  : 0.,
+    'result_path'   : '',
+    'sp_method'     : '',
+    'wait_for_flow_ramp': True,
+    'settle_time'   : 0.,
+    'flow_path'     : 1,
+    'stop_flow'     : False,
+
+    # Exposure parameters
+    'frames_by_elut': True,
+    'num_frames'    : 0,
+    'exp_time'      : 0.,
+    'exp_period'    : 0.,
+    'data_dir'      : '',
+    'filename'      : '',
+    'wait_for_trig' : True,
+    'num_trig'      : 0,
+    #Not used, for completeness
+    'struck_measurement_time' : 0.,
+
+    #Coflow parameters
+    'coflow_from_fr': True,
+    'start_coflow'  : True,
+    'stop_coflow'   : False,
+    'coflow_fr'     : 0.,
+    }
+
+
+
+default_standalone_exp_settings = {
+    # General parameters
+    'item_type'     : 'exposure',
+    'inst'          : 'exp',
+    'notes'         : '',
+    'conc'          : '',
+    'buf'           : '',
+    'sample_name'   : '',
+    'column'        : 'Superdex 200 10/300 Increase',
+    'temp'          : '20',
+    'inj_vol'       : '',
+    'exp_type'      : 'SEC-SAXS',
+
+    # Exposure parameters
+    'num_frames'    : 0,
+    'exp_time'      : 0.,
+    'exp_period'    : 0.,
+    'data_dir'      : '',
+    'filename'      : '',
+    'wait_for_trig' : True,
+    'num_trig'      : 0,
+    #Not used, for completeness
+    'struck_measurement_time' : 0.,
+    }
+
+
+def create_info_sizer(layout_settings, top_level, parent, read_only=False):
+    top_sizer = wx.GridBagSizer(vgap=top_level._FromDIP(5), hgap=top_level._FromDIP(5))
+
+    for row, item in enumerate(layout_settings.values()):
+        label = item[0]
+        myId = item[1]
+        itemType = item[2]
+
+        if itemType == 'choice':
+            labeltxt = wx.StaticText(parent, -1, label)
+            ctrl = wx.Choice(parent, myId, choices=item[3])
+            ctrl.SetSelection(0)
+
+            if read_only:
+                ctrl.Disable()
+
+            top_sizer.Add(labeltxt, (row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
+            top_sizer.Add(ctrl, (row, 1), flag=wx.ALIGN_CENTER_VERTICAL)
+
+        elif itemType == 'text' or itemType == 'int' or itemType =='float':
+            labeltxt = wx.StaticText(parent, -1, label)
+
+            if itemType == 'int':
+                valid = utils.CharValidator('int')
+            elif itemType == 'float':
+                valid=utils.CharValidator('float')
+            else:
+                valid = None
+
+            if valid:
+                ctrl = wx.TextCtrl(parent, myId, '', size=top_level._FromDIP((100,-1)),
+                    validator=valid)
+            else:
+                ctrl = wx.TextCtrl(parent, myId, '', size=top_level._FromDIP((100,-1)))
+
+            if read_only:
+                ctrl.SetEditable(False)
+
+            top_sizer.Add(labeltxt, (row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
+            top_sizer.Add(ctrl, (row, 1), flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
+
+        elif itemType == 'bool':
+            ctrl = wx.CheckBox(parent, myId, label)
+
+            if read_only:
+                ctrl.Disable()
+
+            top_sizer.Add(ctrl, (row, 0), span=(1,2),
+                flag=wx.ALIGN_CENTER_VERTICAL)
+
+    top_sizer.AddGrowableCol(1)
+
+    return top_sizer
+
+def make_sec_saxs_info_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
+    num_flow_paths, acq_methods, sample_methods, read_only=False):
+    ################ Metadata #################
+    column_choices = ['Superdex 200 10/300 Increase', 'Superdex 75 10/300 Increase',
+        'Superose 6 10/300 Increase', 'Superdex 200 5/150 Increase',
+        'Superdex 75 5/150 Increase', 'Superose 6 5/150 Increase',
+        'Superdex 200 10/300', 'Superdex 75 10/300', 'Superose 6 10/300',
+        'Superdex 200 5/150', 'Superdex 75 5/150', 'Superose 6 5/150',
+        'Wyatt 010S5', 'Wyatt 015S5', 'Wyatt 030S5', 'Capto HiRes Q 5/50',
+        'Capto HiRes S 5/50', 'Other']
+
+    metadata_settings = {
+        'sample_name'   : ['Sample:', ctrl_ids['sample_name'], 'text'],
+        'buf'           : ['Buffer:', ctrl_ids['buf'], 'text'],
+        'temp'          : ['Temperature [C]:', ctrl_ids['temp'], 'float'],
+        'conc'          : ['Concentration [mg/ml]:', ctrl_ids['conc'], 'float'],
+        'column'        : ['Column:', ctrl_ids['column'], 'choice', column_choices],
+        }
+
+    metadata_box = wx.StaticBox(parent, label='Metadata')
+    md_sizer1 = create_info_sizer(metadata_settings, top_level, metadata_box,
+        read_only)
+
+    notes = wx.TextCtrl(metadata_box, ctrl_ids['notes'],
+        style=wx.TE_MULTILINE, size=top_level._FromDIP((100, 100)))
+
+    if read_only:
+        notes.SetEditable(False)
+
+    md_sizer2 = wx.BoxSizer(wx.HORIZONTAL)
+    md_sizer2.Add(wx.StaticText(metadata_box, label='Notes:'),
+        border=top_level._FromDIP(5), flag=wx.TOP|wx.BOTTOM|wx.LEFT)
+    md_sizer2.Add(notes, proportion=1, border=top_level._FromDIP(5),
+        flag=wx.EXPAND|wx.ALL)
+
+    metadata_sizer = wx.StaticBoxSizer(metadata_box, wx.VERTICAL)
+    metadata_sizer.Add(md_sizer1, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
+        border=top_level._FromDIP(5))
+    metadata_sizer.Add(md_sizer2, proportion=1, flag=wx.EXPAND|wx.ALL,
+        border=top_level._FromDIP(5))
+
+    ################ HPLC #################
+    fp_choices = ['{}'.format(i+1) for i in
+        range(int(num_flow_paths))]
+
+    hplc_settings = {
+        'sample_loc'    : ['Sample location:', ctrl_ids['sample_loc'], 'text'],
+        'inj_vol'       : ['Injection volume [uL]:', ctrl_ids['inj_vol'], 'float'],
+        'flow_rate'     : ['Flow rate [ml/min]:', ctrl_ids['flow_rate'], 'float'],
+        'elution_vol'   : ['Elution volume [ml]:', ctrl_ids['elution_vol'], 'float'],
+        'flow_path'     : ['Flow path:', ctrl_ids['flow_path'], 'choice', fp_choices],
+        }
+
+    hplc_adv_settings = {
+        'acq_method'    : ['Acquisition method:', ctrl_ids['acq_method'],
+                            'choice', acq_methods],
+        'sp_method'     : ['Sample prep. method:', ctrl_ids['sp_method'],
+                            'choice', sample_methods],
+        'flow_accel'    : ['Flow acceleration [ml/min^2]:', ctrl_ids['flow_accel'], 'float'],
+        'pressure_lim'  : ['Max pressure [bar]:', ctrl_ids['pressure_lim'], 'float'],
+        'wait_for_flow_ramp' : ['Wait for flow ramp', ctrl_ids['wait_for_flow_ramp'], 'bool'],
+        'settle_time'   : ['Settle time [s]:', ctrl_ids['settle_time'], 'float'],
+        'result_path'   : ['Result path:', ctrl_ids['result_path'], 'text'],
+        'stop_flow'     : ['Stop flow after elution', ctrl_ids['stop_flow'], 'bool'],
+        }
+
+    hplc_box = wx.StaticBox(parent, label='HPLC Settings')
+
+    hplc_adv_pane = wx.CollapsiblePane(hplc_box, label="Advanced Settings")
+    hplc_adv_pane.Bind(wx.EVT_COLLAPSIBLEPANE_CHANGED, top_level.on_collapse)
+    hplc_adv_win = hplc_adv_pane.GetPane()
+
+    hplc_sizer1 = create_info_sizer(hplc_settings, top_level, hplc_box, read_only)
+    hplc_sizer2 = create_info_sizer(hplc_adv_settings, top_level, hplc_adv_win,
+        read_only)
+
+    hplc_adv_win.SetSizer(hplc_sizer2)
+    hplc_adv_pane.Collapse()
+
+    hplc_sizer = wx.StaticBoxSizer(hplc_box, wx.VERTICAL)
+    hplc_sizer.Add(hplc_sizer1, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
+        border=top_level._FromDIP(5))
+    hplc_sizer.Add(hplc_adv_pane, flag=wx.EXPAND|wx.ALL, border=top_level._FromDIP(5))
+
+
+    ################ Exposure #################
+    exp_settings = {
+        'filename'      : ['File prefix:', ctrl_ids['filename'], 'text'],
+        'exp_time'      : ['Exposure time [s]:', ctrl_ids['exp_time'], 'float'],
+        'exp_period'    : ['Exposure period [s]:', ctrl_ids['exp_period'], 'float'],
+        }
+
+    exp_adv_settings = {
+        'frames_by_elut': ['Set number of frames from elution time',
+                            ctrl_ids['frames_by_elut'], 'bool'],
+        'num_frames'    : ['Number of frames:', ctrl_ids['num_frames'], 'int'],
+        'wait_for_trig' : ['Wait for external trigger', ctrl_ids['wait_for_trig'], 'bool'],
+        'num_trig'      : ['Number of triggers:', ctrl_ids['num_trig'], 'int'],
+        }
+
+    exp_box = wx.StaticBox(parent, label='Exposure Settings')
+
+    exp_adv_pane = wx.CollapsiblePane(exp_box, label="Advanced Settings")
+    exp_adv_pane.Bind(wx.EVT_COLLAPSIBLEPANE_CHANGED, top_level.on_collapse)
+    exp_adv_win = exp_adv_pane.GetPane()
+
+    exp_sizer1 = create_info_sizer(exp_settings, top_level, exp_box, read_only)
+    exp_sizer2 = create_info_sizer(exp_adv_settings, top_level, exp_adv_win,
+        read_only)
+
+    exp_adv_win.SetSizer(exp_sizer2)
+    exp_adv_pane.Collapse()
+
+    exp_sizer = wx.StaticBoxSizer(exp_box, wx.VERTICAL)
+    exp_sizer.Add(exp_sizer1, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
+        border=top_level._FromDIP(5))
+    exp_sizer.Add(exp_adv_pane, flag=wx.EXPAND|wx.ALL, border=top_level._FromDIP(5))
+
+
+    ################ Coflow #################
+    coflow_settings = {
+        'coflow_from_fr': ['Set coflow flow from HPLC flow rate',
+                            ctrl_ids['coflow_from_fr'], 'bool'],
+        'start_coflow'  : ['Start coflow automatically',
+                            ctrl_ids['start_coflow'], 'bool'],
+        }
+
+    coflow_adv_settings = {
+        'stop_cloflow'  : ['Stop coflow after exposure',
+                            ctrl_ids['stop_coflow'], 'bool'],
+        'coflow_fr'     : ['Coflow flow rate [mL/min]:',
+                            ctrl_ids['coflow_fr'], 'float'],
+        }
+
+    coflow_box = wx.StaticBox(parent, label='Coflow Settings')
+
+    coflow_adv_pane = wx.CollapsiblePane(coflow_box, label="Advanced Settings")
+    coflow_adv_pane.Bind(wx.EVT_COLLAPSIBLEPANE_CHANGED, top_level.on_collapse)
+    coflow_adv_win = coflow_adv_pane.GetPane()
+
+    coflow_sizer1 = create_info_sizer(coflow_settings, top_level, coflow_box,
+        read_only)
+    coflow_sizer2 = create_info_sizer(coflow_adv_settings, top_level,
+        coflow_adv_win, read_only)
+
+    coflow_adv_win.SetSizer(coflow_sizer2)
+    coflow_adv_pane.Collapse()
+
+    coflow_sizer = wx.StaticBoxSizer(coflow_box, wx.VERTICAL)
+    coflow_sizer.Add(coflow_sizer1, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
+        border=top_level._FromDIP(5))
+    coflow_sizer.Add(coflow_adv_pane, flag=wx.EXPAND|wx.ALL, border=top_level._FromDIP(5))
+
+    exp_coflow_sizer = wx.BoxSizer(wx.VERTICAL)
+    exp_coflow_sizer.Add(exp_sizer, flag=wx.EXPAND)
+    exp_coflow_sizer.Add(coflow_sizer, flag=wx.TOP|wx.EXPAND, border=top_level._FromDIP(5))
+
+    if cmd_sizer_dir == 'horiz':
+        cmd_sizer=wx.BoxSizer(wx.HORIZONTAL)
+        cmd_sizer.Add(metadata_sizer, proportion=1, flag=wx.ALL|wx.EXPAND,
+            border=top_level._FromDIP(5))
+        cmd_sizer.Add(hplc_sizer, flag=wx.TOP|wx.RIGHT|wx.BOTTOM|wx.EXPAND,
+            border=top_level._FromDIP(5))
+        cmd_sizer.Add(exp_coflow_sizer, flag=wx.TOP|wx.RIGHT|wx.BOTTOM|wx.EXPAND,
+            border=top_level._FromDIP(5))
+    else:
+        cmd_sizer=wx.BoxSizer(wx.VERTICAL)
+        cmd_sizer.Add(metadata_sizer, flag=wx.ALL|wx.EXPAND,
+            border=top_level._FromDIP(5))
+        cmd_sizer.Add(hplc_sizer, flag=wx.LEFT|wx.RIGHT|wx.BOTTOM|wx.EXPAND,
+            border=top_level._FromDIP(5))
+        cmd_sizer.Add(exp_coflow_sizer, flag=wx.LEFT|wx.RIGHT|wx.BOTTOM|wx.EXPAND,
+            border=top_level._FromDIP(5))
+
+    return cmd_sizer
+
+
+def make_standalone_exp_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
+    read_only=False):
+    ################ Metadata #################
+    column_choices = ['Superdex 200 10/300 Increase', 'Superdex 75 10/300 Increase',
+        'Superose 6 10/300 Increase', 'Superdex 200 5/150 Increase',
+        'Superdex 75 5/150 Increase', 'Superose 6 5/150 Increase',
+        'Superdex 200 10/300', 'Superdex 75 10/300', 'Superose 6 10/300',
+        'Superdex 200 5/150', 'Superdex 75 5/150', 'Superose 6 5/150',
+        'Wyatt 010S5', 'Wyatt 015S5', 'Wyatt 030S5', 'Capto HiRes Q 5/50',
+        'Capto HiRes S 5/50', 'Other']
+
+    exp_choices = ['AF4-MALS-SAXS', 'Batch mode SAXS', 'IEC-SAXS',
+        'SEC-SAXS', 'SEC-MALS-SAXS', 'TR-SAXS', 'Other']
+
+    metadata_settings = {
+        'exp_type'      : ['Experiment type:', ctrl_ids['exp_type'],
+                            'choice', exp_choices],
+        'sample_name'   : ['Sample:', ctrl_ids['sample_name'], 'text'],
+        'buf'           : ['Buffer:', ctrl_ids['buf'], 'text'],
+        'inj_vol'       : ['Injection volume [uL]:', ctrl_ids['inj_vol'], 'float'],
+        'temp'          : ['Temperature [C]:', ctrl_ids['temp'], 'float'],
+        'conc'          : ['Concentration [mg/ml]:', ctrl_ids['conc'], 'float'],
+        'column'        : ['Column:', ctrl_ids['column'], 'choice', column_choices],
+        }
+
+    metadata_box = wx.StaticBox(parent, label='Metadata')
+    md_sizer1 = create_info_sizer(metadata_settings, top_level, metadata_box,
+        read_only)
+
+    notes = wx.TextCtrl(metadata_box, ctrl_ids['notes'],
+        style=wx.TE_MULTILINE, size=top_level._FromDIP((100, 100)))
+
+    if read_only:
+        notes.SetEditable(False)
+
+    md_sizer2 = wx.BoxSizer(wx.HORIZONTAL)
+    md_sizer2.Add(wx.StaticText(metadata_box, label='Notes:'),
+        border=top_level._FromDIP(5), flag=wx.TOP|wx.BOTTOM|wx.LEFT)
+    md_sizer2.Add(notes, proportion=1, border=top_level._FromDIP(5),
+        flag=wx.EXPAND|wx.ALL)
+
+    metadata_sizer = wx.StaticBoxSizer(metadata_box, wx.VERTICAL)
+    metadata_sizer.Add(md_sizer1, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
+        border=top_level._FromDIP(5))
+    metadata_sizer.Add(md_sizer2, proportion=1, flag=wx.EXPAND|wx.ALL,
+        border=top_level._FromDIP(5))
+
+
+    ################ Exposure #################
+    exp_settings = {
+        'filename'      : ['File prefix:', ctrl_ids['filename'], 'text'],
+        'exp_time'      : ['Exposure time [s]:', ctrl_ids['exp_time'], 'float'],
+        'exp_period'    : ['Exposure period [s]:', ctrl_ids['exp_period'], 'float'],
+        'num_frames'    : ['Number of frames:', ctrl_ids['num_frames'], 'int'],
+        }
+
+    exp_adv_settings = {
+        'wait_for_trig' : ['Wait for external trigger', ctrl_ids['wait_for_trig'], 'bool'],
+        'num_trig'      : ['Number of triggers:', ctrl_ids['num_trig'], 'int'],
+        }
+
+    exp_box = wx.StaticBox(parent, label='Exposure Settings')
+
+    exp_adv_pane = wx.CollapsiblePane(exp_box, label="Advanced Settings")
+    exp_adv_pane.Bind(wx.EVT_COLLAPSIBLEPANE_CHANGED, top_level.on_collapse)
+    exp_adv_win = exp_adv_pane.GetPane()
+
+    exp_sizer1 = create_info_sizer(exp_settings, top_level, exp_box, read_only)
+    exp_sizer2 = create_info_sizer(exp_adv_settings, top_level, exp_adv_win,
+        read_only)
+
+    exp_adv_win.SetSizer(exp_sizer2)
+    exp_adv_pane.Collapse()
+
+    exp_sizer = wx.StaticBoxSizer(exp_box, wx.VERTICAL)
+    exp_sizer.Add(exp_sizer1, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
+        border=top_level._FromDIP(5))
+    exp_sizer.Add(exp_adv_pane, flag=wx.EXPAND|wx.ALL, border=top_level._FromDIP(5))
+
+
+    if cmd_sizer_dir == 'horiz':
+        cmd_sizer=wx.BoxSizer(wx.HORIZONTAL)
+        cmd_sizer.Add(exp_sizer, flag=wx.TOP|wx.RIGHT|wx.BOTTOM|wx.EXPAND,
+            border=top_level._FromDIP(5))
+        cmd_sizer.Add(metadata_sizer, proportion=1, flag=wx.ALL|wx.EXPAND,
+            border=top_level._FromDIP(5))
+    else:
+        cmd_sizer=wx.BoxSizer(wx.VERTICAL)
+        cmd_sizer.Add(exp_sizer, flag=wx.ALL|wx.EXPAND,
+            border=top_level._FromDIP(5))
+        cmd_sizer.Add(metadata_sizer, flag=wx.ALL|wx.EXPAND,
+            border=top_level._FromDIP(5))
+
+    return cmd_sizer
+
 class AutoListPanel(wx.Panel):
     def __init__(self, settings, *args, **kwargs):
         wx.Panel.__init__(self, *args, **kwargs)
@@ -1284,26 +1779,33 @@ class AutoListPanel(wx.Panel):
         self.automator.add_on_abort_callback(self._on_automator_abort_callback)
 
     def _create_layout(self):
-        self.top_list_ctrl = self._create_list_layout()
-        self.top_settings_ctrl = self._create_settings_layout()
+        actions_box = wx.StaticBox(self, label='Actions')
+        top_list_ctrl = self._create_list_layout(actions_box)
+        top_settings_ctrl = self._create_settings_layout(actions_box)
 
-        self.top_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        self.top_sizer.Add(self.top_list_ctrl, proportion=1,
+        self.top_sizer = wx.StaticBoxSizer(actions_box, wx.HORIZONTAL)
+        self.top_sizer.Add(top_list_ctrl, proportion=5,
             flag=wx.RIGHT|wx.EXPAND, border=self._FromDIP(5))
-        self.top_sizer.Add(self.top_settings_ctrl, proportion=1,
+        self.top_sizer.Add(top_settings_ctrl, proportion=4,
             flag=wx.EXPAND)
 
         self.SetSizer(self.top_sizer)
 
-    def _create_list_layout(self):
+    def _create_list_layout(self, parent):
         self.auto_list = AutoList(self._on_add_item_callback,
             self._on_remove_item_callback, self._on_move_item_callback,
-            self, self)
+            self, parent)
 
         return self.auto_list
 
-    def _create_settings_layout(self):
-        return wx.Panel(self)
+    def _create_settings_layout(self, parent):
+        settings_box = wx.StaticBox(parent, label='Settings')
+        self.auto_settings = AutoSettings(self, settings_box)
+
+        auto_settings_sizer = wx.StaticBoxSizer(settings_box, wx.VERTICAL)
+        auto_settings_sizer.Add(self.auto_settings, proportion=1, flag=wx.EXPAND)
+
+        return auto_settings_sizer
 
     def _on_add_item_callback(self, item_info):
         item_type = item_info['item_type']
@@ -1395,15 +1897,15 @@ class AutoList(utils.ItemList):
         if settings is None:
             actions = []
 
-            if ('hplc' in self.settings['instruments'] and
-                'exp' in self.settings['instruments'] and
-                'coflow' in self.settings['instruments']):
+            if ('hplc' in self.auto_panel.settings['instruments'] and
+                'exp' in self.auto_panel.settings['instruments'] and
+                'coflow' in self.auto_panel.settings['instruments']):
                 actions.extend(['Run SEC-SAXS sample', 'Equilibrate column',
                 'Switch pumps'])
 
             actions.append('----Staff Methods----')
 
-            if 'exp' in self.settings['instruments']:
+            if 'exp' in self.auto_panel.settings['instruments']:
                 actions.extend(['Standalone Exposure'])
 
             dialog = wx.SingleChoiceDialog(self, 'Pick an action to add:',
@@ -1458,7 +1960,7 @@ class AutoList(utils.ItemList):
                     exp_panel = wx.FindWindowByName('exposure')
                     default_exp_settings, _ = exp_panel.get_exp_values(False)
 
-                    hplc_panel = wx.FindWindowByName('hplc')
+                    hplc_panel = self.auto_panel.settings['instruments']['hplc']['hplc_panel']
                     default_inj_settings = hplc_panel.get_default_sample_settings()
 
                     coflow_panel = wx.FindWindowByName('coflow')
@@ -1468,50 +1970,37 @@ class AutoList(utils.ItemList):
                     except ValueError:
                         coflow_fr = float(coflow_panel.settings['lc_flow_rate'])
 
-                    default_settings = {
-                        # General parameters
-                        'item_type'     : 'sec_sample',
-                        'notes'         : '',
-                        'conc'          : '',
-                        'buf'           : '',
-                        'inst'          : '{}_pump'.format(self.auto_panel.settings['hplc_inst']),
-                        'sample_name'   : '',
-                        'column'        : 'Superdex 200 10/300 Increase',
-                        'temp'          : '20',
+                    default_settings = copy.deepcopy(default_sec_saxs_settings)
 
-                        # Injection parameters
-                        'acq_method'    : default_inj_settings['acq_method'],
-                        'sample_loc'    : default_inj_settings['sample_loc'],
-                        'inj_vol'       : default_inj_settings['inj_vol'],
-                        'flow_rate'     : default_inj_settings['flow_rate'],
-                        'elution_vol'   : default_inj_settings['elution_vol'],
-                        'flow_accel'    : default_inj_settings['flow_accel'],
-                        'pressure_lim'  : default_inj_settings['pressure_lim'],
-                        'result_path'   : default_inj_settings['result_path'],
-                        'sp_method'     : default_inj_settings['sp_method'],
-                        'wait_for_flow_ramp'    : default_inj_settings['wait_for_flow_ramp'],
-                        'settle_time'   : default_inj_settings['settle_time'],
-                        'flow_path'     : 1,
-                        'stop_flow'     : False,
+                    # General parameters
+                    default_settings['inst'] = '{}_pump'.format(self.auto_panel.settings['hplc_inst']),
 
-                        # Exposure parameters
-                        'frames_by_elut': True,
-                        'num_frames'    : default_exp_settings['num_frames'],
-                        'exp_time'      : default_exp_settings['exp_time'],
-                        'exp_period'    : default_exp_settings['exp_period'],
-                        'data_dir'      : exp_panel.settings['base_data_dir'],
-                        'filename'      : '',
-                        'wait_for_trig' : default_exp_settings['wait_for_trig'],
-                        'num_trig'      : default_exp_settings['num_trig'],
-                        #Not used, for completeness
-                        'struck_measurement_time' : default_exp_settings['struck_measurement_time'],
+                    # Injection parameters
+                    default_settings['acq_method'] = default_inj_settings['acq_method']
+                    default_settings['sample_loc'] = default_inj_settings['sample_loc']
+                    default_settings['inj_vol'] = default_inj_settings['inj_vol']
+                    default_settings['flow_rate'] = default_inj_settings['flow_rate']
+                    default_settings['elution_vol'] = default_inj_settings['elution_vol']
+                    default_settings['flow_accel'] = default_inj_settings['flow_accel']
+                    default_settings['pressure_lim'] = default_inj_settings['pressure_lim']
+                    default_settings['result_path'] = default_inj_settings['result_path']
+                    default_settings['sp_method'] = default_inj_settings['sp_method']
+                    default_settings['wait_for_flow_ramp'] = default_inj_settings['wait_for_flow_ramp']
+                    default_settings['settle_time'] = default_inj_settings['settle_time']
 
-                        #Coflow parameters
-                        'coflow_from_fr': True,
-                        'start_coflow'  : True,
-                        'stop_coflow'   : False,
-                        'coflow_fr'     : coflow_fr,
-                        }
+                    # Exposure parameters
+                    default_settings['num_frames'] = default_exp_settings['num_frames']
+                    default_settings['exp_time'] = default_exp_settings['exp_time']
+                    default_settings['exp_period'] = default_exp_settings['exp_period']
+                    default_settings['data_dir'] = exp_panel.settings['base_data_dir']
+                    default_settings['wait_for_trig'] = default_exp_settings['wait_for_trig']
+                    default_settings['num_trig'] = default_exp_settings['num_trig']
+                    #Not used, for completeness
+                    default_settings['struck_measurement_time'] = default_exp_settings['struck_measurement_time']
+
+                    #Coflow parameters
+                    default_settings['coflow_fr'] = coflow_fr
+
 
                     inst = self.auto_panel.settings['hplc_inst']
                     num_flow_paths = self.auto_panel.settings['instruments'][inst]['num_paths']
@@ -1527,7 +2016,7 @@ class AutoList(utils.ItemList):
 
             elif choice == 'Equilibrate column':
                 if settings is None:
-                    hplc_panel = wx.FindWindowByName('hplc')
+                    hplc_panel = self.auto_panel.settings['instruments']['hplc']['hplc_panel']
                     default_equil_settings = hplc_panel.get_default_equil_settings()
 
                     coflow_panel = wx.FindWindowByName('coflow')
@@ -1580,7 +2069,7 @@ class AutoList(utils.ItemList):
 
             elif choice == 'Switch pumps':
                 if settings is None:
-                    hplc_panel = wx.FindWindowByName('hplc')
+                    hplc_panel = self.auto_panel.settings['instruments']['hplc']['hplc_panel']
                     default_switch_settings = hplc_panel.get_default_switch_flow_path_settings()
 
                     coflow_panel = wx.FindWindowByName('coflow')
@@ -1628,30 +2117,15 @@ class AutoList(utils.ItemList):
                     exp_panel = wx.FindWindowByName('exposure')
                     default_exp_settings, _ = exp_panel.get_exp_values(False)
 
-                    default_settings = {
-                        # General parameters
-                        'item_type'     : 'exposure',
-                        'inst'          : 'exp',
-                        'notes'         : '',
-                        'conc'          : '',
-                        'buf'           : '',
-                        'sample_name'   : '',
-                        'column'        : 'Superdex 200 10/300 Increase',
-                        'temp'          : '20',
-                        'inj_vol'       : '',
-                        'exp_type'      : 'SEC-SAXS',
-
-                        # Exposure parameters
-                        'num_frames'    : default_exp_settings['num_frames'],
-                        'exp_time'      : default_exp_settings['exp_time'],
-                        'exp_period'    : default_exp_settings['exp_period'],
-                        'data_dir'      : exp_panel.settings['base_data_dir'],
-                        'filename'      : '',
-                        'wait_for_trig' : default_exp_settings['wait_for_trig'],
-                        'num_trig'      : default_exp_settings['num_trig'],
-                        #Not used, for completeness
-                        'struck_measurement_time': default_exp_settings['struck_measurement_time'],
-                        }
+                    default_settings = copy.deepcopy(default_standalone_exp_settings)
+                    default_settings['num_frames'] = default_exp_settings['num_frames']
+                    default_settings['exp_time'] = default_exp_settings['exp_time']
+                    default_settings['exp_period'] = default_exp_settings['exp_period']
+                    default_settings['data_dir'] = exp_panel.settings['base_data_dir']
+                    default_settings['wait_for_trig'] = default_exp_settings['wait_for_trig']
+                    default_settings['num_trig'] = default_exp_settings['num_trig']
+                    #Not used, for completeness
+                    default_settings['struck_measurement_time'] = default_exp_settings['struck_measurement_time']
 
                 else:
                     default_settings = settings
@@ -1846,21 +2320,21 @@ class AutoList(utils.ItemList):
         return cmd_settings, valid, errors
 
     def _validate_hplc_injection_params(self, cmd_settings):
-        hplc_panel = wx.FindWindowByName('hplc')
+        hplc_panel = self.auto_panel.settings['instruments']['hplc']['hplc_panel']
 
         valid, errors = hplc_panel.validate_injection_params(cmd_settings)
 
         return cmd_settings, valid, errors
 
     def _validate_hplc_equil_params(self, cmd_settings):
-        hplc_panel = wx.FindWindowByName('hplc')
+        hplc_panel = self.auto_panel.settings['instruments']['hplc']['hplc_panel']
 
         valid, errors = hplc_panel.validate_equil_params(cmd_settings)
 
         return cmd_settings, valid, errors
 
     def _validate_hplc_switch_params(self, cmd_settings):
-        hplc_panel = wx.FindWindowByName('hplc')
+        hplc_panel = self.auto_panel.settings['instruments']['hplc']['hplc_panel']
 
         valid, errors = hplc_panel.validate_switch_params(cmd_settings)
 
@@ -2240,54 +2714,10 @@ class AutoCmdDialog(wx.Dialog):
     def _create_layout(self):
         pass
 
-    def _create_sizer(self, layout_settings, parent):
-        top_sizer = wx.GridBagSizer(vgap=self._FromDIP(5), hgap=self._FromDIP(5))
-
-        for row, item in enumerate(layout_settings.values()):
-            label = item[0]
-            myId = item[1]
-            itemType = item[2]
-
-            if itemType == 'choice':
-                labeltxt = wx.StaticText(parent, -1, label)
-                ctrl = wx.Choice(parent, myId, choices=item[3])
-                ctrl.SetSelection(0)
-
-                top_sizer.Add(labeltxt, (row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
-                top_sizer.Add(ctrl, (row, 1), flag=wx.ALIGN_CENTER_VERTICAL)
-
-            elif itemType == 'text' or itemType == 'int' or itemType =='float':
-                labeltxt = wx.StaticText(parent, -1, label)
-
-                if itemType == 'int':
-                    valid = utils.CharValidator('int')
-                elif itemType == 'float':
-                    valid=utils.CharValidator('float')
-                else:
-                    valid = None
-
-                if valid:
-                    ctrl = wx.TextCtrl(parent, myId, '', size=self._FromDIP((100,-1)),
-                        validator=valid)
-                else:
-                    ctrl = wx.TextCtrl(parent, myId, '', size=self._FromDIP((100,-1)))
-
-                top_sizer.Add(labeltxt, (row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
-                top_sizer.Add(ctrl, (row, 1), flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
-
-            elif itemType == 'bool':
-                ctrl = wx.CheckBox(parent, myId, label)
-                top_sizer.Add(ctrl, (row, 0), span=(1,2),
-                    flag=wx.ALIGN_CENTER_VERTICAL)
-
-        top_sizer.AddGrowableCol(1)
-
-        return top_sizer
-
     def _init_settings(self):
         for key, c_id in self.ctrl_ids.items():
             default_val = self._default_settings[key]
-            ctrl = wx.FindWindowById(c_id)
+            ctrl = self.FindWindowById(c_id)
 
             if ctrl is not None:
                 if isinstance(ctrl, wx.Choice):
@@ -2302,7 +2732,7 @@ class AutoCmdDialog(wx.Dialog):
         cmd_settings = {}
 
         for key, c_id in self.ctrl_ids.items():
-            ctrl = wx.FindWindowById(c_id)
+            ctrl = self.FindWindowById(c_id)
 
             if ctrl is not None:
                 if isinstance(ctrl, wx.Choice):
@@ -2333,161 +2763,13 @@ class SecSampleCmdDialog(AutoCmdDialog):
     def _create_layout(self):
         parent = self
 
-        ################ Metadata #################
-        column_choices = ['Superdex 200 10/300 Increase', 'Superdex 75 10/300 Increase',
-            'Superose 6 10/300 Increase', 'Superdex 200 5/150 Increase',
-            'Superdex 75 5/150 Increase', 'Superose 6 5/150 Increase',
-            'Superdex 200 10/300', 'Superdex 75 10/300', 'Superose 6 10/300',
-            'Superdex 200 5/150', 'Superdex 75 5/150', 'Superose 6 5/150',
-            'Wyatt 010S5', 'Wyatt 015S5', 'Wyatt 030S5', 'Capto HiRes Q 5/50',
-            'Capto HiRes S 5/50', 'Other']
+        num_flow_paths = self._default_settings['num_flow_paths']
+        self.acq_methods
+        self.sample_methods
 
-        metadata_settings = {
-            'sample_name'   : ['Sample:', self.ctrl_ids['sample_name'], 'text'],
-            'buf'           : ['Buffer:', self.ctrl_ids['buf'], 'text'],
-            'temp'          : ['Temperature [C]:', self.ctrl_ids['temp'], 'float'],
-            'conc'          : ['Concentration [mg/ml]:', self.ctrl_ids['conc'], 'float'],
-            'column'        : ['Column:', self.ctrl_ids['column'], 'choice', column_choices],
-            }
-
-        metadata_box = wx.StaticBox(parent, label='Metadata')
-        md_sizer1 = self._create_sizer(metadata_settings, metadata_box)
-
-        notes = wx.TextCtrl(metadata_box, self.ctrl_ids['notes'],
-            style=wx.TE_MULTILINE, size=self._FromDIP((100, 100)))
-        md_sizer2 = wx.BoxSizer(wx.HORIZONTAL)
-        md_sizer2.Add(wx.StaticText(metadata_box, label='Notes:'),
-            border=self._FromDIP(5), flag=wx.TOP|wx.BOTTOM|wx.LEFT)
-        md_sizer2.Add(notes, proportion=1, border=self._FromDIP(5),
-            flag=wx.EXPAND|wx.ALL)
-
-        metadata_sizer = wx.StaticBoxSizer(metadata_box, wx.VERTICAL)
-        metadata_sizer.Add(md_sizer1, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
-            border=self._FromDIP(5))
-        metadata_sizer.Add(md_sizer2, proportion=1, flag=wx.EXPAND|wx.ALL,
-            border=self._FromDIP(5))
-
-        ################ HPLC #################
-        fp_choices = ['{}'.format(i+1) for i in
-            range(int(self._default_settings['num_flow_paths']))]
-
-        hplc_settings = {
-            'sample_loc'    : ['Sample location:', self.ctrl_ids['sample_loc'], 'text'],
-            'inj_vol'       : ['Injection volume [uL]:', self.ctrl_ids['inj_vol'], 'float'],
-            'flow_rate'     : ['Flow rate [ml/min]:', self.ctrl_ids['flow_rate'], 'float'],
-            'elution_vol'   : ['Elution volume [ml]:', self.ctrl_ids['elution_vol'], 'float'],
-            'flow_path'     : ['Flow path:', self.ctrl_ids['flow_path'], 'choice', fp_choices],
-            }
-
-        hplc_adv_settings = {
-            'acq_method'    : ['Acquisition method:', self.ctrl_ids['acq_method'],
-                                'choice', self.acq_methods],
-            'sp_method'     : ['Sample prep. method:', self.ctrl_ids['sp_method'],
-                                'choice', self.sample_methods],
-            'flow_accel'    : ['Flow acceleration [ml/min^2]:', self.ctrl_ids['flow_accel'], 'float'],
-            'pressure_lim'  : ['Max pressure [bar]:', self.ctrl_ids['pressure_lim'], 'float'],
-            'wait_for_flow_ramp' : ['Wait for flow ramp', self.ctrl_ids['wait_for_flow_ramp'], 'bool'],
-            'settle_time'   : ['Settle time [s]:', self.ctrl_ids['settle_time'], 'float'],
-            'result_path'   : ['Result path:', self.ctrl_ids['result_path'], 'text'],
-            'stop_flow'     : ['Stop flow after elution', self.ctrl_ids['stop_flow'], 'bool'],
-            }
-
-        hplc_box = wx.StaticBox(parent, label='HPLC Settings')
-
-        hplc_adv_pane = wx.CollapsiblePane(hplc_box, label="Advanced Settings")
-        hplc_adv_pane.Bind(wx.EVT_COLLAPSIBLEPANE_CHANGED, self.on_collapse)
-        hplc_adv_win = hplc_adv_pane.GetPane()
-
-        hplc_sizer1 = self._create_sizer(hplc_settings, hplc_box)
-        hplc_sizer2 = self._create_sizer(hplc_adv_settings, hplc_adv_win)
-
-        hplc_adv_win.SetSizer(hplc_sizer2)
-        hplc_adv_pane.Collapse()
-
-        hplc_sizer = wx.StaticBoxSizer(hplc_box, wx.VERTICAL)
-        hplc_sizer.Add(hplc_sizer1, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
-            border=self._FromDIP(5))
-        hplc_sizer.Add(hplc_adv_pane, flag=wx.EXPAND|wx.ALL, border=self._FromDIP(5))
-
-
-        ################ Exposure #################
-        exp_settings = {
-            'filename'      : ['File prefix:', self.ctrl_ids['filename'], 'text'],
-            'exp_time'      : ['Exposure time [s]:', self.ctrl_ids['exp_time'], 'float'],
-            'exp_period'    : ['Exposure period [s]:', self.ctrl_ids['exp_period'], 'float'],
-            }
-
-        exp_adv_settings = {
-            'frames_by_elut': ['Set number of frames from elution time',
-                                self.ctrl_ids['frames_by_elut'], 'bool'],
-            'num_frames'    : ['Number of frames:', self.ctrl_ids['num_frames'], 'int'],
-            'wait_for_trig' : ['Wait for external trigger', self.ctrl_ids['wait_for_trig'], 'bool'],
-            'num_trig'      : ['Number of triggers:', self.ctrl_ids['num_trig'], 'int'],
-            }
-
-        exp_box = wx.StaticBox(parent, label='Exposure Settings')
-
-        exp_adv_pane = wx.CollapsiblePane(exp_box, label="Advanced Settings")
-        exp_adv_pane.Bind(wx.EVT_COLLAPSIBLEPANE_CHANGED, self.on_collapse)
-        exp_adv_win = exp_adv_pane.GetPane()
-
-        exp_sizer1 = self._create_sizer(exp_settings, exp_box)
-        exp_sizer2 = self._create_sizer(exp_adv_settings, exp_adv_win)
-
-        exp_adv_win.SetSizer(exp_sizer2)
-        exp_adv_pane.Collapse()
-
-        exp_sizer = wx.StaticBoxSizer(exp_box, wx.VERTICAL)
-        exp_sizer.Add(exp_sizer1, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
-            border=self._FromDIP(5))
-        exp_sizer.Add(exp_adv_pane, flag=wx.EXPAND|wx.ALL, border=self._FromDIP(5))
-
-
-        ################ Coflow #################
-        coflow_settings = {
-            'coflow_from_fr': ['Set coflow flow from HPLC flow rate',
-                                self.ctrl_ids['coflow_from_fr'], 'bool'],
-            'start_coflow'  : ['Start coflow automatically',
-                                self.ctrl_ids['start_coflow'], 'bool'],
-            }
-
-        coflow_adv_settings = {
-            'stop_cloflow'  : ['Stop coflow after exposure',
-                                self.ctrl_ids['stop_coflow'], 'bool'],
-            'coflow_fr'     : ['Coflow flow rate [mL/min]:',
-                                self.ctrl_ids['coflow_fr'], 'float'],
-            }
-
-        coflow_box = wx.StaticBox(parent, label='Coflow Settings')
-
-        coflow_adv_pane = wx.CollapsiblePane(coflow_box, label="Advanced Settings")
-        coflow_adv_pane.Bind(wx.EVT_COLLAPSIBLEPANE_CHANGED, self.on_collapse)
-        coflow_adv_win = coflow_adv_pane.GetPane()
-
-        coflow_sizer1 = self._create_sizer(coflow_settings, coflow_box)
-        coflow_sizer2 = self._create_sizer(coflow_adv_settings, coflow_adv_win)
-
-        coflow_adv_win.SetSizer(coflow_sizer2)
-        coflow_adv_pane.Collapse()
-
-        coflow_sizer = wx.StaticBoxSizer(coflow_box, wx.VERTICAL)
-        coflow_sizer.Add(coflow_sizer1, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
-            border=self._FromDIP(5))
-        coflow_sizer.Add(coflow_adv_pane, flag=wx.EXPAND|wx.ALL, border=self._FromDIP(5))
+        cmd_sizer = make_sec_saxs_info_panel(self, self, self.ctrl_ids, 'horiz')
 
         button_sizer = self.CreateButtonSizer(wx.OK | wx.CANCEL)
-
-        exp_coflow_sizer = wx.BoxSizer(wx.VERTICAL)
-        exp_coflow_sizer.Add(exp_sizer)
-        exp_coflow_sizer.Add(coflow_sizer, flag=wx.TOP, border=self._FromDIP(5))
-
-        cmd_sizer=wx.BoxSizer(wx.HORIZONTAL)
-        cmd_sizer.Add(metadata_sizer, proportion=1, flag=wx.ALL|wx.EXPAND,
-            border=self._FromDIP(5))
-        cmd_sizer.Add(hplc_sizer, flag=wx.TOP|wx.RIGHT|wx.BOTTOM|wx.EXPAND,
-            border=self._FromDIP(5))
-        cmd_sizer.Add(exp_coflow_sizer, flag=wx.TOP|wx.RIGHT|wx.BOTTOM|wx.EXPAND,
-            border=self._FromDIP(5))
 
         top_sizer = wx.BoxSizer(wx.VERTICAL)
         top_sizer.Add(cmd_sizer, proportion=1, flag=wx.EXPAND|wx.ALL,
@@ -2506,6 +2788,7 @@ class EquilibrateDialog(AutoCmdDialog):
 
     def _create_layout(self):
         parent = self
+        top_level = self
 
         ################ HPLC #################
         fp_choices = ['{}'.format(i+1) for i in range(int(self._default_settings['num_flow_paths']))]
@@ -2537,8 +2820,8 @@ class EquilibrateDialog(AutoCmdDialog):
         equil_adv_pane.Bind(wx.EVT_COLLAPSIBLEPANE_CHANGED, self.on_collapse)
         equil_adv_win = equil_adv_pane.GetPane()
 
-        equil_sizer1 = self._create_sizer(equil_settings, equil_box)
-        equil_sizer2 = self._create_sizer(equil_adv_settings, equil_adv_win)
+        equil_sizer1 = create_info_sizer(equil_settings, top_level, equil_box)
+        equil_sizer2 = create_info_sizer(equil_adv_settings, top_level, equil_adv_win)
 
         equil_adv_win.SetSizer(equil_sizer2)
         equil_adv_pane.Collapse()
@@ -2570,8 +2853,8 @@ class EquilibrateDialog(AutoCmdDialog):
         coflow_adv_pane.Bind(wx.EVT_COLLAPSIBLEPANE_CHANGED, self.on_collapse)
         coflow_adv_win = coflow_adv_pane.GetPane()
 
-        coflow_sizer1 = self._create_sizer(coflow_settings, coflow_box)
-        coflow_sizer2 = self._create_sizer(coflow_adv_settings, coflow_adv_win)
+        coflow_sizer1 = create_info_sizer(coflow_settings, top_level, coflow_box)
+        coflow_sizer2 = create_info_sizer(coflow_adv_settings, top_level, coflow_adv_win)
 
         coflow_adv_win.SetSizer(coflow_sizer2)
         coflow_adv_pane.Collapse()
@@ -2606,6 +2889,7 @@ class SwitchDialog(AutoCmdDialog):
 
     def _create_layout(self):
         parent = self
+        top_level = self
 
         ################ HPLC #################
         fp_choices = ['1', '2']
@@ -2636,8 +2920,8 @@ class SwitchDialog(AutoCmdDialog):
         switch_adv_pane.Bind(wx.EVT_COLLAPSIBLEPANE_CHANGED, self.on_collapse)
         switch_adv_win = switch_adv_pane.GetPane()
 
-        switch_sizer1 = self._create_sizer(switch_settings, switch_box)
-        switch_sizer2 = self._create_sizer(switch_adv_settings, switch_adv_win)
+        switch_sizer1 = create_info_sizer(switch_settings, top_level, switch_box)
+        switch_sizer2 = create_info_sizer(switch_adv_settings, top_level, switch_adv_win)
 
         switch_adv_win.SetSizer(switch_sizer2)
         switch_adv_pane.Collapse()
@@ -2669,8 +2953,8 @@ class SwitchDialog(AutoCmdDialog):
         coflow_adv_pane.Bind(wx.EVT_COLLAPSIBLEPANE_CHANGED, self.on_collapse)
         coflow_adv_win = coflow_adv_pane.GetPane()
 
-        coflow_sizer1 = self._create_sizer(coflow_settings, coflow_box)
-        coflow_sizer2 = self._create_sizer(coflow_adv_settings, coflow_adv_win)
+        coflow_sizer1 = create_info_sizer(coflow_settings, top_level, coflow_box)
+        coflow_sizer2 = create_info_sizer(coflow_adv_settings, top_level, coflow_adv_win)
 
         coflow_adv_win.SetSizer(coflow_sizer2)
         coflow_adv_pane.Collapse()
@@ -2706,84 +2990,12 @@ class ExposureCmdDialog(AutoCmdDialog):
 
     def _create_layout(self):
         parent = self
+        top_level = self
 
-        ################ Metadata #################
-        column_choices = ['Superdex 200 10/300 Increase', 'Superdex 75 10/300 Increase',
-            'Superose 6 10/300 Increase', 'Superdex 200 5/150 Increase',
-            'Superdex 75 5/150 Increase', 'Superose 6 5/150 Increase',
-            'Superdex 200 10/300', 'Superdex 75 10/300', 'Superose 6 10/300',
-            'Superdex 200 5/150', 'Superdex 75 5/150', 'Superose 6 5/150',
-            'Wyatt 010S5', 'Wyatt 015S5', 'Wyatt 030S5', 'Capto HiRes Q 5/50',
-            'Capto HiRes S 5/50', 'Other']
-
-        exp_choices = ['AF4-MALS-SAXS', 'Batch mode SAXS', 'IEC-SAXS',
-            'SEC-SAXS', 'SEC-MALS-SAXS', 'TR-SAXS', 'Other']
-
-        metadata_settings = {
-            'exp_type'      : ['Experiment type:', self.ctrl_ids['exp_type'],
-                                'choice', exp_choices],
-            'sample_name'   : ['Sample:', self.ctrl_ids['sample_name'], 'text'],
-            'buf'           : ['Buffer:', self.ctrl_ids['buf'], 'text'],
-            'inj_vol'       : ['Injection volume [uL]:', self.ctrl_ids['inj_vol'], 'float'],
-            'temp'          : ['Temperature [C]:', self.ctrl_ids['temp'], 'float'],
-            'conc'          : ['Concentration [mg/ml]:', self.ctrl_ids['conc'], 'float'],
-            'column'        : ['Column:', self.ctrl_ids['column'], 'choice', column_choices],
-            }
-
-        metadata_box = wx.StaticBox(parent, label='Metadata')
-        md_sizer1 = self._create_sizer(metadata_settings, metadata_box)
-
-        notes = wx.TextCtrl(metadata_box, self.ctrl_ids['notes'],
-            style=wx.TE_MULTILINE, size=self._FromDIP((100, 100)))
-        md_sizer2 = wx.BoxSizer(wx.HORIZONTAL)
-        md_sizer2.Add(wx.StaticText(metadata_box, label='Notes:'),
-            border=self._FromDIP(5), flag=wx.TOP|wx.BOTTOM|wx.LEFT)
-        md_sizer2.Add(notes, proportion=1, border=self._FromDIP(5),
-            flag=wx.EXPAND|wx.ALL)
-
-        metadata_sizer = wx.StaticBoxSizer(metadata_box, wx.VERTICAL)
-        metadata_sizer.Add(md_sizer1, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT)
-        metadata_sizer.Add(md_sizer2, proportion=1, flag=wx.EXPAND|wx.ALL,
-            border=self._FromDIP(5))
-
-
-        ################ Exposure #################
-        exp_settings = {
-            'filename'      : ['File prefix:', self.ctrl_ids['filename'], 'text'],
-            'exp_time'      : ['Exposure time [s]:', self.ctrl_ids['exp_time'], 'float'],
-            'exp_period'    : ['Exposure period [s]:', self.ctrl_ids['exp_period'], 'float'],
-            'num_frames'    : ['Number of frames:', self.ctrl_ids['num_frames'], 'int'],
-            }
-
-        exp_adv_settings = {
-            'wait_for_trig' : ['Wait for external trigger', self.ctrl_ids['wait_for_trig'], 'bool'],
-            'num_trig'      : ['Number of triggers:', self.ctrl_ids['num_trig'], 'int'],
-            }
-
-        exp_box = wx.StaticBox(parent, label='Exposure Settings')
-
-        exp_adv_pane = wx.CollapsiblePane(exp_box, label="Advanced Settings")
-        exp_adv_pane.Bind(wx.EVT_COLLAPSIBLEPANE_CHANGED, self.on_collapse)
-        exp_adv_win = exp_adv_pane.GetPane()
-
-        exp_sizer1 = self._create_sizer(exp_settings, exp_box)
-        exp_sizer2 = self._create_sizer(exp_adv_settings, exp_adv_win)
-
-        exp_adv_win.SetSizer(exp_sizer2)
-        exp_adv_pane.Collapse()
-
-        exp_sizer = wx.StaticBoxSizer(exp_box, wx.VERTICAL)
-        exp_sizer.Add(exp_sizer1, flag=wx.EXPAND|wx.ALL, border=self._FromDIP(5))
-        exp_sizer.Add(exp_adv_pane, flag=wx.EXPAND|wx.TOP|wx.BOTTOM|wx.RIGHT,
-            border=self._FromDIP(5))
+        cmd_sizer = make_standalone_exp_panel(top_level, parent, self.ctrl_ids,
+            'horiz')
 
         button_sizer = self.CreateButtonSizer(wx.OK | wx.CANCEL)
-
-        cmd_sizer=wx.BoxSizer(wx.HORIZONTAL)
-        cmd_sizer.Add(exp_sizer, flag=wx.TOP|wx.RIGHT|wx.BOTTOM|wx.EXPAND,
-            border=self._FromDIP(5))
-        cmd_sizer.Add(metadata_sizer, proportion=1, flag=wx.ALL|wx.EXPAND,
-            border=self._FromDIP(5))
 
         top_sizer = wx.BoxSizer(wx.VERTICAL)
         top_sizer.Add(cmd_sizer, proportion=1, flag=wx.EXPAND|wx.ALL,
@@ -3072,6 +3284,7 @@ if __name__ == '__main__':
     # coflow_frame.Show()
 
 
+    hplc_panel = hplc_frame.devices[0]
     hplc_automator_callback = hplc_frame.devices[0].automator_callback
     # coflow_automator_callback = coflow_frame.coflow_panel.automator_callback
 
@@ -3080,7 +3293,8 @@ if __name__ == '__main__':
     automator_settings['hplc_inst'] = 'hplc'
     automator_settings['instruments'] = {
         'hplc'    : {'num_paths': 2,
-                    'automator_callback': hplc_automator_callback},
+                    'automator_callback': hplc_automator_callback,
+                    'hplc_panel'    : hplc_panel,},
         # 'coflow'    : {'automator_callback': coflow_automator_callback},
         # 'exp'       : {'automator_callback': test_cmd_func}
         }
