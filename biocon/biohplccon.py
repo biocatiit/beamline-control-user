@@ -256,7 +256,12 @@ class AgilentHPLCStandard(AgilentHPLC):
             The valve position
         """
         valve = self._valves[valve_id]
-        position = valve.get_position()
+        position = None
+        retry = 5
+        while position is None and retry > 0:
+            position = valve.get_position()
+            retry -= 1
+
         return position
 
     def get_active_flow_path(self):
@@ -543,6 +548,54 @@ class AgilentHPLCStandard(AgilentHPLC):
             uv_abs = None
 
         return uv_abs
+
+    def get_hplc_elapsed_runtime(self, update=True):
+        """
+        Gets the elasped runtime of the specified flow path
+
+        Parameters
+        ----------
+        update: bool
+
+        Returns
+        -------
+        run_time: float
+            The elasped runtime of the specified flow path. Returns -1
+            if time cannot be acquired.
+        """
+
+        if self._active_flow_path == 1:
+            run_time = self.get_elapsed_runtime(self._pump1_id,
+                update)
+        elif self._active_flow_path == 2:
+            run_time = self.get_elapsed_runtime(self._pump2_id,
+                update)
+
+        return run_time
+
+    def get_hplc_total_runtime(self, update=True):
+        """
+        Gets the total runtime of the specified flow path
+
+        Parameters
+        ----------
+        update: bool
+
+        Returns
+        -------
+        run_time: float
+            The total runtime of the specified flow path. Returns -1
+            if time cannot be acquired.
+        """
+
+        if self._active_flow_path == 1:
+            run_time = self.get_total_runtime(self._pump1_id,
+                update)
+        elif self._active_flow_path == 2:
+            run_time = self.get_total_runtime(self._pump2_id,
+                update)
+
+        return run_time
 
     def _get_flow_rate1(self):
         return self.get_hplc_flow_rate(1)
@@ -1738,6 +1791,8 @@ class AgilentHPLCStandard(AgilentHPLC):
         success: bool
             True if successful
         """
+        self._submitting_sample = True
+
         flow_rate = float(flow_rate)
         flow_accel = float(flow_accel)
         high_pressure_lim = float(high_pressure_lim)
@@ -1794,7 +1849,7 @@ class AgilentHPLCStandard(AgilentHPLC):
         logger.info(('HPLC %s starting to submit sample %s on active flow '
             'path %s'), self.name, name, self._active_flow_path)
 
-        self._submitting_sample = True
+
         self._abort_submit.clear()
         self._monitor_submit_evt.set()
 
@@ -1834,6 +1889,15 @@ class AgilentHPLCStandard(AgilentHPLC):
                 self.submit_sequence(name, [sequence_vals], result_path, name)
 
             if len(self._submit_queue) == 0:
+                if self.get_run_queue_status() == 'Default':
+                    while True:
+                        status = self.get_instrument_status()
+                        if (status != 'Run' and status != 'Injecting'
+                            and status != 'PostRun' and status != 'PreRun'):
+                            time.sleep(0.1)
+                        else:
+                            break
+
                 self._submitting_sample = False
                 self._monitor_submit_evt.clear()
 
@@ -2464,6 +2528,8 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
         success: bool
             True if successful
         """
+        self._submitting_sample = True
+
         flow_rate = float(flow_rate)
         flow_accel = float(flow_accel)
         high_pressure_lim = float(high_pressure_lim)
@@ -2528,7 +2594,7 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
         logger.info(('HPLC %s starting to submit sample %s on active flow '
             'path %s'), self.name, name, self._active_flow_path)
 
-        self._submitting_sample = True
+
         self._abort_submit.clear()
         self._monitor_submit_evt.set()
 
@@ -2791,13 +2857,7 @@ class HPLCCommThread(utils.CommManager):
             'errors'            : device.get_instrument_errors(),
             'run_queue_status'  : device.get_run_queue_status(),
             'run_queue'         : device.get_run_queue(),
-            'elapsed_runtime'   : 0,
-            'remaining_runtime' : 0,
             }
-
-        if instrument_status['status'] == 'Run':
-            instrument_status['elapsed_runtime'] = device.get_elapsed_runtime()
-            instrument_status['remaining_runtime'] = device.get_remaining_runtime()
 
         pump_status = {
             'purging_pump1'     : device.get_purge_status(1),
@@ -2861,13 +2921,23 @@ class HPLCCommThread(utils.CommManager):
             # don't bother it when it's running
             return
 
+        instrument_status = {
+            'elapsed_runtime'   : 0,
+            'total_runtime'     : 0,
+            'status'            : status,
+            }
+
+        if status == 'Run':
+            instrument_status['elapsed_runtime'] = device.get_hplc_elapsed_runtime()
+            instrument_status['total_runtime'] = device.get_hplc_total_runtime( update=False)
+
         pump_status = {
             'target_flow1'      : device.get_hplc_target_flow_rate(1),
             'flow_accel1'       : device.get_hplc_flow_accel(1, False),
             }
 
         if isinstance(device, AgilentHPLC2Pumps):
-            pump_status['target_flow2'] = device.get_hplc_target_flow_rate(2, False)
+            pump_status['target_flow2'] = device.get_hplc_target_flow_rate(2)
             pump_status['flow_accel2'] = device.get_hplc_flow_accel(2, False)
 
         autosampler_status = {
@@ -2882,6 +2952,7 @@ class HPLCCommThread(utils.CommManager):
             uv_status = {}
 
         val = {
+            'instrument_status' : instrument_status,
             'pump_status'       : pump_status,
             'autosampler_status': autosampler_status,
             'uv_status'         : uv_status,
@@ -2917,8 +2988,8 @@ class HPLCCommThread(utils.CommManager):
             pump_status['power_status2'] = device.get_hplc_pump_power_status(2)
             pump_status['high_pressure_lim2'] =device.get_hplc_high_pressure_limit(2,
                 False)
-            pump_status['seal_wash1'] = device.get_hplc_seal_wash_settings(1)
-            pump_status['seal_wash2'] = device.get_hplc_seal_wash_settings(2)
+            # pump_status['seal_wash1'] = device.get_hplc_seal_wash_settings(1)
+            # pump_status['seal_wash2'] = device.get_hplc_seal_wash_settings(2)
 
         autosampler_status = {
             'thermostat_power_status'   : device.get_autosampler_thermostat_power_status(),
@@ -3784,7 +3855,7 @@ class HPLCPanel(utils.DevicePanel):
         self._pump1_on_btn = wx.Button(pump1_box, label='Pump On')
         self._pump1_standby_btn = wx.Button(pump1_box, label='Pump Standby')
         self._pump1_off_btn = wx.Button(pump1_box, label='Pump Off')
-        self._pump1_seal_wash_btn = wx.Button(pump1_box, label='Set Seal Wash')
+        # self._pump1_seal_wash_btn = wx.Button(pump1_box, label='Set Seal Wash')
 
         self._set_pump1_flow_rate_btn.Bind(wx.EVT_BUTTON, self._on_set_flow)
         self._set_pump1_flow_accel_btn.Bind(wx.EVT_BUTTON, self._on_set_flow_accel)
@@ -3798,7 +3869,7 @@ class HPLCPanel(utils.DevicePanel):
         self._pump1_on_btn.Bind(wx.EVT_BUTTON, self._on_pump_on)
         self._pump1_standby_btn.Bind(wx.EVT_BUTTON, self._on_pump_standby)
         self._pump1_off_btn.Bind(wx.EVT_BUTTON, self._on_pump_off)
-        self._pump1_seal_wash_btn.Bind(wx.EVT_BUTTON, self._on_pump_seal_wash)
+        # self._pump1_seal_wash_btn.Bind(wx.EVT_BUTTON, self._on_pump_seal_wash)
 
 
         pump1_ctrl_sizer1 = wx.FlexGridSizer(vgap=self._FromDIP(5),
@@ -3833,7 +3904,7 @@ class HPLCPanel(utils.DevicePanel):
         pump1_btn_sizer.Add(self._pump1_on_btn)
         pump1_btn_sizer.Add(self._pump1_standby_btn)
         pump1_btn_sizer.Add(self._pump1_off_btn)
-        pump1_btn_sizer.Add(self._pump1_seal_wash_btn)
+        # pump1_btn_sizer.Add(self._pump1_seal_wash_btn)
 
 
         pump1_sizer = wx.StaticBoxSizer(pump1_box, wx.VERTICAL)
@@ -3994,7 +4065,7 @@ class HPLCPanel(utils.DevicePanel):
             self._pump2_on_btn = wx.Button(pump2_box, label='Pump On')
             self._pump2_standby_btn = wx.Button(pump2_box, label='Pump Standby')
             self._pump2_off_btn = wx.Button(pump2_box, label='Pump Off')
-            self._pump2_seal_wash_btn = wx.Button(pump2_box, label='Set Seal Wash')
+            # self._pump2_seal_wash_btn = wx.Button(pump2_box, label='Set Seal Wash')
 
 
             self._set_pump2_flow_rate_btn.Bind(wx.EVT_BUTTON, self._on_set_flow)
@@ -4009,7 +4080,7 @@ class HPLCPanel(utils.DevicePanel):
             self._pump2_on_btn.Bind(wx.EVT_BUTTON, self._on_pump_on)
             self._pump2_standby_btn.Bind(wx.EVT_BUTTON, self._on_pump_standby)
             self._pump2_off_btn.Bind(wx.EVT_BUTTON, self._on_pump_off)
-            self._pump2_seal_wash_btn.Bind(wx.EVT_BUTTON, self._on_pump_seal_wash)
+            # self._pump2_seal_wash_btn.Bind(wx.EVT_BUTTON, self._on_pump_seal_wash)
 
 
             pump2_ctrl_sizer1 = wx.FlexGridSizer(vgap=self._FromDIP(5),
@@ -4044,7 +4115,7 @@ class HPLCPanel(utils.DevicePanel):
             pump2_btn_sizer.Add(self._pump2_on_btn)
             pump2_btn_sizer.Add(self._pump2_standby_btn)
             pump2_btn_sizer.Add(self._pump2_off_btn)
-            pump2_btn_sizer.Add(self._pump2_seal_wash_btn)
+            # pump2_btn_sizer.Add(self._pump2_seal_wash_btn)
 
 
             pump2_sizer = wx.StaticBoxSizer(pump2_box, wx.VERTICAL)
@@ -4404,14 +4475,7 @@ class HPLCPanel(utils.DevicePanel):
             cmd = ['abort_current_run', [self.name,], {}]
             self._send_cmd(cmd, False)
 
-    def _on_set_flow_path(self, evt):
-        evt_obj = evt.GetEventObject()
-
-        if self._set_path1_btn == evt_obj:
-            flow_path = 1
-        elif self._set_path2_btn == evt_obj:
-            flow_path = 2
-
+    def get_default_switch_flow_path_settings(self):
         default_switch_settings = {
             'purge_vol'                 : self.settings['switch_purge_volume'],
             'purge_rate'                : self.settings['switch_purge_rate'],
@@ -4422,6 +4486,18 @@ class HPLCPanel(utils.DevicePanel):
             'stop_flow2'                : self.settings['switch_stop_flow2'],
             'purge_active'              : self.settings['switch_purge_active'],
             }
+
+        return default_switch_settings
+
+    def _on_set_flow_path(self, evt):
+        evt_obj = evt.GetEventObject()
+
+        if self._set_path1_btn == evt_obj:
+            flow_path = 1
+        elif self._set_path2_btn == evt_obj:
+            flow_path = 2
+
+        default_switch_settings = self.get_default_switch_flow_path_settings()
 
         switch_dialog = SwitchDialog(self, default_switch_settings,
             title='Switch active flowpath to {} settings'.format(flow_path))
@@ -4437,23 +4513,70 @@ class HPLCPanel(utils.DevicePanel):
         if switch_settings is not None:
             self._validate_and_switch(flow_path, switch_settings)
 
-    def _validate_and_switch(self, flow_path, switch_settings):
-        do_switch = True
+    def _validate_and_switch(self, flow_path, switch_settings, verbose=True):
+        valid, errors = self.validate_switch_params(switch_settings)
+
+        if valid:
+            switch_settings['purge_max_pressure'] = self.settings['purge_max_pressure']
+
+            cmd = ['set_active_flow_path', [self.name, flow_path], switch_settings]
+            self._send_cmd(cmd, False)
+
+            do_switch = True
+
+        else:
+            do_switch = False
+
+            if verbose:
+                msg = 'The following field(s) have invalid values:'
+                for err in errors:
+                    msg = msg + '\n- ' + err
+                msg = msg + ('\n\nPlease correct these errors, then start the '
+                    'switch.')
+
+                wx.CallAfter(wx.MessageBox, msg, 'Error in switch parameters',
+                    style=wx.OK|wx.ICON_ERROR)
+
+        return do_switch
+
+    def validate_switch_params(self, switch_settings):
+        errors = []
 
         if switch_settings['purge_active']:
             try:
                 switch_settings['purge_volume'] = float(switch_settings['purge_volume'])
-                switch_settings['purge_rate'] = float(switch_settings['purge_rate'])
-                switch_settings['purge_accel'] = float(switch_settings['purge_accel'])
-                switch_settings['purge_max_pressure'] = self.settings['purge_max_pressure']
             except Exception:
-                do_switch = False
+                errors.append('Purge volume (must be >0)')
 
-        if do_switch:
-            cmd = ['set_active_flow_path', [self.name, flow_path], switch_settings]
-            self._send_cmd(cmd, False)
+            try:
+                switch_settings['purge_rate'] = float(switch_settings['purge_rate'])
+            except Exception:
+                errors.append('Purge rate (must be >0)')
 
-        return do_switch
+            try:
+                switch_settings['purge_accel'] = float(switch_settings['purge_accel'])
+            except Exception:
+                errors.append('Purge acceleration (must be >0)')
+
+        if switch_settings['purge_active']:
+            if isinstance(switch_settings['purge_volume'], float):
+                if switch_settings['purge_volume'] <= 0:
+                    errors.append('Purge volume (must be >0)')
+
+            if isinstance(switch_settings['purge_rate'], float):
+                if switch_settings['purge_rate'] <= 0:
+                    errors.append('Purge rate (must be >0)')
+
+            if isinstance(switch_settings['purge_accel'], float):
+                if switch_settings['purge_accel'] <= 0:
+                    errors.append('Purge acceleration (must be >0)')
+
+        if len(errors) > 0:
+            valid = False
+        else:
+            valid =  True
+
+        return valid, errors
 
     def _on_stop_all(self, evt):
         cmd = ['stop_all', [self.name,], {}]
@@ -4563,6 +4686,9 @@ class HPLCPanel(utils.DevicePanel):
         elif self._pump2_stop_btn == evt_obj:
             flow_path = 2
 
+        self._stop_flow(flow_path)
+
+    def _stop_flow(self, flow_path):
         cmd = ['stop_pump{}'.format(flow_path), [self.name,], {}]
         self._send_cmd(cmd, False)
 
@@ -4571,7 +4697,7 @@ class HPLCPanel(utils.DevicePanel):
                     wx.CallAfter(self._pump1_flow_target_ctrl.SetLabel, '0.0')
                     self._pump1_flow_target = '0.0'
 
-        elif flow_path == 1:
+        elif flow_path == 2:
             if '0.0' != self._pump2_flow_target:
                     wx.CallAfter(self._pump2_flow_target_ctrl.SetLabel, '0.0')
                     self._pump2_flow_target = '0.0'
@@ -4592,7 +4718,7 @@ class HPLCPanel(utils.DevicePanel):
                     wx.CallAfter(self._pump1_flow_target_ctrl.SetLabel, '0.0')
                     self._pump1_flow_target = '0.0'
 
-        elif flow_path == 1:
+        elif flow_path == 2:
             if '0.0' != self._pump2_flow_target:
                     wx.CallAfter(self._pump2_flow_target_ctrl.SetLabel, '0.0')
                     self._pump2_flow_target = '0.0'
@@ -4659,14 +4785,7 @@ class HPLCPanel(utils.DevicePanel):
         cmd = ['stop_purge', [self.name, flow_path,], {}]
         self._send_cmd(cmd, False)
 
-    def _on_eq(self, evt):
-        evt_obj = evt.GetEventObject()
-
-        if self._pump1_eq_btn == evt_obj:
-            flow_path = 1
-        elif self._pump2_eq_btn == evt_obj:
-            flow_path = 2
-
+    def get_default_equil_settings(self):
         default_equil_settings = {
             'equil_vol'     : self.settings['equil_volume'],
             'equil_rate'    : self.settings['equil_rate'],
@@ -4678,6 +4797,18 @@ class HPLCPanel(utils.DevicePanel):
             'equil_with_sample' : self.settings['equil_with_sample'],
             'stop_after_equil'  : self.settings['stop_after_equil'],
         }
+
+        return default_equil_settings
+
+    def _on_eq(self, evt):
+        evt_obj = evt.GetEventObject()
+
+        if self._pump1_eq_btn == evt_obj:
+            flow_path = 1
+        elif self._pump2_eq_btn == evt_obj:
+            flow_path = 2
+
+        default_equil_settings = self.get_default_equil_settings()
 
         equil_dialog = EquilDialog(self, default_equil_settings,
             title='Equilibration {} settings'.format(flow_path))
@@ -4693,23 +4824,16 @@ class HPLCPanel(utils.DevicePanel):
         if equil_settings is not None:
             self._validate_and_equilibrate(flow_path, equil_settings)
 
-    def _validate_and_equilibrate(self, flow_path, equil_settings):
-        equil_vol = equil_settings.pop('equil_vol')
-        equil_rate = equil_settings.pop('equil_rate')
-        equil_accel = equil_settings.pop('equil_accel')
+    def _validate_and_equilibrate(self, flow_path, equil_settings, verbose=True):
+        valid, errors = self.validate_equil_params(equil_settings)
 
-        try:
-            equil_vol = float(equil_vol)
-            equil_rate = float(equil_rate)
-            equil_accel = float(equil_accel)
-            equil_settings['purge_volume'] = float(equil_settings['purge_volume'])
-            equil_settings['purge_rate'] = float(equil_settings['purge_rate'])
-            equil_settings['purge_accel'] = float(equil_settings['purge_accel'])
+        if valid:
+            equil_vol = equil_settings.pop('equil_vol')
+            equil_rate = equil_settings.pop('equil_rate')
+            equil_accel = equil_settings.pop('equil_accel')
+
             equil_settings['purge_max_pressure'] = self.settings['purge_max_pressure']
-        except Exception:
-            equil_vol = None
 
-        if equil_vol is not None:
             cmd = ['equil_flow_path', [self.name, flow_path, equil_vol,
                 equil_rate, equil_accel], equil_settings]
             self._send_cmd(cmd, False)
@@ -4719,7 +4843,93 @@ class HPLCPanel(utils.DevicePanel):
         else:
             run_equil = False
 
+            if verbose:
+                msg = 'The following field(s) have invalid values:'
+                for err in errors:
+                    msg = msg + '\n- ' + err
+                msg = msg + ('\n\nPlease correct these errors, then start the '
+                    'equilibration.')
+
+                wx.CallAfter(wx.MessageBox, msg, 'Error in equilibration parameters',
+                    style=wx.OK|wx.ICON_ERROR)
+
         return run_equil
+
+    def validate_equil_params(self, equil_settings):
+        equil_vol = equil_settings['equil_vol']
+        equil_rate = equil_settings['equil_rate']
+        equil_accel = equil_settings['equil_accel']
+
+        errors = []
+
+        try:
+            equil_vol = float(equil_vol)
+        except Exception:
+            errors.append('Equilibration volume (must be >0)')
+
+        try:
+            equil_rate = float(equil_rate)
+        except Exception:
+            errors.append('Equilibration rate (must be >0)')
+
+        try:
+            equil_accel = float(equil_accel)
+        except Exception:
+            errors.append('Equilibration acceleration (must be >0)')
+
+        if equil_settings['purge']:
+            try:
+                equil_settings['purge_volume'] = float(equil_settings['purge_volume'])
+            except Exception:
+                errors.append('Purge volume (must be >0)')
+
+            try:
+                equil_settings['purge_rate'] = float(equil_settings['purge_rate'])
+            except Exception:
+                errors.append('Purge rate (must be >0)')
+
+            try:
+                equil_settings['purge_accel'] = float(equil_settings['purge_accel'])
+            except Exception:
+                errors.append('Purge acceleration (must be >0)')
+
+        if isinstance(equil_vol, float):
+            if equil_vol <= 0:
+                errors.append('Equilibration volume (must be >0)')
+
+        if isinstance(equil_rate, float):
+            if equil_rate <= 0:
+                errors.append('Equilibration rate (must be >0)')
+
+        if isinstance(equil_accel, float):
+            if equil_accel <= 0:
+                errors.append('Equilibration acceleration (must be >0)')
+
+        if equil_settings['purge']:
+            if isinstance(equil_settings['purge_volume'], float):
+                if equil_settings['purge_volume'] <= 0:
+                    errors.append('Purge volume (must be >0)')
+
+            if isinstance(equil_settings['purge_rate'], float):
+                if equil_settings['purge_rate'] <= 0:
+                    errors.append('Purge rate (must be >0)')
+
+            if isinstance(equil_settings['purge_accel'], float):
+                if equil_settings['purge_accel'] <= 0:
+                    errors.append('Purge acceleration (must be >0)')
+
+        if len(errors) > 0:
+            valid = False
+        else:
+            valid =  True
+
+        if valid:
+            equil_settings['equil_vol'] = equil_vol
+            equil_settings['equil_rate'] = equil_rate
+            equil_settings['equil_accel'] = equil_accel
+
+        return valid, errors
+
 
     def _on_stop_eq(self, evt):
         evt_obj = evt.GetEventObject()
@@ -4903,7 +5113,9 @@ class HPLCPanel(utils.DevicePanel):
                         wx.CallAfter(self._pump2_flow_target_ctrl.SetLabel, str(val))
                         self._pump2_flow_target = str(val)
 
-    def _on_submit_sample(self, evt):
+    def get_default_sample_settings(self):
+
+
         default_sample_settings = {
             'acq_method'    : self.settings['acq_method'],
             'sample_loc'    : self.settings['sample_loc'],
@@ -4920,6 +5132,32 @@ class HPLCPanel(utils.DevicePanel):
             'all_sample_methods'    : self._sp_methods,
             }
 
+        default_method = default_sample_settings['acq_method']
+        if default_method not in default_sample_settings['all_acq_methods']:
+            default_method = os.path.splitext(default_method)[0]+'.amx'
+
+            if default_method not in default_sample_settings['all_acq_methods']:
+                default_method ='.\\{}'.format(default_method)
+
+            default_sample_settings['acq_method'] = default_method
+
+        default_sp_method = default_sample_settings['sp_method']
+        if default_sp_method not in default_sample_settings['all_sample_methods']:
+            if default_sp_method != '':
+                default_sp_method = os.path.splitext(default_sp_method)[0]+'.smx'
+
+                if default_method not in default_sample_settings['all_sample_methods']:
+                    default_method ='.\\{}'.format(default_method)
+            else:
+                default_sp_method = 'None'
+
+            default_sample_settings['sp_method'] = default_sp_method
+
+        return default_sample_settings
+
+    def _on_submit_sample(self, evt):
+        default_sample_settings = self.get_default_sample_settings()
+
         sample_dialog = SampleDialog(self, default_sample_settings,
             title='Sample submission settings')
         result = sample_dialog.ShowModal()
@@ -4934,30 +5172,20 @@ class HPLCPanel(utils.DevicePanel):
         if sample_settings is not None:
             self._validate_and_submit_sample(sample_settings)
 
-    def _validate_and_submit_sample(self, sample_settings):
-        sample_name = sample_settings.pop('sample_name')
-        acq_method = sample_settings.pop('acq_method')
-        sample_loc = sample_settings.pop('sample_loc')
-        inj_vol = sample_settings.pop('inj_vol')
-        flow_rate = sample_settings.pop('flow_rate')
-        flow_accel = sample_settings.pop('flow_accel')
-        elution_vol = sample_settings.pop('elution_vol')
-        pressure_lim = sample_settings.pop('pressure_lim')
+    def _validate_and_submit_sample(self, sample_settings, verbose=True):
+        valid, errors = self.validate_injection_params(sample_settings)
 
-        try:
-            inj_vol = float(inj_vol)
-            flow_rate = float(flow_rate)
-            flow_accel = float(flow_accel)
-            elution_vol = float(elution_vol)
-            pressure_lim = float(pressure_lim)
+        if valid:
 
-            if sample_settings['wait_for_flow_ramp']:
-                sample_settings['settle_time'] = float(sample_settings['settle_time'])
+            sample_name = sample_settings.pop('sample_name')
+            acq_method = sample_settings.pop('acq_method')
+            sample_loc = sample_settings.pop('sample_loc')
+            inj_vol = sample_settings.pop('inj_vol')
+            flow_rate = sample_settings.pop('flow_rate')
+            flow_accel = sample_settings.pop('flow_accel')
+            elution_vol = sample_settings.pop('elution_vol')
+            pressure_lim = sample_settings.pop('pressure_lim')
 
-        except Exception:
-            inj_vol = None
-
-        if inj_vol is not None:
             cmd = ['submit_sample', [self.name, sample_name, acq_method,
                 sample_loc, inj_vol, flow_rate, flow_accel, elution_vol,
                 pressure_lim], sample_settings]
@@ -4968,7 +5196,122 @@ class HPLCPanel(utils.DevicePanel):
         else:
             run_sample = False
 
+            if verbose:
+                msg = 'The following field(s) have invalid values:'
+                for err in errors:
+                    msg = msg + '\n- ' + err
+                msg = msg + ('\n\nPlease correct these errors, then start the run.')
+
+                wx.CallAfter(wx.MessageBox, msg, 'Error in injection parameters',
+                    style=wx.OK|wx.ICON_ERROR)
+
         return run_sample
+
+    def validate_injection_params(self, sample_settings):
+        sample_name = sample_settings['sample_name']
+        acq_method = sample_settings['acq_method']
+        sample_loc = sample_settings['sample_loc']
+        inj_vol = sample_settings['inj_vol']
+        flow_rate = sample_settings['flow_rate']
+        flow_accel = sample_settings['flow_accel']
+        elution_vol = sample_settings['elution_vol']
+        pressure_lim = sample_settings['pressure_lim']
+
+        errors = []
+
+        if len(sample_name) == 0:
+            errors.append('Sample name (must not be blank)')
+
+        if len(acq_method) == 0:
+            errors.append('Acquisition method (must not be blank)')
+
+        if '-' in sample_loc:
+            drawer, spot = sample_loc.split('-')
+            if drawer not in ['D1F', 'D1B', 'D2F', 'D2B', 'D3F', 'D3B']:
+                errors.append('Drawer (not a valid drawer location)')
+
+            if not spot[0].isalpha():
+                errors.append('Sample well/position not valid')
+
+            elif not spot[1:].isdigit():
+                errors.append('Sample well/position not valid')
+
+        else:
+            if not sample_loc.isdigit():
+                errors.append('Sample well/position not valid')
+
+        try:
+            inj_vol = float(inj_vol)
+        except Exception:
+            errors.append('Injection volume (between 1 and {} uL)'.format(
+                self.settings['max_inj_vol']))
+
+        try:
+            flow_rate = float(flow_rate)
+        except Exception:
+            errors.append('Flow rate (must be >0)')
+
+        try:
+            flow_accel = float(flow_accel)
+        except Exception:
+            errors.append('Flow acceleration (must be >0)')
+
+        try:
+            elution_vol = float(elution_vol)
+        except Exception:
+            errors.append('Elution volume (must be >0)')
+
+        try:
+            pressure_lim = float(pressure_lim)
+        except Exception:
+            errors.append('Pressure limit (must be >0)')
+
+        try:
+            if sample_settings['wait_for_flow_ramp']:
+                sample_settings['settle_time'] = float(sample_settings['settle_time'])
+        except Exception:
+            errors.append('Settling time (must be >=0)')
+
+        if isinstance(inj_vol, float):
+            if inj_vol < 1 or inj_vol > self.settings['max_inj_vol']:
+                errors.append('Injection volume (between 1 and {} uL)'.format(
+                    self.settings['max_inj_vol']))
+
+        if isinstance(flow_rate, float):
+            if flow_rate <= 0:
+                errors.append('Flow rate (must be >0)')
+
+        if isinstance(flow_accel, float):
+            if flow_accel <= 0:
+                errors.append('Flow acceleration (must be >0)')
+
+        if isinstance(elution_vol, float):
+            if elution_vol <= 0:
+                errors.append('Elution volume (must be >0)')
+
+        if isinstance(pressure_lim, float):
+            if pressure_lim <= 0:
+                errors.append('Pressure limit (must be >0)')
+
+        if sample_settings['wait_for_flow_ramp']:
+            if isinstance(sample_settings['settle_time'], float):
+                if sample_settings['settle_time'] < 0:
+                    errors.append('Settling time (must be >=0)')
+
+        if len(errors) > 0:
+            valid = False
+        else:
+            valid =  True
+
+        if valid:
+            sample_settings['inj_vol'] = inj_vol
+            sample_settings['flow_rate'] = flow_rate
+            sample_settings['flow_accel'] = flow_accel
+            sample_settings['elution_vol'] = elution_vol
+            sample_settings['pressure_lim'] = pressure_lim
+
+        return valid, errors
+
 
     def _on_stop_submission(self, evt):
         cmd = ['stop_sample_submission', [self.name,], {}]
@@ -5088,16 +5431,6 @@ class HPLCPanel(utils.DevicePanel):
             status = str(inst_status['status'])
             run_queue_status = str(inst_status['run_queue_status'])
             run_queue = inst_status['run_queue']
-            elapsed_runtime = inst_status['elapsed_runtime']
-            remaining_runtime = inst_status['remaining_runtime']
-
-            if (status != 'Run' and status != 'Injecting'
-                and status != 'PostRun' and status != 'PreRun'):
-                total_runtime = '0.0'
-                elapsed_runtime = '0.0'
-            else:
-                total_runtime = str(round(elapsed_runtime + remaining_runtime,1))
-                elapsed_runtime = str(round(elapsed_runtime, 1))
 
             if connected != self._inst_connected:
                 wx.CallAfter(self._inst_connected_ctrl.SetLabel,
@@ -5108,13 +5441,6 @@ class HPLCPanel(utils.DevicePanel):
                 wx.CallAfter(self._inst_status_ctrl.SetLabel,
                     status)
                 self._inst_status =  status
-
-            if((elapsed_runtime != self._inst_elapsed_runtime) or
-                (total_runtime != self._inst_total_runtime)):
-                wx.CallAfter(self._inst_runtime_ctrl.SetLabel,
-                    '{}/{}'.format(elapsed_runtime, total_runtime))
-                self._inst_elapsed_runtime =  elapsed_runtime
-                self._inst_total_runtime =  total_runtime
 
             if (run_queue_status != self._inst_run_queue_status):
                 wx.CallAfter(self._inst_run_queue_status_ctrl.SetLabel,
@@ -5322,6 +5648,26 @@ class HPLCPanel(utils.DevicePanel):
 
 
         elif cmd == 'get_slow_hplc_status':
+            inst_status = val['instrument_status']
+            elapsed_runtime = inst_status['elapsed_runtime']
+            total_runtime = inst_status['total_runtime']
+            status = str(inst_status['status'])
+
+            if (status != 'Run' and status != 'Injecting'
+                and status != 'PostRun' and status != 'PreRun'):
+                total_runtime = '0.0'
+                elapsed_runtime = '0.0'
+            else:
+                total_runtime = str(round(total_runtime,1))
+                elapsed_runtime = str(round(elapsed_runtime, 1))
+
+            if((elapsed_runtime != self._inst_elapsed_runtime) or
+                (total_runtime != self._inst_total_runtime)):
+                wx.CallAfter(self._inst_runtime_ctrl.SetLabel,
+                    '{}/{}'.format(elapsed_runtime, total_runtime))
+                self._inst_elapsed_runtime =  elapsed_runtime
+                self._inst_total_runtime =  total_runtime
+
             pump_status = val['pump_status']
             pump1_flow_target = str(round(float(pump_status['target_flow1']),3))
             pump1_flow_accel = str(round(float(pump_status['flow_accel1']),3))
@@ -5367,8 +5713,8 @@ class HPLCPanel(utils.DevicePanel):
             if self._device_type == 'AgilentHPLC2Pumps':
                 pump2_power = str(pump_status['power_status2'])
                 pump2_pressure_lim = str(round(float(pump_status['high_pressure_lim2']),3))
-                pump1_seal_wash = pump_status['seal_wash1']
-                pump2_seal_wash = pump_status['seal_wash2']
+                # pump1_seal_wash = pump_status['seal_wash1']
+                # pump2_seal_wash = pump_status['seal_wash2']
 
                 if pump2_power != self._pump2_power:
                     wx.CallAfter(self._pump2_power_ctrl.SetLabel, pump2_power)
@@ -5379,15 +5725,15 @@ class HPLCPanel(utils.DevicePanel):
                         pump2_pressure_lim)
                     self._pump2_pressure_lim = pump2_pressure_lim
 
-                self._pump1_seal_wash_mode = str(pump1_seal_wash['mode'])
-                self._pump1_seal_wash_single_duration = str(pump1_seal_wash['single_duration'])
-                self._pump1_seal_wash_period = str(pump1_seal_wash['period'])
-                self._pump1_seal_wash_period_duration = str(pump1_seal_wash['period_duration'])
+                # self._pump1_seal_wash_mode = str(pump1_seal_wash['mode'])
+                # self._pump1_seal_wash_single_duration = str(pump1_seal_wash['single_duration'])
+                # self._pump1_seal_wash_period = str(pump1_seal_wash['period'])
+                # self._pump1_seal_wash_period_duration = str(pump1_seal_wash['period_duration'])
 
-                self._pump2_seal_wash_mode = str(pump2_seal_wash['mode'])
-                self._pump2_seal_wash_single_duration = str(pump2_seal_wash['single_duration'])
-                self._pump2_seal_wash_period = str(pump2_seal_wash['period'])
-                self._pump2_seal_wash_period_duration = str(pump2_seal_wash['period_duration'])
+                # self._pump2_seal_wash_mode = str(pump2_seal_wash['mode'])
+                # self._pump2_seal_wash_single_duration = str(pump2_seal_wash['single_duration'])
+                # self._pump2_seal_wash_period = str(pump2_seal_wash['period'])
+                # self._pump2_seal_wash_period_duration = str(pump2_seal_wash['period_duration'])
 
 
             sampler_status = val['autosampler_status']
@@ -5540,6 +5886,28 @@ class HPLCPanel(utils.DevicePanel):
 
         self._run_queue_ctrl.Thaw()
 
+    def _get_automator_state(self, flow_path):
+        if self._flow_path_status.lower() == 'true':
+            state = 'switch'
+
+        elif flow_path == 1:
+            if self._pump1_purge.lower() == 'true':
+                state = 'equil'
+            elif self._pump1_eq.lower() == 'true':
+                state = 'equil'
+            else:
+                state = 'idle'
+
+        elif flow_path == 2:
+            if self._pump2_purge.lower() == 'true':
+                state = 'equil'
+            elif self._pump2_eq.lower() == 'true':
+                state = 'equil'
+            else:
+                state = 'idle'
+
+        return state
+
     def automator_callback(self, cmd_name, cmd_args, cmd_kwargs):
         # if cmd_name != 'status':
         #     print('automator_callback')
@@ -5564,28 +5932,19 @@ class HPLCPanel(utils.DevicePanel):
 
                 flow_path = int(inst_name.split('_')[-1].lstrip('pump'))
 
-                if self._flow_path_status.lower() == 'true':
-                    state = 'switch'
-
-                elif flow_path == 1:
-                    if self._pump1_purge.lower() == 'true':
-                        state = 'equil'
-                    elif self._pump1_eq.lower() == 'true':
-                        state = 'equil'
-                    else:
-                        state = 'idle'
-
-                elif flow_path == 2:
-                    if self._pump2_purge.lower() == 'true':
-                        state = 'equil'
-                    elif self._pump2_eq.lower() == 'true':
-                        state = 'equil'
-                    else:
-                        state = 'idle'
+                state = self._get_automator_state(flow_path)
 
             elif (self._inst_status == 'Run' or self._inst_status == 'Injecting'
                 or self._inst_status == 'PostRun' or self._inst_status == 'PreRun'):
-                state = 'run'
+                inst_name = cmd_kwargs['inst_name']
+                flow_path = int(inst_name.split('_')[-1].lstrip('pump'))
+                if self._device_type == 'AgilentHPLC2Pumps':
+                    if flow_path == int(self._flow_path):
+                        state = 'run'
+                    else:
+                        state = self._get_automator_state(flow_path)
+                else:
+                    state = 'run'
 
             else:
                 state = 'idle'
@@ -5616,7 +5975,7 @@ class HPLCPanel(utils.DevicePanel):
 
             if (acq_method in self._methods and (sp_method is None
                 or sp_method in self._sp_methods)):
-                success = self._validate_and_submit_sample(cmd_kwargs)
+                success = self._validate_and_submit_sample(cmd_kwargs, False)
 
             else:
                 success = False
@@ -5625,34 +5984,40 @@ class HPLCPanel(utils.DevicePanel):
 
         elif cmd_name == 'equilibrate':
             flow_path = cmd_kwargs.pop('flow_path')
-            success = self._validate_and_equilibrate(flow_path, cmd_kwargs)
+            success = self._validate_and_equilibrate(flow_path, cmd_kwargs, False)
 
             state = 'equil'
 
         elif cmd_name == 'switch_pumps':
-            flow_path = cmd_kwargs.pop('flow_path')
-            success = self._validate_and_switch(flow_path, cmd_kwargs)
+            flow_path = int(cmd_kwargs.pop('flow_path'))
 
-            state = 'switch'
+            if flow_path != int(self._flow_path):
+                success = self._validate_and_switch(flow_path, cmd_kwargs, False)
+                state = 'switch'
+            else:
+                state = self._get_automator_state(flow_path)
+
+        elif cmd_name == 'stop_flow':
+            flow_path = cmd_kwargs['flow_path']
+            self._stop_flow(flow_path)
+
+            state = 'idle'
 
         elif cmd_name == 'abort':
             state = 'idle'
+            inst_name = cmd_kwargs['inst_name']
+            abort_flow_path = int(inst_name.split('_')[-1].lstrip('pump'))
 
-            if (self._inst_status == 'Run' or self._inst_status == 'Injecting'
-                or self._inst_status == 'PostRun' or self._inst_status == 'PreRun'):
+            if ((self._inst_status == 'Run' or self._inst_status == 'Injecting'
+                or self._inst_status == 'PostRun' or self._inst_status == 'PreRun')
+                and abort_flow_path == int(self._flow_path)):
                 self._on_abort_current_run(None)
 
             else:
-                inst_name = cmd_kwargs['inst_name']
-                flow_path = int(inst_name.split('_')[-1].lstrip('pump'))
-
                 if self._flow_path_status.lower() == 'true':
                     self._on_stop_switch(None)
 
-                elif self._sampler_submitting.lower() == 'true':
-                    self._on_stop_submission(None)
-
-                elif flow_path == 1:
+                elif abort_flow_path == 1:
                     if self._pump1_eq.lower() == 'true':
                         self._stop_eq(1)
 
@@ -5660,7 +6025,11 @@ class HPLCPanel(utils.DevicePanel):
                         and self._pump1_purge.lower() == 'true'):
                         self._stop_purge(1)
 
-                elif flow_path == 2:
+                    elif (self._sampler_submitting.lower() == 'true'
+                        and int(self._flow_path) == 1):
+                        self._on_stop_submission(None)
+
+                elif abort_flow_path == 2:
                     if self._pump2_eq.lower() == 'true':
                         self._stop_eq(2)
 
@@ -5668,7 +6037,58 @@ class HPLCPanel(utils.DevicePanel):
                         and self._pump2_purge.lower() == 'true'):
                         self._stop_purge(2)
 
+                    elif (self._sampler_submitting.lower() == 'true'
+                        and int(self._flow_path) == 2):
+                        self._on_stop_submission(None)
+
+        elif cmd_name == 'full_status':
+            if self._flow_path_status.lower() == 'true':
+                state = 'Switching'
+            elif self._sampler_submitting.lower() == 'true':
+                state = 'Submitting'
+            else:
+                state = copy.copy(self._inst_status)
+
+            runtime = float(self._inst_total_runtime)-float(self._inst_elapsed_runtime)
+            rountime = round(runtime, 1)
+
+            if self._pump1_purge.lower() == 'true':
+                pump1_state = 'Equilibrating'
+            elif self._pump1_eq.lower() == 'true':
+                pump1_state = 'Equilibrating'
+            elif float(self._pump1_flow) > 0:
+                pump1_state = 'Flowing'
+            else:
+                pump1_state = 'Stopped'
+
+            if self._device_type == 'AgilentHPLC2Pumps':
+                if self._pump2_purge.lower() == 'true':
+                    pump2_state = 'Equilibrating'
+                elif self._pump2_eq.lower() == 'true':
+                    pump2_state = 'Equilibrating'
+                elif float(self._pump2_flow) > 0:
+                    pump2_state = 'Flowing'
+                else:
+                    pump2_state = 'Stopped'
+            else:
+                pump2_state = ''
+
+            state = {
+                'state'         : state,
+                'flow_path'     : copy.copy(self._flow_path),
+                'runtime'       : str(runtime),
+                'pump1_state'   : pump1_state,
+                'pump1_fr'      : copy.copy(self._pump1_flow),
+                'pump1_pressure': copy.copy(self._pump1_pressure),
+                'pump2_state'   : pump2_state,
+                'pump2_fr'      : copy.copy(self._pump2_flow),
+                'pump2_pressure': copy.copy(self._pump2_pressure),
+            }
+
         return state, success
+
+    def on_exit(self):
+        pass
 
 
 
@@ -6291,6 +6711,114 @@ class HPLCFrame(utils.DeviceFrame):
         self._init_devices()
 
 
+######################################################
+# Default settings
+
+# SEC-SAXS 2 pump
+hplc_args = {
+    'name'  : 'SEC-SAXS',
+    'args'  : ['AgilentHPLC', 'net.pipe://localhost/Agilent/OpenLAB/'],
+    'kwargs': {'instrument_name': 'SEC-SAXS', 'project_name': 'Demo',
+                'get_inst_method_on_start': True, 'use_angi': False,}
+    }
+
+default_selector_valve_args = {
+    'name'  : 'Selector',
+    'args'  : ['Cheminert', 'COM5'],
+    'kwargs': {'positions' : 2}
+    }
+
+default_outlet_valve_args = {
+    'name'  : 'Outlet',
+    'args'  : ['Cheminert', 'COM3'],
+    'kwargs': {'positions' : 2}
+    }
+
+default_purge1_valve_args = {
+    'name'  : 'Purge 1',
+    'args'  : ['Cheminert', 'COM6'],
+    'kwargs': {'positions' : 4}
+    }
+
+default_purge2_valve_args = {
+    'name'  : 'Purge 2',
+    'args'  : ['Cheminert', 'COM9'],
+    'kwargs': {'positions' : 4}
+    }
+
+default_buffer1_valve_args = {
+    'name'  : 'Buffer 1',
+    'args'  : ['Cheminert', 'COM7'],
+    'kwargs': {'positions' : 10}
+    }
+
+default_buffer2_valve_args = {
+    'name'  : 'Buffer 2',
+    'args'  : ['Cheminert', 'COM4'],
+    'kwargs': {'positions' : 10}
+    }
+
+# 2 pump HPLC for SEC-SAXS
+setup_devices = [
+    {'name': 'SEC-SAXS', 'args': ['AgilentHPLC2Pumps', None],
+        'kwargs': {'hplc_args' : hplc_args,
+        'selector_valve_args' : default_selector_valve_args,
+        'outlet_valve_args' : default_outlet_valve_args,
+        'purge1_valve_args' : default_purge1_valve_args,
+        'purge2_valve_args' : default_purge2_valve_args,
+        'buffer1_valve_args' : default_buffer1_valve_args,
+        'buffer2_valve_args' : default_buffer2_valve_args,
+        'pump1_id' : 'quat. pump 1#1c#1',
+        'pump2_id' : 'quat. pump 2#1c#2'},
+        }
+    ]
+
+default_hplc_2pump_settings = {
+    # Connection settings for hplc
+    'remote'        : False,
+    'remote_device' : 'hplc',
+    'device_init'   : setup_devices,
+    'remote_ip'     : '192.168.1.16',
+    'remote_port'   : '5558',
+    'com_thread'    : None,
+    # Default settings for hplc
+    'purge_volume'              : 20,
+    'purge_rate'                : 5,
+    'purge_accel'               : 10,
+    'purge_max_pressure'        : 250,
+    'restore_flow_after_purge'  : True,
+    'purge_with_sample'         : False,
+    'stop_before_purge'         : True,
+    'stop_after_purge'          : True,
+    'equil_volume'              : 48,
+    'equil_rate'                : 0.6,
+    'equil_accel'               : 0.1,
+    'equil_purge'               : True,
+    'equil_with_sample'         : False,
+    'stop_after_equil'          : False,
+    'switch_purge_active'       : True,
+    'switch_purge_volume'       : 1,
+    'switch_purge_rate'         : 1,
+    'switch_purge_accel'        : 10,
+    'switch_with_sample'        : False,
+    'switch_stop_flow1'         : True,
+    'switch_stop_flow2'         : True,
+    'restore_flow_after_switch' : True,
+    'acq_method'                : 'SECSAXS_test',
+    # 'acq_method'                : 'SEC-MALS',
+    'sample_loc'                : 'D2F-A1',
+    'inj_vol'                   : 10.0,
+    'flow_rate'                 : 0.6,
+    'flow_accel'                : 0.1,
+    'elution_vol'               : 30,
+    'sample_pressure_lim'       : 60.0,
+    'max_inj_vol'               : 400.0,
+    'result_path'               : '',
+    'sp_method'                 : '',
+    'wait_for_flow_ramp'        : True,
+    'settle_time'               : 0.0,
+    }
+
 if __name__ == '__main__':
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
@@ -6301,36 +6829,21 @@ if __name__ == '__main__':
     h1.setFormatter(formatter)
     logger.addHandler(h1)
 
-    # # SEC-SAXS 2 pump
+
+
+
+    # # SEC-MALS HPLC-1
     # hplc_args = {
-    #     'name'  : 'SEC-SAXS',
+    #     'name'  : 'HPLC-1',
     #     'args'  : ['AgilentHPLC', 'net.pipe://localhost/Agilent/OpenLAB/'],
-    #     'kwargs': {'instrument_name': 'SEC-SAXS', 'project_name': 'Demo',
+    #     'kwargs': {'instrument_name': 'HPLC-1', 'project_name': 'Demo',
     #                 'get_inst_method_on_start': True}
-    #     }
-
-    # selector_valve_args = {
-    #     'name'  : 'Selector',
-    #     'args'  : ['Cheminert', 'COM5'],
-    #     'kwargs': {'positions' : 2}
-    #     }
-
-    # outlet_valve_args = {
-    #     'name'  : 'Outlet',
-    #     'args'  : ['Cheminert', 'COM8'],
-    #     'kwargs': {'positions' : 2}
     #     }
 
     # purge1_valve_args = {
     #     'name'  : 'Purge 1',
-    #     'args'  : ['Cheminert', 'COM9'],
-    #     'kwargs': {'positions' : 4}
-    #     }
-
-    # purge2_valve_args = {
-    #     'name'  : 'Purge 2',
-    #     'args'  : ['Cheminert', 'COM6'],
-    #     'kwargs': {'positions' : 4}
+    #     'args'  :['Rheodyne', 'COM5'],
+    #     'kwargs': {'positions' : 6}
     #     }
 
     # buffer1_valve_args = {
@@ -6338,33 +6851,6 @@ if __name__ == '__main__':
     #     'args'  : ['Cheminert', 'COM3'],
     #     'kwargs': {'positions' : 10}
     #     }
-
-    # buffer2_valve_args = {
-    #     'name'  : 'Buffer 2',
-    #     'args'  : ['Cheminert', 'COM4'],
-    #     'kwargs': {'positions' : 10}
-    #     }
-
-
-    # SEC-MALS HPLC-1
-    hplc_args = {
-        'name'  : 'HPLC-1',
-        'args'  : ['AgilentHPLC', 'net.pipe://localhost/Agilent/OpenLAB/'],
-        'kwargs': {'instrument_name': 'HPLC-1', 'project_name': 'Demo',
-                    'get_inst_method_on_start': True}
-        }
-
-    purge1_valve_args = {
-        'name'  : 'Purge 1',
-        'args'  :['Rheodyne', 'COM5'],
-        'kwargs': {'positions' : 6}
-        }
-
-    buffer1_valve_args = {
-        'name'  : 'Buffer 1',
-        'args'  : ['Cheminert', 'COM3'],
-        'kwargs': {'positions' : 10}
-        }
 
     # my_hplc = AgilentHPLC2Pumps(hplc_args['name'], None, hplc_args=hplc_args,
     #     selector_valve_args=selector_valve_args,
@@ -6403,87 +6889,36 @@ if __name__ == '__main__':
     #     0.05, 0.1, 0.1, 60.0, result_path='api_test', )
 
 
-    # # 2 pump HPLC for SEC-SAXS
-    # setup_devices = [
-    #     {'name': 'SEC-SAXS', 'args': ['AgilentHPLC2Pumps', None],
-    #         'kwargs': {'hplc_args' : hplc_args,
-    #         'selector_valve_args' : selector_valve_args,
-    #         'outlet_valve_args' : outlet_valve_args,
-    #         'purge1_valve_args' : purge1_valve_args,
-    #         'purge2_valve_args' : purge2_valve_args,
-    #         'buffer1_valve_args' : buffer1_valve_args,
-    #         'buffer2_valve_args' : buffer2_valve_args,
-    #         'pump1_id' : 'quat. pump 1#1c#1',
-    #         'pump2_id' : 'quat. pump 2#1c#2'},
-    #         }
-    #     ]
 
-    # Standard stack for SEC-MALS
-    setup_devices = [
-        {'name': 'HPLC-1', 'args': ['AgilentHPLCStandard', None],
-            'kwargs': {'hplc_args' : hplc_args,
-            'purge1_valve_args' : purge1_valve_args,
-            'buffer1_valve_args' : buffer1_valve_args,
-            'pump1_id' : 'quat. pump#1c#1',
-            },
-        }
-        ]
+
+    # # Standard stack for SEC-MALS
+    # setup_devices = [
+    #     {'name': 'HPLC-1', 'args': ['AgilentHPLCStandard', None],
+    #         'kwargs': {'hplc_args' : hplc_args,
+    #         'purge1_valve_args' : purge1_valve_args,
+    #         'buffer1_valve_args' : buffer1_valve_args,
+    #         'pump1_id' : 'quat. pump#1c#1',
+    #         },
+    #     }
+    #     ]
 
     # Local
     com_thread = HPLCCommThread('HPLCComm')
     com_thread.start()
+    default_hplc_2pump_settings['com_thread'] = com_thread
 
     # # Remote
     # com_thread = None
+    # default_hplc_2pump_settings['com_thread'] = com_thread
+    # default_hplc_2pump_settings['remote'] = True
+    # default_hplc_2pump_settings['remote_device'] = 'hplc'
+    # default_hplc_2pump_settings['remote_ip'] = '164.54.204.113'
+    # default_hplc_2pump_settings['remote_port'] = '5556'
 
-    hplc_settings = {
-        # Connection settings for hplc
-        'remote'        : False,
-        'remote_device' : 'hplc',
-        'device_init'   : setup_devices,
-        'remote_ip'     : '192.168.1.16',
-        'remote_port'   : '5558',
-        'com_thread'    : com_thread,
-        # Default settings for hplc
-        'purge_volume'              : 20,
-        'purge_rate'                : 5,
-        'purge_accel'               : 10,
-        'purge_max_pressure'        : 250,
-        'restore_flow_after_purge'  : True,
-        'purge_with_sample'         : False,
-        'stop_before_purge'         : True,
-        'stop_after_purge'          : True,
-        'equil_volume'              : 48,
-        'equil_rate'                : 0.6,
-        'equil_accel'               : 0.1,
-        'equil_purge'               : True,
-        'equil_with_sample'         : False,
-        'stop_after_equil'          : True,
-        'switch_purge_active'       : True,
-        'switch_purge_volume'       : 1,
-        'switch_purge_rate'         : 1,
-        'switch_purge_accel'        : 10,
-        'switch_with_sample'        : False,
-        'switch_stop_flow1'         : True,
-        'switch_stop_flow2'         : True,
-        'restore_flow_after_switch' : True,
-        # 'acq_method'                : 'SECSAXS_test',
-        'acq_method'                : 'SEC-MALS',
-        'sample_loc'                : 'D2F-A1',
-        'inj_vol'                   : 10.0,
-        'flow_rate'                 : 0.6,
-        'flow_accel'                : 0.1,
-        'elution_vol'               : 30,
-        'sample_pressure_lim'       : 60.0,
-        'result_path'               : '',
-        'sp_method'                 : '',
-        'wait_for_flow_ramp'        : True,
-        'settle_time'               : 0.0,
-        }
 
     app = wx.App()
     logger.debug('Setting up wx app')
-    frame = HPLCFrame('HPLCFrame', hplc_settings, parent=None,
+    frame = HPLCFrame('HPLCFrame', default_hplc_2pump_settings, parent=None,
         title='HPLC Control')
     frame.Show()
 

@@ -143,7 +143,6 @@ class ExpCommThread(threading.Thread):
             record_name = self._settings['detector'].rstrip('_epics')
 
             det_args = self._settings['det_args']
-
             det = detectorcon.EPICSEigerDetector(record_name, **det_args)
 
         logger.debug("Got detector records")
@@ -2723,61 +2722,19 @@ class ExpCommThread(threading.Thread):
 
 class ExpPanel(wx.Panel):
     """
-    This pump panel supports standard flow controls and settings, including
-    connection settings, for a pump. It is meant to be embedded in a larger application
-    and can be instanced several times, once for each pump. It communciates
-    with the pumps using the :py:class:`PumpCommThread`. Currently it only supports
-    the :py:class:`M50Pump`, but it should be easy to extend for other pumps. The
-    only things that should have to be changed are the are adding in pump-specific
-    settings, modeled after how the ``m50_pump_sizer`` is constructed in the
-    :py:func:`_create_layout` function, and then add in type switching in the
-    :py:func:`_on_type` function.
+    Exposure panel
     """
     def __init__(self, settings, *args, **kwargs):
         """
-        Initializes the custom thread. Important parameters here are the
-        list of known commands ``_commands`` and known pumps ``known_pumps``.
-
-        :param wx.Window parent: Parent class for the panel.
-
-        :param int panel_id: wx ID for the panel.
-
-        :param str panel_name: Name for the panel
-
-        :param list all_comports: A list containing all comports that the pump
-            could be connected to.
-
-        :param collections.deque pump_cmd_q: The ``pump_cmd_q`` that was passed to
-            the :py:class:`PumpCommThread`.
-
-        :param list known_pumps: The list of known pump types, obtained from
-            the :py:class:`PumpCommThread`.
-
-        :param str pump_name: An identifier for the pump, displayed in the pump
-            panel.
-
-        :param str pump_type: One of the ``known_pumps``, corresponding to the pump
-            connected to this panel. Only required if you are connecting the pump
-            when the panel is first set up (rather than manually later).
-
-        :param str comport: The comport the pump is connected to. Only required
-            if you are connecting the pump when the panel is first set up (rather
-            than manually later).
-
-        :param list pump_args: Pump specific arguments for initialization.
-            Only required if you are connecting the pump when the panel is first
-            set up (rather than manually later).
-
-        :param dict pump_kwargs: Pump specific keyword arguments for initialization.
-            Only required if you are connecting the pump when the panel is first
-            set up (rather than manually later).
-
         """
 
         wx.Panel.__init__(self, *args, **kwargs)
         logger.debug('Initializing ExpPanel')
 
         self.settings = settings
+        self._exp_status = ''
+        self._time_remaining = 0
+        self._run_number = '_{:03d}'.format(self.settings['run_num'])
 
         self.exp_cmd_q = deque()
         self.exp_ret_q = deque()
@@ -2826,7 +2783,7 @@ class ExpPanel(wx.Panel):
             size=self._FromDIP((60,-1)), validator=utils.CharValidator('float'))
         self.exp_period = wx.TextCtrl(self, value=self.settings['exp_period'],
             size=self._FromDIP((60,-1)), validator=utils.CharValidator('float'))
-        self.run_num = wx.StaticText(self, label='_{:03d}'.format(self.settings['run_num']))
+        self.run_num = wx.StaticText(self, label=self._run_number)
         self.wait_for_trig = wx.CheckBox(self, label='Wait for external trigger')
         self.wait_for_trig.SetValue(self.settings['wait_for_trig'])
         self.num_trig = wx.TextCtrl(self, value=self.settings['num_trig'],
@@ -3060,29 +3017,34 @@ class ExpPanel(wx.Panel):
     def _on_stop_exp(self, evt):
         self.stop_exp()
 
-    def start_exp(self, exp_only):
+    def start_exp(self, exp_only, exp_values=None, metadata_vals=None, verbose=True):
         self.abort_event.clear()
         self.exp_event.clear()
         self.timeout_event.clear()
 
-        warnings_valid = self._check_warnings()
+        warnings_valid = self._check_warnings(verbose)
 
         if not warnings_valid:
             return
 
-        exp_values, exp_valid = self._get_exp_values()
+        if exp_values is None:
+            exp_values, exp_valid = self.get_exp_values(verbose)
+        else:
+            exp_valid = True
+
+        self.current_exposure_values = exp_values
 
         if not exp_valid:
             return
 
-        metadata, metadata_valid = self._get_metadata()
+        metadata, metadata_valid = self._get_metadata(metadata_vals, verbose)
 
         if metadata_valid:
             exp_values['metadata'] = metadata
         else:
             return
 
-        overwrite_valid = self._check_overwrite(exp_values)
+        overwrite_valid = self._check_overwrite(exp_values, verbose)
 
         if not overwrite_valid:
             return
@@ -3091,7 +3053,7 @@ class ExpPanel(wx.Panel):
             data_dir = os.path.join(self.current_exposure_values['data_dir'], 'images')
             self.current_exposure_values['data_dir'] = data_dir
 
-        comp_valid, comp_settings = self._check_components(exp_only)
+        comp_valid, comp_settings = self._check_components(exp_only, verbose)
 
         if not comp_valid:
             return
@@ -3114,8 +3076,8 @@ class ExpPanel(wx.Panel):
         self._pipeline_start_exp()
 
         self.set_status('Preparing exposure')
-        self.start_exp_btn.Disable()
-        self.stop_exp_btn.Enable()
+        wx.CallAfter(self.start_exp_btn.Disable)
+        wx.CallAfter(self.stop_exp_btn.Enable)
         self.total_time = exp_values['num_frames']*exp_values['exp_period']
 
         if self.settings['tr_muscle_exp']:
@@ -3142,10 +3104,10 @@ class ExpPanel(wx.Panel):
 
         if (('trsaxs_scan' in self.settings['components'] and not exp_only) or exp_values['wait_for_trig']
             or ('scan' in self.settings['components'] and not exp_only)):
-            self.exp_status_sizer.Show(self.scan_num_sizer, recursive=True)
-            self.scan_number.SetLabel('1')
+            wx.CallAfter(self.exp_status_sizer.Show, self.scan_num_sizer, recursive=True)
+            wx.CallAfter(self.scan_number.SetLabel, '1')
         else:
-            self.exp_status_sizer.Hide(self.scan_num_sizer, recursive=True)
+            wx.CallAfter(self.exp_status_sizer.Hide, self.scan_num_sizer, recursive=True)
 
         if 'trsaxs_flow' in self.settings['components'] and not exp_only:
             trsaxs_flow_panel = wx.FindWindowByName('trsaxs_flow')
@@ -3170,7 +3132,9 @@ class ExpPanel(wx.Panel):
         self.set_time_remaining(0)
         old_rn = self.run_num.GetLabel()
         run_num = int(old_rn[1:])+1
-        self.run_num.SetLabel('_{:03d}'.format(run_num))
+        self._run_number = '_{:03d}'.format(run_num)
+        self.run_num.SetLabel(self._run_number)
+
 
         if 'coflow' in self.settings['components']:
             coflow_panel = wx.FindWindowByName('coflow')
@@ -3187,17 +3151,19 @@ class ExpPanel(wx.Panel):
             uv_panel.on_exposure_stop(self)
 
     def set_status(self, status):
-        self.status.SetLabel(status)
+        wx.CallAfter(self.status.SetLabel, status)
+        self._exp_status = status
 
     def set_time_remaining(self, tr):
         if tr < 3600:
-            tr = time.strftime('%M:%S', time.gmtime(tr))
+            tr_str = time.strftime('%M:%S', time.gmtime(tr))
         elif tr < 86400:
-            tr = time.strftime('%H:%M:%S', time.gmtime(tr))
+            tr_str = time.strftime('%H:%M:%S', time.gmtime(tr))
         else:
-            tr = time.strftime('%d:%H:%M:%S', time.gmtime(tr))
+            tr_str = time.strftime('%d:%H:%M:%S', time.gmtime(tr))
 
-        self.time_remaining.SetLabel(tr)
+        self._time_remaining = tr
+        wx.CallAfter(self.time_remaining.SetLabel, tr_str)
 
     def set_scan_number(self, val):
         self.scan_number.SetLabel(str(val))
@@ -3277,7 +3243,8 @@ class ExpPanel(wx.Panel):
                     else:
                         exp_type = 'Batch'
 
-                elif md_exp_type == 'SEC-SAXS' or md_exp_type == 'SEC-MALS-SAXS':
+                elif (md_exp_type == 'SEC-SAXS' or md_exp_type == 'SEC-MALS-SAXS'
+                    or md_exp_type == 'AF4-MALS-SAXS'):
                     exp_type = 'SEC'
 
                 elif md_exp_type == 'TR-SAXS':
@@ -3355,20 +3322,20 @@ class ExpPanel(wx.Panel):
     def _on_close_timeout_dialog(self):
         self.timeout_dialog = None
 
-    def _check_warnings(self):
-        shutter_valid = self._check_shutters()
+    def _check_warnings(self, verbose=True):
+        shutter_valid = self._check_shutters(verbose)
 
         if not shutter_valid:
             return shutter_valid
 
-        vac_valid = self._check_vacuum()
+        vac_valid = self._check_vacuum(verbose)
 
         if not vac_valid:
             return vac_valid
 
         return True
 
-    def _check_shutters(self):
+    def _check_shutters(self, verbose=True):
 
         cont = True
         msg = ''
@@ -3405,8 +3372,9 @@ class ExpPanel(wx.Panel):
                 msg = ('The D Hutch shutter is closed. Are you sure you '
                     'want to continue?')
 
-            if msg != '':
-                dlg = wx.MessageDialog(None, msg, "Shutter Closed", wx.YES_NO|wx.ICON_EXCLAMATION|wx.NO_DEFAULT)
+            if msg != '' and verbose:
+                dlg = wx.MessageDialog(None, msg, "Shutter Closed",
+                    wx.YES_NO|wx.ICON_EXCLAMATION|wx.NO_DEFAULT)
                 result = dlg.ShowModal()
                 dlg.Destroy()
 
@@ -3424,7 +3392,7 @@ class ExpPanel(wx.Panel):
 
         return cont
 
-    def _check_vacuum(self):
+    def _check_vacuum(self, verbose=True):
         cont = True
         msg = ''
 
@@ -3484,10 +3452,11 @@ class ExpPanel(wx.Panel):
                 msg = msg + ('\nFlight tube vacuum (< {} mtorr): {} mtorr'.format(
                     int(round(thresh*1000)), int(round(vac*1000))))
 
-        if msg != '':
+        if msg != '' and verbose:
             msg = ('The following vacuum readings are too high, are you sure '
                 'you want to continue?') + msg
-            dlg = wx.MessageDialog(None, msg, "Shutter Closed", wx.YES_NO|wx.ICON_EXCLAMATION|wx.NO_DEFAULT)
+            dlg = wx.MessageDialog(None, msg, "Shutter Closed",
+                wx.YES_NO|wx.ICON_EXCLAMATION|wx.NO_DEFAULT)
             result = dlg.ShowModal()
             dlg.Destroy()
 
@@ -3496,13 +3465,13 @@ class ExpPanel(wx.Panel):
 
         return cont
 
-    def _get_exp_values(self):
+    def get_exp_values(self, verbose=True):
         num_frames = self.num_frames.GetValue()
         exp_time = self.exp_time.GetValue()
         exp_period = self.exp_period.GetValue()
         data_dir = self.data_dir.GetValue()
         filename = self.filename.GetValue()
-        run_num = self.run_num.GetLabel()
+        run_num = self._run_number
         wait_for_trig = self.wait_for_trig.GetValue()
         num_trig = self.num_trig.GetValue()
         shutter_speed_open = self.settings['shutter_speed_open']
@@ -3512,6 +3481,37 @@ class ExpPanel(wx.Panel):
         struck_log_vals = self.settings['struck_log_vals']
         joerger_log_vals = self.settings['joerger_log_vals']
         struck_measurement_time = self.muscle_sampling.GetValue()
+
+        (num_frames, exp_time, exp_period, data_dir, filename,
+            wait_for_trig, num_trig, local_data_dir, struck_num_meas, valid,
+            errors) = self._validate_exp_values(
+            num_frames, exp_time, exp_period, data_dir, filename,
+            wait_for_trig, num_trig, struck_measurement_time, verbose=verbose)
+
+        exp_values = {
+            'num_frames'                : num_frames,
+            'exp_time'                  : exp_time,
+            'exp_period'                : exp_period,
+            'data_dir'                  : data_dir,
+            'local_data_dir'            : local_data_dir,
+            'fprefix'                   : filename+run_num,
+            'wait_for_trig'             : wait_for_trig,
+            'num_trig'                  : num_trig,
+            'shutter_speed_open'        : shutter_speed_open,
+            'shutter_speed_close'       : shutter_speed_close,
+            'shutter_cycle'             : shutter_cycle,
+            'shutter_pad'               : shutter_pad,
+            'joerger_log_vals'          : joerger_log_vals,
+            'struck_log_vals'           : struck_log_vals,
+            'struck_measurement_time'   : struck_measurement_time,
+            'struck_num_meas'           : struck_num_meas,
+            }
+
+        return exp_values, valid
+
+    def _validate_exp_values(self, num_frames, exp_time, exp_period, data_dir,
+        filename, wait_for_trig, num_trig, struck_measurement_time, verbose=True,
+        automator=False):
 
         errors = []
 
@@ -3549,7 +3549,8 @@ class ExpPanel(wx.Panel):
 
         if isinstance(num_frames, int):
             if num_frames < 1 or num_frames > self.settings['nframes_max']:
-                errors.append('Number of frames (between 1 and {}'.format(self.settings['nframes_max']))
+                errors.append('Number of frames (between 1 and {}'.format(
+                    self.settings['nframes_max']))
 
         if isinstance(exp_time, float):
             if (exp_time < self.settings['exp_time_min']
@@ -3595,7 +3596,7 @@ class ExpPanel(wx.Panel):
         if filename == '':
             errors.append('Filename (must not be blank)')
 
-        if data_dir == '' or not os.path.exists(data_dir):
+        if (data_dir == '' or not os.path.exists(data_dir)) and not automator:
             errors.append('Data directory (must exist, and not be blank)')
 
         if wait_for_trig:
@@ -3603,7 +3604,7 @@ class ExpPanel(wx.Panel):
                 if num_trig < 1:
                     errors.append(('Number of triggers (greater than 0)'))
 
-        if len(errors) > 0:
+        if len(errors) > 0 and verbose:
             msg = 'The following field(s) have invalid values:'
             for err in errors:
                 msg = msg + '\n- ' + err
@@ -3612,7 +3613,6 @@ class ExpPanel(wx.Panel):
             wx.CallAfter(wx.MessageBox, msg, 'Error in exposure parameters',
                 style=wx.OK|wx.ICON_ERROR)
 
-            exp_values = {}
             valid = False
 
         else:
@@ -3626,32 +3626,15 @@ class ExpPanel(wx.Panel):
             else:
                 struck_num_meas = 0
 
-            exp_values = {
-                'num_frames'                : num_frames,
-                'exp_time'                  : exp_time,
-                'exp_period'                : exp_period,
-                'data_dir'                  : data_dir,
-                'local_data_dir'            : local_data_dir,
-                'fprefix'                   : filename+run_num,
-                'wait_for_trig'             : wait_for_trig,
-                'num_trig'                  : num_trig,
-                'shutter_speed_open'        : shutter_speed_open,
-                'shutter_speed_close'       : shutter_speed_close,
-                'shutter_cycle'             : shutter_cycle,
-                'shutter_pad'               : shutter_pad,
-                'joerger_log_vals'          : joerger_log_vals,
-                'struck_log_vals'           : struck_log_vals,
-                'struck_measurement_time'   : struck_measurement_time,
-                'struck_num_meas'           : struck_num_meas,
-                }
+
 
             valid = True
 
-        self.current_exposure_values = exp_values
+        return (num_frames, exp_time, exp_period, data_dir, filename,
+            wait_for_trig, num_trig, local_data_dir, struck_num_meas, valid,
+            errors)
 
-        return exp_values, valid
-
-    def _check_components(self, exp_only):
+    def _check_components(self, exp_only, verbose=True):
         comp_settings = {}
         errors = []
 
@@ -3717,7 +3700,7 @@ class ExpPanel(wx.Panel):
                 errors.append(('Exposure period must be at least 0.01 s longer '
                     'than exposure time with UV data collection'))
 
-        if len(errors) > 0:
+        if len(errors) > 0 and verbose:
             msg = 'The following field(s) have invalid values:'
             for err in errors:
                 msg = msg + '\n- ' + err
@@ -3728,13 +3711,15 @@ class ExpPanel(wx.Panel):
 
             comp_settings = {}
             valid = False
+        elif not verbose:
+            valid = True
         else:
             valid = (coflow_started and trsaxs_scan_valid and trsaxs_flow_valid
                 and scan_valid and uv_valid)
 
         return valid, comp_settings
 
-    def _check_overwrite(self, exp_settings):
+    def _check_overwrite(self, exp_settings, verbose=True):
         data_dir = exp_settings['data_dir']
         fprefix = exp_settings['fprefix']
         num_frames = exp_settings['num_frames']
@@ -3760,7 +3745,7 @@ class ExpPanel(wx.Panel):
                 cont = False
                 break
 
-        if not cont:
+        if not cont and verbose:
             msg = ("Warning: data collection will overwrite existing files "
                 "with the same name. Do you want to proceed?")
             dlg = wx.MessageDialog(None, msg, "Confirm data overwrite",
@@ -3770,11 +3755,13 @@ class ExpPanel(wx.Panel):
 
             if result == wx.ID_YES:
                 cont = True
+        else:
+            cont = True
 
         return cont
 
 
-    def _get_metadata(self):
+    def _get_metadata(self, metadata_vals=None, verbose=True):
 
         metadata = self.metadata()
 
@@ -3813,11 +3800,18 @@ class ExpPanel(wx.Panel):
             for key, value in scan_metadata.items():
                 metadata[key] = value
 
-        if 'metadata' in self.settings['components']:
+        if 'metadata' in self.settings['components'] and metadata_vals is None:
             params_panel = wx.FindWindowByName('metadata')
             params_metadata = params_panel.metadata()
 
             for key, value in params_metadata.items():
+                metadata[key] = value
+
+                if key == 'Column:':
+                    column = value
+
+        elif metadata_vals is not None:
+            for key, value in metadata_vals.items():
                 metadata[key] = value
 
                 if key == 'Column:':
@@ -3835,11 +3829,11 @@ class ExpPanel(wx.Panel):
             if metadata['Coflow on:']:
                 if column is not None and flow_rate is not None:
                     if '10/300' in column:
-                        flow_range = (0.5, 0.8)
+                        flow_range = (0.4, 0.8)
                     elif '5/150' in column:
-                        flow_range = (0.25, 0.5)
+                        flow_range = (0.2, 0.5)
                     elif 'Wyatt' in column:
-                        flow_range = (0.5, 0.8)
+                        flow_range = (0.4, 0.8)
                     else:
                         flow_range = None
 
@@ -3861,7 +3855,7 @@ class ExpPanel(wx.Panel):
                 msg = ('Coflow is not on')
                 errors.append(msg)
 
-        if len(errors) == 0:
+        if len(errors) == 0 or not verbose:
             metadata_valid = True
 
         else:
@@ -3979,7 +3973,7 @@ class ExpPanel(wx.Panel):
 
         exp_settings['data_dir'] = self.data_dir.GetValue()
         exp_settings['filename'] = self.filename.GetValue()
-        exp_settings['run_num'] = self.run_num.GetLabel()
+        exp_settings['run_num'] = self._run_number
         exp_settings['wait_for_trig'] = self.wait_for_trig.GetValue()
 
         return exp_settings
@@ -3993,14 +3987,14 @@ class ExpPanel(wx.Panel):
             self.exp_period.ChangeValue(str(exp_settings['exp_period']))
         if 'num_trig' in exp_settings:
             self.num_trig.ChangeValue(str(exp_settings['num_trig']))
-        if 'data_dir' in exp_settings:
-            self.data_dir.ChangeValue(str(exp_settings['data_dir']))
+        if 'local_data_dir' in exp_settings:
+            self.data_dir.ChangeValue(str(exp_settings['local_data_dir']))
         if 'filename' in exp_settings:
             self.filename.ChangeValue(str(exp_settings['filename']))
         if 'run_num' in exp_settings:
             self.run_num.ChangeValue(str(exp_settings['run_num']))
         if 'wait_for_trig' in exp_settings:
-            self.wait_for_trig.ChangeValue(str(exp_settings['wait_for_trig']))
+            self.wait_for_trig.SetValue(exp_settings['wait_for_trig'])
 
     def set_pipeline_ctrl(self, pipeline_ctrl):
         self.pipeline_ctrl = pipeline_ctrl
@@ -4019,6 +4013,144 @@ class ExpPanel(wx.Panel):
 
         else:
             self.pipeline_warning_shown = False
+
+    def automator_callback(self, cmd_name, cmd_args, cmd_kwargs):
+        success = True
+
+        if cmd_name == 'status':
+            if (self._exp_status == 'Aborting'
+                or self._exp_status == 'Exposing'
+                or self._exp_status == 'Waiting for Trigger'):
+                state = 'exposing'
+
+            elif self._exp_status == 'Preparing exposure':
+                state = 'preparing'
+
+            elif self._exp_status == 'Ready':
+                state = 'idle'
+
+            else:
+                state = 'idle'
+
+        elif cmd_name == 'abort':
+            if (self._exp_status == 'Exposing'
+                or self._exp_status == 'Waiting for Trigger'):
+                self.stop_exp()
+
+            state = 'idle'
+
+        elif cmd_name == 'expose':
+            num_frames = int(cmd_kwargs['num_frames'])
+            exp_time = float(cmd_kwargs['exp_time'])
+            exp_period = float(cmd_kwargs['exp_period'])
+            data_dir = cmd_kwargs['data_dir']
+            filename = cmd_kwargs['filename']
+            run_num = self._run_number
+            wait_for_trig = cmd_kwargs['wait_for_trig']
+            num_trig = int(cmd_kwargs['num_trig'])
+            shutter_speed_open = self.settings['shutter_speed_open']
+            shutter_speed_close = self.settings['shutter_speed_close']
+            shutter_cycle = self.settings['shutter_cycle']
+            shutter_pad = self.settings['shutter_pad']
+            struck_log_vals = self.settings['struck_log_vals']
+            joerger_log_vals = self.settings['joerger_log_vals']
+            struck_measurement_time = float(cmd_kwargs['struck_measurement_time'])
+
+            if self.settings['tr_muscle_exp']:
+                struck_num_meas = exp_period*num_frames/struck_measurement_time
+                struck_num_meas = int(struck_num_meas+0.5)
+            else:
+                struck_num_meas = 0
+
+            local_data_dir = copy.copy(data_dir)
+            data_dir = data_dir.replace(self.settings['local_dir_root'],
+                self.settings['remote_dir_root'], 1)
+
+            exp_values = {
+                'num_frames'                : num_frames,
+                'exp_time'                  : exp_time,
+                'exp_period'                : exp_period,
+                'data_dir'                  : data_dir,
+                'local_data_dir'            : local_data_dir,
+                'fprefix'                   : filename+run_num,
+                'wait_for_trig'             : wait_for_trig,
+                'num_trig'                  : num_trig,
+                'shutter_speed_open'        : shutter_speed_open,
+                'shutter_speed_close'       : shutter_speed_close,
+                'shutter_cycle'             : shutter_cycle,
+                'shutter_pad'               : shutter_pad,
+                'joerger_log_vals'          : joerger_log_vals,
+                'struck_log_vals'           : struck_log_vals,
+                'struck_measurement_time'   : struck_measurement_time,
+                'struck_num_meas'           : struck_num_meas,
+                'filename'                  : filename,
+                }
+
+            if cmd_kwargs['item_type'] == 'sec_sample':
+                exp_type = 'SEC-SAXS'
+
+            elif cmd_kwargs['item_type'] == 'exposure':
+                exp_type = cmd_kwargs['exp_type']
+
+            if (exp_type == 'SEC-SAXS' or exp_type == 'SEC-MALS-SAXS' or
+                exp_type == 'IEC-SAXS'):
+                column = cmd_kwargs['column']
+
+            sample = cmd_kwargs['sample_name']
+            buf = cmd_kwargs['buf']
+            temperature = cmd_kwargs['temp']
+            vol = cmd_kwargs['inj_vol']
+            conc = cmd_kwargs['conc']
+            notes = cmd_kwargs['notes']
+
+            metadata = {
+                'Experiment type:'      : exp_type,
+                'Sample:'               : sample,
+                'Buffer:'               : buf,
+                'Temperature [C]:'      : temperature,
+                'Loaded volume [uL]:'   : vol,
+                'Concentration [mg/ml]:': conc,
+                }
+
+            if (exp_type == 'SEC-SAXS' or exp_type == 'SEC-MALS-SAXS' or
+                exp_type == 'IEC-SAXS'):
+                metadata['Column:'] = column
+
+            metadata['Notes:'] = notes
+
+            wx.CallAfter(self.set_exp_settings, exp_values)
+
+            params_panel = wx.FindWindowByName('metadata')
+            if params_panel is not None:
+                if params_panel.saxs_panel.IsShown():
+                    wx.CallAfter(params_panel.saxs_panel.set_metadata, metadata)
+                else:
+                    wx.CallAfter(params_panel.muscle_panel.set_metadata, metadata)
+
+            else:
+                metadata = None
+
+            if not os.path.exists(exp_values['local_data_dir']):
+                os.makedirs(exp_values['local_data_dir'])
+
+
+            self.start_exp(True, exp_values, metadata, False)
+
+            state = 'exposing'
+
+        elif cmd_name == 'full_status':
+            runtime = round(self._time_remaining/60,1)
+            if self._exp_status == 'Ready':
+                status = 'Idle'
+            else:
+                status = copy.copy(self._exp_status)
+
+            state = {
+                'status'    : status,
+                'runtime'   : str(runtime),
+            }
+
+        return state, success
 
 
     def on_exit(self):
@@ -4069,7 +4201,7 @@ class ExpFrame(wx.Frame):
         self.exp_sizer.Add(self.exp_panel, proportion=1, flag=wx.EXPAND)
 
         top_sizer = wx.BoxSizer(wx.VERTICAL)
-        top_sizer.Add(self.exp_sizer, flag=wx.EXPAND|wx.ALL, border=5)
+        top_sizer.Add(self.exp_sizer, flag=wx.EXPAND)
 
         return top_sizer
 
@@ -4078,6 +4210,124 @@ class ExpFrame(wx.Frame):
         logger.debug('Closing the ExpFrame')
         self.exp_panel.on_exit()
         self.Destroy()
+
+
+
+############################################################################
+default_exposure_settings = {
+    'data_dir'              : '',
+    'filename'              : '',
+    'run_num'               : 1,
+    'exp_time'              : '0.5',
+    'exp_period'            : '1',
+    'exp_num'               : '2',
+
+    # 'exp_time_min'          : 0.00105,  # For Pilatus3 X 1M
+    # 'exp_time_max'          : 5184000,
+    # 'exp_period_min'        : 0.002,
+    # 'exp_period_max'        : 5184000,
+    # 'nframes_max'           : 15000, # For Pilatus: 999999, for Struck: 15000 (set by maxChannels in the driver configuration)
+    # 'nparams_max'           : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
+    # 'exp_period_delta'      : 0.00095,
+    # 'local_dir_root'        : '/nas_data/Pilatus1M',
+    # 'remote_dir_root'       : '/nas_data',
+    # 'detector'              : 'pilatus_mx',
+    # 'det_args'              : {}, #Allows detector specific keyword arguments
+    # 'add_file_postfix'      : True,
+
+    'exp_time_min'          : 0.000000050, #Eiger2 XE 9M
+    'exp_time_max'          : 3600,
+    'exp_period_min'        : 0.001785714286, #There's an 8bit undocumented mode that can go faster, in theory
+    'exp_period_max'        : 5184000, # Not clear there is a maximum, so left it at this
+    'nframes_max'           : 15000, # For Eiger: 2000000000, for Struck: 15000 (set by maxChannels in the driver configuration)
+    'nparams_max'           : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
+    'exp_period_delta'      : 0.000000200,
+    'local_dir_root'        : '/nas_data/Eiger2x',
+    'remote_dir_root'       : '/nas_data/Eiger2x',
+    'detector'              : '18ID:EIG2:_epics',
+    'det_args'              :  {'use_tiff_writer': False, 'use_file_writer': True,
+                                'photon_energy' : 12.0, 'images_per_file': 1000}, #1 image/file for TR, 300 for equilibrium
+    'add_file_postfix'      : False,
+
+    # 'shutter_speed_open'    : 0.004, #in s      NM vacuum shutter, broken
+    # 'shutter_speed_close'   : 0.004, # in s
+    # 'shutter_pad'           : 0.002, #padding for shutter related values
+    # 'shutter_cycle'         : 0.02, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
+
+    # 'shutter_speed_open'    : 0.001, #in s    Fast shutters
+    # 'shutter_speed_close'   : 0.001, # in s
+    # 'shutter_pad'           : 0.00, #padding for shutter related values
+    # 'shutter_cycle'         : 0.002, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
+
+    # 'shutter_speed_open'    : 0.075, #in s      Slow vacuum shutter
+    # 'shutter_speed_close'   : 0.075, # in s
+    # 'shutter_pad'           : 0.01, #padding for shutter related values
+    # 'shutter_cycle'         : 0.2, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
+
+    'shutter_speed_open'    : 0.0045, #in s      Normal vacuum shutter
+    'shutter_speed_close'   : 0.004, # in s
+    'shutter_pad'           : 0.002, #padding for shutter related values
+    'shutter_cycle'         : 0.1, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
+
+    'struck_measurement_time' : '0.001', #in s
+    'tr_muscle_exp'         : False,
+    'slow_mode_thres'       : 0.1,
+    'fast_mode_max_exp_time': 2000,
+    'wait_for_trig'         : True,
+    'num_trig'              : '1',
+    'show_advanced_options' : True,
+    'fe_shutter_pv'         : 'FE:18:ID:FEshutter',
+    'd_shutter_pv'          : 'PA:18ID:STA_D_SDS_OPEN_PL.VAL',
+    'col_vac_pv'            : '18ID:VAC:D:Cols',
+    'guard_vac_pv'          : '18ID:VAC:D:Guards',
+    'sample_vac_pv'         : '18ID:VAC:D:Sample',
+    'sc_vac_pv'             : '18ID:VAC:D:ScatterChamber',
+    'use_old_i0_gain'       : True,
+    'i0_gain_pv'            : '18ID_D_BPM_Gain:Level-SP',
+
+    'struck_log_vals'       : [
+        # Format: (mx_record_name, struck_channel, header_name,
+        # scale, offset, use_dark_current, normalize_by_exp_time)
+        {'mx_record': 'mcs3', 'channel': 2, 'name': 'I0',
+        'scale': 1, 'offset': 0, 'dark': True, 'norm_time': False},
+        {'mx_record': 'mcs4', 'channel': 3, 'name': 'I1', 'scale': 1,
+        'offset': 0, 'dark': True, 'norm_time': False},
+        # {'mx_record': 'mcs5', 'channel': 4, 'name': 'I2', 'scale': 1,
+        # 'offset': 0, 'dark': True, 'norm_time': False},
+        # {'mx_record': 'mcs6', 'channel': 5, 'name': 'I3', 'scale': 1,
+        # 'offset': 0, 'dark': True, 'norm_time': False},
+        # {'mx_record': 'mcs11', 'channel': 10, 'name': 'Beam_current',
+        # 'scale': 5000, 'offset': 0.5, 'dark': False, 'norm_time': True},
+        # {'mx_record': 'mcs12', 'channel': 11, 'name': 'Flow_rate',
+        # 'scale': 10e6, 'offset': 0, 'dark': True, 'norm_time': True},
+        # {'mx_record': 'mcs7', 'channel': 6, 'name': 'Detector_Enable',
+        # 'scale': 1e5, 'offset': 0, 'dark': True, 'norm_time': True},
+        # {'mx_record': 'mcs12', 'channel': 11, 'name': 'Length_Out',
+        # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
+        # {'mx_record': 'mcs13', 'channel': 13, 'name': 'Length_In',
+        # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
+        # {'mx_record': 'mcs13', 'channel': 12, 'name': 'Force',
+        # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
+        ],
+    'joerger_log_vals'      : [{'mx_record': 'j3', 'name': 'I0',
+        'scale': 1, 'offset': 0, 'norm_time': False}, #Format: (mx_record_name, struck_channel, header_name, scale, offset, use_dark_current, normalize_by_exp_time)
+        {'mx_record': 'j4', 'name': 'I1', 'scale': 1, 'offset': 0,
+        'norm_time': False},
+        # {'mx_record': 'j5', 'name': 'I2', 'scale': 1, 'offset': 0,
+        # 'norm_time': False},
+        # {'mx_record': 'j6', 'name': 'I3', 'scale': 1, 'offset': 0,
+        # 'norm_time': False},
+        # {'mx_record': 'j11', 'name': 'Beam_current', 'scale': 5000,
+        # 'offset': 0.5, 'norm_time': True}
+        ],
+    'warnings'              : {'shutter' : True, 'col_vac' : {'check': True,
+        'thresh': 0.04}, 'guard_vac' : {'check': True, 'thresh': 0.04},
+        'sample_vac': {'check': True, 'thresh': 0.04}, 'sc_vac':
+        {'check': True, 'thresh':0.04}},
+    'base_data_dir'         : '/nas_data/Eiger2x/2025_Run1', #CHANGE ME and pipeline local_basedir
+    }
+
+default_exposure_settings['data_dir'] = default_exposure_settings['base_data_dir']
 
 
 if __name__ == '__main__':
@@ -4092,115 +4342,8 @@ if __name__ == '__main__':
 
     logger.addHandler(h1)
 
-    #Settings for Pilatus 3X 1M
-    settings = {
-        'data_dir'              : '',
-        'filename'              : '',
-        'run_num'               : 1,
-        'exp_time'              : '0.5',
-        'exp_period'            : '1',
-        'exp_num'               : '2',
-
-        # 'exp_time_min'          : 0.00105,  # For Pilatus3 X 1M
-        # 'exp_time_max'          : 5184000,
-        # 'exp_period_min'        : 0.002,
-        # 'exp_period_max'        : 5184000,
-        # 'nframes_max'           : 15000, # For Pilatus: 999999, for Struck: 15000 (set by maxChannels in the driver configuration)
-        # 'nparams_max'           : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
-        # 'exp_period_delta'      : 0.00095,
-
-        'exp_time_min'          : 0.000000050, #Eiger2 XE 9M
-        'exp_time_max'          : 3600,
-        'exp_period_min'        : 0.001785714286, #There's an 8bit undocumented mode that can go faster, in theory
-        'exp_period_max'        : 5184000, # Not clear there is a maximum, so left it at this
-        'nframes_max'           : 15000, # For Eiger: 2000000000, for Struck: 15000 (set by maxChannels in the driver configuration)
-        'nparams_max'           : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
-        'exp_period_delta'      : 0.000000200,
-
-        # 'shutter_speed_open'    : 0.004, #in s      NM vacuum shutter, broken
-        # 'shutter_speed_close'   : 0.004, # in s
-        # 'shutter_pad'           : 0.002, #padding for shutter related values
-        # 'shutter_cycle'         : 0.02, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
-
-        'shutter_speed_open'    : 0.001, #in s    Fast shutters
-        'shutter_speed_close'   : 0.001, # in s
-        'shutter_pad'           : 0.00, #padding for shutter related values
-        'shutter_cycle'         : 0.002, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
-
-        # 'shutter_speed_open'    : 0.075, #in s      Slow vacuum shutter
-        # 'shutter_speed_close'   : 0.075, # in s
-        # 'shutter_pad'           : 0.01, #padding for shutter related values
-        # 'shutter_cycle'         : 0.2, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
-
-        # 'shutter_speed_open'    : 0.0045, #in s      Normal vacuum shutter
-        # 'shutter_speed_close'   : 0.004, # in s
-        # 'shutter_pad'           : 0.002, #padding for shutter related values
-        # 'shutter_cycle'         : 0.1, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
-
-        'struck_measurement_time' : '0.001', #in s
-        'tr_muscle_exp'         : True,
-        'slow_mode_thres'       : 0.1,
-        'fast_mode_max_exp_time': 2000,
-        'wait_for_trig'         : True,
-        'num_trig'              : '1',
-        'show_advanced_options' : True,
-        'fe_shutter_pv'         : 'FE:18:ID:FEshutter',
-        'd_shutter_pv'          : 'PA:18ID:STA_D_SDS_OPEN_PL.VAL',
-        'col_vac_pv'            : '18ID:VAC:D:Cols',
-        'guard_vac_pv'          : '18ID:VAC:D:Guards',
-        'sample_vac_pv'         : '18ID:VAC:D:Sample',
-        'sc_vac_pv'             : '18ID:VAC:D:ScatterChamber',
-        'use_old_i0_gain'       : True,
-        'i0_gain_pv'            : '18ID_D_BPM_Gain:Level-SP',
-        # 'local_dir_root'        : '/nas_data/Pilatus1M',
-        'local_dir_root'        : '/nas_data/Eiger2xe9M',
-        'remote_dir_root'       : '/nas_data',
-        # 'detector'              : 'pilatus_mx',
-        # 'det_args'              : {}, #Allows detector specific keyword arguments
-        # 'add_file_postfix'      : True,
-        'detector'              :  '18ID:EIG2:_epics',
-        'det_args'              :  {'use_tiff_writer': False, 'use_file_writer': True,
-            'photon_energy' : 12.0,},
-        'add_file_postfix'      : False,
-        'struck_log_vals'       : [{'mx_record': 'mcs3', 'channel': 2, 'name': 'I0',
-            'scale': 1, 'offset': 0, 'dark': True, 'norm_time': False}, #Format: (mx_record_name, struck_channel, header_name, scale, offset, use_dark_current, normalize_by_exp_time)
-            {'mx_record': 'mcs4', 'channel': 3, 'name': 'I1', 'scale': 1,
-            'offset': 0, 'dark': True, 'norm_time': False},
-            # {'mx_record': 'mcs5', 'channel': 4, 'name': 'I2', 'scale': 1,
-            # 'offset': 0, 'dark': True, 'norm_time': False},
-            # {'mx_record': 'mcs6', 'channel': 5, 'name': 'I3', 'scale': 1,
-            # 'offset': 0, 'dark': True, 'norm_time': False},
-            {'mx_record': 'mcs11', 'channel': 10, 'name': 'Beam_current',
-            'scale': 5000, 'offset': 0.5, 'dark': False, 'norm_time': True},
-            # {'mx_record': 'mcs12', 'channel': 11, 'name': 'Flow_rate',
-            # 'scale': 10e6, 'offset': 0, 'dark': True, 'norm_time': True},
-            # {'mx_record': 'mcs7', 'channel': 6, 'name': 'Detector_Enable',
-            # 'scale': 1e5, 'offset': 0, 'dark': True, 'norm_time': True},
-            # {'mx_record': 'mcs12', 'channel': 11, 'name': 'Length',
-            # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
-            # {'mx_record': 'mcs13', 'channel': 12, 'name': 'Force',
-            # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
-            ],
-        'joerger_log_vals'      : [{'mx_record': 'j3', 'name': 'I0',
-            'scale': 1, 'offset': 0, 'norm_time': False}, #Format: (mx_record_name, struck_channel, header_name, scale, offset, use_dark_current, normalize_by_exp_time)
-            {'mx_record': 'j4', 'name': 'I1', 'scale': 1, 'offset': 0,
-            'norm_time': False},
-            # {'mx_record': 'j5', 'name': 'I2', 'scale': 1, 'offset': 0,
-            # 'norm_time': False},
-            # {'mx_record': 'j6', 'name': 'I3', 'scale': 1, 'offset': 0,
-            # 'norm_time': False},
-            {'mx_record': 'j11', 'name': 'Beam_current', 'scale': 5000,
-            'offset': 0.5, 'norm_time': True}
-            ],
-        'warnings'              : {'shutter' : True, 'col_vac' : {'check': True,
-            'thresh': 0.04}, 'guard_vac' : {'check': True, 'thresh': 0.04},
-            'sample_vac': {'check': True, 'thresh': 0.04}, 'sc_vac':
-            {'check': True, 'thresh':0.04}},
-        # 'base_data_dir'         : '/nas_data/Pilatus1M/2021_Run3', #CHANGE ME
-        'base_data_dir'         : '/nas_data/Eiger2xe9M/2021_Run3', #CHANGE ME
-        }
-
-    settings['data_dir'] = settings['base_data_dir']
+    settings = default_exposure_settings
+    settings['components'] = ['exposure']
 
     app = wx.App()
 
