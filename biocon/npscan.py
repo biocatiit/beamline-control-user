@@ -41,6 +41,7 @@ import sys
 import wx
 import wx.lib.agw.genericmessagedialog as GMD
 import matplotlib
+import matplotlib.figure
 matplotlib.rcParams['backend'] = 'WxAgg'
 from matplotlib.backends.backend_wxagg import NavigationToolbar2WxAgg
 from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg
@@ -64,7 +65,8 @@ class ScanProcess(multiprocessing.Process):
     running.
     """
 
-    def __init__(self, command_queue, return_queue, return_val_q, abort_event):
+    def __init__(self, command_queue, return_queue, return_val_q, abort_event,
+        is_hxp=False):
         """
         Initializes the Process.
 
@@ -99,6 +101,14 @@ class ScanProcess(multiprocessing.Process):
 
         self.shutter1 = None
         self.shutter2 = None
+
+        self.is_hxp = is_hxp
+
+        if not self.is_hxp:
+            self.index_ref = {'XY.X' : 0, 'XY.Y': 1}
+        else:
+            self.index_ref = {'HEXAPOD.X': 0, 'HEXAPOD.Y': 1, 'HEXAPOD.Z': 2,
+                'HEXAPOD.U': 3, 'HEXAPOD.V': 4, 'HEXAPOD.W': 5}
 
         self._commands = {'start_mxdb'      : self._start_mxdb,
                         'set_scan_params'   : self._set_scan_params,
@@ -166,7 +176,14 @@ class ScanProcess(multiprocessing.Process):
         self.mx_database.set_plot_enable(2)
         self.mx_database.set_program_name("npscancon")
 
-        self.np_motor = motorcon.NewportXPSMotor('XY', self.xps, '164.54.204.76', 5001, 20, 'XY', 2)
+        if not self.is_hxp:
+            self.np_motor = motorcon.NewportXPSMotor('XY', self.xps,
+                '164.54.204.76', 5001, 20, 'XY', 2, self.is_hxp)
+            self.positioner = 'XY'
+        else:
+            self.np_motor = motorcon.NewportXPSMotor('HEXAPOD', self.xps,
+                '164.54.204.49', 5001, 20, 'HEXAPOD', 6, self.is_hxp)
+            self.positioner = 'HEXAPOD'
 
     def _get_devices(self):
         """
@@ -180,7 +197,11 @@ class ScanProcess(multiprocessing.Process):
         """
         scalers = []
         timers = []
-        motors = ['XY.X', 'XY.Y']
+        if not self.is_hxp:
+            motors = ['XY.X', 'XY.Y']
+        else:
+            motors = ['HEXAPOD.X', 'HEXAPOD.Y', 'HEXAPOD.Z', 'HEXAPOD.U',
+                'HEXAPOD.V', 'HEXAPOD.W']
         detectors = []
 
         for r in self.mx_database.get_all_records():
@@ -204,10 +225,7 @@ class ScanProcess(multiprocessing.Process):
         if motor_name != self.motor_name:
             self.motor_name = motor_name
 
-        if self.motor_name == 'XY.X':
-            index = 0
-        else:
-            index = 1
+        index = self.index_ref[self.motor_name]
 
         pos = self.np_motor.get_positioner_position(self.motor_name, index)
         self.return_queue.put_nowait([pos])
@@ -216,27 +234,18 @@ class ScanProcess(multiprocessing.Process):
         if motor_name != self.motor_name2:
             self.motor_name2 = motor_name
 
-        if self.motor_name2 == 'XY.X':
-            index = 0
-        else:
-            index = 1
+        index = self.index_ref[self.motor_name2]
 
         pos = self.np_motor.get_positioner_position(self.motor_name2, index)
         self.return_queue.put_nowait([pos])
 
     def _move_abs(self, position):
-        if self.motor_name == 'XY.X':
-            index = 0
-        else:
-            index = 1
+        index = self.index_ref[self.motor_name]
 
         self.np_motor.move_positioner_absolute(self.motor_name, index, position)
 
     def _move_abs2(self, position):
-        if self.motor_name2== 'XY.X':
-            index = 0
-        else:
-            index = 1
+        index = self.index_ref[self.motor_name2]
 
         self.np_motor.move_positioner_absolute(self.motor_name2, index, position)
 
@@ -393,7 +402,7 @@ class ScanProcess(multiprocessing.Process):
                 # logger.info('Moving motor 1 position to {}'.format(mtr1_pos))
                 self.np_motor.move_positioner_absolute(self.device, m1_index, mtr1_pos)
             # mtr1.wait_for_motor_stop()
-            while self.np_motor.positioner_is_moving('XY'):
+            while self.np_motor.positioner_is_moving(self.positioner):
                 time.sleep(0.01)
                 if self._abort_event.is_set():
                     self.motor.stop()
@@ -412,7 +421,7 @@ class ScanProcess(multiprocessing.Process):
                     if mtr2_pos != mtr2_positions[0]:
                         self.np_motor.move_positioner_absolute(self.device2, m2_index, mtr2_pos)
                     # mtr1.wait_for_motor2_stop()
-                    while self.np_motor.positioner_is_moving('XY'):
+                    while self.np_motor.positioner_is_moving(self.positioner):
                         time.sleep(0.01)
                         if self._abort_event.is_set():
                             self.motor2.stop()
@@ -504,7 +513,7 @@ class ScanPanel(wx.Panel):
     various parameters (COM, FWHM), and allows the user to move to those positions
     or to any point in the scan.
     """
-    def __init__(self, mx_database, *args, **kwargs):
+    def __init__(self, mx_database, is_hxp, *args, **kwargs):
         """
         Initializes the scan panel. Accepts the usual wx.Panel arguments plus
         the following.
@@ -525,8 +534,9 @@ class ScanPanel(wx.Panel):
         self.return_q = self.manager.Queue()
         self.return_val_q = self.manager.Queue()
         self.abort_event = self.manager.Event()
+        self.is_hxp = is_hxp
         self.scan_proc = ScanProcess(self.cmd_q, self.return_q, self.return_val_q,
-            self.abort_event)
+            self.abort_event, self.is_hxp)
         self.scan_proc.start()
 
         self.scan_timer = wx.Timer()
@@ -1159,7 +1169,7 @@ class ScanPanel(wx.Panel):
             #This is a hack
             self.scan_proc.stop()
             self.scan_proc = ScanProcess(self.cmd_q, self.return_q, self.return_val_q,
-                self.abort_event)
+                self.abort_event, self.is_hxp)
             self.scan_proc.start()
             self._start_scan_mxdb()
 
@@ -1219,7 +1229,7 @@ class ScanPanel(wx.Panel):
             if (self.plt_x is not None and self.plt_y is not None and
                 len(self.plt_x) == len(self.plt_y)) and len(self.plt_x) > 0:
 
-                self.plt_pts, = self.plot.plot(self.plt_x, self.plt_y, 'bo', animated=True, picker=10)
+                self.plt_pts, = self.plot.plot(self.plt_x, self.plt_y, 'bo', animated=True, picker=3)
                 self.plt_line, = self.plot.plot(self.plt_x, self.plt_y, 'b-', animated=True)
 
                 get_plt_bkg = True
@@ -1228,7 +1238,7 @@ class ScanPanel(wx.Panel):
             if (self.plt_x is not None and self.der_y is not None and
                 len(self.plt_x) == len(self.der_y) and len(self.plt_x) > 1):
 
-                self.der_pts, = self.der_plot.plot(self.plt_x, self.der_y, 'bo', animated=True, picker=10)
+                self.der_pts, = self.der_plot.plot(self.plt_x, self.der_y, 'bo', animated=True, picker=3)
                 self.der_line, = self.der_plot.plot(self.plt_x, self.der_y, 'b-', animated=True)
 
                 get_der_bkg = True
@@ -2025,15 +2035,15 @@ class ScanPanel(wx.Panel):
         """Updates the results section of the GUI."""
 
         if self.fwhm is not None:
-            self.disp_fwhm.SetLabel(str(round(self.fwhm[0], 4)))
-            self.disp_fwhm_pos.SetLabel(str(round(((self.fwhm[2]+self.fwhm[1])/2.), 4)))
+            self.disp_fwhm.SetLabel(str(round(self.fwhm[0], 5)))
+            self.disp_fwhm_pos.SetLabel(str(round(((self.fwhm[2]+self.fwhm[1])/2.), 5)))
 
         if self.com is not None:
             self.disp_com.SetLabel(str(round(self.com, 4)))
 
         if self.der_fwhm is not None:
-            self.disp_der_fwhm.SetLabel(str(round(self.der_fwhm[0], 4)))
-            self.disp_der_fwhm_pos.SetLabel(str(round(((self.der_fwhm[2]+self.der_fwhm[1])/2.), 4)))
+            self.disp_der_fwhm.SetLabel(str(round(self.der_fwhm[0], 5)))
+            self.disp_der_fwhm_pos.SetLabel(str(round(((self.der_fwhm[2]+self.der_fwhm[1])/2.), 5)))
 
         if self.der_com is not None:
             self.disp_der_com.SetLabel(str(round(self.der_com, 4)))
@@ -2209,7 +2219,7 @@ class ScanFrame(wx.Frame):
     """
     A lightweight scan frame that holds the :mod:`ScanPanel`.
     """
-    def __init__(self, mx_database, *args, **kwargs):
+    def __init__(self, mx_database, is_hxp, *args, **kwargs):
         """
         Initializes the scan frame. Takes all the usual wx.Frame arguments and
         also the following.
@@ -2223,7 +2233,7 @@ class ScanFrame(wx.Frame):
         """
         wx.Frame.__init__(self, *args, **kwargs)
 
-        self._create_layout(mx_database)
+        self._create_layout(mx_database, is_hxp)
 
         self.Layout()
         self.Fit()
@@ -2232,7 +2242,7 @@ class ScanFrame(wx.Frame):
 
         self.Bind(wx.EVT_CLOSE, self._on_close)
 
-    def _create_layout(self, mx_database):
+    def _create_layout(self, mx_database, is_hxp):
         """
         Creates the layout, by calling mod:`ScanPanel`.
 
@@ -2243,7 +2253,7 @@ class ScanFrame(wx.Frame):
         :param Mp.RecordList mx_database: The Mp record list representing the
             MX database being used.
         """
-        self.scan_panel = ScanPanel(mx_database, parent=self)
+        self.scan_panel = ScanPanel(mx_database, is_hxp, parent=self)
 
         top_sizer = wx.BoxSizer(wx.HORIZONTAL)
         top_sizer.Add(self.scan_panel, 1, wx.EXPAND)
@@ -2281,7 +2291,9 @@ if __name__ == '__main__':
 
     app = wx.App()
 
-    frame = ScanFrame(database_filename, parent=None, title='Scan Control')
+    is_hxp = True
+
+    frame = ScanFrame(database_filename, is_hxp, parent=None, title='Scan Control')
     frame.Show()
     app.MainLoop()
 

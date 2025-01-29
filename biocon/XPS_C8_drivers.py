@@ -900,6 +900,67 @@ class XPS:
             i, j = i+j+1, 0
         return retList
 
+    # GroupMoveAbsolute :  Do an absolute move
+    def HexapodMoveAbsolute (self, socketId, GroupName, TargetPosition):
+        group = '.'.join(GroupName.split('.')[0:-1])
+
+        err, x, y, z, u, v, w = self.HexapodPositionCurrentGet(socketId, group, 6)
+
+        target = TargetPosition[0]
+        if GroupName.endswith('X'):
+            target_pos = [target, y, z, u, v, w]
+        elif GroupName.endswith('Y'):
+            target_pos = [x, target, z, u, v, w]
+        elif GroupName.endswith('Z'):
+            target_pos = [x, y, target, u, v, w]
+        elif GroupName.endswith('U'):
+            target_pos = [x, y, z, target, v, w]
+        elif GroupName.endswith('V'):
+            target_pos = [x, y, z, u, target, w]
+        elif GroupName.endswith('W'):
+            target_pos = [x, y, z, u, v, target]
+
+
+
+        command = 'HexapodMoveAbsolute(' + group + ',Work'
+        for i in range(len(target_pos)):
+            if (i >= 0):
+                command += ','
+            command += str(target_pos[i])
+        command += ')'
+        return self.Send(socketId, command)
+
+    # GroupMoveRelative :  Do a relative move
+    def HexapodMoveRelative (self, socketId, GroupName, TargetDisplacement):
+        command = 'HexapodMoveIncremental(' + GroupName + ','
+        for i in range(len(TargetDisplacement)):
+            if (i > 0):
+                command += ','
+            command += str(TargetDisplacement[i])
+        command += ')'
+        return self.Send(socketId, command)
+
+    # GroupPositionCurrentGet :  Return current positions
+    def HexapodPositionCurrentGet (self, socketId, GroupName, nbElement):
+        command = 'HexapodPositionCurrentGet(' + GroupName + ','
+        for i in range(nbElement):
+            if (i > 0):
+                command += ','
+            command += 'double *'
+        command += ')'
+
+        error, returnedString = self.Send(socketId, command)
+        if (error != 0):
+            return [error, returnedString]
+
+        i, j, retList = 0, 0, [error]
+        for paramNb in range(nbElement):
+            while ((i+j) < len(returnedString) and returnedString[i+j] != ','):
+                j += 1
+            retList.append(eval(returnedString[i:i+j]))
+            i, j = i+j+1, 0
+        return retList
+
 
     # KillAll :  Put all groups in 'Not initialized' state
     def KillAll (self, socketId):
