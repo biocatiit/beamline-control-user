@@ -1102,10 +1102,16 @@ if __name__ == '__main__':
     #     {'name': 'outlet', 'args' : ['BFS', 'COM6'], 'kwargs': {}},
     #     ]
 
-    # Simulated flow meter
+    # TR-SAXS flow meter
     setup_devices = [
-        {'name': 'sheath', 'args': ['Soft', None], 'kwargs': {}},
+        {'name': 'laminar_outlet', 'args' : ['BFS', 'COM13'], 'kwargs': {}},
+        {'name': 'chaotic_outlet', 'args' : ['BFS', 'COM5'], 'kwargs': {}},
         ]
+
+    # # Simulated flow meter
+    # setup_devices = [
+    #     {'name': 'sheath', 'args': ['Soft', None], 'kwargs': {}},
+    #     ]
 
     settings = {
         'remote'        : False,

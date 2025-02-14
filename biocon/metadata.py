@@ -357,8 +357,8 @@ class SAXSPanel(wx.Panel):
         return metadata
 
     def set_metadata(self, new_metadata):
-        if 'Experment type:' in new_metadata:
-            self.experiment_type.SetStringSelection(new_metadata['Experment type:'])
+        if 'Experiment type:' in new_metadata:
+            self.experiment_type.SetStringSelection(new_metadata['Experiment type:'])
             self._set_experiment_type()
 
         if 'Sample:' in new_metadata:

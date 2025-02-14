@@ -213,7 +213,6 @@ class EPICSEigerDetector(object):
         use_file_writer = True, photon_energy = 12.0, images_per_file=100):
         """
         """
-
         self.det = AD_EigerCamera(pv_prefix)
 
         self.use_tiff_writer = use_tiff_writer

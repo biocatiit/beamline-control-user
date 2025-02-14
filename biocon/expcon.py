@@ -142,7 +142,7 @@ class ExpCommThread(threading.Thread):
             logger.debug('Getting epics detector')
             record_name = self._settings['detector'].rstrip('_epics')
 
-            det_args = self._settings['det_args']            
+            det_args = self._settings['det_args']
             det = detectorcon.EPICSEigerDetector(record_name, **det_args)
 
         logger.debug("Got detector records")
@@ -2733,6 +2733,7 @@ class ExpPanel(wx.Panel):
 
         self.settings = settings
         self._exp_status = ''
+        self._time_remaining = 0
         self._run_number = '_{:03d}'.format(self.settings['run_num'])
 
         self.exp_cmd_q = deque()
@@ -3155,13 +3156,14 @@ class ExpPanel(wx.Panel):
 
     def set_time_remaining(self, tr):
         if tr < 3600:
-            tr = time.strftime('%M:%S', time.gmtime(tr))
+            tr_str = time.strftime('%M:%S', time.gmtime(tr))
         elif tr < 86400:
-            tr = time.strftime('%H:%M:%S', time.gmtime(tr))
+            tr_str = time.strftime('%H:%M:%S', time.gmtime(tr))
         else:
-            tr = time.strftime('%d:%H:%M:%S', time.gmtime(tr))
+            tr_str = time.strftime('%d:%H:%M:%S', time.gmtime(tr))
 
-        wx.CallAfter(self.time_remaining.SetLabel, tr)
+        self._time_remaining = tr
+        wx.CallAfter(self.time_remaining.SetLabel, tr_str)
 
     def set_scan_number(self, val):
         self.scan_number.SetLabel(str(val))
@@ -3480,6 +3482,37 @@ class ExpPanel(wx.Panel):
         joerger_log_vals = self.settings['joerger_log_vals']
         struck_measurement_time = self.muscle_sampling.GetValue()
 
+        (num_frames, exp_time, exp_period, data_dir, filename,
+            wait_for_trig, num_trig, local_data_dir, struck_num_meas, valid,
+            errors) = self._validate_exp_values(
+            num_frames, exp_time, exp_period, data_dir, filename,
+            wait_for_trig, num_trig, struck_measurement_time, verbose=verbose)
+
+        exp_values = {
+            'num_frames'                : num_frames,
+            'exp_time'                  : exp_time,
+            'exp_period'                : exp_period,
+            'data_dir'                  : data_dir,
+            'local_data_dir'            : local_data_dir,
+            'fprefix'                   : filename+run_num,
+            'wait_for_trig'             : wait_for_trig,
+            'num_trig'                  : num_trig,
+            'shutter_speed_open'        : shutter_speed_open,
+            'shutter_speed_close'       : shutter_speed_close,
+            'shutter_cycle'             : shutter_cycle,
+            'shutter_pad'               : shutter_pad,
+            'joerger_log_vals'          : joerger_log_vals,
+            'struck_log_vals'           : struck_log_vals,
+            'struck_measurement_time'   : struck_measurement_time,
+            'struck_num_meas'           : struck_num_meas,
+            }
+
+        return exp_values, valid
+
+    def _validate_exp_values(self, num_frames, exp_time, exp_period, data_dir,
+        filename, wait_for_trig, num_trig, struck_measurement_time, verbose=True,
+        automator=False):
+
         errors = []
 
         try:
@@ -3516,7 +3549,8 @@ class ExpPanel(wx.Panel):
 
         if isinstance(num_frames, int):
             if num_frames < 1 or num_frames > self.settings['nframes_max']:
-                errors.append('Number of frames (between 1 and {}'.format(self.settings['nframes_max']))
+                errors.append('Number of frames (between 1 and {}'.format(
+                    self.settings['nframes_max']))
 
         if isinstance(exp_time, float):
             if (exp_time < self.settings['exp_time_min']
@@ -3562,7 +3596,7 @@ class ExpPanel(wx.Panel):
         if filename == '':
             errors.append('Filename (must not be blank)')
 
-        if data_dir == '' or not os.path.exists(data_dir):
+        if (data_dir == '' or not os.path.exists(data_dir)) and not automator:
             errors.append('Data directory (must exist, and not be blank)')
 
         if wait_for_trig:
@@ -3579,7 +3613,6 @@ class ExpPanel(wx.Panel):
             wx.CallAfter(wx.MessageBox, msg, 'Error in exposure parameters',
                 style=wx.OK|wx.ICON_ERROR)
 
-            exp_values = {}
             valid = False
 
         else:
@@ -3593,28 +3626,13 @@ class ExpPanel(wx.Panel):
             else:
                 struck_num_meas = 0
 
-            exp_values = {
-                'num_frames'                : num_frames,
-                'exp_time'                  : exp_time,
-                'exp_period'                : exp_period,
-                'data_dir'                  : data_dir,
-                'local_data_dir'            : local_data_dir,
-                'fprefix'                   : filename+run_num,
-                'wait_for_trig'             : wait_for_trig,
-                'num_trig'                  : num_trig,
-                'shutter_speed_open'        : shutter_speed_open,
-                'shutter_speed_close'       : shutter_speed_close,
-                'shutter_cycle'             : shutter_cycle,
-                'shutter_pad'               : shutter_pad,
-                'joerger_log_vals'          : joerger_log_vals,
-                'struck_log_vals'           : struck_log_vals,
-                'struck_measurement_time'   : struck_measurement_time,
-                'struck_num_meas'           : struck_num_meas,
-                }
+
 
             valid = True
 
-        return exp_values, valid
+        return (num_frames, exp_time, exp_period, data_dir, filename,
+            wait_for_trig, num_trig, local_data_dir, struck_num_meas, valid,
+            errors)
 
     def _check_components(self, exp_only, verbose=True):
         comp_settings = {}
@@ -3746,7 +3764,6 @@ class ExpPanel(wx.Panel):
     def _get_metadata(self, metadata_vals=None, verbose=True):
 
         metadata = self.metadata()
-        print(metadata)
 
         column = None
         flow_rate = None
@@ -3755,8 +3772,6 @@ class ExpPanel(wx.Panel):
         if 'coflow' in self.settings['components']:
             coflow_panel = wx.FindWindowByName('coflow')
             coflow_metadata = coflow_panel.metadata()
-
-            print(coflow_metadata)
 
             for key, value in coflow_metadata.items():
                 metadata[key] = value
@@ -3814,11 +3829,11 @@ class ExpPanel(wx.Panel):
             if metadata['Coflow on:']:
                 if column is not None and flow_rate is not None:
                     if '10/300' in column:
-                        flow_range = (0.5, 0.8)
+                        flow_range = (0.4, 0.8)
                     elif '5/150' in column:
-                        flow_range = (0.25, 0.5)
+                        flow_range = (0.2, 0.5)
                     elif 'Wyatt' in column:
-                        flow_range = (0.5, 0.8)
+                        flow_range = (0.4, 0.8)
                     else:
                         flow_range = None
 
@@ -3972,14 +3987,14 @@ class ExpPanel(wx.Panel):
             self.exp_period.ChangeValue(str(exp_settings['exp_period']))
         if 'num_trig' in exp_settings:
             self.num_trig.ChangeValue(str(exp_settings['num_trig']))
-        if 'data_dir' in exp_settings:
-            self.data_dir.ChangeValue(str(exp_settings['data_dir']))
+        if 'local_data_dir' in exp_settings:
+            self.data_dir.ChangeValue(str(exp_settings['local_data_dir']))
         if 'filename' in exp_settings:
             self.filename.ChangeValue(str(exp_settings['filename']))
         if 'run_num' in exp_settings:
             self.run_num.ChangeValue(str(exp_settings['run_num']))
         if 'wait_for_trig' in exp_settings:
-            self.wait_for_trig.ChangeValue(str(exp_settings['wait_for_trig']))
+            self.wait_for_trig.SetValue(exp_settings['wait_for_trig'])
 
     def set_pipeline_ctrl(self, pipeline_ctrl):
         self.pipeline_ctrl = pipeline_ctrl
@@ -4014,8 +4029,13 @@ class ExpPanel(wx.Panel):
             elif self._exp_status == 'Ready':
                 state = 'idle'
 
+            else:
+                state = 'idle'
+
         elif cmd_name == 'abort':
-            self.stop_exp()
+            if (self._exp_status == 'Exposing'
+                or self._exp_status == 'Waiting for Trigger'):
+                self.stop_exp()
 
             state = 'idle'
 
@@ -4034,7 +4054,7 @@ class ExpPanel(wx.Panel):
             shutter_pad = self.settings['shutter_pad']
             struck_log_vals = self.settings['struck_log_vals']
             joerger_log_vals = self.settings['joerger_log_vals']
-            struck_measurement_time = float(cmd_kwargs['musc_samp'])
+            struck_measurement_time = float(cmd_kwargs['struck_measurement_time'])
 
             if self.settings['tr_muscle_exp']:
                 struck_num_meas = exp_period*num_frames/struck_measurement_time
@@ -4063,13 +4083,20 @@ class ExpPanel(wx.Panel):
                 'struck_log_vals'           : struck_log_vals,
                 'struck_measurement_time'   : struck_measurement_time,
                 'struck_num_meas'           : struck_num_meas,
+                'filename'                  : filename,
                 }
 
             if cmd_kwargs['item_type'] == 'sec_sample':
                 exp_type = 'SEC-SAXS'
+
+            elif cmd_kwargs['item_type'] == 'exposure':
+                exp_type = cmd_kwargs['exp_type']
+
+            if (exp_type == 'SEC-SAXS' or exp_type == 'SEC-MALS-SAXS' or
+                exp_type == 'IEC-SAXS'):
                 column = cmd_kwargs['column']
 
-            sample = cmd_kwargs['sample']
+            sample = cmd_kwargs['sample_name']
             buf = cmd_kwargs['buf']
             temperature = cmd_kwargs['temp']
             vol = cmd_kwargs['inj_vol']
@@ -4080,9 +4107,9 @@ class ExpPanel(wx.Panel):
                 'Experiment type:'      : exp_type,
                 'Sample:'               : sample,
                 'Buffer:'               : buf,
-                'Temperature [C]'       : temperature,
-                'Loaded volume [uL]'    : vol,
-                'Concentration [mg/ml]' : conc,
+                'Temperature [C]:'      : temperature,
+                'Loaded volume [uL]:'   : vol,
+                'Concentration [mg/ml]:': conc,
                 }
 
             if (exp_type == 'SEC-SAXS' or exp_type == 'SEC-MALS-SAXS' or
@@ -4094,11 +4121,34 @@ class ExpPanel(wx.Panel):
             wx.CallAfter(self.set_exp_settings, exp_values)
 
             params_panel = wx.FindWindowByName('metadata')
-            wx.CallAfter(params_panel.set_metadata(metadata))
+            if params_panel is not None:
+                if params_panel.saxs_panel.IsShown():
+                    wx.CallAfter(params_panel.saxs_panel.set_metadata, metadata)
+                else:
+                    wx.CallAfter(params_panel.muscle_panel.set_metadata, metadata)
 
-            self._start_exp(True, exp_values, metadata, False)
+            else:
+                metadata = None
+
+            if not os.path.exists(exp_values['local_data_dir']):
+                os.makedirs(exp_values['local_data_dir'])
+
+
+            self.start_exp(True, exp_values, metadata, False)
 
             state = 'exposing'
+
+        elif cmd_name == 'full_status':
+            runtime = round(self._time_remaining/60,1)
+            if self._exp_status == 'Ready':
+                status = 'Idle'
+            else:
+                status = copy.copy(self._exp_status)
+
+            state = {
+                'status'    : status,
+                'runtime'   : str(runtime),
+            }
 
         return state, success
 
@@ -4274,7 +4324,7 @@ default_exposure_settings = {
         'thresh': 0.04}, 'guard_vac' : {'check': True, 'thresh': 0.04},
         'sample_vac': {'check': True, 'thresh': 0.04}, 'sc_vac':
         {'check': True, 'thresh':0.04}},
-    'base_data_dir'         : '/nas_data/Eiger2x/2024_Run3', #CHANGE ME and pipeline local_basedir
+    'base_data_dir'         : '/nas_data/Eiger2x/2025_Run1', #CHANGE ME and pipeline local_basedir
     }
 
 default_exposure_settings['data_dir'] = default_exposure_settings['base_data_dir']
@@ -4293,8 +4343,7 @@ if __name__ == '__main__':
     logger.addHandler(h1)
 
     settings = default_exposure_settings
-
-
+    settings['components'] = ['exposure']
 
     app = wx.App()
 
