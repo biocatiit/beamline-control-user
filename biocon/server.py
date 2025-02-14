@@ -396,10 +396,10 @@ if __name__ == '__main__':
     port3 = '5558'
     port4 = '5559'
 
-    # exp_type = 'coflow' #coflow or trsaxs_laminar or trsaxs_chaotic or hplc
+    exp_type = 'coflow' #coflow or trsaxs_laminar or trsaxs_chaotic or hplc
     # exp_type = 'trsaxs_chaotic'
     # exp_type = 'trsaxs_laminar'
-    exp_type = 'hplc'
+    # exp_type = 'hplc'
 
 
     if exp_type == 'coflow':
@@ -427,7 +427,7 @@ if __name__ == '__main__':
             {'name': 'sheath', 'args': ['VICI M50', 'COM6'],
                 'kwargs': {'flow_cal': '627.72', 'backlash_cal': '9.814'},
                 'ctrl_args': {'flow_rate': 1}},
-            {'name': 'outlet', 'args': ['OB1 Pump', 'COM7'],
+            {'name': 'outlet', 'args': ['OB1 Pump', 'COM13'],
                 'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
                 'min_pressure': -900, 'max_pressure': 1000, 'P': -2, 'I': -0.15,
                 'D': 0, 'bfs_instr_ID': None, 'comm_lock': ob1_comm_lock,
