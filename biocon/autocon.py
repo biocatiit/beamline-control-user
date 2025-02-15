@@ -1395,15 +1395,15 @@ class AutoList(utils.ItemList):
         if settings is None:
             actions = []
 
-            if ('hplc' in self.settings['instruments'] and
-                'exp' in self.settings['instruments'] and
-                'coflow' in self.settings['instruments']):
+            if ('hplc' in self.auto_panel.settings['instruments'] and
+                'exp' in self.auto_panel.settings['instruments'] and
+                'coflow' in self.auto_panel.settings['instruments']):
                 actions.extend(['Run SEC-SAXS sample', 'Equilibrate column',
                 'Switch pumps'])
 
             actions.append('----Staff Methods----')
 
-            if 'exp' in self.settings['instruments']:
+            if 'exp' in self.auto_panel.settings['instruments']:
                 actions.extend(['Standalone Exposure'])
 
             dialog = wx.SingleChoiceDialog(self, 'Pick an action to add:',
@@ -1811,7 +1811,7 @@ class AutoList(utils.ItemList):
 
         return cmd_settings, valid, errors
 
-    def _validate_coflow_parms(self, cmd_settings):
+    def _validate_coflow_params(self, cmd_settings):
         errors = []
 
         column = cmd_settings['column']

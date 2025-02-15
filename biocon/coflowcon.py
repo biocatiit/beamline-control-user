@@ -2121,6 +2121,8 @@ class CoflowPanel(wx.Panel):
                 status = 'Equilibrating'
             elif self._status.lower() == 'coflow off':
                 status = 'Stopped'
+            else:
+                status = 'Unknown'
 
             state = {
                 'status'    : status,
