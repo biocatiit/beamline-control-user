@@ -818,21 +818,21 @@ if __name__ == '__main__':
     #         'kwargs': {'positions': 10}},
     #     ]
 
-    # # # TR-SAXS laminar flow
-    # setup_devices = [
-    # # {'name': 'Injection', 'args': ['Rheodyne', 'COM6'],
-    #     #     'kwargs': {'positions' : 2}},
-    #     {'name': 'Buffer 1', 'args': ['Rheodyne', 'COM10'],
-    #         'kwargs': {'positions' : 6}},
-    #     {'name': 'Buffer 2', 'args': ['Rheodyne', 'COM4'],
-    #         'kwargs': {'positions' : 6}},
-    #     {'name': 'Sample', 'args': ['Rheodyne', 'COM3'],
-    #         'kwargs': {'positions' : 6}},
-    #     {'name': 'Sheath 1', 'args': ['Rheodyne', 'COM21'],
-    #         'kwargs': {'positions' : 6}},
-    #     {'name': 'Sheath 2', 'args': ['Rheodyne', 'COM8'],
-    #         'kwargs': {'positions' : 6}},
-    #     ]
+    # # TR-SAXS laminar flow
+    setup_devices = [
+    # {'name': 'Injection', 'args': ['Rheodyne', 'COM6'],
+        #     'kwargs': {'positions' : 2}},
+        {'name': 'Buffer 1', 'args': ['Rheodyne', 'COM10'],
+            'kwargs': {'positions' : 6}},
+        {'name': 'Buffer 2', 'args': ['Rheodyne', 'COM4'],
+            'kwargs': {'positions' : 6}},
+        {'name': 'Sample', 'args': ['Rheodyne', 'COM3'],
+            'kwargs': {'positions' : 6}},
+        {'name': 'Sheath 1', 'args': ['Rheodyne', 'COM21'],
+            'kwargs': {'positions' : 6}},
+        {'name': 'Sheath 2', 'args': ['Rheodyne', 'COM8'],
+            'kwargs': {'positions' : 6}},
+        ]
 
     # # New HPLC
     # setup_devices = [
@@ -865,11 +865,11 @@ if __name__ == '__main__':
     #     {'name': 'Coflow Sheath', 'args': ['Soft', None], 'kwargs': {'positions': 10}}
     #     ]
 
-    # Autosampler needle
-    setup_devices = [
-        {'name': 'Needle', 'args': ['Cheminert', 'COM11'],
-            'kwargs': {'positions': 10}},
-        ]
+    # # Autosampler needle
+    # setup_devices = [
+    #     {'name': 'Needle', 'args': ['Cheminert', 'COM11'],
+    #         'kwargs': {'positions': 10}},
+    #     ]
 
     # Local
     com_thread = ValveCommThread('ValveComm')

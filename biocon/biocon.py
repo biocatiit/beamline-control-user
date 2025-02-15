@@ -167,7 +167,7 @@ class BioFrame(wx.Frame):
 
         self.SetSizer(top_sizer)
 
-        
+
 
     def _create_auto_layout(self):
         top_panel = wx.Panel(self)
@@ -293,7 +293,7 @@ class BioFrame(wx.Frame):
                 else:
                     component_sizers[key] = component_sizer
 
-                
+
                 self.component_panels[key] = component_panel
 
             elif key == 'pipeline':
@@ -774,12 +774,12 @@ if __name__ == '__main__':
     biocon_settings = {}
 
     components = OrderedDict([
-        ('exposure', expcon.ExpPanel),
-        ('coflow', coflowcon.CoflowPanel),
+        # ('exposure', expcon.ExpPanel),
+        # ('coflow', coflowcon.CoflowPanel),
         # ('trsaxs_scan', trcon.TRScanPanel),
         # ('trsaxs_flow', trcon.TRFlowPanel),
         # ('scan',    scancon.ScanPanel),
-        ('metadata', metadata.ParamPanel),
+        # ('metadata', metadata.ParamPanel),
         # ('pipeline', pipeline_ctrl.PipelineControl),
         # ('uv', spectrometercon.UVPanel),
         ('hplc', biohplccon.HPLCPanel),

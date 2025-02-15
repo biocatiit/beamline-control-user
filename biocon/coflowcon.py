@@ -716,6 +716,7 @@ class CoflowPanel(wx.Panel):
 
         self.current_sheath_valve_position = None
         self._buffer_info = {}
+        self._status = ''
 
         connect = True
 
@@ -769,7 +770,7 @@ class CoflowPanel(wx.Panel):
                     self.change_buffer_button.Disable()
                     self.stop_flow_button.Enable()
                     self.change_flow_button.Enable()
-                    self.status.SetLabel('Coflow on')
+                    self.set_status('Coflow on')
                     self.monitor_timer.Start(self.settings['settling_time'])
                     self.coflow_control.coflow_on = True
                 else:
@@ -1265,7 +1266,7 @@ class CoflowPanel(wx.Panel):
 
         #Start flow
         self._start_flow(False)
-        wx.CallAfter(self.status.SetLabel, 'Changing buffer')
+        wx.CallAfter(self.set_status, 'Changing buffer')
         #Start flow timer
         fr = self.coflow_control.sheath_setpoint
         time = 60*(self.settings['buffer_change_vol']/fr)
@@ -1490,6 +1491,10 @@ class CoflowPanel(wx.Panel):
         if auto:
             self.stop_flow()
 
+    def set_status(self, status):
+        self.status.SetLabel(status)
+        self._status = status
+
     def start_flow(self, validate=True):
         logger.debug('Starting flow')
 
@@ -1507,7 +1512,7 @@ class CoflowPanel(wx.Panel):
 
         self.coflow_control.start_flow()
 
-        wx.CallAfter(self.status.SetLabel, 'Coflow on')
+        wx.CallAfter(self.set_status, 'Coflow on')
 
         if start_monitor:
             wx.CallAfter(self.monitor_timer.Start, self.settings['settling_time'])
@@ -1548,7 +1553,7 @@ class CoflowPanel(wx.Panel):
 
             self.coflow_control.stop_flow()
 
-            self.status.SetLabel('Coflow off')
+            self.set_status('Coflow off')
 
             logger.info('Stopped coflow pumps')
 
@@ -1824,7 +1829,7 @@ class CoflowPanel(wx.Panel):
             if self.coflow_control.sheath_is_moving and self.coflow_control.outlet_is_moving:
                 self.start_flow_button.Disable()
                 self.change_buffer_button.Disable()
-                self.status.SetLabel('Coflow on')
+                self.set_status('Coflow on')
             else:
                 self.start_flow_button.Enable()
                 self.change_buffer_button.Enable()
@@ -2108,6 +2113,19 @@ class CoflowPanel(wx.Panel):
         elif cmd_name == 'overflow_off':
             self.coflow_control.stop_overflow()
             state = self._get_automator_state()
+
+        elif cmd_name == 'full_status':
+            if self._status.lower() == 'coflow on':
+                status = 'Flowing'
+            elif self._status.lower() == 'changing buffer':
+                status = 'Equilibrating'
+            elif self._status.lower() == 'coflow off':
+                status = 'Stopped'
+
+            state = {
+                'status'    : status,
+                'fr'        : str(self.coflow_control.lc_flow_rate),
+            }
 
         return state, success
 

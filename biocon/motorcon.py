@@ -197,7 +197,8 @@ class NewportXPSMotor(Motor):
     """
     """
 
-    def __init__(self, name, xps, ip_address, port, timeout, group, num_axes):
+    def __init__(self, name, xps, ip_address, port, timeout, group, num_axes,
+        is_hxp=False):
         """
         """
 
@@ -210,6 +211,7 @@ class NewportXPSMotor(Motor):
         self.num_axes = num_axes
 
         self.xps = xps
+        self.is_hxp = is_hxp
 
         self.sockets = {}
 
@@ -463,7 +465,10 @@ class NewportXPSMotor(Motor):
             for i, disp in enumerate(displacements):
                 cor_displacements.append((disp-self._offset[i])/self._scale)
 
-        error, ret = self.xps.GroupMoveRelative(self.sockets['move'], positioner, cor_displacements)
+        if not self.is_hxp:
+            error, ret = self.xps.GroupMoveRelative(self.sockets['move'], positioner, cor_displacements)
+        else:
+            error, ret = self.xps.HexapodMoveRelative(self.sockets['move'], positioner, cor_displacements)
 
         if error != 0:
             self.get_error('move', self.sockets['move'], error, ret)
@@ -489,7 +494,10 @@ class NewportXPSMotor(Motor):
             for i, pos in enumerate(positions):
                 cor_positions.append((pos-self._offset[i])/self._scale)
 
-        error, ret = self.xps.GroupMoveAbsolute(self.sockets['move'], positioner, cor_positions)
+        if not self.is_hxp:
+            error, ret = self.xps.GroupMoveAbsolute(self.sockets['move'], positioner, cor_positions)
+        else:
+            error, ret = self.xps.HexapodMoveAbsolute(self.sockets['move'], positioner, cor_positions)
 
         if error != 0:
             self.get_error('move', self.sockets['move'], error, ret)

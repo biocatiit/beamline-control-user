@@ -6036,6 +6036,50 @@ class HPLCPanel(utils.DevicePanel):
                         and int(self._flow_path) == 2):
                         self._on_stop_submission(None)
 
+        elif cmd_name == 'full_status':
+            if self._flow_path_status.lower() == 'true':
+                state = 'Switching'
+            elif self._sampler_submitting.lower() == 'true':
+                state = 'Submitting'
+            else:
+                state = copy.copy(self._inst_status)
+
+            runtime = float(self._inst_total_runtime)-float(self._inst_elapsed_runtime)
+            rountime = round(runtime, 1)
+
+            if self._pump1_purge.lower() == 'true':
+                pump1_state = 'Equilibrating'
+            elif self._pump1_eq.lower() == 'true':
+                pump1_state = 'Equilibrating'
+            elif float(self._pump1_flow) > 0:
+                pump1_state = 'Flowing'
+            else:
+                pump1_state = 'Stopped'
+
+            if self._device_type == 'AgilentHPLC2Pumps':
+                if self._pump2_purge.lower() == 'true':
+                    pump2_state = 'Equilibrating'
+                elif self._pump2_eq.lower() == 'true':
+                    pump2_state = 'Equilibrating'
+                elif float(self._pump2_flow) > 0:
+                    pump2_state = 'Flowing'
+                else:
+                    pump2_state = 'Stopped'
+            else:
+                pump2_state = ''
+
+            state = {
+                'state'         : state,
+                'flow_path'     : copy.copy(self._flow_path),
+                'runtime'       : str(runtime),
+                'pump1_state'   : pump1_state,
+                'pump1_fr'      : copy.copy(self._pump1_flow),
+                'pump1_pressure': copy.copy(self._pump1_pressure),
+                'pump2_state'   : pump2_state,
+                'pump2_fr'      : copy.copy(self._pump2_flow),
+                'pump2_pressure': copy.copy(self._pump2_pressure),
+            }
+
         return state, success
 
     def on_exit(self):
