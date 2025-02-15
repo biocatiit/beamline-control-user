@@ -2105,12 +2105,12 @@ if __name__ == '__main__':
         # 'motor_home_velocity'   : {'x': 10, 'y': 10, 'z': 10},
         # 'motor_velocity'        : {'x': 75, 'y': 75, 'z': 75}, #112
         # 'motor_acceleration'    : {'x': 500, 'y': 500, 'z': 500},
-        'base_position'         : {'plate_x': 271.4, 'plate_z': -73.6, 'needle_y': 93.55}, # A1 well position, needle height at chiller plate top
+        'base_position'         : {'plate_x': 270.9, 'plate_z': -82.1, 'needle_y': 102.685}, # A1 well position, needle height at chiller plate top
         'clean_offsets'         : {'plate_x': 96, 'plate_z': -17, 'needle_y': 0.7}, # Relative to base position
         'needle_out_offset'     : 5, # mm
         'needle_in_position'    : 0,
-        'plate_out_position'    : {'plate_x': 241.4, 'plate_z': -73.6},
-        'plate_load_position'   : {'plate_x': 0, 'plate_z': -73.6},
+        'plate_out_position'    : {'plate_x': 241.4, 'plate_z': -82.1},
+        'plate_load_position'   : {'plate_x': 0, 'plate_z': -82.1},
         'plate_type'            : 'Thermo-Fast 96 well PCR',
         # 'plate_type'            : 'Abgene 96 well deepwell storage',
         'valve_positions'       : {'sample': 5, 'clean1': 1, 'clean2': 2, 'clean3': 3, 'clean4': 4},

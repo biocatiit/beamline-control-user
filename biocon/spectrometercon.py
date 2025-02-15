@@ -4255,6 +4255,53 @@ class UVFrame(utils.DeviceFrame):
 
         self._init_devices()
 
+
+
+
+
+default_spectrometer_settings = {
+        'device_init'           : [{'name': 'CoflowUV', 'args': ['StellarNet', None],
+                                    'kwargs': {'shutter_pv_name': '18ID:LJT4:2:Bo11',
+                                    'trigger_pv_name' : '18ID:LJT4:2:Bo12',
+                                    'out1_pv_name' : '18ID:E1608:Ao1',
+                                    'out2_pv_name' : '18ID:E1608:Ao2',
+                                    'trigger_in_pv_name' : '18ID:E1608:Bi8'}},],
+        'max_int_t'             : 0.025, # in s
+        'scan_avg'              : 1,
+        'smoothing'             : 0,
+        'xtiming'               : 3,
+        'spectrum_type'         : 'Absorbance', #Absorbance, Transmission, Raw
+        'dark_correct'          : True,
+        'auto_dark'             : True,
+        'auto_dark_t'           : 60*60, #in s
+        'dark_avgs'             : 3,
+        'ref_avgs'              : 2,
+        'history_t'             : 60*60*24, #in s
+        'save_subdir'           : 'UV',
+        'save_type'             : 'Absorbance',
+        'series_ref_at_start'   : True,
+        'drift_correct'         : True,
+        'drift_window'          : [750, 800],
+        'abs_wav'               : [280, 260],
+        'abs_window'            : 1,
+        'int_t_scale'           : 2,
+        'wavelength_range'      : [225, 838.39],
+        'analog_out_v_max'      : 10.,
+        'analog_out_au_max'     : 10000, #mAu
+        'analog_out_wav'        : {'out1': 280, 'out2': 260},
+        'do_ao'                 : True,
+        'remote_ip'             : '164.54.204.53',
+        'remote_port'           : '5559',
+        'device_communication'  : 'local',
+        'remote'                : False,
+        'remote_device'         : 'uv',
+        'com_thread'            : None,
+        'remote_dir_prefix'     : {'local' : '/nas_data', 'remote' : 'Y:\\'},
+        'inline_panel'          : False,
+        'plot_refresh_t'        : 0.1, #in s
+    }
+
+
 if __name__ == '__main__':
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
@@ -4524,46 +4571,10 @@ if __name__ == '__main__':
     # Remote
     # com_thread = None
 
-    spectrometer_settings = {
-        'device_init'           : [{'name': 'CoflowUV', 'args': ['StellarNet', None],
-                                    'kwargs': {'shutter_pv_name': '18ID:LJT4:2:Bo11',
-                                    'trigger_pv_name' : '18ID:LJT4:2:Bo12',
-                                    'out1_pv_name' : '18ID:E1608:Ao1',
-                                    'out2_pv_name' : '18ID:E1608:Ao2',
-                                    'trigger_in_pv_name' : '18ID:E1608:Bi8'}}],
-        'max_int_t'             : 0.025, # in s
-        'scan_avg'              : 1,
-        'smoothing'             : 0,
-        'xtiming'               : 3,
-        'spectrum_type'         : 'Absorbance', #Absorbance, Transmission, Raw
-        'dark_correct'          : True,
-        'auto_dark'             : True,
-        'auto_dark_t'           : 60*60, #in s
-        'dark_avgs'             : 3,
-        'ref_avgs'              : 2,
-        'history_t'             : 60*60*24, #in s
-        'save_subdir'           : 'UV',
-        'save_type'             : 'Absorbance',
-        'series_ref_at_start'   : True,
-        'drift_correct'         : True,
-        'drift_window'          : [750, 800],
-        'abs_wav'               : [280, 260],
-        'abs_window'            : 1,
-        'int_t_scale'           : 2,
-        'wavelength_range'      : [225, 838.39],
-        'analog_out_v_max'      : 10.,
-        'analog_out_au_max'     : 10000, #mAu
-        'analog_out_wav'        : {'out1': 280, 'out2': 260},
-        'do_ao'                 : True,
-        'remote_ip'             : '164.54.204.53',
-        'remote_port'           : '5559',
-        'remote'                : False,
-        'remote_device'         : 'uv',
-        'com_thread'            : com_thread,
-        'remote_dir_prefix'     : {'local' : '/nas_data', 'remote' : 'Y:\\'},
-        'inline_panel'          : False,
-        'plot_refresh_t'        : 0.1, #in s
-    }
+    spectrometer_settings = default_spectrometer_settings
+    spectrometer_settings['components'] = ['uv']
+    spectrometer_settings['com_thread'] = com_thread
+
 
     #initialized epics ca context in the main thread first as recommended
     # epics.get_pv(spectrometer_settings['device_init'][0]['kwargs']['shutter_pv_name'])

@@ -405,8 +405,8 @@ if __name__ == '__main__':
     if exp_type == 'coflow':
         # Coflow
 
-        # has_uv = True
-        has_uv = False
+        has_uv = True
+        # has_uv = False
 
         ip = '164.54.204.53'
         # ip = '164.54.204.253'
@@ -440,11 +440,20 @@ if __name__ == '__main__':
                 'kwargs': {'positions' : 10}},
             ]
 
-        setup_uv = [
-            {'name': 'CoflowUV', 'args': ['StellarNet', None], 'kwargs':
-            {'shutter_pv_name': '18ID:LJT4:2:Bo11',
-            'trigger_pv_name' : '18ID:LJT4:2:Bo12'}},
-            ]
+        spectrometer_settings = spectrometercon.default_spectrometer_settings
+        spectrometer_settings['device_init'] = [{'name': 'CoflowUV',
+            'args': ['StellarNet', None],
+            'kwargs': {'shutter_pv_name': '18ID:LJT4:2:Bo11',
+            'trigger_pv_name' : '18ID:LJT4:2:Bo12',
+            'out1_pv_name' : '18ID:E1608:Ao1',
+            'out2_pv_name' : '18ID:E1608:Ao2',
+            'trigger_in_pv_name' : '18ID:E1608:Bi8'}},]
+
+        # setup_uv = [
+        #     {'name': 'CoflowUV', 'args': ['StellarNet', None], 'kwargs':
+        #     {'shutter_pv_name': '18ID:LJT4:2:Bo11',
+        #     'trigger_pv_name' : '18ID:LJT4:2:Bo12'}},
+        #     ]
 
         outlet_fm_comm_lock = threading.Lock()
 
@@ -739,15 +748,13 @@ if __name__ == '__main__':
             time.sleep(1)
             uv_comm_thread = control_server_uv.get_comm_thread('uv')
 
-            uv_settings = {
-                'remote'        : False,
-                'device_init'   : setup_uv,
-                'com_thread'    : uv_comm_thread,
-                'inline_panel'  : False,
-                'plot_refresh_t': 0.1, #in s
-                }
+            spectrometer_settings['remote'] = False
+            spectrometer_settings['device_communication'] = 'local'
+            spectrometer_settings['com_thread'] = uv_comm_thread
+            spectrometer_settings['inline_panel'] = False
+            spectrometer_settings['plot_refresh_t'] = 0.1
 
-            uv_frame = spectrometercon.UVFrame('UVFrame', uv_settings,
+            uv_frame = spectrometercon.UVFrame('UVFrame', spectrometer_settings,
                 parent=None, title='UV Spectrometer Control')
             uv_frame.Show()
 
