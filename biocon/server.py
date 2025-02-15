@@ -396,17 +396,17 @@ if __name__ == '__main__':
     port3 = '5558'
     port4 = '5559'
 
-    # exp_type = 'coflow' #coflow or trsaxs_laminar or trsaxs_chaotic or hplc
+    exp_type = 'coflow' #coflow or trsaxs_laminar or trsaxs_chaotic or hplc
     # exp_type = 'trsaxs_chaotic'
     # exp_type = 'trsaxs_laminar'
-    exp_type = 'hplc'
+    # exp_type = 'hplc'
 
 
     if exp_type == 'coflow':
         # Coflow
 
-        # has_uv = True
-        has_uv = False
+        has_uv = True
+        # has_uv = False
 
         ip = '164.54.204.53'
         # ip = '164.54.204.253'
@@ -427,7 +427,7 @@ if __name__ == '__main__':
             {'name': 'sheath', 'args': ['VICI M50', 'COM6'],
                 'kwargs': {'flow_cal': '627.72', 'backlash_cal': '9.814'},
                 'ctrl_args': {'flow_rate': 1}},
-            {'name': 'outlet', 'args': ['OB1 Pump', 'COM7'],
+            {'name': 'outlet', 'args': ['OB1 Pump', 'COM13'],
                 'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
                 'min_pressure': -900, 'max_pressure': 1000, 'P': -2, 'I': -0.15,
                 'D': 0, 'bfs_instr_ID': None, 'comm_lock': ob1_comm_lock,
@@ -440,11 +440,20 @@ if __name__ == '__main__':
                 'kwargs': {'positions' : 10}},
             ]
 
-        setup_uv = [
-            {'name': 'CoflowUV', 'args': ['StellarNet', None], 'kwargs':
-            {'shutter_pv_name': '18ID:LJT4:2:Bo11',
-            'trigger_pv_name' : '18ID:LJT4:2:Bo12'}},
-            ]
+        spectrometer_settings = spectrometercon.default_spectrometer_settings
+        spectrometer_settings['device_init'] = [{'name': 'CoflowUV',
+            'args': ['StellarNet', None],
+            'kwargs': {'shutter_pv_name': '18ID:LJT4:2:Bo11',
+            'trigger_pv_name' : '18ID:LJT4:2:Bo12',
+            'out1_pv_name' : '18ID:E1608:Ao1',
+            'out2_pv_name' : '18ID:E1608:Ao2',
+            'trigger_in_pv_name' : '18ID:E1608:Bi8'}},]
+
+        # setup_uv = [
+        #     {'name': 'CoflowUV', 'args': ['StellarNet', None], 'kwargs':
+        #     {'shutter_pv_name': '18ID:LJT4:2:Bo11',
+        #     'trigger_pv_name' : '18ID:LJT4:2:Bo12'}},
+        #     ]
 
         outlet_fm_comm_lock = threading.Lock()
 
@@ -481,17 +490,17 @@ if __name__ == '__main__':
             # Chaotic flow
 
             setup_pumps = [
-                {'name': 'Buffer 2', 'args': ['SSI Next Gen', 'COM9'],
+                {'name': 'Buffer 2', 'args': ['SSI Next Gen', 'COM15'],
                     'kwargs': {'flow_rate_scale': 1.0179,
                     'flow_rate_offset': -20.842/10000,'scale_type': 'up'},
                     'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
                     'max_pressure': 1800}},
-                {'name': 'Sample', 'args': ['SSI Next Gen', 'COM7'],
+                {'name': 'Sample', 'args': ['SSI Next Gen', 'COM12'],
                     'kwargs': {'flow_rate_scale': 1.0204,
                     'flow_rate_offset': 15.346/1000,'scale_type': 'up'},
                     'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
                     'max_pressure': 1500}},
-                {'name': 'Buffer 1', 'args': ['SSI Next Gen', 'COM15'],
+                {'name': 'Buffer 1', 'args': ['SSI Next Gen', 'COM14'],
                     'kwargs': {'flow_rate_scale': 1.0478,
                     'flow_rate_offset': -72.82/1000,'scale_type': 'up'},
                     'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
@@ -577,11 +586,11 @@ if __name__ == '__main__':
                     'kwargs': {'syringe_id': '3 mL, Medline P.C.',
                     'pump_address': '00', 'dual_syringe': 'False'},
                     'ctrl_args': {'flow_rate' : '0.068', 'refill_rate' : '3'}},
-                {'name': 'Sample', 'args': ['Pico Plus', 'COM14'],
+                {'name': 'Sample', 'args': ['Pico Plus', 'COM9'],
                     'kwargs': {'syringe_id': '1 mL, Medline P.C.',
                     'pump_address': '00', 'dual_syringe': 'False'},
                     'ctrl_args': {'flow_rate' : '0.009', 'refill_rate' : '1.0'}},
-                {'name': 'Sheath', 'args': ['Pico Plus', 'COM12'],
+                {'name': 'Sheath', 'args': ['Pico Plus', 'COM7'],
                     'kwargs': {'syringe_id': '1 mL, Medline P.C.',
                     'pump_address': '00', 'dual_syringe': 'False'},
                     'ctrl_args': {'flow_rate' : '0.002', 'refill_rate' : '1.0'}},
@@ -739,15 +748,13 @@ if __name__ == '__main__':
             time.sleep(1)
             uv_comm_thread = control_server_uv.get_comm_thread('uv')
 
-            uv_settings = {
-                'remote'        : False,
-                'device_init'   : setup_uv,
-                'com_thread'    : uv_comm_thread,
-                'inline_panel'  : False,
-                'plot_refresh_t': 0.1, #in s
-                }
+            spectrometer_settings['remote'] = False
+            spectrometer_settings['device_communication'] = 'local'
+            spectrometer_settings['com_thread'] = uv_comm_thread
+            spectrometer_settings['inline_panel'] = False
+            spectrometer_settings['plot_refresh_t'] = 0.1
 
-            uv_frame = spectrometercon.UVFrame('UVFrame', uv_settings,
+            uv_frame = spectrometercon.UVFrame('UVFrame', spectrometer_settings,
                 parent=None, title='UV Spectrometer Control')
             uv_frame.Show()
 

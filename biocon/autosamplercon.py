@@ -449,16 +449,17 @@ class Autosampler(object):
 
     def _check_abort(self):
         if self.abort_event.is_set():
-            self.plate_x.stop()
-            self.plate_z.stop()
-            self.needle_y.stop()
-
+            print('here')
+            self.plate_x_motor.stop()
+            self.plate_z_motor.stop()
+            self.needle_y_motor.stop()
+            print('here2')
             self.sample_pump.stop()
             self.clean1_pump.stop()
             self.clean2_pump.stop()
             self.clean3_pump.stop()
 
-            self.set_valve_positions(self.settings['valve_positions']['sample'])
+            self.set_valve_position(self.settings['valve_positions']['sample'])
 
             self.abort_event.clear()
 
@@ -776,7 +777,7 @@ class Autosampler(object):
 
         if blocking:
             while selected_pump.is_moving():
-                abort = self.sleep(0.05)
+                abort = self._sleep(0.05)
 
             # final_volume = selected_pump.volume
 
@@ -2104,12 +2105,12 @@ if __name__ == '__main__':
         # 'motor_home_velocity'   : {'x': 10, 'y': 10, 'z': 10},
         # 'motor_velocity'        : {'x': 75, 'y': 75, 'z': 75}, #112
         # 'motor_acceleration'    : {'x': 500, 'y': 500, 'z': 500},
-        'base_position'         : {'plate_x': 271.4, 'plate_z': -73.6, 'needle_y': 93.55}, # A1 well position, needle height at chiller plate top
+        'base_position'         : {'plate_x': 270.9, 'plate_z': -82.1, 'needle_y': 102.685}, # A1 well position, needle height at chiller plate top
         'clean_offsets'         : {'plate_x': 96, 'plate_z': -17, 'needle_y': 0.7}, # Relative to base position
         'needle_out_offset'     : 5, # mm
         'needle_in_position'    : 0,
-        'plate_out_position'    : {'plate_x': 241.4, 'plate_z': -73.6},
-        'plate_load_position'   : {'plate_x': 0, 'plate_z': -73.6},
+        'plate_out_position'    : {'plate_x': 241.4, 'plate_z': -82.1},
+        'plate_load_position'   : {'plate_x': 0, 'plate_z': -82.1},
         'plate_type'            : 'Thermo-Fast 96 well PCR',
         # 'plate_type'            : 'Abgene 96 well deepwell storage',
         'valve_positions'       : {'sample': 5, 'clean1': 1, 'clean2': 2, 'clean3': 3, 'clean4': 4},
@@ -2118,7 +2119,7 @@ if __name__ == '__main__':
                                     ('clean1', 'dispense', 5, 1),
                                     ('clean2', 'dispense', 5, 1), # rate, volume in ml/min and ml
                                     ('clean4', 'wait', 60, 0),], #wait time in s, N/A
-        'pump_rates'            : {'sample': (0.1, 0.1), 'buffer': (0.1, 0.1), 'purge': (1, 1)}, # (refill, infuse) rates in ml/min
+        'pump_rates'            : {'sample': (0.3, 0.1), 'buffer': (0.1, 0.1), 'purge': (1, 1)}, # (refill, infuse) rates in ml/min
         'loop_volume'           : 0.1,
         'load_dwell_time'       : 3, #Time to wait in well after aspirating
         'inject_connect_vol'    : 0, #Volume to eject from the needle after loading before re-entering the cell, to ensure a wet-to-wet entry for the needle and prevent bubbles, uL
