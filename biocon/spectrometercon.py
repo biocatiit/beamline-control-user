@@ -1016,8 +1016,15 @@ class Spectrometer(object):
         wvl_start = wvl - self._absorbance_window/2
         wvl_end = wvl + self._absorbance_window/2
 
-        _, start_idx = utils.find_closest(wvl_start, self.wavelength)
-        _, end_idx = utils.find_closest(wvl_end, self.wavelength)
+        if len(self._wavelength_range_idx) > 0 and self._wavelength_range_idx[0] is not None:
+            start = self._wavelength_range_idx[0]
+            end = self._wavelength_range_idx[1]
+            wavelength = self.wavelength[start:end+1]
+        else:
+            wavelength = self.wavelength
+
+        _, start_idx = utils.find_closest(wvl_start, wavelength)
+        _, end_idx = utils.find_closest(wvl_end, wavelength)
 
         self._absorbance_wavelengths[wvl] = {'start': start_idx, 'end': end_idx}
 
@@ -1165,8 +1172,6 @@ class StellarnetUVVis(Spectrometer):
         self._ext_trig = False
 
         self.connected = False
-
-        print(trigger_pv_name)
 
         self.shutter_pv = epics.get_pv(shutter_pv_name)
         self.trigger_pv = epics.get_pv(trigger_pv_name)
