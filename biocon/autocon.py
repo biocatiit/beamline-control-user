@@ -1066,7 +1066,7 @@ class AutoStatusPanel(wx.Panel):
 
             hplc_status_box = wx.StaticBox(ctrl_parent, label='HPLC')
 
-            hplc_stop_btn = wx.Button(hplc_status_box, label='Stop')
+            # hplc_stop_btn = wx.Button(hplc_status_box, label='Stop')
 
             self.hplc_flow_path = wx.StaticText(hplc_status_box, size=self._FromDIP((60,-1)),
                 style=wx.ST_NO_AUTORESIZE)
@@ -1113,7 +1113,8 @@ class AutoStatusPanel(wx.Panel):
 
             if num_paths == 2:
                 hplc_sub_status_sizer.AddSpacer(1)
-                hplc_sub_status_sizer.Add(hplc_stop_btn, flag=wx.ALIGN_CENTER_VERTICAL)
+                hplc_sub_status_sizer.AddSpacer(1)
+                # hplc_sub_status_sizer.Add(hplc_stop_btn, flag=wx.ALIGN_CENTER_VERTICAL)
                 hplc_sub_status_sizer.Add(wx.StaticText(hplc_status_box, label='Flow path:'),
                     flag=wx.ALIGN_CENTER_VERTICAL)
                 hplc_sub_status_sizer.Add(self.hplc_flow_path, flag=wx.ALIGN_CENTER_VERTICAL)
@@ -1137,14 +1138,16 @@ class AutoStatusPanel(wx.Panel):
             exp_status_box  = wx.StaticBox(ctrl_parent, label='Exposure')
 
             exp_stop_btn = wx.Button(exp_status_box, label='Stop Exposure')
+            exp_stop_btn.Bind(wx.EVT_BUTTON, self._on_stop_exp)
 
-            self.exp_status = wx.StaticText(exp_status_box, size=self._FromDIP((80,-1)),
+            self.exp_status = wx.StaticText(exp_status_box, size=self._FromDIP((120,-1)),
                 style=wx.ST_NO_AUTORESIZE)
             self.exp_runtime = wx.StaticText(exp_status_box, size=self._FromDIP((60,-1)),
                 style=wx.ST_NO_AUTORESIZE)
 
             if 'coflow' in self.settings['instruments']:
                 coflow_stop_btn = wx.Button(exp_status_box, label='Stop Coflow')
+                coflow_stop_btn.Bind(wx.EVT_BUTTON, self._on_stop_coflow)
 
                 self.coflow_status = wx.StaticText(exp_status_box, size=self._FromDIP((100,-1)),
                     style=wx.ST_NO_AUTORESIZE)
@@ -1259,6 +1262,14 @@ class AutoStatusPanel(wx.Panel):
                 self.coflow_status.SetLabel(status['status'])
                 self.coflow_fr.SetLabel(status['fr'])
 
+    def _on_stop_exp(self, evt):
+        exp_callback = self.settings['instruments']['exp']['automator_callback']
+        status, success = exp_callback('abort', [], {})
+
+    def _on_stop_coflow(self, evt):
+        coflow_callback = self.settings['instruments']['coflow']['automator_callback']
+        status, success = coflow_callback('stop', [], {})
+
 
 class AutoSettings(scrolled.ScrolledPanel):
     def __init__(self, auto_panel, *args, **kwargs):
@@ -1276,7 +1287,7 @@ class AutoSettings(scrolled.ScrolledPanel):
             }
 
         for key in self._sec_saxs_settings.keys():
-            self.ctrl_ids['sec_saxs'][key] = wx.NewIdRef()
+            self.ctrl_ids['sec_sample'][key] = wx.NewIdRef()
 
         for key in self._standalone_exp_settings.keys():
             self.ctrl_ids['exposure'][key] = wx.NewIdRef()
@@ -1334,26 +1345,34 @@ class AutoSettings(scrolled.ScrolledPanel):
 
     def on_item_selection(self, settings):
         item_type = settings['item_type']
-        for key, c_id in self.ctrl_ids[item_type].items():
-            default_val = settings[key]
-            ctrl = self.FindWindowById(c_id)
 
-            if ctrl is not None:
-                if isinstance(ctrl, wx.Choice):
-                    ctrl.SetStringSelection(str(default_val))
-                else:
-                    try:
-                        ctrl.SetValue(str(default_val))
-                    except TypeError:
-                        ctrl.SetValue(default_val)
+        if item_type in self.ctrl_ids:
+            for key, c_id in self.ctrl_ids[item_type].items():
+                default_val = settings[key]
+                ctrl = self.FindWindowById(c_id)
 
-        if item_type == 'sec_sample':
-            self.top_sizer.Show(self.sec_saxs_panel, recursive=True)
-            self.top_sizer.Hide(self.exp_panel, recursive=True)
+                if ctrl is not None:
+                    if isinstance(ctrl, wx.Choice):
+                        ctrl.SetStringSelection(str(default_val))
+                    else:
+                        try:
+                            ctrl.SetValue(str(default_val))
+                        except TypeError:
+                            ctrl.SetValue(default_val)
 
-        elif item_type == 'exposure':
+            if item_type == 'sec_sample':
+                self.top_sizer.Show(self.sec_saxs_panel, recursive=True)
+                self.top_sizer.Hide(self.exp_panel, recursive=True)
+
+            elif item_type == 'exposure':
+                self.top_sizer.Hide(self.sec_saxs_panel, recursive=True)
+                self.top_sizer.Show(self.exp_panel, recursive=True)
+
+            self.Layout()
+            self.Refresh()
+        else:
             self.top_sizer.Hide(self.sec_saxs_panel, recursive=True)
-            self.top_sizer.Show(self.exp_panel, recursive=True)
+            self.top_sizer.Hide(self.exp_panel, recursive=True)
 
 default_sec_saxs_settings = {
     # General parameters
@@ -2153,7 +2172,7 @@ class AutoList(utils.ItemList):
 
         if cmd_settings['item_type'] == 'sec_sample':
             # Do exposure verification and hplc param verification here
-            cmd_settings['inst'] = '{}{}'.format(cmd_settings['inst'],
+            cmd_settings['inst'] = '{}{}'.format(cmd_settings['inst'][0],
                 cmd_settings['flow_path'])
 
             cmd_settings['data_dir'] = os.path.join(cmd_settings['data_dir'],
@@ -2201,7 +2220,7 @@ class AutoList(utils.ItemList):
         elif cmd_settings['item_type'] == 'equilibrate':
             # Do equilibration verification here
 
-            cmd_settings['inst'] = '{}{}'.format(cmd_settings['inst'],
+            cmd_settings['inst'] = '{}{}'.format(cmd_settings['inst'][0],
                 cmd_settings['flow_path'])
 
             cmd_settings, hplc_valid, hplc_errors = self._validate_hplc_equil_params(
@@ -2491,6 +2510,9 @@ class AutoList(utils.ItemList):
     def _get_shared_cmd_number(self, cmd_name, item):
         return item.command.auto_names.count(cmd_name)
 
+    def item_selected(self, item):
+        self.auto_panel.auto_settings.on_item_selection(item.item_info)
+
     def abort_item(self, aid):
         for item in self.all_items:
             if item.status != 'done' and item.status != 'abort':
@@ -2679,6 +2701,25 @@ class AutoListItem(utils.ListItem):
         elif self.status == 'pause' and label != 'Paused':
             self.status_ctrl.SetLabel('Paused')
 
+    def set_selected(self, selected):
+        self._selected = selected
+
+        if self._selected:
+
+            self.SetBackgroundColour(self.highlight_list_bkg_color)
+
+            for text_item in self.text_list:
+                text_item.SetForegroundColour(self.general_text_color)
+
+            self.item_list.item_selected(self)
+
+        else:
+            self.SetBackgroundColour(self.list_bkg_color)
+            for text_item in self.text_list:
+                text_item.SetForegroundColour(self.general_text_color)
+
+        self.Refresh()
+
     def abort(self):
         self.command.abort()
         self.status_ctrl.SetLabel('Aborted')
@@ -2767,7 +2808,8 @@ class SecSampleCmdDialog(AutoCmdDialog):
         self.acq_methods
         self.sample_methods
 
-        cmd_sizer = make_sec_saxs_info_panel(self, self, self.ctrl_ids, 'horiz')
+        cmd_sizer =  make_sec_saxs_info_panel(self, self, self.ctrl_ids, 'horiz',
+            num_flow_paths, self.acq_methods, self.sample_methods)
 
         button_sizer = self.CreateButtonSizer(wx.OK | wx.CANCEL)
 
