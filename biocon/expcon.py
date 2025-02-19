@@ -3777,7 +3777,10 @@ class ExpPanel(wx.Panel):
                 metadata[key] = value
 
                 if key.startswith('LC flow rate'):
-                    flow_rate = float(value)
+                    try:
+                        flow_rate = float(value)
+                    except TypeError:
+                        flow_rate = 0
 
         if 'trsaxs_scan' in self.settings['components']:
             trsaxs_panel = wx.FindWindowByName('trsaxs_scan')
