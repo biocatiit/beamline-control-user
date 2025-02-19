@@ -665,6 +665,8 @@ class Spectrometer(object):
 
             tot_spectrum = 0
 
+            self._calculate_all_abs_single_wavelength()
+
             dt_delta_t = datetime.timedelta(seconds=delta_t_min)
 
             if self._series_abort_event.is_set():
