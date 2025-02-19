@@ -203,7 +203,8 @@ class BioFrame(wx.Frame):
             else:
                 num_paths = 1
             inst_settings['hplc'] = {'num_paths': num_paths,
-                'automator_callback': hplc_automator_callback}
+                'automator_callback': hplc_automator_callback,
+                'hplc_panel'    : hplc_panel,}
         if 'coflow' in self.settings['components']:
             coflow_panel = self.component_panels['coflow']
             coflow_automator_callback = coflow_panel.automator_callback
@@ -383,7 +384,7 @@ if __name__ == '__main__':
         'thresh': 0.04}, 'guard_vac' : {'check': True, 'thresh': 0.04},
         'sample_vac': {'check': True, 'thresh': 0.04}, 'sc_vac':
         {'check': True, 'thresh':0.04}}
-    exposure_settings['base_data_dir'] = '/nas_data/Eiger2x/2025_Run1/2025_02_13_Watkins' #CHANGE ME and pipeline local_basedir
+    exposure_settings['base_data_dir'] = '/nas_data/Eiger2x/2025_Run1/2025_02_15_Rosenberg' #CHANGE ME and pipeline local_basedir
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']
 
 
