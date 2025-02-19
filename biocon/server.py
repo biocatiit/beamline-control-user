@@ -448,6 +448,10 @@ if __name__ == '__main__':
             'out1_pv_name' : '18ID:E1608:Ao1',
             'out2_pv_name' : '18ID:E1608:Ao2',
             'trigger_in_pv_name' : '18ID:E1608:Bi8'}},]
+        spectrometer_settings['remote'] = False
+        spectrometer_settings['device_communication'] = 'local'
+        spectrometer_settings['inline_panel'] = False
+        spectrometer_settings['plot_refresh_t'] = 1
 
         # setup_uv = [
         #     {'name': 'CoflowUV', 'args': ['StellarNet', None], 'kwargs':
@@ -748,11 +752,7 @@ if __name__ == '__main__':
             time.sleep(1)
             uv_comm_thread = control_server_uv.get_comm_thread('uv')
 
-            spectrometer_settings['remote'] = False
-            spectrometer_settings['device_communication'] = 'local'
             spectrometer_settings['com_thread'] = uv_comm_thread
-            spectrometer_settings['inline_panel'] = False
-            spectrometer_settings['plot_refresh_t'] = 0.1
 
             uv_frame = spectrometercon.UVFrame('UVFrame', spectrometer_settings,
                 parent=None, title='UV Spectrometer Control')
