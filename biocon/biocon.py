@@ -384,7 +384,7 @@ if __name__ == '__main__':
         'thresh': 0.04}, 'guard_vac' : {'check': True, 'thresh': 0.04},
         'sample_vac': {'check': True, 'thresh': 0.04}, 'sc_vac':
         {'check': True, 'thresh':0.04}}
-    exposure_settings['base_data_dir'] = '/nas_data/Eiger2x/2025_Run1/2025_02_15_Rosenberg' #CHANGE ME and pipeline local_basedir
+    exposure_settings['base_data_dir'] = '/nas_data/Eiger2x/2025_Run1/' #CHANGE ME and pipeline local_basedir
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']
 
 
@@ -783,8 +783,8 @@ if __name__ == '__main__':
         ('metadata', metadata.ParamPanel),
         ('pipeline', pipeline_ctrl.PipelineControl),
         ('uv', spectrometercon.UVPanel),
-        ('hplc', biohplccon.HPLCPanel),
-        ('automator', autocon.AutoPanel)
+        # ('hplc', biohplccon.HPLCPanel),
+        # ('automator', autocon.AutoPanel)
         ])
 
     settings = {
