@@ -897,7 +897,7 @@ class SwitchPumpsCommand(AutoCommand):
                 self._add_automator_cmd('coflow', 'start', [],
                     {'flow_rate': cmd_info['coflow_rate']})
 
-            self._add_automator_cmd(cmd_name, finish_wait_cmd, [],
+            self._add_automator_cmd('coflow', finish_wait_cmd, [],
                 {'condition': 'status', 'inst_conds': finish_inst_conds})
 
         self._post_initialize_cmd()
