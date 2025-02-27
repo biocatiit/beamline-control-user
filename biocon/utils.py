@@ -545,7 +545,7 @@ class ValueEntry(wx.TextCtrl):
 
     def OnEnter(self, event):
         """
-        When enter is pressed in the box, it sets the value in EPICS.
+        When enter is pressed in the box, it sets the value via the callback.
         """
         value = self.GetValue().strip()
         self._enter_callback(self, value)
