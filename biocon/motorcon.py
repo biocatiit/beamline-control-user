@@ -1376,7 +1376,8 @@ class EpicsMotor(Motor):
 
             logger.info("Changed motor %s units from %s to %s", self.name, old_units, units)
         else:
-            logger.warning("Failed to change motor %s units, units supplied were invalid: %s", self.name, units)
+            logger.warning("Failed to change motor %s units, units supplied were invalid: %s",
+                self.name, units)
 
 
     def send_cmd(self, cmd, get_response=True):
