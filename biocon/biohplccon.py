@@ -6802,7 +6802,7 @@ default_hplc_2pump_settings = {
     'acq_method'                : 'SECSAXS_test',
     # 'acq_method'                : 'SEC-MALS',
     'sample_loc'                : 'D2F-A1',
-    'inj_vol'                   : 10.0,
+    'inj_vol'                   : 240.0,
     'flow_rate'                 : 0.6,
     'flow_accel'                : 0.1,
     'elution_vol'               : 30,

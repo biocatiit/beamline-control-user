@@ -5316,7 +5316,7 @@ class PumpPanel(utils.DevicePanel):
                     except Exception:
                         msg = "Volume must be a number."
                         wx.MessageBox(msg, "Error setting volume")
-                        logger.debug('Failed to set dispense/aspirate volume to %s for pump %s', vol, self.name)
+                        logger.debug('Failed to set dispense/aspirate volume for pump %s', self.name)
                         return
 
                 logger.info('Starting pump %s flow', self.name)
