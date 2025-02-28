@@ -5108,11 +5108,6 @@ class HPLCPanel(utils.DevicePanel):
                 wx.CallAfter(self._sampler_setpoint_ctrl.SetLabel, str(val))
                 self._sampler_setpoint = str(val)
 
-            elif flow_path == 1:
-                if str(val) != self._pump2_flow_target:
-                        wx.CallAfter(self._pump2_flow_target_ctrl.SetLabel, str(val))
-                        self._pump2_flow_target = str(val)
-
     def get_default_sample_settings(self):
 
 
@@ -6807,7 +6802,7 @@ default_hplc_2pump_settings = {
     'acq_method'                : 'SECSAXS_test',
     # 'acq_method'                : 'SEC-MALS',
     'sample_loc'                : 'D2F-A1',
-    'inj_vol'                   : 10.0,
+    'inj_vol'                   : 240.0,
     'flow_rate'                 : 0.6,
     'flow_accel'                : 0.1,
     'elution_vol'               : 30,
