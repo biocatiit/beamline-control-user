@@ -41,7 +41,6 @@ import wx
 from wx.lib.wordwrap import wordwrap
 import wx.lib.mixins.listctrl
 from wx.lib.stattext import GenStaticText as StaticText
-import wx.lib.mixins.listctrl
 from matplotlib.backends.backend_wxagg import NavigationToolbar2WxAgg
 import numpy as np
 try:

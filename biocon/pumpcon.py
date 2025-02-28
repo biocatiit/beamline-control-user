@@ -1581,7 +1581,6 @@ class NE500Pump(SyringePump):
         self.send_cmd("STP")
 
     def _send_pump_cal_cmd(self):
-        self.diameter = self.round(diameter)
         self.send_cmd("DIA{}".format(self.diameter))
         self.send_cmd("VOLML")
 
