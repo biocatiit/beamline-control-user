@@ -396,10 +396,10 @@ if __name__ == '__main__':
     port3 = '5558'
     port4 = '5559'
 
-    # exp_type = 'coflow' #coflow or trsaxs_laminar or trsaxs_chaotic or hplc
+    exp_type = 'coflow' #coflow or trsaxs_laminar or trsaxs_chaotic or hplc
     # exp_type = 'trsaxs_chaotic'
     # exp_type = 'trsaxs_laminar'
-    exp_type = 'hplc'
+    # exp_type = 'hplc'
 
 
     if exp_type == 'coflow':
@@ -427,7 +427,7 @@ if __name__ == '__main__':
             {'name': 'sheath', 'args': ['VICI M50', 'COM6'],
                 'kwargs': {'flow_cal': '627.72', 'backlash_cal': '9.814'},
                 'ctrl_args': {'flow_rate': 1}},
-            {'name': 'outlet', 'args': ['OB1 Pump', 'COM7'],
+            {'name': 'outlet', 'args': ['OB1 Pump', 'COM13'],
                 'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
                 'min_pressure': -900, 'max_pressure': 1000, 'P': -2, 'I': -0.15,
                 'D': 0, 'bfs_instr_ID': None, 'comm_lock': ob1_comm_lock,
@@ -440,11 +440,24 @@ if __name__ == '__main__':
                 'kwargs': {'positions' : 10}},
             ]
 
-        setup_uv = [
-            {'name': 'CoflowUV', 'args': ['StellarNet', None], 'kwargs':
-            {'shutter_pv_name': '18ID:LJT4:2:Bo11',
-            'trigger_pv_name' : '18ID:LJT4:2:Bo12'}},
-            ]
+        spectrometer_settings = spectrometercon.default_spectrometer_settings
+        spectrometer_settings['device_init'] = [{'name': 'CoflowUV',
+            'args': ['StellarNet', None],
+            'kwargs': {'shutter_pv_name': '18ID:LJT4:2:Bo11',
+            'trigger_pv_name' : '18ID:LJT4:2:Bo12',
+            'out1_pv_name' : '18ID:E1608:Ao1',
+            'out2_pv_name' : '18ID:E1608:Ao2',
+            'trigger_in_pv_name' : '18ID:E1608:Bi8'}},]
+        spectrometer_settings['remote'] = False
+        spectrometer_settings['device_communication'] = 'local'
+        spectrometer_settings['inline_panel'] = False
+        spectrometer_settings['plot_refresh_t'] = 1
+
+        # setup_uv = [
+        #     {'name': 'CoflowUV', 'args': ['StellarNet', None], 'kwargs':
+        #     {'shutter_pv_name': '18ID:LJT4:2:Bo11',
+        #     'trigger_pv_name' : '18ID:LJT4:2:Bo12'}},
+        #     ]
 
         outlet_fm_comm_lock = threading.Lock()
 
@@ -739,15 +752,9 @@ if __name__ == '__main__':
             time.sleep(1)
             uv_comm_thread = control_server_uv.get_comm_thread('uv')
 
-            uv_settings = {
-                'remote'        : False,
-                'device_init'   : setup_uv,
-                'com_thread'    : uv_comm_thread,
-                'inline_panel'  : False,
-                'plot_refresh_t': 0.1, #in s
-                }
+            spectrometer_settings['com_thread'] = uv_comm_thread
 
-            uv_frame = spectrometercon.UVFrame('UVFrame', uv_settings,
+            uv_frame = spectrometercon.UVFrame('UVFrame', spectrometer_settings,
                 parent=None, title='UV Spectrometer Control')
             uv_frame.Show()
 

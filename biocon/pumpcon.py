@@ -1730,6 +1730,9 @@ class HamiltonPSD6Pump(SyringePump):
         #Get current volume
         self.volume
 
+        #Set Aux output 1 to 0
+        self.set_trigger(False)
+
 
     def send_cmd(self, cmd, get_response=True):
         """
@@ -1886,6 +1889,9 @@ class HamiltonPSD6Pump(SyringePump):
     def _get_move_status(self):
         ret, status = self.send_cmd("Q")
 
+        print(ret)
+        print(status)
+
         if status == '`':
             moving = False
         elif status == '@':
@@ -1937,7 +1943,6 @@ class HamiltonPSD6Pump(SyringePump):
         return vol
 
     def _send_dispense_cmd(self, vol):
-        vol = self.round(vol)
         cur_vol = self._convert_volume(self.volume, self.units.split('/')[0],
             self._pump_base_units.split('/')[0])
         new_vol = cur_vol - vol
@@ -1949,7 +1954,6 @@ class HamiltonPSD6Pump(SyringePump):
         self.send_cmd('V{}A{}'.format(step_rate, new_pos))
 
     def _send_aspirate_cmd(self, vol):
-        vol = self.round(vol)
         cur_vol = self._convert_volume(self.volume, self.units.split('/')[0],
             self._pump_base_units.split('/')[0])
         new_vol = cur_vol + vol
@@ -1979,6 +1983,65 @@ class HamiltonPSD6Pump(SyringePump):
             self.send_cmd('h23002')
         elif pos == 'Bypass':
             self.send_cmd('h23005')
+
+    def set_trigger(self, trigger):
+        if trigger:
+            self.send_cmd('J1')
+        else:
+            self.send_cmd('J0')
+
+    def dispense_with_trigger(self, vol, delay, units):
+        vol = self._convert_volume(vol, units, self._pump_base_units.split('/')[0])
+
+        if self._is_flowing:
+            logger.debug("Stopping pump %s current motion before infusing", self.name)
+            self.stop()
+
+        cont = True
+
+        if self.volume - vol < 0:
+            logger.error(("Attempting to infuse {} mL, which is more than the "
+                "current volume of the syringe ({} mL)".format(vol, self.volume)))
+            cont = False
+
+        vol = self.round(vol)
+
+        if vol <= 0:
+            logger.error(("Infuse volume must be positive."))
+            cont = False
+
+        if cont:
+
+            logger.info("Pump %s infusing %f %s at %f %s", self.name, vol, units,
+                self.flow_rate, self.units)
+
+            cur_vol = self._convert_volume(self.volume, self.units.split('/')[0],
+                self._pump_base_units.split('/')[0])
+            new_vol = cur_vol - vol
+
+            new_pos = self._convert_volume_to_steps(new_vol)
+
+            step_rate = self._calc_flow_rate(self._flow_rate)
+
+            delay *= 1000 #convert to ms
+
+            if delay > 5:
+                delay_cmd = ''
+                while delay-5 > 30000:
+                    delay_cmd += 'M30000'
+                    delay -= 30000
+
+                if delay - 5 > 0:
+                    delay_cmd += 'M{}'.format(delay-5)
+
+                cmd = 'V{}J1M5J0M{}A{}'.format(step_rate, delay_cmd, new_pos)
+            else:
+                cmd = 'V{}J1M5J0A{}'.format(step_rate, new_pos)
+
+
+            self._flow_dir = 1
+
+        self.send_cmd(cmd)
 
 
 class SSINextGenPump(Pump):
@@ -5768,8 +5831,8 @@ if __name__ == '__main__':
     # my_pump.flow_rate = 10
     # my_pump.refill_rate = 10
 
-    # my_pump = HamiltonPSD6Pump('Pump1', 'COM4', '1', 23.5, 30, 30, '30 mL',
-    #     False, comm_lock=comm_lock)
+    my_pump = HamiltonPSD6Pump('Pump1', 'COM7', '1', 1.46, 0.1, 1,
+        '0.1 mL, Hamilton Glass', False, comm_lock=comm_lock)
     # my_pump.flow_rate = 10
     # my_pump.refill_rate = 10
 
@@ -5965,28 +6028,28 @@ if __name__ == '__main__':
     #     {'name': 'outlet', 'args': ['Soft', None], 'kwargs': {}},
     #     ]
 
-    # Local
-    com_thread = PumpCommThread('PumpComm')
-    com_thread.start()
+    # # Local
+    # com_thread = PumpCommThread('PumpComm')
+    # com_thread.start()
 
-    # # Remote
-    # com_thread = None
+    # # # Remote
+    # # com_thread = None
 
-    settings = {
-        'remote'        : False,
-        'remote_device' : 'pump',
-        'device_init'   : setup_devices,
-        'remote_ip'     : '164.54.204.24',
-        'remote_port'   : '5556',
-        'com_thread'    : com_thread
-        }
+    # settings = {
+    #     'remote'        : False,
+    #     'remote_device' : 'pump',
+    #     'device_init'   : setup_devices,
+    #     'remote_ip'     : '164.54.204.24',
+    #     'remote_port'   : '5556',
+    #     'com_thread'    : com_thread
+    #     }
 
-    app = wx.App()
-    logger.debug('Setting up wx app')
-    frame = PumpFrame('PumpFrame', settings, parent=None, title='Pump Control')
-    frame.Show()
-    app.MainLoop()
+    # app = wx.App()
+    # logger.debug('Setting up wx app')
+    # frame = PumpFrame('PumpFrame', settings, parent=None, title='Pump Control')
+    # frame.Show()
+    # app.MainLoop()
 
-    if com_thread is not None:
-        com_thread.stop()
-        com_thread.join()
+    # if com_thread is not None:
+    #     com_thread.stop()
+    #     com_thread.join()

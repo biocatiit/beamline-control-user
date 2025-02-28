@@ -2769,6 +2769,7 @@ class ExpPanel(wx.Panel):
         """Creates the layout for the panel."""
         self.data_dir = wx.TextCtrl(self, value=self.settings['data_dir'],
             style=wx.TE_READONLY)
+        self.data_dir.Bind(wx.EVT_RIGHT_DOWN, self._on_data_dir_right_click)
 
         file_open = wx.ArtProvider.GetBitmap(wx.ART_FOLDER_OPEN, wx.ART_BUTTON)
         self.change_dir_btn = wx.BitmapButton(self, bitmap=file_open,
@@ -3000,6 +3001,34 @@ class ExpPanel(wx.Panel):
                     style=wx.OK|wx.ICON_ERROR)
 
         return
+
+    def _on_data_dir_right_click(self, evt):
+        wx.CallAfter(self._show_data_dir_menu)
+
+    def _show_data_dir_menu(self, evt):
+
+        menu = wx.Menu()
+
+        menu.Append(1, 'Change base directory')
+
+        self.Bind(wx.EVT_MENU, self._on_popup_menu_choice)
+        self.PopupMenu(menu)
+
+        menu.Destroy()
+
+    def _on_popup_menu_choice(self, evt):
+        if evt.GetId() == 1:
+            with wx.DirDialog(self, "Select New Base Directory",
+                self.settings['base_data_dir']) as fd:
+
+                if fd.ShowModal() == wx.ID_CANCEL:
+                    return
+
+                pathname = fd.GetPath()
+
+                if os.path.exists(pathname):
+                    self.settings['base_data_dir'] = pathname
+
 
     def _on_change_exp_param(self, evt):
         if 'trsaxs_scan' in self.settings['components']:
@@ -3777,7 +3806,10 @@ class ExpPanel(wx.Panel):
                 metadata[key] = value
 
                 if key.startswith('LC flow rate'):
-                    flow_rate = float(value)
+                    try:
+                        flow_rate = float(value)
+                    except TypeError:
+                        flow_rate = 0
 
         if 'trsaxs_scan' in self.settings['components']:
             trsaxs_panel = wx.FindWindowByName('trsaxs_scan')
