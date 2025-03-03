@@ -190,9 +190,9 @@ class Autosampler(object):
         self.plate_z_motor = motorcon.EpicsMotor(self.settings['plate_z_motor']['name'],
             *plate_z_args, **plate_z_kwargs)
 
-        coflow_args = self.settings['coflow_motor']['args']
-        coflow_kwargs = self.settings['coflow_motor']['kwargs']
-        self.coflow_y_motor = motorcon.EpicsMotor(self.settings['coflow_motor']['name'],
+        coflow_args = self.settings['coflow_y_motor']['args']
+        coflow_kwargs = self.settings['coflow_y_motor']['kwargs']
+        self.coflow_y_motor = motorcon.EpicsMotor(self.settings['coflow_y_motor']['name'],
             *coflow_args, **coflow_kwargs)
 
         self.set_base_position(self.settings['base_position']['plate_x'],
@@ -2173,7 +2173,7 @@ default_autosampler_settings = {
                                     'kwargs': {}},
     'plate_z_motor'         : {'name': 'plate_z', 'args': ['18ID_DMC_E05:34'],
                                     'kwargs': {}},
-    'coflow_y_motor'        : {'name': 'coflow_y', 'args': ['18ID_DMC_E03_23'],
+    'coflow_y_motor'        : {'name': 'coflow_y', 'args': ['18ID_DMC_E03:23'],
                                     'kwargs': {}},
     'needle_valve'          : {'name': 'Needle',
                                     'args':['Cheminert', 'COM11'],
