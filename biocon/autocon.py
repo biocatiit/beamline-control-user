@@ -705,7 +705,7 @@ class SecSampleCommand(AutoCommand):
         self._add_automator_cmd(hplc_inst, 'inject', [], inj_settings)
         if cmd_info['stop_flow']:
             self._add_automator_cmd(hplc_inst, 'stop_flow', [],
-                {'flow_path': cmd_info['flow_path']})
+                {'flow_path': 0, 'use_active': True})
         #accounts for delayed update time between run queue and instrument status
         self._add_automator_cmd(hplc_inst, 'wait_time', [],
             {'condition': 'time', 't_wait': 1})
@@ -791,6 +791,8 @@ class EquilibrateCommand(AutoCommand):
 
         self._add_automator_cmd(hplc_inst, start_wait_cmd, [],
                 {'condition' : 'status', 'inst_conds': start_conds })
+        self._add_automator_cmd(hplc_inst, 'switch_buffer_bottle', [],
+            {'buffer_position': cmd_info['buffer_position']})
         self._add_automator_cmd(hplc_inst, 'equilibrate', [], equil_settings)
         self._add_automator_cmd(hplc_inst, finish_wait_cmd, [],
             {'condition' : 'status', 'inst_conds': finish_conds})
@@ -1439,7 +1441,6 @@ default_sec_saxs_settings = {
     'sp_method'     : '',
     'wait_for_flow_ramp': True,
     'settle_time'   : 0.,
-    'flow_path'     : 1,
     'stop_flow'     : False,
 
     # Exposure parameters
@@ -1643,7 +1644,6 @@ def make_sec_saxs_info_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
         'inj_vol'       : ['Injection volume [uL]:', ctrl_ids['inj_vol'], 'float'],
         'flow_rate'     : ['Flow rate [ml/min]:', ctrl_ids['flow_rate'], 'float'],
         'elution_vol'   : ['Elution volume [ml]:', ctrl_ids['elution_vol'], 'float'],
-        'flow_path'     : ['Flow path:', ctrl_ids['flow_path'], 'choice', fp_choices],
         }
 
     hplc_adv_settings = {
@@ -2444,8 +2444,7 @@ class AutoList(utils.ItemList):
 
         if cmd_settings['item_type'] == 'sec_sample':
             # Do exposure verification and hplc param verification here
-            cmd_settings['inst'] = '{}{}'.format(cmd_settings['inst'],
-                cmd_settings['flow_path'])
+            cmd_settings['inst'] = '{}'.format(cmd_settings['inst'])
 
             cmd_settings['data_dir'] = os.path.join(cmd_settings['data_dir'],
                 cmd_settings['filename'])
