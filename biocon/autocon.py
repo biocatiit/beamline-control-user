@@ -767,6 +767,16 @@ class EquilibrateCommand(AutoCommand):
             'flow_path'     : cmd_info['flow_path'],
             }
 
+        switch_buffer_bottle_settings = {
+            'buffer_position'   : cmd_info['buffer_position'],
+            'stop_flow'         : True,
+            'flow_accel'        : cmd_info['equil_accel'],
+            'restore_flow_after_switch' : False,
+            'switch_with_sample': cmd_info['equil_with_sample'],
+            'switch_with_activity': False,
+            'flow_path'         : cmd_info['flow_path'],
+            }
+
         equil_coflow = cmd_info['coflow_equil']
         num_paths = cmd_info['num_flow_paths']
 
@@ -792,7 +802,7 @@ class EquilibrateCommand(AutoCommand):
         self._add_automator_cmd(hplc_inst, start_wait_cmd, [],
                 {'condition' : 'status', 'inst_conds': start_conds })
         self._add_automator_cmd(hplc_inst, 'switch_buffer_bottle', [],
-            {'buffer_position': cmd_info['buffer_position']})
+            switch_buffer_bottle_settings)
         self._add_automator_cmd(hplc_inst, 'equilibrate', [], equil_settings)
         self._add_automator_cmd(hplc_inst, finish_wait_cmd, [],
             {'condition' : 'status', 'inst_conds': finish_conds})
@@ -1441,6 +1451,7 @@ default_sec_saxs_settings = {
     'sp_method'     : '',
     'wait_for_flow_ramp': True,
     'settle_time'   : 0.,
+    'flow_path'     : 0,
     'stop_flow'     : False,
 
     # Exposure parameters
@@ -1644,6 +1655,7 @@ def make_sec_saxs_info_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
         'inj_vol'       : ['Injection volume [uL]:', ctrl_ids['inj_vol'], 'float'],
         'flow_rate'     : ['Flow rate [ml/min]:', ctrl_ids['flow_rate'], 'float'],
         'elution_vol'   : ['Elution volume [ml]:', ctrl_ids['elution_vol'], 'float'],
+        'flow_path'     : ['Flow path:', ctrl_ids['flow_path'], 'choice', fp_choices],
         }
 
     hplc_adv_settings = {
@@ -2264,8 +2276,6 @@ class AutoList(utils.ItemList):
                     exp_panel = wx.FindWindowByName('exposure')
                     default_exp_settings, _ = exp_panel.get_exp_values(False)
 
-
-
                     coflow_panel = wx.FindWindowByName('coflow')
                     coflow_fr = coflow_panel.get_flow_rate()
                     try:
@@ -2290,6 +2300,7 @@ class AutoList(utils.ItemList):
                     default_settings['sp_method'] = default_inj_settings['sp_method']
                     default_settings['wait_for_flow_ramp'] = default_inj_settings['wait_for_flow_ramp']
                     default_settings['settle_time'] = default_inj_settings['settle_time']
+                    default_settings['flow_path'] = default_inj_settings['flow_path']
 
                     # Exposure parameters
                     default_settings['num_frames'] = default_exp_settings['num_frames']
@@ -2444,7 +2455,8 @@ class AutoList(utils.ItemList):
 
         if cmd_settings['item_type'] == 'sec_sample':
             # Do exposure verification and hplc param verification here
-            cmd_settings['inst'] = '{}'.format(cmd_settings['inst'])
+            cmd_settings['inst'] = '{}{}'.format(cmd_settings['inst'],
+                cmd_settings['flow_path'])
 
             cmd_settings['data_dir'] = os.path.join(cmd_settings['data_dir'],
                 cmd_settings['filename'])
