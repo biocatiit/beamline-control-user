@@ -4572,13 +4572,13 @@ class HPLCPanel(utils.DevicePanel):
         buffer_switch_sizer = wx.FlexGridSizer(cols=4, vgap=self._FromDIP(5),
             hgap=self._FromDIP(5))
         buffer_switch_sizer.Add(wx.StaticText(valve_box, label='Switching 1:'),
-            flag=wx.ALIGN_CENTER_VERTICA)
+            flag=wx.ALIGN_CENTER_VERTICAL)
         buffer_switch_sizer.Add(self._buffer1_valve_switch,
             flag=wx.ALIGN_CENTER_VERTICAL)
 
         if self._device_type == 'AgilentHPLC2Pumps':
             buffer_switch_sizer.Add(wx.StaticText(valve_box, label='Switching 2:'),
-                flag=wx.ALIGN_CENTER_VERTICA)
+                flag=wx.ALIGN_CENTER_VERTICAL)
             buffer_switch_sizer.Add(self._buffer2_valve_switch,
                 flag=wx.ALIGN_CENTER_VERTICAL)
 
@@ -4593,6 +4593,10 @@ class HPLCPanel(utils.DevicePanel):
 
         top_sizer = wx.StaticBoxSizer(valve_box, wx.VERTICAL)
         top_sizer.Add(valve_sizer, flag=wx.ALL|wx.EXPAND, proportion=1,
+            border=self._FromDIP(5))
+        top_sizer.Add(buffer_switch_sizer, flag=wx.LEFT|wx.RIGHT|wx.BOTTOM,
+            border=self._FromDIP(5))
+        top_sizer.Add(buffer_switch_ctrl_sizer, flag=wx.LEFT|wx.RIGHT|wx.BOTTOM,
             border=self._FromDIP(5))
 
         return top_sizer
