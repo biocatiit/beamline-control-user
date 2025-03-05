@@ -5060,18 +5060,21 @@ class HPLCPanel(utils.DevicePanel):
             val = None
 
         if val is not None:
-            cmd = ['set_flow_accel', [self.name, val, flow_path], {}]
-            self._send_cmd(cmd, False)
+            self._set_flow_accel(flow_path, val)
 
-            if flow_path == 1:
-                if str(val) != self._pump1_flow_accel:
-                    wx.CallAfter(self._pump1_flow_accel_ctrl.SetLabel, str(val))
-                    self._pump1_flow_accel = str(val)
+    def _set_flow_accel(self, flow_path, val):
+        cmd = ['set_flow_accel', [self.name, val, flow_path], {}]
+        self._send_cmd(cmd, False)
 
-            elif flow_path == 2:
-                if str(val) != self._pump2_flow_accel:
-                    wx.CallAfter(self._pump2_flow_accel_ctrl.SetLabel, str(val))
-                    self._pump2_flow_accel = str(val)
+        if flow_path == 1:
+            if str(val) != self._pump1_flow_accel:
+                wx.CallAfter(self._pump1_flow_accel_ctrl.SetLabel, str(val))
+                self._pump1_flow_accel = str(val)
+
+        elif flow_path == 2:
+            if str(val) != self._pump2_flow_accel:
+                wx.CallAfter(self._pump2_flow_accel_ctrl.SetLabel, str(val))
+                self._pump2_flow_accel = str(val)
 
     def _on_set_pressure_lim(self, evt):
         evt_obj = evt.GetEventObject()
@@ -5146,6 +5149,14 @@ class HPLCPanel(utils.DevicePanel):
             if '0.0' != self._pump2_flow_target:
                     wx.CallAfter(self._pump2_flow_target_ctrl.SetLabel, '0.0')
                     self._pump2_flow_target = '0.0'
+
+    def get_default_stop_flow_settings(self):
+        default_stop_flow_settings = {
+            'flow_accel1'   : self.settings['equil_accel'],
+            'flow_accel2'   : self.settings['equil_accel'],
+            }
+
+        return default_stop_flow_settings
 
     def _on_purge(self, evt):
         evt_obj = evt.GetEventObject()
@@ -6581,6 +6592,10 @@ class HPLCPanel(utils.DevicePanel):
                 flow_path = cmd_kwargs['flow_path']
             else:
                 flow_path = self._flow_path
+
+            if 'flow_accel' in cmd_kwargs:
+                self._set_flow_accel(flow_path, cmd_kwargs['flow_accel'])
+
             self._stop_flow(flow_path)
 
             state = 'idle'
