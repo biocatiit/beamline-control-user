@@ -249,74 +249,62 @@ class Autosampler(object):
         self.set_sample_draw_rate(self.settings['pump_rates']['sample'][0], 'mL/min')
         self.set_sample_dwell_time(self.settings['load_dwell_time'])
 
-    # def home_motors(self, motor='all'):
-    #     self._active_count += 1
-    #     abort = False
+    def home_motor(self, motor_name):
+        self._active_count += 1
+        abort = False
 
-    #     if motor == 'all':
-    #         old_velocities = [self.x_velocity, self.y_velocity, self.z_velocity]
-    #         home_velocities = [self.settings['motor_home_velocity']['x'],
-    #             self.settings['motor_home_velocity']['y'],
-    #             self.settings['motor_home_velocity']['z']]
-    #         self.set_motor_velocity(home_velocities)
-    #         self.motor_z.home(False)
-    #         time.sleep(0.05)
-    #         self.motor_x.home(False)
-    #         time.sleep(0.05)    # Necessary for the Zabers for some reason
-    #         self.motor_y.home(False)
-    #         time.sleep(0.05)
+        if motor_name == 'needle_y':
+            motor = self.needle_y_motor
+        elif motor_name == 'plate_x':
+            motor = self.plate_x_motor
+        elif motor_name == 'plate_z':
+            motor = self.plate_z_motor
 
-    #         while self.motor_x.is_moving() or self.motor_y.is_moving() or self.motor_z.is_moving():
-    #             time.sleep(0.05)
-    #             abort = self._check_abort()
-    #             if abort:
-    #                 break
+        direction = self.settings['home_settings'][motor_name]['dir']
+        step = self.settings['home_settings'][motor_name]['step']
+        pos = self.settings['home_settings'][motor_name]['pos']
 
-    #         self.set_motor_velocity(old_velocities)
+        if direction == 1:
+            on_lim = motor.on_high_limit()
+        else:
+            on_lim = motor.on_low_limit()
 
-    #     elif motor == 'x':
-    #         logger.info('Homing x motor')
-    #         old_velocity = self.x_velocity
-    #         self.set_motor_velocity(self.settings['motor_home_velocity']['x'], 'x')
-    #         self.motor_x.home(False)
+        abort = self._check_abort()
 
-    #         while self.motor_x.is_moving():
-    #             time.sleep(0.01)
-    #             abort = self._check_abort()
-    #             if abort:
-    #                 break
+        if not on_lim and not abort:
+            if direction == 1:
+                jog_dir = 'positive'
+            else:
+                jog_dir = 'negative'
 
-    #         self.set_motor_velocity(old_velocity, 'x')
+            motor.jog(jog_dir, True)
 
-    #     elif motor == 'y':
-    #         old_velocity = self.y_velocity
-    #         self.set_motor_velocity(self.settings['motor_home_velocity']['y'], 'y')
-    #         self.motor_y.home(False)
+        while not on_lim and not abort:
+            if direction == 1:
+                on_lim = motor.on_high_limit()
+            else:
+                on_lim = motor.on_low_limit()
 
-    #         while self.motor_y.is_moving():
-    #             time.sleep(0.01)
-    #             abort = self._check_abort()
-    #             if abort:
-    #                 break
+            abort = self._sleep(0.02)
 
-    #         self.set_motor_velocity(old_velocity, 'y')
+        motor.jog(jog_dir, False)
 
-    #     elif motor == 'z':
-    #         old_velocity = self.z_velocity
-    #         self.set_motor_velocity(self.settings['motor_home_velocity']['z'], 'z')
-    #         self.motor_z.home(False)
+        move_off = -1*direction*step
 
-    #         while self.motor_z.is_moving():
-    #             time.sleep(0.01)
-    #             abort = self._check_abort()
-    #             if abort:
-    #                 break
+        while on_lim and not abort:
+            abort = self.move_motors_relative(move_off, motor_name)
 
-    #         self.set_motor_velocity(old_velocity, 'z')
+            if direction == 1:
+                on_lim = motor.on_high_limit()
+            else:
+                on_lim = motor.on_low_limit()
 
-    #     self._active_count -= 1
+        if not abort:
+            motor.position = pos
 
-    #     return not abort
+        self._active_count -= 1
+
+        return not abort
 
     def move_motors_absolute(self, position, motor='all'):
         self._active_count += 1
@@ -1083,6 +1071,7 @@ class ASCommThread(utils.CommManager):
             'move_plate_out'        : self._move_plate_out,
             'move_plate_change'     : self._move_plate_change,
             'move_plate_load'       : self._move_plate_load,
+            'home_motor'            : self._home_motor,
             'set_valve_position'    : self._set_valve_position,
             'set_aspirate_rates'    : self._set_pump_aspirate_rates,
             'set_dispense_rates'    : self._set_pump_dispense_rates,
@@ -1272,6 +1261,19 @@ class ASCommThread(utils.CommManager):
 
         logger.debug("%s moved plate to well {}{} load position", name,
             row, col)
+
+    def _home_motor(self, name, motor_name, **kwargs):
+        logger.info("%s homing motor {}", name, motor_name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        success = device.home_motor(motor_name, **kwargs)
+
+        self._return_value((name, cmd, success), comm_name)
+
+        logger.debug("%s homed motor {}", name, motor_name)
 
     def _set_valve_position(self, name, val, **kwargs):
         logger.info("Setting %s valve position to %s", name, val)
@@ -2013,6 +2015,9 @@ class AutosamplerPanel(utils.DevicePanel):
         if clean_needle:
             self._send_cmd(['clean', [self.name,], {}], False)
 
+    def home_motor(self, motor):
+        self._send_cmd(['home_motor', [self.name, motor], {}], False)
+
     def _init_device(self, settings):
         """
         Initializes the device parameters if any were provided. If enough are
@@ -2141,6 +2146,90 @@ class AutosamplerPanel(utils.DevicePanel):
     def on_exit(self):
         self.close()
 
+class StaffControlsFrame(wx.Frame):
+
+    def __init__(self, as_panel, settings, *args, **kwargs):
+
+        wx.Frame.__init__(self, *args, **kwargs)
+
+        self.as_panel = as_panel
+        self.settings = settings
+
+        self._create_layout()
+
+        self.Fit()
+        self.Raise()
+
+    def _FromDIP(self, size):
+        # This is a hack to provide easy back compatibility with wxpython < 4.1
+        try:
+            return self.FromDIP(size)
+        except Exception:
+            return size
+
+    def _create_layout(self):
+        parent = wx.Panel(self)
+
+        motor_box = wx.StaticBox(parent, label='Motors and Homing')
+
+        needle_ctrl = motorcon.EpicsMXMotorPanel(self.settings['needle_motor']['args'][0],
+            None, motor_box)
+        plate_x_ctrl = motorcon.EpicsMXMotorPanel(self.settings['plate_x_motor']['args'][0],
+            None, motor_box)
+        plate_z_ctrl = motorcon.EpicsMXMotorPanel(self.settings['plate_z_motor']['args'][0],
+            None, motor_box)
+        coflow_y_ctrl = motorcon.EpicsMXMotorPanel(self.settings['coflow_y_motor']['args'][0],
+            None, motor_box)
+
+        motor_sizer = wx.FlexGridSizer(cols=4, vgap=self._FromDIP(5),
+            hgap=self._FromDIP(5))
+        motor_sizer.Add(needle_ctrl)
+        motor_sizer.Add(plate_x_ctrl)
+        motor_sizer.Add(plate_z_ctrl)
+        motor_sizer.Add(coflow_y_ctrl)
+
+        self._home_needle_btn = wx.Button(motor_box, label='Home Needle Y')
+        self._home_plate_x_btn = wx.Button(motor_box, label='Home Plate X')
+        self._home_plate_z_btn = wx.Button(motor_box, label='Home Plate z')
+
+        self._home_needle_btn.Bind(wx.EVT_BUTTON, self._on_home_btn)
+
+        home_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        home_sizer.Add(self._home_needle_btn, flag=wx.RIGHT, border=self._FromDIP(5))
+        home_sizer.Add(self._home_plate_x_btn, flag=wx.RIGHT, border=self._FromDIP(5))
+        home_sizer.Add(self._home_plate_z_btn)
+
+        motor_top_sizer = wx.StaticBoxSizer(motor_box, wx.VERTICAL)
+        motor_top_sizer.Add(motor_sizer, flag=wx.ALL, border=self._FromDIP(5))
+        motor_top_sizer.Add(home_sizer, flag=wx.LEFT|wx.RIGHT|wx.BOTTOM,
+            border=self._FromDIP(5))
+
+        panel_sizer = wx.BoxSizer(wx.VERTICAL)
+        panel_sizer.Add(motor_top_sizer, flag=wx.ALL, border=self._FromDIP(5))
+
+        parent.SetSizer(panel_sizer)
+
+        top_sizer = wx.BoxSizer(wx.VERTICAL)
+        top_sizer.Add(parent, flag=wx.EXPAND, proportion=1)
+
+        self.SetSizer(top_sizer)
+
+    def _on_home_btn(self, evt):
+        evt_obj = evt.GetEventObject()
+
+        motor = None
+
+        if evt_obj == self._home_needle_btn:
+            motor = 'needle_y'
+        elif evt_obj == self._home_plate_x_btn:
+            motor = 'plate_x'
+        elif evt_obj == self._home_plate_z_btn:
+            motor = 'plate_z'
+
+        if motor is not None:
+            self.as_panel.home_motor(motor)
+
+
 class AutosamplerFrame(utils.DeviceFrame):
 
     def __init__(self, name, settings, *args, **kwargs):
@@ -2195,6 +2284,9 @@ default_autosampler_settings = {
     # 'motor_home_velocity'   : {'x': 10, 'y': 10, 'z': 10},
     # 'motor_velocity'        : {'x': 75, 'y': 75, 'z': 75}, #112
     # 'motor_acceleration'    : {'x': 500, 'y': 500, 'z': 500},
+    'home_settings'         : {'plate_x': {'dir': -1, 'step': 0.1, 'pos': 0},
+                                'plate_z': {'dir': 1, 'step': 0.1, 'pos': 0},
+                                'needle_y': {'dir': -1, 'step': 0.1, 'pos': 0}} #Direction 1/-1 for positive/negative. step is step size off limit, pos is what to set the home position as.
     'base_position'         : {'plate_x': 270.9, 'plate_z': -82.1, 'needle_y': 102.685}, # A1 well position, needle height at chiller plate top
     'clean_offsets'         : {'plate_x': 96, 'plate_z': -17, 'needle_y': 0.7}, # Relative to base position
     'needle_out_offset'     : 5, # mm
