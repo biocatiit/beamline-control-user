@@ -30,6 +30,7 @@ from collections import OrderedDict, deque
 import queue
 import logging
 import sys
+import os
 
 if __name__ != '__main__':
     logger = logging.getLogger(__name__)
@@ -38,6 +39,7 @@ import wx
 import wx.lib.buttons as buttons
 import numpy as np
 import epics
+from epics.wx.wxlib import EpicsFunction
 
 try:
     import serial.tools.list_ports as list_ports
@@ -51,6 +53,7 @@ except ModuleNotFoundError:
 
 import XPS_C8_drivers as xps_drivers
 import utils
+import custom_epics_widgets
 
 
 class Motor(object):
@@ -3489,6 +3492,9 @@ class EpicsMXMotorPanel(wx.Panel):
         self.mx_database = mx_database
         self.motor_name = motor_name
 
+        font = self.GetFont()
+        self.vert_size = font.GetPixelSize()[1]+5
+
         if self.mx_database is not None:
             self.motor = self.mx_database.get_record(self.motor_name)
             self.mtr_type = self.motor.get_field('mx_type')
@@ -3503,8 +3509,7 @@ class EpicsMXMotorPanel(wx.Panel):
             # else:
             #     font = wx.Font(10, wx.FONTFAMILY_DEFAULT, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL)
             # # self.SetFont(font)
-            font = self.GetFont()
-            self.vert_size = font.GetPixelSize()[1]+5
+
 
             self.is_epics = False
             self.is_slit_mtr = False
@@ -3518,6 +3523,11 @@ class EpicsMXMotorPanel(wx.Panel):
 
         else:
             self.is_epics = True
+            self.epics_pv_name = motor_name
+            self.scale = 1
+            self.offset = 0
+            self.mtr_type = 'epics_motor'
+            self.is_slit_mtr = False
 
         if self.is_epics:
 
@@ -3646,12 +3656,16 @@ class EpicsMXMotorPanel(wx.Panel):
             self.ll_indc = wx.StaticBitmap(self, bitmap=lim_indc.ConvertToBitmap())
             self.hl_indc = wx.StaticBitmap(self, bitmap=lim_indc.ConvertToBitmap())
 
-            mname = wx.StaticText(self, label='{}'.format(self.epics_pv_name))
+            mpv = wx.StaticText(self, label='{}'.format(self.epics_pv_name))
 
+            # print(self.epics_motor.get_pv('description'))
+            mname = epics.wx.PVText(self, self.epics_motor.get_pv('DESC'))
 
-        status_grid = wx.GridBagSizer(vgap=5, hgap=5)
-        status_grid.Add(wx.StaticText(self, label='Motor name:'), (0,0))
-        status_grid.Add(mname, (0,1), flag=wx.EXPAND)
+        status_grid = wx.FlexGridSizer(cols=2, vgap=5, hgap=5)
+        status_grid.Add(wx.StaticText(self, label='Motor PV:'))
+        status_grid.Add(mpv, flag=wx.EXPAND)
+        status_grid.Add(wx.StaticText(self, label='Motor name:'))
+        status_grid.Add(mname, flag=wx.EXPAND)
         status_grid.AddGrowableCol(1)
 
         status_sizer = wx.StaticBoxSizer(wx.StaticBox(self, label='Info'),
@@ -3690,8 +3704,12 @@ class EpicsMXMotorPanel(wx.Panel):
         self.pos_sizer.Add((1,1))
         self.pos_sizer.Add(wx.StaticText(self, label='Low lim.'), flag=wx.ALIGN_CENTER_VERTICAL)
         self.pos_sizer.Add((1,1))
-        self.pos_sizer.Add(wx.StaticText(self, label='Pos. ({})'.format(self.motor.get_field('units'))),
-            flag=wx.ALIGN_CENTER_VERTICAL)
+        if self.mtr_type == 'network_motor':
+            self.pos_sizer.Add(wx.StaticText(self, label='Pos. ({})'.format(self.motor.get_field('units'))),
+                flag=wx.ALIGN_CENTER_VERTICAL)
+        else:
+            self.pos_sizer.Add(wx.StaticText(self, label='Pos. ({})'.format(self.epics_motor.get('units'))),
+                flag=wx.ALIGN_CENTER_VERTICAL)
         self.pos_sizer.Add((1,1))
         self.pos_sizer.Add(wx.StaticText(self, label='High lim.'), flag=wx.ALIGN_CENTER_VERTICAL)
         self.pos_sizer.Add((1,1))
@@ -3699,11 +3717,11 @@ class EpicsMXMotorPanel(wx.Panel):
             self.pos_sizer.Add(self.ll_indc, flag=wx.ALIGN_CENTER_VERTICAL|wx.RESERVE_SPACE_EVEN_IF_HIDDEN)
         else:
             self.pos_sizer.Add((1,1))
-        self.pos_sizer.Add(self.low_limit, flag=wx.ALIGN_CENTER_VERTICAL)
+        self.pos_sizer.Add(self.low_limit, flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
         self.pos_sizer.Add((1,1))
-        self.pos_sizer.Add(pos, flag=wx.ALIGN_CENTER_VERTICAL)
+        self.pos_sizer.Add(pos, flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
         self.pos_sizer.Add((1,1))
-        self.pos_sizer.Add(self.high_limit, flag=wx.ALIGN_CENTER_VERTICAL)
+        self.pos_sizer.Add(self.high_limit, flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
         if self.is_epics:
             self.pos_sizer.Add(self.hl_indc, flag=wx.ALIGN_CENTER_VERTICAL|wx.RESERVE_SPACE_EVEN_IF_HIDDEN)
         else:
@@ -3751,8 +3769,7 @@ class EpicsMXMotorPanel(wx.Panel):
 
         self.Bind(wx.EVT_RIGHT_DOWN, self._on_rightclick)
         for item in self.GetChildren():
-            if ((isinstance(item, wx.StaticText) or isinstance(item, mpwx.Value)
-                or isinstance(item, wx.StaticBox))
+            if ((isinstance(item, wx.StaticText) or isinstance(item, wx.StaticBox))
                 and not (isinstance(item, custom_epics_widgets.PVTextLabeled)
                 or isinstance(item, custom_epics_widgets.PVTextCtrl2))
                 ):
@@ -3978,8 +3995,7 @@ class EpicsMXMotorPanel(wx.Panel):
             self._enabled = True
 
         for item in self.GetChildren():
-            if (not isinstance(item, wx.StaticText) and not isinstance(item, mpwx.Value)
-                and not isinstance(item, wx.StaticBox)):
+            if (not isinstance(item, wx.StaticText) and not isinstance(item, wx.StaticBox)):
                 item.Enable(self._enabled)
 
         if self.is_epics:

@@ -167,8 +167,8 @@ class Autosampler(object):
 
     def connect(self):
         self._init_motors()
-        self._init_valves()
-        self._init_pumps()
+        # self._init_valves()
+        # self._init_pumps()
 
         self.set_well_plate(self.settings['plate_type'])
 
@@ -1503,6 +1503,8 @@ class AutosamplerPanel(utils.DevicePanel):
         self._current_status = ''
         self._current_trigger_on_inject = True
 
+        self._staff_ctrl_window = None
+
         super(AutosamplerPanel, self).__init__(parent, panel_id, settings, *args, **kwargs)
 
     def _create_layout(self):
@@ -1723,12 +1725,17 @@ class AutosamplerPanel(utils.DevicePanel):
         pump_sizer.Add(pump_sub_sizer)
 
 
+        self._staff_ctrl_btn = wx.Button(adv_win, label='Staff Controls')
+        self._staff_ctrl_btn.Bind(wx.EVT_BUTTON, self._on_staff_ctrl_btn)
+
+
         top_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(5),
             hgap=self._FromDIP(5))
         top_sizer.Add(inj_sizer)
         top_sizer.Add(needle_sizer)
         top_sizer.Add(plate_sizer)
         top_sizer.Add(pump_sizer)
+        top_sizer.Add(self._staff_ctrl_btn)
 
         adv_win.SetSizer(top_sizer)
 
@@ -2018,6 +2025,13 @@ class AutosamplerPanel(utils.DevicePanel):
     def home_motor(self, motor):
         self._send_cmd(['home_motor', [self.name, motor], {}], False)
 
+    def _on_staff_ctrl_btn(self, evt):
+        if self._staff_ctrl_window is None:
+            self._staff_ctrl_window = StaffControlsFrame(self, self.settings, self)
+            self._staff_ctrl_window.Show()
+        else:
+            self._staff_ctrl_window.Raise()
+
     def _init_device(self, settings):
         """
         Initializes the device parameters if any were provided. If enough are
@@ -2155,6 +2169,8 @@ class StaffControlsFrame(wx.Frame):
         self.as_panel = as_panel
         self.settings = settings
 
+        self.Bind(wx.EVT_CLOSE, self.OnClose)
+
         self._create_layout()
 
         self.Fit()
@@ -2229,6 +2245,10 @@ class StaffControlsFrame(wx.Frame):
         if motor is not None:
             self.as_panel.home_motor(motor)
 
+    def OnClose(self, evt):
+        self.as_panel._staff_ctrl_window = None
+        self.Destroy()
+
 
 class AutosamplerFrame(utils.DeviceFrame):
 
@@ -2256,13 +2276,13 @@ default_autosampler_settings = {
     # 'remote_fm_port'        : '5557',
     'volume_units'          : 'uL',
     'components'            : [],
-    'needle_motor'          : {'name': 'needle_y', 'args': ['18ID_DMC_E05:33'],
+    'needle_motor'          : {'name': 'needle_y', 'args': ['18ID_DMC_E05:36'],
                                     'kwargs': {}},
-    'plate_x_motor'         : {'name': 'plate_x', 'args': ['18ID_DMC_E05:37'],
+    'plate_x_motor'         : {'name': 'plate_x', 'args': ['18ID_DMC_E05:35'],
                                     'kwargs': {}},
     'plate_z_motor'         : {'name': 'plate_z', 'args': ['18ID_DMC_E05:34'],
                                     'kwargs': {}},
-    'coflow_y_motor'        : {'name': 'coflow_y', 'args': ['18ID_DMC_E03:23'],
+    'coflow_y_motor'        : {'name': 'coflow_y', 'args': ['18ID_DMC_E03:24'],
                                     'kwargs': {}},
     'needle_valve'          : {'name': 'Needle',
                                     'args':['Cheminert', 'COM11'],
@@ -2286,7 +2306,7 @@ default_autosampler_settings = {
     # 'motor_acceleration'    : {'x': 500, 'y': 500, 'z': 500},
     'home_settings'         : {'plate_x': {'dir': -1, 'step': 0.1, 'pos': 0},
                                 'plate_z': {'dir': 1, 'step': 0.1, 'pos': 0},
-                                'needle_y': {'dir': -1, 'step': 0.1, 'pos': 0}} #Direction 1/-1 for positive/negative. step is step size off limit, pos is what to set the home position as.
+                                'needle_y': {'dir': -1, 'step': 0.1, 'pos': 0}}, #Direction 1/-1 for positive/negative. step is step size off limit, pos is what to set the home position as.
     'base_position'         : {'plate_x': 270.9, 'plate_z': -82.1, 'needle_y': 102.685}, # A1 well position, needle height at chiller plate top
     'clean_offsets'         : {'plate_x': 96, 'plate_z': -17, 'needle_y': 0.7}, # Relative to base position
     'needle_out_offset'     : 5, # mm
