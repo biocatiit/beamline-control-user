@@ -3604,6 +3604,13 @@ class EpicsMXMotorPanel(wx.Panel):
             self.epics_motor.clear_callback('HLS')
             self.epics_motor.clear_callback('LLS')
 
+    def _FromDIP(self, size):
+        # This is a hack to provide easy back compatibility with wxpython < 4.1
+        try:
+            return self.FromDIP(size)
+        except Exception:
+            return size
+
     def _create_layout(self):
         """
         Creates the layout for the panel.
@@ -3614,7 +3621,8 @@ class EpicsMXMotorPanel(wx.Panel):
         if self.mtr_type == 'network_motor':
             pos_name = "{}.position".format(self.remote_record_name)
             pos = mpwx.Value(self, self.server_record, pos_name,
-                function=custom_widgets.network_value_callback, args=(self.scale, self.offset))
+                function=custom_widgets.network_value_callback, args=(self.scale,
+                    self.offset))
 
             if self.scale*self.remote_scale.get() > 0:
                 nlimit = "{}.raw_negative_limit".format(self.remote_record_name)
@@ -3661,7 +3669,8 @@ class EpicsMXMotorPanel(wx.Panel):
             # print(self.epics_motor.get_pv('description'))
             mname = epics.wx.PVText(self, self.epics_motor.get_pv('DESC'))
 
-        status_grid = wx.FlexGridSizer(cols=2, vgap=5, hgap=5)
+        status_grid = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(5),
+            hgap=self._FromDIP(5))
         status_grid.Add(wx.StaticText(self, label='Motor PV:'))
         status_grid.Add(mpv, flag=wx.EXPAND)
         status_grid.Add(wx.StaticText(self, label='Motor name:'))
@@ -3678,52 +3687,65 @@ class EpicsMXMotorPanel(wx.Panel):
             validator=utils.CharValidator('float_neg'))
 
         # move_btn = wx.Button(self, label='Move', size=(50, self.vert_size), style=wx.BU_EXACTFIT)
-        move_btn = buttons.ThemedGenButton(self, label='Move', size=(-1, self.vert_size), style=wx.BU_EXACTFIT)
+        move_btn = buttons.ThemedGenButton(self, label='Move',
+            size=(-1, self.vert_size), style=wx.BU_EXACTFIT)
         move_btn.Bind(wx.EVT_BUTTON, self._on_moveto)
-        set_btn = buttons.ThemedGenButton(self, label='Set', size=(-1, self.vert_size), style=wx.BU_EXACTFIT)
+        set_btn = buttons.ThemedGenButton(self, label='Set',
+            size=(-1, self.vert_size), style=wx.BU_EXACTFIT)
         set_btn.Bind(wx.EVT_BUTTON, self._on_setto)
 
-        tp_btn = buttons.ThemedGenButton(self, label='+ >', size=(-1, self.vert_size),
-            style=wx.BU_EXACTFIT, name='rel_move_plus')
-        tm_btn = buttons.ThemedGenButton(self, label='< -', size=(-1, self.vert_size),
-            style=wx.BU_EXACTFIT, name='rel_move_minus')
+        tp_btn = buttons.ThemedGenButton(self, label='+ >',
+            size=(-1, self.vert_size), style=wx.BU_EXACTFIT,
+            name='rel_move_plus')
+        tm_btn = buttons.ThemedGenButton(self, label='< -',
+            size=(-1, self.vert_size), style=wx.BU_EXACTFIT,
+            name='rel_move_minus')
         tp_btn.Bind(wx.EVT_BUTTON, self._on_mrel)
         tm_btn.Bind(wx.EVT_BUTTON, self._on_mrel)
 
-        stop_btn = buttons.ThemedGenButton(self, label='Abort', size=(-1,self.vert_size), style=wx.BU_EXACTFIT)
+        stop_btn = buttons.ThemedGenButton(self, label='Abort',
+            size=(-1,self.vert_size), style=wx.BU_EXACTFIT)
         stop_btn.Bind(wx.EVT_BUTTON, self._on_stop)
 
         # scan_btn = buttons.ThemedGenButton(self, label='Scan', size=(-1, self.vert_size), style=wx.BU_EXACTFIT)
         # scan_btn.Bind(wx.EVT_BUTTON, self._on_scan)
 
         if self.is_epics:
-            more_btn = buttons.ThemedGenButton(self, label='More', size=(-1,self.vert_size), style=wx.BU_EXACTFIT)
+            more_btn = buttons.ThemedGenButton(self, label='More',
+                size=(-1,self.vert_size), style=wx.BU_EXACTFIT)
             more_btn.Bind(wx.EVT_BUTTON, self._on_more)
 
-        self.pos_sizer = wx.FlexGridSizer(vgap=2, hgap=2, cols=7, rows=2)
+        self.pos_sizer = wx.FlexGridSizer(vgap=self._FromDIP(2),
+            hgap=self._FromDIP(2), cols=7)
         self.pos_sizer.Add((1,1))
-        self.pos_sizer.Add(wx.StaticText(self, label='Low lim.'), flag=wx.ALIGN_CENTER_VERTICAL)
+        self.pos_sizer.Add(wx.StaticText(self, label='Low lim.'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
         self.pos_sizer.Add((1,1))
         if self.mtr_type == 'network_motor':
-            self.pos_sizer.Add(wx.StaticText(self, label='Pos. ({})'.format(self.motor.get_field('units'))),
-                flag=wx.ALIGN_CENTER_VERTICAL)
+            self.pos_sizer.Add(wx.StaticText(self, label='Pos. ({})'.format(
+                self.motor.get_field('units'))), flag=wx.ALIGN_CENTER_VERTICAL)
         else:
-            self.pos_sizer.Add(wx.StaticText(self, label='Pos. ({})'.format(self.epics_motor.get('units'))),
-                flag=wx.ALIGN_CENTER_VERTICAL)
+            self.pos_sizer.Add(wx.StaticText(self, label='Pos. ({})'.format(
+                self.epics_motor.get('units'))), flag=wx.ALIGN_CENTER_VERTICAL)
         self.pos_sizer.Add((1,1))
-        self.pos_sizer.Add(wx.StaticText(self, label='High lim.'), flag=wx.ALIGN_CENTER_VERTICAL)
+        self.pos_sizer.Add(wx.StaticText(self, label='High lim.'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
         self.pos_sizer.Add((1,1))
         if self.is_epics:
-            self.pos_sizer.Add(self.ll_indc, flag=wx.ALIGN_CENTER_VERTICAL|wx.RESERVE_SPACE_EVEN_IF_HIDDEN)
+            self.pos_sizer.Add(self.ll_indc,
+                flag=wx.ALIGN_CENTER_VERTICAL|wx.RESERVE_SPACE_EVEN_IF_HIDDEN)
         else:
             self.pos_sizer.Add((1,1))
-        self.pos_sizer.Add(self.low_limit, flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
+        self.pos_sizer.Add(self.low_limit,
+            flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
         self.pos_sizer.Add((1,1))
         self.pos_sizer.Add(pos, flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
         self.pos_sizer.Add((1,1))
-        self.pos_sizer.Add(self.high_limit, flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
+        self.pos_sizer.Add(self.high_limit,
+            flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
         if self.is_epics:
-            self.pos_sizer.Add(self.hl_indc, flag=wx.ALIGN_CENTER_VERTICAL|wx.RESERVE_SPACE_EVEN_IF_HIDDEN)
+            self.pos_sizer.Add(self.hl_indc,
+                flag=wx.ALIGN_CENTER_VERTICAL|wx.RESERVE_SPACE_EVEN_IF_HIDDEN)
         else:
             self.pos_sizer.Add((1,1))
         self.pos_sizer.AddGrowableCol(2)
@@ -3736,36 +3758,48 @@ class EpicsMXMotorPanel(wx.Panel):
         mabs_sizer = wx.BoxSizer(wx.HORIZONTAL)
         mabs_sizer.Add(wx.StaticText(self, label='Position:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
-        mabs_sizer.Add(self.pos_ctrl, 1, border=2, flag=wx.LEFT|wx.ALIGN_CENTER_VERTICAL)
-        mabs_sizer.Add(move_btn, border=2, flag=wx.LEFT|wx.ALIGN_CENTER_VERTICAL)
-        mabs_sizer.Add(set_btn, border=2, flag=wx.LEFT|wx.ALIGN_CENTER_VERTICAL)
+        mabs_sizer.Add(self.pos_ctrl, 1, border=self._FromDIP(2),
+            flag=wx.LEFT|wx.ALIGN_CENTER_VERTICAL)
+        mabs_sizer.Add(move_btn, border=self._FromDIP(2),
+            flag=wx.LEFT|wx.ALIGN_CENTER_VERTICAL)
+        mabs_sizer.Add(set_btn, border=self._FromDIP(2),
+            flag=wx.LEFT|wx.ALIGN_CENTER_VERTICAL)
 
         mrel_sizer = wx.BoxSizer(wx.HORIZONTAL)
         mrel_sizer.Add(wx.StaticText(self, label='Rel. Move:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
-        mrel_sizer.Add(tm_btn, border=2, flag=wx.LEFT|wx.ALIGN_CENTER_VERTICAL)
-        mrel_sizer.Add(self.mrel_ctrl, 1, border=2, flag=wx.LEFT|wx.ALIGN_CENTER_VERTICAL)
-        mrel_sizer.Add(tp_btn, border=2, flag=wx.LEFT|wx.ALIGN_CENTER_VERTICAL)
+        mrel_sizer.Add(tm_btn, border=self._FromDIP(2),
+            flag=wx.LEFT|wx.ALIGN_CENTER_VERTICAL)
+        mrel_sizer.Add(self.mrel_ctrl, 1, border=self._FromDIP(2),
+            flag=wx.LEFT|wx.ALIGN_CENTER_VERTICAL)
+        mrel_sizer.Add(tp_btn, border=self._FromDIP(2),
+            flag=wx.LEFT|wx.ALIGN_CENTER_VERTICAL)
 
         ctrl_btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
         # ctrl_btn_sizer.Add(scan_btn, flag=wx.ALIGN_LEFT)
         if self.is_epics:
             ctrl_btn_sizer.Add(more_btn, flag=wx.ALIGN_LEFT)
         ctrl_btn_sizer.AddStretchSpacer(1)
-        ctrl_btn_sizer.Add(stop_btn, border=5, flag=wx.LEFT)
+        ctrl_btn_sizer.Add(stop_btn, border=self._FromDIP(5), flag=wx.LEFT)
 
 
         control_sizer = wx.StaticBoxSizer(wx.StaticBox(self, label='Controls'),
             wx.VERTICAL)
-        control_sizer.Add(self.pos_sizer, border=2, flag=wx.EXPAND|wx.BOTTOM)
-        control_sizer.Add(mabs_sizer, border=2, flag=wx.EXPAND|wx.BOTTOM)
-        control_sizer.Add(mrel_sizer, border=2, flag=wx.EXPAND|wx.BOTTOM|wx.TOP)
-        control_sizer.Add(wx.StaticLine(self), border=10, flag=wx.EXPAND|wx.LEFT|wx.RIGHT)
-        control_sizer.Add(ctrl_btn_sizer, border=2, flag=wx.TOP|wx.EXPAND)
+        control_sizer.Add(self.pos_sizer, border=self._FromDIP(2),
+            flag=wx.EXPAND|wx.BOTTOM)
+        control_sizer.Add(mabs_sizer, border=self._FromDIP(2),
+            flag=wx.EXPAND|wx.BOTTOM)
+        control_sizer.Add(mrel_sizer, border=self._FromDIP(2),
+            flag=wx.EXPAND|wx.BOTTOM|wx.TOP)
+        control_sizer.Add(wx.StaticLine(self), border=self._FromDIP(10),
+            flag=wx.EXPAND|wx.LEFT|wx.RIGHT)
+        control_sizer.Add(ctrl_btn_sizer, border=self._FromDIP(2),
+            flag=wx.TOP|wx.EXPAND)
 
         top_sizer = wx.BoxSizer(wx.VERTICAL)
         top_sizer.Add(status_sizer, flag=wx.EXPAND)
-        top_sizer.Add(control_sizer, border=2, flag=wx.EXPAND|wx.TOP)
+        top_sizer.Add(control_sizer, border=self._FromDIP(2),
+            flag=wx.EXPAND|wx.TOP)
 
         self.Bind(wx.EVT_RIGHT_DOWN, self._on_rightclick)
         for item in self.GetChildren():
