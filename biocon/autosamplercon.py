@@ -2171,6 +2171,8 @@ class StaffControlsFrame(wx.Frame):
 
         self.Bind(wx.EVT_CLOSE, self.OnClose)
 
+        self._create_pump_comm()
+
         self._create_layout()
 
         self.Fit()
@@ -2220,8 +2222,12 @@ class StaffControlsFrame(wx.Frame):
         motor_top_sizer.Add(home_sizer, flag=wx.LEFT|wx.RIGHT|wx.BOTTOM,
             border=self._FromDIP(5))
 
+        pump_top_sizer = self._create_pump_sizer(parent)
+
         panel_sizer = wx.BoxSizer(wx.VERTICAL)
         panel_sizer.Add(motor_top_sizer, flag=wx.ALL, border=self._FromDIP(5))
+        panel_sizer.Add(pump_top_sizer, flag=wx.LEFT|wx.RIGHT|wx.BOTTOM,
+            border=self.FromDIP(5))
 
         parent.SetSizer(panel_sizer)
 
@@ -2229,6 +2235,54 @@ class StaffControlsFrame(wx.Frame):
         top_sizer.Add(parent, flag=wx.EXPAND, proportion=1)
 
         self.SetSizer(top_sizer)
+
+    def _create_pump_comm(self):
+        self.com_thread = pumpcon.PumpCommThread('PumpComm')
+        self.com_thread.start()
+
+        self.devices = []
+
+        self.setup_devices = [
+            self.settings['sample_pump'],
+            self.settings['clean1_pump'],
+            self.settings['clean2_pump'],
+            self.settings['clean3_pump'],
+            ]
+
+        self._pump_settings = {
+            'remote'        : False,
+            'remote_device' : 'pump',
+            'remote_ip'     : '',
+            'remote_port'   : '',
+            'com_thread'    : self.com_thread
+            }
+
+    def _create_pump_sizer(self, parent):
+        pump_box = wx.StaticBox(parent, label='Pump Control')
+
+        pump_sizer = wx.BoxSizer(wx.HORIZONTAL)
+
+        for device in self.setup_devices:
+            dev_settings = {}
+            for key, val in self._pump_settings.items():
+                if key != 'com_thread':
+                    dev_settings[key] = copy.deepcopy(val)
+                else:
+                    dev_settings[key] = val
+
+            dev_settings['device_data'] = device
+            new_device = pumpcon.PumpPanel(pump_box, wx.ID_ANY,
+                dev_settings)
+
+            pump_sizer.Add(new_device, 1, flag=wx.EXPAND|wx.ALL,
+                border=self._FromDIP(3))
+            self.devices.append(new_device)
+
+        pump_top_sizer = wx.StaticBoxSizer(pump_box, wx.VERTICAL)
+        pump_top_sizer.Add(pump_sizer, proportion=1, flag=wx.EXPAND|wx.ALL,
+            border=self._FromDIP(5))
+
+        return pump_top_sizer
 
     def _on_home_btn(self, evt):
         evt_obj = evt.GetEventObject()
@@ -2247,6 +2301,13 @@ class StaffControlsFrame(wx.Frame):
 
     def OnClose(self, evt):
         self.as_panel._staff_ctrl_window = None
+
+        for device in self.devices:
+            device.close()
+
+        self.com_thread.stop()
+        self.com_thread.join()
+
         self.Destroy()
 
 
@@ -2291,15 +2352,18 @@ default_autosampler_settings = {
                                 'kwargs': {'syringe_id': '0.1 mL, Hamilton Glass',
                                 'pump_address': '1', 'dual_syringe': 'False',
                                 'diameter': 1.46, 'max_volume': 0.1,
-                                'max_rate': 1},},
+                                'max_rate': 1, 'comm_lock': threading.RLock(),},},
     'clean1_pump'           : {'name': 'water', 'args': ['KPHM100', 'COM10'],
-                                'kwargs': {'flow_cal': '319.2',},
+                                'kwargs': {'flow_cal': '319.2',
+                                'comm_lock': threading.RLock()},
                                 'ctrl_args': {'flow_rate': 1}},
     'clean2_pump'           : {'name': 'ethanol', 'args': ['KPHM100', 'COM8'],
-                                'kwargs': {'flow_cal': '319.2',},
+                                'kwargs': {'flow_cal': '319.2',
+                                'comm_lock': threading.RLock()},
                                 'ctrl_args': {'flow_rate': 1}},
     'clean3_pump'           : {'name': 'hellmanex', 'args': ['KPHM100', 'COM9'],
-                                'kwargs': {'flow_cal': '319.2',},
+                                'kwargs': {'flow_cal': '319.2',
+                                'comm_lock': threading.RLock()},
                                 'ctrl_args': {'flow_rate': 1}},
     # 'motor_home_velocity'   : {'x': 10, 'y': 10, 'z': 10},
     # 'motor_velocity'        : {'x': 75, 'y': 75, 'z': 75}, #112
