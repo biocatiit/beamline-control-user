@@ -372,10 +372,10 @@ class AgilentHPLCStandard(AgilentHPLC):
         flow_path = int(flow_path)
 
         if flow_path == 1:
-            is_switching = copy.copy(self._switch_buffer_bottle1)
+            is_switching = copy.copy(self._switching_buffer_bottle1)
 
         elif flow_path == 2:
-            is_switching = copy.copy(self._switch_buffer_bottle2)
+            is_switching = copy.copy(self._switching_buffer_bottle2)
 
         return is_switching
 
@@ -1555,6 +1555,8 @@ class AgilentHPLCStandard(AgilentHPLC):
                         'flow_accel': flow_accel,
                         }
 
+                    self._abort_switch_buffer_bottle1.clear()
+
                 else:
                     self._switch_buffer2_bottle_args = {
                         'flow_path': flow_path,
@@ -1564,7 +1566,8 @@ class AgilentHPLCStandard(AgilentHPLC):
                         'flow_accel': flow_accel,
                         }
 
-                self._abort_switch_buffer_bottle.clear()
+                    self._abort_switch_buffer_bottle2.clear()
+
                 if flow_path == 1:
                     self._switching_buffer_bottle1 = True
                 else:
@@ -1587,7 +1590,7 @@ class AgilentHPLCStandard(AgilentHPLC):
         restart_flow2 = False
 
         while not self._terminate_monitor_switch_buffer_bottle.is_set():
-            self._monitor_equil_evt.wait()
+            self._monitor_switch_buffer_bottle_evt.wait()
 
             if (self._switching_buffer_bottle1 and not start_switch1
                 and not monitor_switch1 and not switch_buffer1
@@ -1597,13 +1600,15 @@ class AgilentHPLCStandard(AgilentHPLC):
                 switch_buffer1 = False
                 restart_flow1 = False
                 initial_flow1 = self.get_hplc_flow_rate(1)
+                initial_accel1 = self.get_hplc_flow_accel(1)
 
-                buffer_position1 = self._switch_buffer1_bottle_args['equil_rate']
+                buffer_position1 = self._switch_buffer1_bottle_args['buffer_position']
                 stop_flow1 = self._switch_buffer1_bottle_args['stop_flow']
                 restart_flow_after_switch1 = self._switch_buffer1_bottle_args['restore_flow_after_switch']
-                flow_accel1 = self._equil1_args['flow_accel']
+                flow_accel1 = self._switch_buffer1_bottle_args['flow_accel']
 
-                self.set_hplc_flow_accel(flow_accel1, 1)
+                if stop_flow1:
+                    self.set_hplc_flow_accel(flow_accel1, 1)
 
             if (self._switching_buffer_bottle2 and not start_switch2
                 and not monitor_switch2 and not switch_buffer2
@@ -1613,13 +1618,15 @@ class AgilentHPLCStandard(AgilentHPLC):
                 switch_buffer2 = False
                 restart_flow2 = False
                 initial_flow2 = self.get_hplc_flow_rate(2)
+                initial_accel2 = self.get_hplc_flow_accel(2)
 
-                buffer_position2 = self._switch_buffer2_bottle_args['equil_rate']
+                buffer_position2 = self._switch_buffer2_bottle_args['buffer_position']
                 stop_flow2 = self._switch_buffer2_bottle_args['stop_flow']
-                restart_flow_after_switch2 = self._switch_buffer1_bottle_args['restore_flow_after_switch']
-                flow_accel2 = self._equil2_args['flow_accel']
+                restart_flow_after_switch2 = self._switch_buffer2_bottle_args['restore_flow_after_switch']
+                flow_accel2 = self._switch_buffer2_bottle_args['flow_accel']
 
-                self.set_hplc_flow_accel(flow_accel2, 2)
+                if stop_flow2:
+                    self.set_hplc_flow_accel(flow_accel2, 2)
 
 
             if start_switch1:
@@ -1671,7 +1678,7 @@ class AgilentHPLCStandard(AgilentHPLC):
                     switch_buffer1 = False
                     restart_flow1 = True
 
-            if switch_buffer1:
+            if switch_buffer2:
                 if not self._abort_switch_buffer_bottle2.is_set():
                     self.set_valve_position('buffer2', buffer_position2)
                     switch_buffer2 = False
@@ -1693,6 +1700,9 @@ class AgilentHPLCStandard(AgilentHPLC):
                         restart_flow1 = False
                         self._switching_buffer_bottle1 = False
 
+                        if stop_flow1:
+                            self.set_hplc_flow_accel(initial_accel1, 1)
+
                         logger.info(('HPLC %s finished switching flow path 1 '
                             'buffer bottle'),
                             self.name)
@@ -1709,6 +1719,9 @@ class AgilentHPLCStandard(AgilentHPLC):
 
                         restart_flow2 = False
                         self._switching_buffer_bottle2 = False
+
+                        if stop_flow2:
+                            self.set_hplc_flow_accel(initial_accel2, 2)
 
                         logger.info(('HPLC %s finished switching flow path 2 '
                             'buffer bottle'),
@@ -7303,9 +7316,9 @@ class SwitchBufferBottleDialog(wx.Dialog):
     def _create_layout(self, settings):
         parent = self
 
-        buffer_choices = list(range(1, settings['max_positions']+1))
+        buffer_choices = [str(i) for i in range(1, settings['max_positions']+1)]
 
-        self._buffer_position = wx.Choices(parent, choices=buffer_choices)
+        self._buffer_position = wx.Choice(parent, choices=buffer_choices)
         self._flow_accel_ctrl = wx.TextCtrl(parent, size=self._FromDIP((60, -1)),
             validator=utils.CharValidator('float'))
 
@@ -7358,7 +7371,7 @@ class SwitchBufferBottleDialog(wx.Dialog):
 
     def get_settings(self):
         buffer_position = self._buffer_position.GetStringSelection()
-        flow_accel = self._flow_accel.GetValue()
+        flow_accel = self._flow_accel_ctrl.GetValue()
         stop_flow = self._switch_stop_before.GetValue()
         restore_flow_after_switch = self._switch_restore_flow.GetValue()
         switch_with_sample = self._switch_with_sample.GetValue()
@@ -7366,7 +7379,7 @@ class SwitchBufferBottleDialog(wx.Dialog):
 
         settings = {
             'buffer_position'           : buffer_position,
-            'stop_before_switch'        : stop_flow,
+            'stop_flow'                 : stop_flow,
             'flow_accel'                : flow_accel,
             'restore_flow_after_switch' : restore_flow_after_switch,
             'switch_with_sample'        : switch_with_sample,
@@ -7476,7 +7489,7 @@ default_hplc_2pump_settings = {
     'com_thread'    : None,
     # Default settings for hplc
     'purge_volume'              : 20,
-    'purge_rate'                : 5,
+    'purge_rate'                : 3,
     'purge_accel'               : 10,
     'purge_max_pressure'        : 250,
     'restore_flow_after_purge'  : True,
