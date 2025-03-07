@@ -167,8 +167,8 @@ class Autosampler(object):
 
     def connect(self):
         self._init_motors()
-        # self._init_valves()
-        # self._init_pumps()
+        self._init_valves()
+        self._init_pumps()
 
         self.set_well_plate(self.settings['plate_type'])
 

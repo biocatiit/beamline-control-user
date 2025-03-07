@@ -3491,6 +3491,9 @@ class EpicsMXMotorPanel(wx.Panel):
         wx.Panel.__init__(self, *args, **kwargs)
         self.mx_database = mx_database
         self.motor_name = motor_name
+        self._enabled = True
+        self.scan_frame = None
+        self.is_slit_mtr = False
 
         font = self.GetFont()
         self.vert_size = font.GetPixelSize()[1]+5
@@ -3501,9 +3504,6 @@ class EpicsMXMotorPanel(wx.Panel):
             self.scale = float(self.motor.get_field('scale'))
             self.offset = float(self.motor.get_field('offset'))
 
-            self._enabled = True
-            self.scan_frame = None
-
             # if platform.system() == 'Darwin':
             #     font = self.GetFont()
             # else:
@@ -3512,7 +3512,6 @@ class EpicsMXMotorPanel(wx.Panel):
 
 
             self.is_epics = False
-            self.is_slit_mtr = False
 
             self.epics_motor = None
 
@@ -3527,7 +3526,6 @@ class EpicsMXMotorPanel(wx.Panel):
             self.scale = 1
             self.offset = 0
             self.mtr_type = 'epics_motor'
-            self.is_slit_mtr = False
 
         if self.is_epics:
 
@@ -3681,30 +3679,30 @@ class EpicsMXMotorPanel(wx.Panel):
             wx.VERTICAL)
         status_sizer.Add(status_grid, 1, flag=wx.EXPAND)
 
-        self.pos_ctrl = wx.TextCtrl(self, value='', size=(50,self.vert_size),
+        self.pos_ctrl = wx.TextCtrl(self, value='', size=self._FromDIP((50,self.vert_size)),
             validator=utils.CharValidator('float_neg'))
-        self.mrel_ctrl = wx.TextCtrl(self, value='1.0', size=(50,self.vert_size),
+        self.mrel_ctrl = wx.TextCtrl(self, value='1.0', size=self._FromDIP((50,self.vert_size)),
             validator=utils.CharValidator('float_neg'))
 
         # move_btn = wx.Button(self, label='Move', size=(50, self.vert_size), style=wx.BU_EXACTFIT)
         move_btn = buttons.ThemedGenButton(self, label='Move',
-            size=(-1, self.vert_size), style=wx.BU_EXACTFIT)
+            size=self._FromDIP((-1, self.vert_size)), style=wx.BU_EXACTFIT)
         move_btn.Bind(wx.EVT_BUTTON, self._on_moveto)
         set_btn = buttons.ThemedGenButton(self, label='Set',
-            size=(-1, self.vert_size), style=wx.BU_EXACTFIT)
+            size=self._FromDIP((-1, self.vert_size)), style=wx.BU_EXACTFIT)
         set_btn.Bind(wx.EVT_BUTTON, self._on_setto)
 
         tp_btn = buttons.ThemedGenButton(self, label='+ >',
-            size=(-1, self.vert_size), style=wx.BU_EXACTFIT,
+            size=self._FromDIP((-1, self.vert_size)), style=wx.BU_EXACTFIT,
             name='rel_move_plus')
         tm_btn = buttons.ThemedGenButton(self, label='< -',
-            size=(-1, self.vert_size), style=wx.BU_EXACTFIT,
+            size=self._FromDIP((-1, self.vert_size)), style=wx.BU_EXACTFIT,
             name='rel_move_minus')
         tp_btn.Bind(wx.EVT_BUTTON, self._on_mrel)
         tm_btn.Bind(wx.EVT_BUTTON, self._on_mrel)
 
         stop_btn = buttons.ThemedGenButton(self, label='Abort',
-            size=(-1,self.vert_size), style=wx.BU_EXACTFIT)
+            size=self._FromDIP((-1,self.vert_size)), style=wx.BU_EXACTFIT)
         stop_btn.Bind(wx.EVT_BUTTON, self._on_stop)
 
         # scan_btn = buttons.ThemedGenButton(self, label='Scan', size=(-1, self.vert_size), style=wx.BU_EXACTFIT)
