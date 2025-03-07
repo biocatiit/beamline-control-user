@@ -3658,7 +3658,7 @@ class EpicsMXMotorPanel(wx.Panel):
                 validator=utils.CharValidator('float_neg_te'))
 
             lim_indc = wx.Image(os.path.join('.', 'resources', 'red_circle.png'))
-            lim_indc.Rescale(20, 20)
+            lim_indc.Rescale(self._FromDIP(20), self._FromDIP(20))
             self.ll_indc = wx.StaticBitmap(self, bitmap=lim_indc.ConvertToBitmap())
             self.hl_indc = wx.StaticBitmap(self, bitmap=lim_indc.ConvertToBitmap())
 
