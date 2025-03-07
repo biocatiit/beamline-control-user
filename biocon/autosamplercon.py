@@ -153,6 +153,7 @@ class Autosampler(object):
         self.name = name
         self.device = device #Note: None, here for consistency with other devices
         self.settings = settings
+        self.device_settings = self.settings['device_init']['kwargs']
 
         self._active_count = 0
 
@@ -175,24 +176,24 @@ class Autosampler(object):
     def _init_motors(self):
         logger.info('Initializing autosampler motors')
 
-        needle_args = self.settings['needle_motor']['args']
-        needle_kwargs = self.settings['needle_motor']['kwargs']
-        self.needle_y_motor = motorcon.EpicsMotor(self.settings['needle_motor']['name'],
+        needle_args = self.device_settings['needle_motor']['args']
+        needle_kwargs = self.device_settings['needle_motor']['kwargs']
+        self.needle_y_motor = motorcon.EpicsMotor(self.device_settings['needle_motor']['name'],
             *needle_args, **needle_kwargs)
 
-        plate_x_args = self.settings['plate_x_motor']['args']
-        plate_x_kwargs = self.settings['plate_x_motor']['kwargs']
-        self.plate_x_motor = motorcon.EpicsMotor(self.settings['plate_x_motor']['name'],
+        plate_x_args = self.device_settings['plate_x_motor']['args']
+        plate_x_kwargs = self.device_settings['plate_x_motor']['kwargs']
+        self.plate_x_motor = motorcon.EpicsMotor(self.device_settings['plate_x_motor']['name'],
             *plate_x_args, **plate_x_kwargs)
 
-        plate_z_args = self.settings['plate_z_motor']['args']
-        plate_z_kwargs = self.settings['plate_z_motor']['kwargs']
-        self.plate_z_motor = motorcon.EpicsMotor(self.settings['plate_z_motor']['name'],
+        plate_z_args = self.device_settings['plate_z_motor']['args']
+        plate_z_kwargs = self.device_settings['plate_z_motor']['kwargs']
+        self.plate_z_motor = motorcon.EpicsMotor(self.device_settings['plate_z_motor']['name'],
             *plate_z_args, **plate_z_kwargs)
 
-        coflow_args = self.settings['coflow_y_motor']['args']
-        coflow_kwargs = self.settings['coflow_y_motor']['kwargs']
-        self.coflow_y_motor = motorcon.EpicsMotor(self.settings['coflow_y_motor']['name'],
+        coflow_args = self.device_settings['coflow_y_motor']['args']
+        coflow_kwargs = self.device_settings['coflow_y_motor']['kwargs']
+        self.coflow_y_motor = motorcon.EpicsMotor(self.device_settings['coflow_y_motor']['name'],
             *coflow_args, **coflow_kwargs)
 
         self.set_base_position(self.settings['base_position']['plate_x'],
@@ -213,37 +214,37 @@ class Autosampler(object):
     def _init_valves(self):
         logger.info('Initializing autosampler valves')
 
-        device =  self.settings['needle_valve']['args'][0]
-        needle_args = self.settings['needle_valve']['args'][1:]
-        needle_kwargs = self.settings['needle_valve']['kwargs']
-        self.needle_valve = valvecon.known_valves[device](self.settings['needle_valve']['name'],
+        device =  self.device_settings['needle_valve']['args'][0]
+        needle_args = self.device_settings['needle_valve']['args'][1:]
+        needle_kwargs = self.device_settings['needle_valve']['kwargs']
+        self.needle_valve = valvecon.known_valves[device](self.device_settings['needle_valve']['name'],
             *needle_args, **needle_kwargs)
 
     def _init_pumps(self):
         logger.info('Initializing autosampler pumps')
 
-        device = self.settings['sample_pump']['args'][0]
-        sample_args = self.settings['sample_pump']['args'][1:]
-        sample_kwargs = self.settings['sample_pump']['kwargs']
-        self.sample_pump = pumpcon.known_pumps[device](self.settings['sample_pump']['name'],
+        device = self.device_settings['sample_pump']['args'][0]
+        sample_args = self.device_settings['sample_pump']['args'][1:]
+        sample_kwargs = self.device_settings['sample_pump']['kwargs']
+        self.sample_pump = pumpcon.known_pumps[device](self.device_settings['sample_pump']['name'],
             *sample_args, **sample_kwargs)
 
-        device = self.settings['clean1_pump']['args'][0]
-        clean1_args = self.settings['clean1_pump']['args'][1:]
-        clean1_kwargs = self.settings['clean1_pump']['kwargs']
-        self.clean1_pump = pumpcon.known_pumps[device](self.settings['clean1_pump']['name'],
+        device = self.device_settings['clean1_pump']['args'][0]
+        clean1_args = self.device_settings['clean1_pump']['args'][1:]
+        clean1_kwargs = self.device_settings['clean1_pump']['kwargs']
+        self.clean1_pump = pumpcon.known_pumps[device](self.device_settings['clean1_pump']['name'],
             *clean1_args, **clean1_kwargs)
 
-        device = self.settings['clean2_pump']['args'][0]
-        clean2_args = self.settings['clean2_pump']['args'][1:]
-        clean2_kwargs = self.settings['clean2_pump']['kwargs']
-        self.clean2_pump = pumpcon.known_pumps[device](self.settings['clean2_pump']['name'],
+        device = self.device_settings['clean2_pump']['args'][0]
+        clean2_args = self.device_settings['clean2_pump']['args'][1:]
+        clean2_kwargs = self.device_settings['clean2_pump']['kwargs']
+        self.clean2_pump = pumpcon.known_pumps[device](self.device_settings['clean2_pump']['name'],
             *clean2_args, **clean2_kwargs)
 
-        device = self.settings['clean3_pump']['args'][0]
-        clean3_args = self.settings['clean3_pump']['args'][1:]
-        clean3_kwargs = self.settings['clean3_pump']['kwargs']
-        self.clean3_pump = pumpcon.known_pumps[device](self.settings['clean3_pump']['name'],
+        device = self.device_settings['clean3_pump']['args'][0]
+        clean3_args = self.device_settings['clean3_pump']['args'][1:]
+        clean3_kwargs = self.device_settings['clean3_pump']['kwargs']
+        self.clean3_pump = pumpcon.known_pumps[device](self.device_settings['clean3_pump']['name'],
             *clean3_args, **clean3_kwargs)
 
         self.set_sample_draw_rate(self.settings['pump_rates']['sample'][0], 'mL/min')
@@ -2329,7 +2330,37 @@ class AutosamplerFrame(utils.DeviceFrame):
 
 #Settings
 default_autosampler_settings = {
-    'device_init'           : [{'name': 'Autosampler', 'args': [], 'kwargs': {}},], # Compatibility with the standard format
+    'device_init'           : [{'name': 'Autosampler', 'args': [], 'kwargs': {
+        'needle_motor'          : {'name': 'needle_y', 'args': ['18ID_DMC_E05:36'],
+                                    'kwargs': {}},
+        'plate_x_motor'         : {'name': 'plate_x', 'args': ['18ID_DMC_E05:35'],
+                                        'kwargs': {}},
+        'plate_z_motor'         : {'name': 'plate_z', 'args': ['18ID_DMC_E05:34'],
+                                        'kwargs': {}},
+        'coflow_y_motor'        : {'name': 'coflow_y', 'args': ['18ID_DMC_E03:24'],
+                                        'kwargs': {}},
+        'needle_valve'          : {'name': 'Needle',
+                                        'args':['Cheminert', 'COM11'],
+                                        'kwargs': {'positions' : 6}},
+        'sample_pump'           : {'name': 'sample', 'args': ['Hamilton PSD6', 'COM7'],
+                                    'kwargs': {'syringe_id': '0.1 mL, Hamilton Glass',
+                                    'pump_address': '1', 'dual_syringe': 'False',
+                                    'diameter': 1.46, 'max_volume': 0.1,
+                                    'max_rate': 1, 'comm_lock': threading.RLock(),},},
+        'clean1_pump'           : {'name': 'water', 'args': ['KPHM100', 'COM10'],
+                                    'kwargs': {'flow_cal': '319.2',
+                                    'comm_lock': threading.RLock()},
+                                    'ctrl_args': {'flow_rate': 1}},
+        'clean2_pump'           : {'name': 'ethanol', 'args': ['KPHM100', 'COM8'],
+                                    'kwargs': {'flow_cal': '319.2',
+                                    'comm_lock': threading.RLock()},
+                                    'ctrl_args': {'flow_rate': 1}},
+        'clean3_pump'           : {'name': 'hellmanex', 'args': ['KPHM100', 'COM9'],
+                                    'kwargs': {'flow_cal': '319.2',
+                                    'comm_lock': threading.RLock()},
+                                    'ctrl_args': {'flow_rate': 1}},
+
+        }},], # Compatibility with the standard format
     'device_communication'  : 'local',
     # 'remote_pump_ip'        : '164.54.204.37',
     # 'remote_pump_port'      : '5556',
@@ -2337,34 +2368,7 @@ default_autosampler_settings = {
     # 'remote_fm_port'        : '5557',
     'volume_units'          : 'uL',
     'components'            : [],
-    'needle_motor'          : {'name': 'needle_y', 'args': ['18ID_DMC_E05:36'],
-                                    'kwargs': {}},
-    'plate_x_motor'         : {'name': 'plate_x', 'args': ['18ID_DMC_E05:35'],
-                                    'kwargs': {}},
-    'plate_z_motor'         : {'name': 'plate_z', 'args': ['18ID_DMC_E05:34'],
-                                    'kwargs': {}},
-    'coflow_y_motor'        : {'name': 'coflow_y', 'args': ['18ID_DMC_E03:24'],
-                                    'kwargs': {}},
-    'needle_valve'          : {'name': 'Needle',
-                                    'args':['Cheminert', 'COM11'],
-                                    'kwargs': {'positions' : 6}},
-    'sample_pump'           : {'name': 'sample', 'args': ['Hamilton PSD6', 'COM7'],
-                                'kwargs': {'syringe_id': '0.1 mL, Hamilton Glass',
-                                'pump_address': '1', 'dual_syringe': 'False',
-                                'diameter': 1.46, 'max_volume': 0.1,
-                                'max_rate': 1, 'comm_lock': threading.RLock(),},},
-    'clean1_pump'           : {'name': 'water', 'args': ['KPHM100', 'COM10'],
-                                'kwargs': {'flow_cal': '319.2',
-                                'comm_lock': threading.RLock()},
-                                'ctrl_args': {'flow_rate': 1}},
-    'clean2_pump'           : {'name': 'ethanol', 'args': ['KPHM100', 'COM8'],
-                                'kwargs': {'flow_cal': '319.2',
-                                'comm_lock': threading.RLock()},
-                                'ctrl_args': {'flow_rate': 1}},
-    'clean3_pump'           : {'name': 'hellmanex', 'args': ['KPHM100', 'COM9'],
-                                'kwargs': {'flow_cal': '319.2',
-                                'comm_lock': threading.RLock()},
-                                'ctrl_args': {'flow_rate': 1}},
+
     # 'motor_home_velocity'   : {'x': 10, 'y': 10, 'z': 10},
     # 'motor_velocity'        : {'x': 75, 'y': 75, 'z': 75}, #112
     # 'motor_acceleration'    : {'x': 500, 'y': 500, 'z': 500},
