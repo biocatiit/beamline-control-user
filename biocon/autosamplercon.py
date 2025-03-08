@@ -153,7 +153,7 @@ class Autosampler(object):
         self.name = name
         self.device = device #Note: None, here for consistency with other devices
         self.settings = settings
-        self.device_settings = self.settings['device_init']['kwargs']
+        self.device_settings = self.settings['device_data']['kwargs']
 
         self._active_count = 0
 
@@ -228,24 +228,28 @@ class Autosampler(object):
         sample_kwargs = self.device_settings['sample_pump']['kwargs']
         self.sample_pump = pumpcon.known_pumps[device](self.device_settings['sample_pump']['name'],
             *sample_args, **sample_kwargs)
+        self.sample_pump.units = 'uL/min'
 
         device = self.device_settings['clean1_pump']['args'][0]
         clean1_args = self.device_settings['clean1_pump']['args'][1:]
         clean1_kwargs = self.device_settings['clean1_pump']['kwargs']
         self.clean1_pump = pumpcon.known_pumps[device](self.device_settings['clean1_pump']['name'],
             *clean1_args, **clean1_kwargs)
+        self.clean1_pump.units = 'uL/min'
 
         device = self.device_settings['clean2_pump']['args'][0]
         clean2_args = self.device_settings['clean2_pump']['args'][1:]
         clean2_kwargs = self.device_settings['clean2_pump']['kwargs']
         self.clean2_pump = pumpcon.known_pumps[device](self.device_settings['clean2_pump']['name'],
             *clean2_args, **clean2_kwargs)
+        self.clean2_pump.units = 'uL/min'
 
         device = self.device_settings['clean3_pump']['args'][0]
         clean3_args = self.device_settings['clean3_pump']['args'][1:]
         clean3_kwargs = self.device_settings['clean3_pump']['kwargs']
         self.clean3_pump = pumpcon.known_pumps[device](self.device_settings['clean3_pump']['name'],
             *clean3_args, **clean3_kwargs)
+        self.clean3_pump.units = 'uL/min'
 
         self.set_sample_draw_rate(self.settings['pump_rates']['sample'][0], 'mL/min')
         self.set_sample_dwell_time(self.settings['load_dwell_time'])
@@ -2173,6 +2177,7 @@ class StaffControlsFrame(wx.Frame):
         self.Bind(wx.EVT_CLOSE, self.OnClose)
 
         self._create_pump_comm()
+        self._create_valve_comm()
 
         self._create_layout()
 
@@ -2189,23 +2194,55 @@ class StaffControlsFrame(wx.Frame):
     def _create_layout(self):
         parent = wx.Panel(self)
 
+        motor_top_sizer = self._create_motor_sizer(parent)
+
+        pump_top_sizer = self._create_pump_sizer(parent)
+        valve_top_sizer = self._create_valve_sizer(parent)
+
+        fluidics_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        fluidics_sizer.Add(pump_top_sizer, flag=wx.RIGHT, border=self._FromDIP(5))
+        fluidics_sizer.Add(valve_top_sizer)
+
+        panel_sizer = wx.BoxSizer(wx.VERTICAL)
+        panel_sizer.Add(motor_top_sizer, flag=wx.ALL|wx.EXPAND,
+            border=self._FromDIP(5))
+        panel_sizer.Add(fluidics_sizer, flag=wx.LEFT|wx.RIGHT|wx.BOTTOM|wx.EXPAND,
+            border=self.FromDIP(5))
+
+        parent.SetSizer(panel_sizer)
+
+        top_sizer = wx.BoxSizer(wx.VERTICAL)
+        top_sizer.Add(parent, flag=wx.EXPAND, proportion=1)
+
+        self.SetSizer(top_sizer)
+
+    def _create_motor_sizer(self, parent):
         motor_box = wx.StaticBox(parent, label='Motors and Homing')
 
-        needle_ctrl = motorcon.EpicsMXMotorPanel(self.settings['needle_motor']['args'][0],
+        needle_ctrl = motorcon.EpicsMXMotorPanel(
+            self.settings['device_data']['kwargs']['needle_motor']['args'][0],
             None, motor_box)
-        plate_x_ctrl = motorcon.EpicsMXMotorPanel(self.settings['plate_x_motor']['args'][0],
+        plate_x_ctrl = motorcon.EpicsMXMotorPanel(
+            self.settings['device_data']['kwargs']['plate_x_motor']['args'][0],
             None, motor_box)
-        plate_z_ctrl = motorcon.EpicsMXMotorPanel(self.settings['plate_z_motor']['args'][0],
+        plate_z_ctrl = motorcon.EpicsMXMotorPanel(
+            self.settings['device_data']['kwargs']['plate_z_motor']['args'][0],
             None, motor_box)
-        coflow_y_ctrl = motorcon.EpicsMXMotorPanel(self.settings['coflow_y_motor']['args'][0],
+        coflow_y_ctrl = motorcon.EpicsMXMotorPanel(
+            self.settings['device_data']['kwargs']['coflow_y_motor']['args'][0],
             None, motor_box)
 
         motor_sizer = wx.FlexGridSizer(cols=4, vgap=self._FromDIP(5),
             hgap=self._FromDIP(5))
-        motor_sizer.Add(needle_ctrl)
-        motor_sizer.Add(plate_x_ctrl)
-        motor_sizer.Add(plate_z_ctrl)
-        motor_sizer.Add(coflow_y_ctrl)
+        motor_sizer.Add(needle_ctrl, flag=wx.EXPAND)
+        motor_sizer.Add(plate_x_ctrl, flag=wx.EXPAND)
+        motor_sizer.Add(plate_z_ctrl, flag=wx.EXPAND)
+        motor_sizer.Add(coflow_y_ctrl, flag=wx.EXPAND)
+
+        motor_sizer.AddGrowableCol(0)
+        motor_sizer.AddGrowableCol(1)
+        motor_sizer.AddGrowableCol(2)
+        motor_sizer.AddGrowableCol(3)
 
         self._home_needle_btn = wx.Button(motor_box, label='Home Needle Y')
         self._home_plate_x_btn = wx.Button(motor_box, label='Home Plate X')
@@ -2219,35 +2256,23 @@ class StaffControlsFrame(wx.Frame):
         home_sizer.Add(self._home_plate_z_btn)
 
         motor_top_sizer = wx.StaticBoxSizer(motor_box, wx.VERTICAL)
-        motor_top_sizer.Add(motor_sizer, flag=wx.ALL, border=self._FromDIP(5))
+        motor_top_sizer.Add(motor_sizer, flag=wx.ALL|wx.EXPAND, border=self._FromDIP(5))
         motor_top_sizer.Add(home_sizer, flag=wx.LEFT|wx.RIGHT|wx.BOTTOM,
             border=self._FromDIP(5))
 
-        pump_top_sizer = self._create_pump_sizer(parent)
-
-        panel_sizer = wx.BoxSizer(wx.VERTICAL)
-        panel_sizer.Add(motor_top_sizer, flag=wx.ALL, border=self._FromDIP(5))
-        panel_sizer.Add(pump_top_sizer, flag=wx.LEFT|wx.RIGHT|wx.BOTTOM,
-            border=self.FromDIP(5))
-
-        parent.SetSizer(panel_sizer)
-
-        top_sizer = wx.BoxSizer(wx.VERTICAL)
-        top_sizer.Add(parent, flag=wx.EXPAND, proportion=1)
-
-        self.SetSizer(top_sizer)
+        return motor_top_sizer
 
     def _create_pump_comm(self):
-        self.com_thread = pumpcon.PumpCommThread('PumpComm')
-        self.com_thread.start()
+        self.pump_com_thread = pumpcon.PumpCommThread('ASPumpComm')
+        self.pump_com_thread.start()
 
-        self.devices = []
+        self.pump_devices = []
 
-        self.setup_devices = [
-            self.settings['sample_pump'],
-            self.settings['clean1_pump'],
-            self.settings['clean2_pump'],
-            self.settings['clean3_pump'],
+        self.pump_setup_devices = [
+            self.settings['device_data']['kwargs']['sample_pump'],
+            self.settings['device_data']['kwargs']['clean1_pump'],
+            self.settings['device_data']['kwargs']['clean2_pump'],
+            self.settings['device_data']['kwargs']['clean3_pump'],
             ]
 
         self._pump_settings = {
@@ -2255,7 +2280,7 @@ class StaffControlsFrame(wx.Frame):
             'remote_device' : 'pump',
             'remote_ip'     : '',
             'remote_port'   : '',
-            'com_thread'    : self.com_thread
+            'com_thread'    : self.pump_com_thread
             }
 
     def _create_pump_sizer(self, parent):
@@ -2263,7 +2288,7 @@ class StaffControlsFrame(wx.Frame):
 
         pump_sizer = wx.BoxSizer(wx.HORIZONTAL)
 
-        for device in self.setup_devices:
+        for device in self.pump_setup_devices:
             dev_settings = {}
             for key, val in self._pump_settings.items():
                 if key != 'com_thread':
@@ -2277,13 +2302,58 @@ class StaffControlsFrame(wx.Frame):
 
             pump_sizer.Add(new_device, 1, flag=wx.EXPAND|wx.ALL,
                 border=self._FromDIP(3))
-            self.devices.append(new_device)
+            self.pump_devices.append(new_device)
 
         pump_top_sizer = wx.StaticBoxSizer(pump_box, wx.VERTICAL)
         pump_top_sizer.Add(pump_sizer, proportion=1, flag=wx.EXPAND|wx.ALL,
             border=self._FromDIP(5))
 
         return pump_top_sizer
+
+    def _create_valve_comm(self):
+        self.valve_com_thread = valvecon.ValveCommThread('ASValveComm')
+        self.valve_com_thread.start()
+
+        self.valve_devices = []
+
+        self.valve_setup_devices = [
+            self.settings['device_data']['kwargs']['needle_valve'],
+            ]
+
+        self._valve_settings = {
+            'remote'        : False,
+            'remote_device' : 'valve',
+            'remote_ip'     : '',
+            'remote_port'   : '',
+            'com_thread'    : self.valve_com_thread
+            }
+
+    def _create_valve_sizer(self, parent):
+        valve_box = wx.StaticBox(parent, label='Valve Control')
+
+        valve_sizer = wx.BoxSizer(wx.HORIZONTAL)
+
+        for device in self.valve_setup_devices:
+            dev_settings = {}
+            for key, val in self._valve_settings.items():
+                if key != 'com_thread':
+                    dev_settings[key] = copy.deepcopy(val)
+                else:
+                    dev_settings[key] = val
+
+            dev_settings['device_data'] = device
+            new_device = valvecon.ValvePanel(valve_box, wx.ID_ANY,
+                dev_settings)
+
+            valve_sizer.Add(new_device, 1, flag=wx.EXPAND|wx.ALL,
+                border=self._FromDIP(3))
+            self.valve_devices.append(new_device)
+
+        valve_top_sizer = wx.StaticBoxSizer(valve_box, wx.VERTICAL)
+        valve_top_sizer.Add(valve_sizer, proportion=1, flag=wx.EXPAND|wx.ALL,
+            border=self._FromDIP(5))
+
+        return valve_top_sizer
 
     def _on_home_btn(self, evt):
         evt_obj = evt.GetEventObject()
@@ -2303,11 +2373,17 @@ class StaffControlsFrame(wx.Frame):
     def OnClose(self, evt):
         self.as_panel._staff_ctrl_window = None
 
-        for device in self.devices:
+        for device in self.pump_devices:
             device.close()
 
-        self.com_thread.stop()
-        self.com_thread.join()
+        self.pump_com_thread.stop()
+        self.pump_com_thread.join()
+
+        for device in self.valve_devices:
+            device.close()
+
+        self.valve_com_thread.stop()
+        self.valve_com_thread.join()
 
         self.Destroy()
 
@@ -2346,7 +2422,9 @@ default_autosampler_settings = {
                                     'kwargs': {'syringe_id': '0.1 mL, Hamilton Glass',
                                     'pump_address': '1', 'dual_syringe': 'False',
                                     'diameter': 1.46, 'max_volume': 0.1,
-                                    'max_rate': 1, 'comm_lock': threading.RLock(),},},
+                                    'max_rate': 1, 'comm_lock': threading.RLock(),},
+                                    'ctrl_args': {'flow_rate' : 100,
+                                    'refill_rate' : 100, 'units': 'uL/min'}},
         'clean1_pump'           : {'name': 'water', 'args': ['KPHM100', 'COM10'],
                                     'kwargs': {'flow_cal': '319.2',
                                     'comm_lock': threading.RLock()},

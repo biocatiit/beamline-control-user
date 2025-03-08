@@ -1888,9 +1888,6 @@ class HamiltonPSD6Pump(SyringePump):
     def _get_move_status(self):
         ret, status = self.send_cmd("Q")
 
-        print(ret)
-        print(status)
-
         if status == '`':
             moving = False
         elif status == '@':
@@ -4762,6 +4759,11 @@ class PumpPanel(utils.DevicePanel):
         else:
             flow_accel = '0.1'
 
+        if 'units' in device_data['ctrl_args']:
+            units = str(device_data['ctrl_args']['units'])
+        else:
+            units = 'mL/min'
+
         self.pump_type = device_data['args'][0]
 
         self.status = wx.StaticText(self, label='Not connected')
@@ -4814,6 +4816,9 @@ class PumpPanel(utils.DevicePanel):
             flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
         status_grid.Add(self.set_syringe_volume, (5,1), span=(1,2),
             flag=wx.LEFT|wx.ALIGN_RIGHT|wx.ALIGN_CENTER_VERTICAL)
+
+        status_grid.AddGrowableCol(1)
+        status_grid.AddGrowableCol(2)
 
 
 
@@ -4921,11 +4926,10 @@ class PumpPanel(utils.DevicePanel):
         self.hamilton_ctrl_sizer.Add(wx.StaticText(self, label='Valve position:'))
         self.hamilton_ctrl_sizer.Add(self.valve_ctrl)
 
-
         self.vol_unit_ctrl = wx.Choice(self, choices=['nL', 'uL', 'mL'])
-        self.vol_unit_ctrl.SetSelection(2)
+        self.vol_unit_ctrl.SetStringSelection(units.split('/')[0])
         self.time_unit_ctrl = wx.Choice(self, choices=['s', 'min'])
-        self.time_unit_ctrl.SetSelection(1)
+        self.time_unit_ctrl.SetStringSelection(units.split('/')[1])
 
         self.vol_unit_ctrl.Bind(wx.EVT_CHOICE, self._on_units)
         self.time_unit_ctrl.Bind(wx.EVT_CHOICE, self._on_units)
@@ -5118,6 +5122,7 @@ class PumpPanel(utils.DevicePanel):
             self.set_syringe_volume.Hide()
             self.control_box_sizer.Show(self.hamilton_ctrl_sizer, recursive=True)
 
+
         vol_unit = self.vol_unit_ctrl.GetStringSelection()
         t_unit = self.time_unit_ctrl.GetStringSelection()
         self.flow_units_lbl.SetLabel('{}/{}'.format(vol_unit, t_unit))
@@ -5197,6 +5202,11 @@ class PumpPanel(utils.DevicePanel):
 
         if self.connected:
             self._set_status_label('Connected')
+
+            if 'units' in self.settings['device_data']['ctrl_args']:
+                units = self.settings['device_data']['ctrl_args']['units']
+                units_cmd = ['set_units', [self.name, units], {}]
+                self._send_cmd(units_cmd)
 
             # if self.pump_type == 'Pico_Plus':
             #     force = self.pump.force

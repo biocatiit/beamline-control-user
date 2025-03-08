@@ -3649,13 +3649,13 @@ class EpicsMXMotorPanel(wx.Panel):
 
         elif self.is_epics:
             pos = custom_epics_widgets.PVTextLabeled(self, self.pos_pv, scale=self.scale,
-                offset=self.offset)
+                offset=self.offset, size=self._FromDIP((50, -1)))
             self.low_limit = custom_epics_widgets.PVTextCtrl2(self, self.nlimit_pv,
                 dirty_timeout=None, scale=self.scale, offset=self.offset,
-                validator=utils.CharValidator('float_neg_te'))
+                validator=utils.CharValidator('float_neg_te'), size=self._FromDIP((50, -1)))
             self.high_limit = custom_epics_widgets.PVTextCtrl2(self, self.plimit_pv,
                 dirty_timeout=None, scale=self.scale, offset=self.offset,
-                validator=utils.CharValidator('float_neg_te'))
+                validator=utils.CharValidator('float_neg_te'), size=self._FromDIP((50, -1)))
 
             lim_indc = wx.Image(os.path.join('.', 'resources', 'red_circle.png'))
             lim_indc.Rescale(self._FromDIP(20), self._FromDIP(20))
@@ -3679,9 +3679,11 @@ class EpicsMXMotorPanel(wx.Panel):
             wx.VERTICAL)
         status_sizer.Add(status_grid, 1, flag=wx.EXPAND)
 
-        self.pos_ctrl = wx.TextCtrl(self, value='', size=self._FromDIP((50,self.vert_size)),
+        self.pos_ctrl = wx.TextCtrl(self, value='',
+            size=self._FromDIP((50,self.vert_size)),
             validator=utils.CharValidator('float_neg'))
-        self.mrel_ctrl = wx.TextCtrl(self, value='1.0', size=self._FromDIP((50,self.vert_size)),
+        self.mrel_ctrl = wx.TextCtrl(self, value='1.0',
+            size=self._FromDIP((50,self.vert_size)),
             validator=utils.CharValidator('float_neg'))
 
         # move_btn = wx.Button(self, label='Move', size=(50, self.vert_size), style=wx.BU_EXACTFIT)
@@ -3746,8 +3748,9 @@ class EpicsMXMotorPanel(wx.Panel):
                 flag=wx.ALIGN_CENTER_VERTICAL|wx.RESERVE_SPACE_EVEN_IF_HIDDEN)
         else:
             self.pos_sizer.Add((1,1))
-        self.pos_sizer.AddGrowableCol(2)
-        self.pos_sizer.AddGrowableCol(4)
+        self.pos_sizer.AddGrowableCol(1)
+        self.pos_sizer.AddGrowableCol(3)
+        self.pos_sizer.AddGrowableCol(5)
 
         if self.is_epics:
             self.pos_sizer.Hide(self.ll_indc)
