@@ -2407,13 +2407,13 @@ class AutosamplerFrame(utils.DeviceFrame):
 #Settings
 default_autosampler_settings = {
     'device_init'           : [{'name': 'Autosampler', 'args': [], 'kwargs': {
-        'needle_motor'          : {'name': 'needle_y', 'args': ['18ID_DMC_E05:36'],
+        'needle_motor'          : {'name': 'needle_y', 'args': ['18ID_DMC_E03:14'],
                                     'kwargs': {}},
-        'plate_x_motor'         : {'name': 'plate_x', 'args': ['18ID_DMC_E05:35'],
+        'plate_x_motor'         : {'name': 'plate_x', 'args': ['18ID_DMC_E05:33'],
                                         'kwargs': {}},
         'plate_z_motor'         : {'name': 'plate_z', 'args': ['18ID_DMC_E05:34'],
                                         'kwargs': {}},
-        'coflow_y_motor'        : {'name': 'coflow_y', 'args': ['18ID_DMC_E03:24'],
+        'coflow_y_motor'        : {'name': 'coflow_y', 'args': ['18ID_DMC_E03:23'],
                                         'kwargs': {}},
         'needle_valve'          : {'name': 'Needle',
                                         'args':['Cheminert', 'COM11'],
