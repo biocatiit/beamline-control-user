@@ -2732,7 +2732,7 @@ class ExpPanel(wx.Panel):
         logger.debug('Initializing ExpPanel')
 
         self.settings = settings
-        self._exp_status = ''
+        self._exp_status = 'Ready'
         self._time_remaining = 0
         self._run_number = '_{:03d}'.format(self.settings['run_num'])
         self._preparing_exposure = False

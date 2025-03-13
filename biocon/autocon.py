@@ -1436,6 +1436,8 @@ class AutoSettings(scrolled.ScrolledPanel):
             border=self._FromDIP(5))
         self.top_sizer.Add(self.switch_panel, flag=wx.ALL|wx.EXPAND, proportion=1,
             border=self._FromDIP(5))
+        self.top_sizer.Add(self.stop_flow_panel, flag=wx.ALL|wx.EXPAND, proportion=1,
+            border=self._FromDIP(5))
 
         self.top_sizer.Hide(self.sec_saxs_panel, recursive=True)
         self.top_sizer.Hide(self.exp_panel, recursive=True)
@@ -1516,7 +1518,6 @@ default_sec_saxs_settings = {
     'inst'          : '',
     'sample_name'   : '',
     'column'        : 'Superdex 200 10/300 Increase',
-    'temp'          : '20',
 
     # Injection parameters
     'acq_method'    : '',
@@ -1713,7 +1714,6 @@ def make_sec_saxs_info_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
     metadata_settings = {
         'sample_name'   : ['Sample:', ctrl_ids['sample_name'], 'text'],
         'buf'           : ['Buffer:', ctrl_ids['buf'], 'text'],
-        'temp'          : ['Temperature [C]:', ctrl_ids['temp'], 'float'],
         'conc'          : ['Concentration [mg/ml]:', ctrl_ids['conc'], 'float'],
         'column'        : ['Column:', ctrl_ids['column'], 'choice', column_choices],
         }
@@ -2430,10 +2430,18 @@ class AutoList(utils.ItemList):
                     except ValueError:
                         coflow_fr = float(coflow_panel.settings['lc_flow_rate'])
 
+                    metadata_panel = wx.FindWindowByName('metadata')
+                    default_metadata = metadata_panel.metadata()
+
                     default_settings = copy.deepcopy(default_sec_saxs_settings)
 
                     # General parameters
                     default_settings['inst'] = '{}_pump'.format(self.auto_panel.settings['hplc_inst'])
+                    default_settings['notes'] = default_metadata['Notes:']
+                    default_settings['conc'] = default_metadata['Concentration [mg/ml]:']
+                    default_settings['buf'] = default_metadata['Buffer:']
+                    default_settings['sample_name'] = default_metadata['Sample:']
+                    default_settings['column'] = default_metadata['Column:']
 
                     # Injection parameters
                     default_settings['acq_method'] = default_inj_settings['acq_method']
@@ -2589,7 +2597,24 @@ class AutoList(utils.ItemList):
                     exp_panel = wx.FindWindowByName('exposure')
                     default_exp_settings, _ = exp_panel.get_exp_values(False)
 
+                    metadata_panel = wx.FindWindowByName('metadata')
+                    default_metadata = metadata_panel.metadata()
+
                     default_settings = copy.deepcopy(default_standalone_exp_settings)
+
+                    # General parameters
+                    default_settings['notes'] = default_metadata['Notes:']
+                    default_settings['conc'] = default_metadata['Concentration [mg/ml]:']
+                    default_settings['buf'] = default_metadata['Buffer:']
+                    default_settings['sample_name'] = default_metadata['Sample:']
+                    default_settings['column'] = default_metadata['Column:']
+                    default_settings['exp_type'] = default_metadata['Experiment type:']
+                    default_settings['inj_vol'] = default_metadata['Loaded volume [uL]:']
+                    try:
+                        default_settings['temp'] = default_metadata['Temperature [C]:']
+                    except Exception:
+                        pass
+
                     default_settings['num_frames'] = default_exp_settings['num_frames']
                     default_settings['exp_time'] = default_exp_settings['exp_time']
                     default_settings['exp_period'] = default_exp_settings['exp_period']
