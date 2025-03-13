@@ -3006,7 +3006,7 @@ class ExpPanel(wx.Panel):
     def _on_data_dir_right_click(self, evt):
         wx.CallAfter(self._show_data_dir_menu)
 
-    def _show_data_dir_menu(self, evt):
+    def _show_data_dir_menu(self):
 
         menu = wx.Menu()
 
@@ -3029,6 +3029,7 @@ class ExpPanel(wx.Panel):
 
                 if os.path.exists(pathname):
                     self.settings['base_data_dir'] = pathname
+                    self.data_dir.SetValue(pathname)
 
 
     def _on_change_exp_param(self, evt):
