@@ -2735,6 +2735,7 @@ class ExpPanel(wx.Panel):
         self._exp_status = ''
         self._time_remaining = 0
         self._run_number = '_{:03d}'.format(self.settings['run_num'])
+        self._preparing_exposure = False
 
         self.exp_cmd_q = deque()
         self.exp_ret_q = deque()
@@ -3012,7 +3013,9 @@ class ExpPanel(wx.Panel):
         else:
             exp_only = False
 
-        self.start_exp(exp_only)
+        if not self._preparing_exposure:
+            self._preparing_exposure = True
+            self.start_exp(exp_only)
 
     def _on_stop_exp(self, evt):
         self.stop_exp()
@@ -3025,6 +3028,7 @@ class ExpPanel(wx.Panel):
         warnings_valid = self._check_warnings(verbose)
 
         if not warnings_valid:
+            self._preparing_exposure = False
             return
 
         if exp_values is None:
@@ -3035,6 +3039,7 @@ class ExpPanel(wx.Panel):
         self.current_exposure_values = exp_values
 
         if not exp_valid:
+            self._preparing_exposure = False
             return
 
         metadata, metadata_valid = self._get_metadata(metadata_vals, verbose)
@@ -3042,11 +3047,13 @@ class ExpPanel(wx.Panel):
         if metadata_valid:
             exp_values['metadata'] = metadata
         else:
+            self._preparing_exposure = False
             return
 
         overwrite_valid = self._check_overwrite(exp_values, verbose)
 
         if not overwrite_valid:
+            self._preparing_exposure = False
             return
 
         if self.pipeline_ctrl is not None:
@@ -3056,6 +3063,7 @@ class ExpPanel(wx.Panel):
         comp_valid, comp_settings = self._check_components(exp_only, verbose)
 
         if not comp_valid:
+            self._preparing_exposure = False
             return
 
         cont = True
@@ -3071,6 +3079,7 @@ class ExpPanel(wx.Panel):
                 cont = False
 
         if not cont:
+            self._preparing_exposure = False
             return
 
         self._pipeline_start_exp()
@@ -3117,6 +3126,7 @@ class ExpPanel(wx.Panel):
         start_thread.daemon = True
         start_thread.start()
 
+        self._preparing_exposure = False
         return
 
     def stop_exp(self):
