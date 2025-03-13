@@ -3384,7 +3384,7 @@ class UVPanel(utils.DevicePanel):
         if cmd == 'set_int_time':
             if str(val) != self.int_time.GetValue():
                 self.int_time.SafeChangeValue(str(val))
-                self._current_int_time = int_time
+                self._current_int_time = val
 
         elif cmd == 'set_scan_avg' and not self.inline:
             if str(val) != self.scan_avg.GetValue():

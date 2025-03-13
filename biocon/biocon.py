@@ -666,7 +666,7 @@ if __name__ == '__main__':
         'autoinject'            : 'After scan',
         'autoinject_scan'       : '5',
         'autoinject_valve_pos'  : 1,
-        'mixer_type'            : 'chaotic', # laminar or chaotic
+        # 'mixer_type'            : 'chaotic', # laminar or chaotic
         'mixer_type'            : 'laminar', # laminar or chaotic
         'sample_ratio'          : '0.066', # For laminar flow
         'sheath_ratio'          : '0.032', # For laminar flow

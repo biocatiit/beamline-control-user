@@ -33,6 +33,7 @@ import threading
 from collections import deque, OrderedDict
 import time
 import copy
+import math
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +41,6 @@ import wx
 from wx.lib.wordwrap import wordwrap
 import wx.lib.mixins.listctrl
 from wx.lib.stattext import GenStaticText as StaticText
-import wx.lib.mixins.listctrl
 from matplotlib.backends.backend_wxagg import NavigationToolbar2WxAgg
 import numpy as np
 try:
@@ -544,7 +544,7 @@ class ValueEntry(wx.TextCtrl):
 
     def OnEnter(self, event):
         """
-        When enter is pressed in the box, it sets the value in EPICS.
+        When enter is pressed in the box, it sets the value via the callback.
         """
         value = self.GetValue().strip()
         self._enter_callback(self, value)
@@ -1767,3 +1767,80 @@ def set_best_size(window, shrink=False):
             best_size.SetHeight(best_height)
 
     window.SetSize(best_size)
+
+
+def load_DIP_bitmap(filepath, bitmap_type, bundle=True):
+    if platform.system() == 'Darwin':
+        bmp = wx.Bitmap(filepath, bitmap_type)
+
+        img = wx.Image(filepath, bitmap_type)
+        img.Replace(0,0,0,255,255,255)
+        dark_bmp = img.ConvertToBitmap()
+
+        return_dict = {'light': bmp, 'dark': dark_bmp}
+    else:
+
+        if bundle:
+            img_prefix, ext = os.path.splitext(filepath)
+            filepaths = [filepath,]
+            for i in range(1,10):
+                img_name = '{}@{}x{}'.format(img_prefix, i, ext)
+                if os.path.exists('{}@{}x{}'.format(img_prefix, i, ext)):
+                    filepaths.append(img_name)
+
+            # print(filepaths)
+            bitmap_list = []
+            dark_bitmap_list = []
+
+            for imgpath in filepaths:
+                bmp = wx.Bitmap(imgpath, bitmap_type)
+                bitmap_list.append(bmp)
+                img = bmp.ConvertToImage()
+                img.Replace(0,0,0,255,255,255)
+                dark_bitmap_list.append(img.ConvertToBitmap())
+
+            light_bundle = wx.BitmapBundle.FromBitmaps(bitmap_list)
+
+            dark_bundle = wx.BitmapBundle.FromBitmaps(dark_bitmap_list)
+
+            return_dict = {'light': light_bundle, 'dark': dark_bundle}
+
+
+        else:
+
+            try:
+                content_scale = wx.GetApp().GetTopWindow().GetDPIScaleFactor()
+            except Exception:
+                content_scale = wx.GetApp().GetTopWindow().GetContentScaleFactor()
+
+            img_scale = math.ceil(content_scale)
+
+            img = None
+            bmp = None
+
+            current_scale = img_scale
+
+            while current_scale > 1:
+                path, ext = os.path.splitext(filepath)
+                imgpath = '{}@{}x{}'.format(path, current_scale, ext)
+                if os.path.isfile(imgpath):
+                    img = wx.Image(imgpath, bitmap_type)
+                    break
+                else:
+                    current_scale = current_scale -1
+
+            if img is None:
+                img = wx.Image(filepath, bitmap_type)
+
+            # Should I rescale for intermediate resolutions? Or just have larger crisp icons?
+            w, h = img.GetSize()
+            extra_scale = content_scale/current_scale
+            img.Rescale(int(w*extra_scale), int(h*extra_scale))
+
+            return_bmp = wx.Bitmap(img)
+            img.Replace(0,0,0,255,255,255)
+            dark_return_bmp = wx.Bitmap(img)
+
+            return_dict = {'light': return_bmp, 'dark': dark_return_bmp}
+
+    return return_dict
