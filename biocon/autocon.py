@@ -285,6 +285,11 @@ class Automator(threading.Thread):
 
                             controls['status'] = status
 
+                        else:
+                            queue_name = copy.copy(name)
+                            for finish_callback in self._on_finish_cmd_callbacks:
+                                finish_callback(cmd_id, queue_name, state)
+
                 else:
                     status = cmd_kwargs
                     status['state'] = cmd_name
@@ -927,7 +932,7 @@ class StopFlowCommand(AutoCommand):
 
         stop_flow1 = cmd_info['stop_flow1']
         stop_flow2 = cmd_info['stop_flow2']
-        stop_coflow = cmd_info['coflow_stop']
+        stop_coflow = cmd_info['stop_coflow']
         num_paths = cmd_info['num_flow_paths']
 
         if (stop_flow1 or stop_flow2) and stop_coflow:
@@ -1209,7 +1214,7 @@ class AutoStatusPanel(wx.Panel):
             exp_stop_btn = wx.Button(exp_status_box, label='Stop Exposure')
             exp_stop_btn.Bind(wx.EVT_BUTTON, self._on_stop_exp)
 
-            self.exp_status = wx.StaticText(exp_status_box, size=self._FromDIP((120,-1)),
+            self.exp_status = wx.StaticText(exp_status_box, size=self._FromDIP((130,-1)),
                 style=wx.ST_NO_AUTORESIZE)
             self.exp_runtime = wx.StaticText(exp_status_box, size=self._FromDIP((60,-1)),
                 style=wx.ST_NO_AUTORESIZE)
@@ -1436,6 +1441,8 @@ class AutoSettings(scrolled.ScrolledPanel):
             border=self._FromDIP(5))
         self.top_sizer.Add(self.switch_panel, flag=wx.ALL|wx.EXPAND, proportion=1,
             border=self._FromDIP(5))
+        self.top_sizer.Add(self.stop_flow_panel, flag=wx.ALL|wx.EXPAND, proportion=1,
+            border=self._FromDIP(5))
 
         self.top_sizer.Hide(self.sec_saxs_panel, recursive=True)
         self.top_sizer.Hide(self.exp_panel, recursive=True)
@@ -1516,7 +1523,6 @@ default_sec_saxs_settings = {
     'inst'          : '',
     'sample_name'   : '',
     'column'        : 'Superdex 200 10/300 Increase',
-    'temp'          : '20',
 
     # Injection parameters
     'acq_method'    : '',
@@ -1713,7 +1719,6 @@ def make_sec_saxs_info_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
     metadata_settings = {
         'sample_name'   : ['Sample:', ctrl_ids['sample_name'], 'text'],
         'buf'           : ['Buffer:', ctrl_ids['buf'], 'text'],
-        'temp'          : ['Temperature [C]:', ctrl_ids['temp'], 'float'],
         'conc'          : ['Concentration [mg/ml]:', ctrl_ids['conc'], 'float'],
         'column'        : ['Column:', ctrl_ids['column'], 'choice', column_choices],
         }
@@ -2430,10 +2435,18 @@ class AutoList(utils.ItemList):
                     except ValueError:
                         coflow_fr = float(coflow_panel.settings['lc_flow_rate'])
 
+                    metadata_panel = wx.FindWindowByName('metadata')
+                    default_metadata = metadata_panel.metadata()
+
                     default_settings = copy.deepcopy(default_sec_saxs_settings)
 
                     # General parameters
                     default_settings['inst'] = '{}_pump'.format(self.auto_panel.settings['hplc_inst'])
+                    default_settings['notes'] = default_metadata['Notes:']
+                    default_settings['conc'] = default_metadata['Concentration [mg/ml]:']
+                    default_settings['buf'] = default_metadata['Buffer:']
+                    default_settings['sample_name'] = default_metadata['Sample:']
+                    default_settings['column'] = default_metadata['Column:']
 
                     # Injection parameters
                     default_settings['acq_method'] = default_inj_settings['acq_method']
@@ -2589,7 +2602,24 @@ class AutoList(utils.ItemList):
                     exp_panel = wx.FindWindowByName('exposure')
                     default_exp_settings, _ = exp_panel.get_exp_values(False)
 
+                    metadata_panel = wx.FindWindowByName('metadata')
+                    default_metadata = metadata_panel.metadata()
+
                     default_settings = copy.deepcopy(default_standalone_exp_settings)
+
+                    # General parameters
+                    default_settings['notes'] = default_metadata['Notes:']
+                    default_settings['conc'] = default_metadata['Concentration [mg/ml]:']
+                    default_settings['buf'] = default_metadata['Buffer:']
+                    default_settings['sample_name'] = default_metadata['Sample:']
+                    default_settings['column'] = default_metadata['Column:']
+                    default_settings['exp_type'] = default_metadata['Experiment type:']
+                    default_settings['inj_vol'] = default_metadata['Loaded volume [uL]:']
+                    try:
+                        default_settings['temp'] = default_metadata['Temperature [C]:']
+                    except Exception:
+                        pass
+
                     default_settings['num_frames'] = default_exp_settings['num_frames']
                     default_settings['exp_time'] = default_exp_settings['exp_time']
                     default_settings['exp_period'] = default_exp_settings['exp_period']
@@ -3125,7 +3155,7 @@ class AutoListItem(utils.ListItem):
 
             item_sizer = wx.BoxSizer(wx.HORIZONTAL)
             item_sizer.Add(wx.StaticText(item_parent, label='Stop pump 1:'),
-                flag=wx.RIGHT|wx.LEFT, border=self._FromDIP(5))
+                flag=wx.LEFT, border=self._FromDIP(5))
             item_sizer.Add(self.stop_flow1_ctrl, flag=wx.LEFT,
                 border=self._FromDIP(5))
             item_sizer.Add(wx.StaticText(item_parent, label='Stop pump 2:'),
@@ -3173,9 +3203,9 @@ class AutoListItem(utils.ListItem):
             pass
 
         elif self.item_type == 'stop_flow':
-            self.stop_flow1_ctrl.SetValue(str(self.item_info['stop_flow1']))
-            self.stop_flow2_ctrl.SetValue(str(self.item_info['stop_flow2']))
-            self.stop_coflow_ctrl.SetValue(str(self.item_info['stop_coflow']))
+            self.stop_flow1_ctrl.SetLabel(str(self.item_info['stop_flow1']))
+            self.stop_flow2_ctrl.SetLabel(str(self.item_info['stop_flow2']))
+            self.stop_coflow_ctrl.SetLabel(str(self.item_info['stop_coflow']))
 
         elif self.item_type == 'exposure':
             name = self.item_info['filename']

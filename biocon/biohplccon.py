@@ -5663,22 +5663,50 @@ class HPLCPanel(utils.DevicePanel):
 
     def get_default_sample_settings(self):
 
+        try:
+            flow_path = int(self._flow_path)
+        except Exception:
+            flow_path = 1
+
+        if flow_path == 1:
+            flow_rate = self._pump1_flow
+            flow_accel = self._pump1_flow_accel
+            pressure_lim = self._pump1_pressure_lim
+        else:
+            flow_rate = self._pump2_flow
+            flow_accel = self._pump2_flow_accel
+            pressure_lim = self._pump2_pressure_lim
+
+        try:
+            flow_rate = float(flow_rate)
+        except Exception:
+            flow_rate = self.settings['flow_rate']
+
+        try:
+            flow_accel = float(flow_accel)
+        except Exception:
+            flow_accel = self.settings['flow_accel']
+
+        try:
+            pressure_lim = float(pressure_lim)
+        except Exception:
+            pressure_lim = self.settings['sample_pressure_lim']
 
         default_sample_settings = {
             'acq_method'    : self.settings['acq_method'],
             'sample_loc'    : self.settings['sample_loc'],
             'inj_vol'       : self.settings['inj_vol'],
-            'flow_rate'     : self.settings['flow_rate'],
-            'flow_accel'    : self.settings['flow_accel'],
+            'flow_rate'     : flow_rate,
+            'flow_accel'    : flow_accel,
             'elution_vol'   : self.settings['elution_vol'],
-            'pressure_lim'  : self.settings['sample_pressure_lim'],
+            'pressure_lim'  : pressure_lim,
             'result_path'   : self.settings['result_path'],
             'sp_method'     : self.settings['sp_method'],
             'wait_for_flow_ramp'    : self.settings['wait_for_flow_ramp'],
             'settle_time'   : self.settings['settle_time'],
             'all_acq_methods'       : self._methods,
             'all_sample_methods'    : self._sp_methods,
-            'flow_path'     : int(self._flow_path),
+            'flow_path'     : flow_path,
             }
 
         default_method = default_sample_settings['acq_method']
@@ -6581,9 +6609,18 @@ class HPLCPanel(utils.DevicePanel):
 
         elif cmd_name == 'switch_buffer_bottle':
             flow_path = cmd_kwargs.pop('flow_path')
+            buffer_position = cmd_kwargs['buffer_position']
             success = self._validate_and_buffer_bottle_switch(flow_path,
                 cmd_kwargs, False)
-            state = 'equil'
+
+            if int(flow_path) == 1:
+                cur_buffer_pos = self._buffer1_valve
+            elif int(flow_path) == 2:
+                cur_buffer_pos = self._buffer2_valve
+            if str(buffer_position) == str(cur_buffer_pos):
+                state = 'idle'
+            else:
+                state = 'equil'
 
         elif cmd_name == 'equilibrate':
             flow_path = cmd_kwargs.pop('flow_path')

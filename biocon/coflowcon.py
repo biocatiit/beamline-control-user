@@ -1682,6 +1682,8 @@ class CoflowPanel(wx.Panel):
             if self.coflow_control.timeout_event.is_set():
                 self.stop_get_fr_event.set()
 
+                logger.error('Lost connection to the coflow control server.')
+
                 msg = ('Lost connection to the coflow control server. '
                     'Contact your beamline scientist.')
 
@@ -1914,7 +1916,7 @@ class CoflowPanel(wx.Panel):
         if self.coflow_control.coflow_on or self.auto_flow.GetValue():
             metadata['Coflow on:'] = True
             metadata['LC flow rate [{}]:'.format(self.settings['flow_units'])] = self.coflow_control.lc_flow_rate
-            metadata['Sample cell temperature [T]:'] = self.cell_temp.GetValue()
+            metadata['Sample cell temperature [C]:'] = self.cell_temp.GetValue()
             metadata['Outlet flow rate [{}]:'.format(self.settings['flow_units'])] = self.coflow_control.outlet_setpoint
             metadata['Sheath ratio:'] = self.settings['sheath_ratio']
             metadata['Sheath excess ratio:'] = self.settings['sheath_excess']

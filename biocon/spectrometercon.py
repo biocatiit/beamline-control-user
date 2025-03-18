@@ -3352,7 +3352,7 @@ class UVPanel(utils.DevicePanel):
                 data_dir = os.path.join(data_dir, self.settings['save_subdir'])
 
                 if not os.path.exists(data_dir):
-                    os.mkdir(data_dir)
+                    os.makedirs(data_dir)
 
                 data_dir = data_dir.replace(self.settings['remote_dir_prefix']['local'],
                         self.settings['remote_dir_prefix']['remote'])
@@ -3649,6 +3649,37 @@ class UVPanel(utils.DevicePanel):
 
                 if num_trig > 1:
                     prefix = '{}_{:04}'.format(prefix, trig)
+
+                # Save UV data in the SAXS folder
+                if exp_panel.pipeline_ctrl is not None:
+                    if 'Experiment type:' in exp_panel.current_metadata:
+                        md_exp_type =  exp_panel.current_metadata['Experiment type:']
+
+                        if md_exp_type == 'Batch mode SAXS':
+                            if ('Needs Separate Buffer Measurement:' in exp_panel.current_metadata
+                                and not exp_panel.current_metadata['Needs Separate Buffer Measurement:']):
+                                # batch mode experiments where the running buffer is
+                                # good for subtraction can be treated like SEC experiments
+                                # in the pipeline
+                                exp_type = 'SEC'
+
+                            else:
+                                exp_type = 'Batch'
+
+                        elif (md_exp_type == 'SEC-SAXS' or md_exp_type == 'SEC-MALS-SAXS'
+                            or md_exp_type == 'AF4-MALS-SAXS'):
+                            exp_type = 'SEC'
+
+                        elif md_exp_type == 'TR-SAXS':
+                            exp_type = 'TR'
+
+                        else:
+                            exp_type = 'Other'
+
+                        if exp_type is not None:
+                            data_dir = data_dir.replace(
+                                exp_panel.pipeline_ctrl.settings['local_basedir'],
+                                exp_panel.pipeline_ctrl.settings['output_basedir'], 1)
 
                 self._set_autosave_parameters(prefix, data_dir)
                 valid = self._collect_series(num_frames, int_time, scan_avgs, exp_period, exp_time)
@@ -4283,7 +4314,7 @@ default_spectrometer_settings = {
         'auto_dark_t'           : 60*60, #in s
         'dark_avgs'             : 3,
         'ref_avgs'              : 2,
-        'history_t'             : 60*60*24, #in s
+        'history_t'             : 60*60, #in s
         'save_subdir'           : 'UV',
         'save_type'             : 'Absorbance',
         'series_ref_at_start'   : True,
