@@ -4314,7 +4314,7 @@ default_spectrometer_settings = {
         'auto_dark_t'           : 60*60, #in s
         'dark_avgs'             : 3,
         'ref_avgs'              : 2,
-        'history_t'             : 60*60*24, #in s
+        'history_t'             : 60*60, #in s
         'save_subdir'           : 'UV',
         'save_type'             : 'Absorbance',
         'series_ref_at_start'   : True,
