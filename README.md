@@ -46,7 +46,7 @@ the MX control system to talk to the devices. It scans two motors, then creates 
 
 ### BioCON
 
-wxpython, pyserial, numpy, six, zaber.serial, pyzmq, matplotlib, future, Mp
+wxpython, pyserial, numpy, pyusb, pyepics, six, zaber.serial, pyzmq, matplotlib, future, Mp
 
 Elveflow SDK: https://www.elveflow.com/microfluidic-flow-control-products/flow-control-system/elveflow-software/
 Unpack and install to c:\Users\biocat\Elvefow_SDK_Vx_xx_xx
