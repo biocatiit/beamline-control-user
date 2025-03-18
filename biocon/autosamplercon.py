@@ -80,6 +80,8 @@ class WellPlate(object):
         if isinstance(row, string_types):
             row = ord(row.lower()) - 96
 
+        column = int(column)
+
         if row > self.num_rows or column > self.num_columns or row < 1 or column < 1:
             raise ValueError('Invalid row or column')
 
@@ -87,7 +89,7 @@ class WellPlate(object):
         row = int(row)-1
 
         return np.array([column*(self.col_step), row*(self.row_step),
-            (self.height+column*self.x_slope+row*self.y_slope)], dtype=np.float_)
+            (self.height+column*self.x_slope+row*self.y_slope)], dtype=np.float64)
 
     def set_well_volume(self, volume, row, column):
         """
@@ -297,7 +299,8 @@ class Autosampler(object):
         move_off = -1*direction*step
 
         while on_lim and not abort:
-            abort = self.move_motors_relative(move_off, motor_name)
+            cont = self.move_motors_relative(move_off, motor_name)
+            abort = not cont
 
             if direction == 1:
                 on_lim = motor.on_high_limit()
@@ -305,6 +308,8 @@ class Autosampler(object):
                 on_lim = motor.on_low_limit()
 
         if not abort:
+            logger.info('Redefining motor %s position %s to %s', motor_name,
+                motor.position, pos)
             motor.position = pos
 
         self._active_count -= 1
@@ -323,7 +328,7 @@ class Autosampler(object):
                 plate_y_pos = position[1]
                 needle_y_pos = position[2]
 
-                coflow_y_pos = self.coflow_y_motor.get_position()
+                coflow_y_pos = self.coflow_y_motor.position
                 offset = coflow_y_pos - self.coflow_y_ref
                 needle_y_pos += offset
 
@@ -358,7 +363,7 @@ class Autosampler(object):
                         break
 
             elif motor == 'needle_y':
-                coflow_y_pos = self.coflow_y_motor.get_position()
+                coflow_y_pos = self.coflow_y_motor.position
                 offset = coflow_y_pos - self.coflow_y_ref
                 position += offset
 
@@ -508,7 +513,7 @@ class Autosampler(object):
         downstream. X: to inboard limit, positive is outboard.
         """
 
-        self.base_position = np.array([plate_x, plate_z, needle_y], dtype=np.float_)
+        self.base_position = np.array([plate_x, plate_z, needle_y], dtype=np.float64)
 
         self.set_clean_position()
 
@@ -522,7 +527,7 @@ class Autosampler(object):
         clean_z = self.base_position[1] + self.clean_z_off
         clean_y = self.base_position[2] + self.clean_y_off
 
-        self.clean_position = np.array([clean_x, clean_z, clean_y], dtype=np.float_)
+        self.clean_position = np.array([clean_x, clean_z, clean_y], dtype=np.float64)
 
     def set_needle_out_position(self):
         self.needle_out_position = (self.base_position[2] + self.well_plate.plate_height
@@ -925,6 +930,8 @@ class Autosampler(object):
                 'uL/min', 'sample')
             success = self.dispense(self.settings['inject_connect_vol'],
                 'sample', units='uL')
+        else:
+            success = True
 
         if success:
             success = self.move_needle_in()
@@ -1253,7 +1260,7 @@ class ASCommThread(utils.CommManager):
         logger.debug("%s moved plate to change plate position", name)
 
     def _move_plate_load(self, name, row, col, **kwargs):
-        logger.debug("%s moving plate to well {}{} load position", name,
+        logger.debug("%s moving plate to well %s%s load position", name,
             row, col)
 
         comm_name = kwargs.pop('comm_name', None)
@@ -1264,11 +1271,11 @@ class ASCommThread(utils.CommManager):
 
         self._return_value((name, cmd, success), comm_name)
 
-        logger.debug("%s moved plate to well {}{} load position", name,
+        logger.debug("%s moved plate to well %s%s load position", name,
             row, col)
 
     def _home_motor(self, name, motor_name, **kwargs):
-        logger.info("%s homing motor {}", name, motor_name)
+        logger.info("%s homing motor %s", name, motor_name)
 
         comm_name = kwargs.pop('comm_name', None)
         cmd = kwargs.pop('cmd', None)
@@ -1278,7 +1285,7 @@ class ASCommThread(utils.CommManager):
 
         self._return_value((name, cmd, success), comm_name)
 
-        logger.debug("%s homed motor {}", name, motor_name)
+        logger.debug("%s homed motor %s", name, motor_name)
 
     def _set_valve_position(self, name, val, **kwargs):
         logger.info("Setting %s valve position to %s", name, val)
@@ -1873,7 +1880,7 @@ class AutosamplerPanel(utils.DevicePanel):
     def _on_change_plate(self, evt):
         self._send_cmd(['move_plate_change', [self.name,], {}], False)
 
-        msg = ("Plate holder is moving to the plate change position. "
+        msg = ("Plate holder is in the plate change position. "
             "Once you have changed the plate press Ok to continue.")
         dlg = wx.MessageDialog(None, msg, "Change plate",
             wx.OK|wx.ICON_INFORMATION)
@@ -2246,9 +2253,11 @@ class StaffControlsFrame(wx.Frame):
 
         self._home_needle_btn = wx.Button(motor_box, label='Home Needle Y')
         self._home_plate_x_btn = wx.Button(motor_box, label='Home Plate X')
-        self._home_plate_z_btn = wx.Button(motor_box, label='Home Plate z')
+        self._home_plate_z_btn = wx.Button(motor_box, label='Home Plate Z')
 
         self._home_needle_btn.Bind(wx.EVT_BUTTON, self._on_home_btn)
+        self._home_plate_x_btn.Bind(wx.EVT_BUTTON, self._on_home_btn)
+        self._home_plate_z_btn.Bind(wx.EVT_BUTTON, self._on_home_btn)
 
         home_sizer = wx.BoxSizer(wx.HORIZONTAL)
         home_sizer.Add(self._home_needle_btn, flag=wx.RIGHT, border=self._FromDIP(5))
@@ -2407,7 +2416,7 @@ class AutosamplerFrame(utils.DeviceFrame):
 #Settings
 default_autosampler_settings = {
     'device_init'           : [{'name': 'Autosampler', 'args': [], 'kwargs': {
-        'needle_motor'          : {'name': 'needle_y', 'args': ['18ID_DMC_E03:14'],
+        'needle_motor'          : {'name': 'needle_y', 'args': ['18ID_DMC_E02:14'],
                                     'kwargs': {}},
         'plate_x_motor'         : {'name': 'plate_x', 'args': ['18ID_DMC_E05:33'],
                                         'kwargs': {}},
@@ -2416,24 +2425,24 @@ default_autosampler_settings = {
         'coflow_y_motor'        : {'name': 'coflow_y', 'args': ['18ID_DMC_E03:23'],
                                         'kwargs': {}},
         'needle_valve'          : {'name': 'Needle',
-                                        'args':['Cheminert', 'COM11'],
+                                        'args':['Cheminert', 'COM7'],
                                         'kwargs': {'positions' : 6}},
-        'sample_pump'           : {'name': 'sample', 'args': ['Hamilton PSD6', 'COM7'],
+        'sample_pump'           : {'name': 'sample', 'args': ['Hamilton PSD6', 'COM3'],
                                     'kwargs': {'syringe_id': '0.1 mL, Hamilton Glass',
                                     'pump_address': '1', 'dual_syringe': 'False',
                                     'diameter': 1.46, 'max_volume': 0.1,
                                     'max_rate': 1, 'comm_lock': threading.RLock(),},
                                     'ctrl_args': {'flow_rate' : 100,
                                     'refill_rate' : 100, 'units': 'uL/min'}},
-        'clean1_pump'           : {'name': 'water', 'args': ['KPHM100', 'COM10'],
+        'clean1_pump'           : {'name': 'water', 'args': ['KPHM100', 'COM5'],
                                     'kwargs': {'flow_cal': '319.2',
                                     'comm_lock': threading.RLock()},
                                     'ctrl_args': {'flow_rate': 1}},
-        'clean2_pump'           : {'name': 'ethanol', 'args': ['KPHM100', 'COM8'],
+        'clean2_pump'           : {'name': 'ethanol', 'args': ['KPHM100', 'COM4'],
                                     'kwargs': {'flow_cal': '319.2',
                                     'comm_lock': threading.RLock()},
                                     'ctrl_args': {'flow_rate': 1}},
-        'clean3_pump'           : {'name': 'hellmanex', 'args': ['KPHM100', 'COM9'],
+        'clean3_pump'           : {'name': 'hellmanex', 'args': ['KPHM100', 'COM6'],
                                     'kwargs': {'flow_cal': '319.2',
                                     'comm_lock': threading.RLock()},
                                     'ctrl_args': {'flow_rate': 1}},
@@ -2452,13 +2461,13 @@ default_autosampler_settings = {
     # 'motor_acceleration'    : {'x': 500, 'y': 500, 'z': 500},
     'home_settings'         : {'plate_x': {'dir': -1, 'step': 0.1, 'pos': 0},
                                 'plate_z': {'dir': 1, 'step': 0.1, 'pos': 0},
-                                'needle_y': {'dir': -1, 'step': 0.1, 'pos': 0}}, #Direction 1/-1 for positive/negative. step is step size off limit, pos is what to set the home position as.
-    'base_position'         : {'plate_x': 270.9, 'plate_z': -82.1, 'needle_y': 102.685}, # A1 well position, needle height at chiller plate top
-    'clean_offsets'         : {'plate_x': 96, 'plate_z': -17, 'needle_y': 0.7}, # Relative to base position
+                                'needle_y': {'dir': -1, 'step': 0.1, 'pos': -1}}, #Direction 1/-1 for positive/negative. step is step size off limit, pos is what to set the home position as.
+    'base_position'         : {'plate_x': 270.5, 'plate_z': -77.3, 'needle_y': 113.25}, # A1 well position, needle height at chiller plate top
+    'clean_offsets'         : {'plate_x': 98, 'plate_z': -21.5, 'needle_y': -3}, # Relative to base position
     'needle_out_offset'     : 5, # mm
     'needle_in_position'    : 0,
-    'plate_out_position'    : {'plate_x': 241.4, 'plate_z': -82.1},
-    'plate_load_position'   : {'plate_x': 0, 'plate_z': -82.1},
+    'plate_out_position'    : {'plate_x': 241.4, 'plate_z': -77.3},
+    'plate_load_position'   : {'plate_x': 0, 'plate_z': -77.3},
     'coflow_y_ref_position' : 0, # Position for coflow y motor when base position was set
     'plate_type'            : 'Thermo-Fast 96 well PCR',
     # 'plate_type'            : 'Abgene 96 well deepwell storage',
