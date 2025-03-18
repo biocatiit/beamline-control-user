@@ -6609,9 +6609,18 @@ class HPLCPanel(utils.DevicePanel):
 
         elif cmd_name == 'switch_buffer_bottle':
             flow_path = cmd_kwargs.pop('flow_path')
+            buffer_position = cmd_kwargs['buffer_position']
             success = self._validate_and_buffer_bottle_switch(flow_path,
                 cmd_kwargs, False)
-            state = 'equil'
+
+            if int(flow_path) == 1:
+                cur_buffer_pos = self._buffer1_valve
+            elif int(flow_path) == 2:
+                cur_buffer_pos = self._buffer2_valve
+            if str(buffer_position) == str(cur_buffer_pos):
+                state = 'idle'
+            else:
+                state = 'equil'
 
         elif cmd_name == 'equilibrate':
             flow_path = cmd_kwargs.pop('flow_path')

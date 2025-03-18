@@ -4141,19 +4141,26 @@ class ExpPanel(wx.Panel):
 
             sample = cmd_kwargs['sample_name']
             buf = cmd_kwargs['buf']
-            temperature = cmd_kwargs['temp']
+
             vol = cmd_kwargs['inj_vol']
             conc = cmd_kwargs['conc']
             notes = cmd_kwargs['notes']
+
+            try:
+                temperature = cmd_kwargs['temp']
+            except Exception:
+                temperature = None
 
             metadata = {
                 'Experiment type:'      : exp_type,
                 'Sample:'               : sample,
                 'Buffer:'               : buf,
-                'Temperature [C]:'      : temperature,
                 'Loaded volume [uL]:'   : vol,
                 'Concentration [mg/ml]:': conc,
                 }
+
+            if temperature is not None:
+                metadata['Temperature [C]:'] = temperature
 
             if (exp_type == 'SEC-SAXS' or exp_type == 'SEC-MALS-SAXS' or
                 exp_type == 'IEC-SAXS'):

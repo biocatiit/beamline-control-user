@@ -1682,6 +1682,8 @@ class CoflowPanel(wx.Panel):
             if self.coflow_control.timeout_event.is_set():
                 self.stop_get_fr_event.set()
 
+                logger.error('Lost connection to the coflow control server.')
+
                 msg = ('Lost connection to the coflow control server. '
                     'Contact your beamline scientist.')
 

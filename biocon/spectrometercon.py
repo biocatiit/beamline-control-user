@@ -3352,7 +3352,7 @@ class UVPanel(utils.DevicePanel):
                 data_dir = os.path.join(data_dir, self.settings['save_subdir'])
 
                 if not os.path.exists(data_dir):
-                    os.mkdir(data_dir)
+                    os.makedirs(data_dir)
 
                 data_dir = data_dir.replace(self.settings['remote_dir_prefix']['local'],
                         self.settings['remote_dir_prefix']['remote'])
