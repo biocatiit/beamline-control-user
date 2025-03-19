@@ -2212,6 +2212,7 @@ class AgilentHPLCStandard(AgilentHPLC):
                         else:
                             break
 
+                time.sleep(2) # Try to avoid issues with getting status while loading a sample
                 self._submitting_sample = False
                 self._monitor_submit_evt.clear()
 
@@ -3194,6 +3195,11 @@ class HPLCCommThread(utils.CommManager):
 
         device = self._connected_devices[name]
 
+        connected = device.get_connected()
+
+        if not connected:
+            return
+
         status = device.get_instrument_status()
 
         # if status == 'PreRun' or status == 'Injecting' or status == 'PostRun':
@@ -3265,6 +3271,11 @@ class HPLCCommThread(utils.CommManager):
 
         device = self._connected_devices[name]
 
+        connected = device.get_connected()
+
+        if not connected:
+            return
+
         status = device.get_instrument_status()
         sample_submission = device.get_submitting_sample_status()
 
@@ -3320,6 +3331,11 @@ class HPLCCommThread(utils.CommManager):
 
         comm_name = kwargs.pop('comm_name', None)
         cmd = kwargs.pop('cmd', None)
+
+        connected = device.get_connected()
+
+        if not connected:
+            return
 
         device = self._connected_devices[name]
 

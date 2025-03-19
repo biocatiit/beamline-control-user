@@ -820,8 +820,8 @@ if __name__ == '__main__':
 
     # # TR-SAXS laminar flow
     setup_devices = [
-    # {'name': 'Injection', 'args': ['Rheodyne', 'COM6'],
-        #     'kwargs': {'positions' : 2}},
+    {'name': 'Injection', 'args': ['Rheodyne', 'COM6'],
+            'kwargs': {'positions' : 2}},
         {'name': 'Buffer 1', 'args': ['Rheodyne', 'COM10'],
             'kwargs': {'positions' : 6}},
         {'name': 'Buffer 2', 'args': ['Rheodyne', 'COM4'],
@@ -870,6 +870,12 @@ if __name__ == '__main__':
     #     {'name': 'Needle', 'args': ['Cheminert', 'COM11'],
     #         'kwargs': {'positions': 10}},
     #     ]
+
+    # # MALS switching
+    setup_devices = [
+        {'name': 'MALS', 'args': ['Cheminert', 'COM8'],
+            'kwargs': {'positions': 2}},
+        ]
 
     # Local
     com_thread = ValveCommThread('ValveComm')
