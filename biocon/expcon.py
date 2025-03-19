@@ -2732,9 +2732,10 @@ class ExpPanel(wx.Panel):
         logger.debug('Initializing ExpPanel')
 
         self.settings = settings
-        self._exp_status = ''
+        self._exp_status = 'Ready'
         self._time_remaining = 0
         self._run_number = '_{:03d}'.format(self.settings['run_num'])
+        self._preparing_exposure = False
 
         self.exp_cmd_q = deque()
         self.exp_ret_q = deque()
@@ -2769,6 +2770,7 @@ class ExpPanel(wx.Panel):
         """Creates the layout for the panel."""
         self.data_dir = wx.TextCtrl(self, value=self.settings['data_dir'],
             style=wx.TE_READONLY)
+        self.data_dir.Bind(wx.EVT_RIGHT_DOWN, self._on_data_dir_right_click)
 
         file_open = wx.ArtProvider.GetBitmap(wx.ART_FOLDER_OPEN, wx.ART_BUTTON)
         self.change_dir_btn = wx.BitmapButton(self, bitmap=file_open,
@@ -3001,6 +3003,35 @@ class ExpPanel(wx.Panel):
 
         return
 
+    def _on_data_dir_right_click(self, evt):
+        wx.CallAfter(self._show_data_dir_menu)
+
+    def _show_data_dir_menu(self):
+
+        menu = wx.Menu()
+
+        menu.Append(1, 'Change base directory')
+
+        self.Bind(wx.EVT_MENU, self._on_popup_menu_choice)
+        self.PopupMenu(menu)
+
+        menu.Destroy()
+
+    def _on_popup_menu_choice(self, evt):
+        if evt.GetId() == 1:
+            with wx.DirDialog(self, "Select New Base Directory",
+                self.settings['base_data_dir']) as fd:
+
+                if fd.ShowModal() == wx.ID_CANCEL:
+                    return
+
+                pathname = fd.GetPath()
+
+                if os.path.exists(pathname):
+                    self.settings['base_data_dir'] = pathname
+                    self.data_dir.SetValue(pathname)
+
+
     def _on_change_exp_param(self, evt):
         if 'trsaxs_scan' in self.settings['components']:
             trsaxs_panel = wx.FindWindowByName('trsaxs_scan')
@@ -3012,7 +3043,9 @@ class ExpPanel(wx.Panel):
         else:
             exp_only = False
 
-        self.start_exp(exp_only)
+        if not self._preparing_exposure:
+            self._preparing_exposure = True
+            self.start_exp(exp_only)
 
     def _on_stop_exp(self, evt):
         self.stop_exp()
@@ -3025,6 +3058,7 @@ class ExpPanel(wx.Panel):
         warnings_valid = self._check_warnings(verbose)
 
         if not warnings_valid:
+            self._preparing_exposure = False
             return
 
         if exp_values is None:
@@ -3035,6 +3069,7 @@ class ExpPanel(wx.Panel):
         self.current_exposure_values = exp_values
 
         if not exp_valid:
+            self._preparing_exposure = False
             return
 
         metadata, metadata_valid = self._get_metadata(metadata_vals, verbose)
@@ -3042,11 +3077,13 @@ class ExpPanel(wx.Panel):
         if metadata_valid:
             exp_values['metadata'] = metadata
         else:
+            self._preparing_exposure = False
             return
 
         overwrite_valid = self._check_overwrite(exp_values, verbose)
 
         if not overwrite_valid:
+            self._preparing_exposure = False
             return
 
         if self.pipeline_ctrl is not None:
@@ -3056,6 +3093,7 @@ class ExpPanel(wx.Panel):
         comp_valid, comp_settings = self._check_components(exp_only, verbose)
 
         if not comp_valid:
+            self._preparing_exposure = False
             return
 
         cont = True
@@ -3071,6 +3109,7 @@ class ExpPanel(wx.Panel):
                 cont = False
 
         if not cont:
+            self._preparing_exposure = False
             return
 
         self._pipeline_start_exp()
@@ -3117,6 +3156,7 @@ class ExpPanel(wx.Panel):
         start_thread.daemon = True
         start_thread.start()
 
+        self._preparing_exposure = False
         return
 
     def stop_exp(self):
@@ -3777,7 +3817,10 @@ class ExpPanel(wx.Panel):
                 metadata[key] = value
 
                 if key.startswith('LC flow rate'):
-                    flow_rate = float(value)
+                    try:
+                        flow_rate = float(value)
+                    except TypeError:
+                        flow_rate = 0
 
         if 'trsaxs_scan' in self.settings['components']:
             trsaxs_panel = wx.FindWindowByName('trsaxs_scan')
@@ -4098,19 +4141,26 @@ class ExpPanel(wx.Panel):
 
             sample = cmd_kwargs['sample_name']
             buf = cmd_kwargs['buf']
-            temperature = cmd_kwargs['temp']
+
             vol = cmd_kwargs['inj_vol']
             conc = cmd_kwargs['conc']
             notes = cmd_kwargs['notes']
+
+            try:
+                temperature = cmd_kwargs['temp']
+            except Exception:
+                temperature = None
 
             metadata = {
                 'Experiment type:'      : exp_type,
                 'Sample:'               : sample,
                 'Buffer:'               : buf,
-                'Temperature [C]:'      : temperature,
                 'Loaded volume [uL]:'   : vol,
                 'Concentration [mg/ml]:': conc,
                 }
+
+            if temperature is not None:
+                metadata['Temperature [C]:'] = temperature
 
             if (exp_type == 'SEC-SAXS' or exp_type == 'SEC-MALS-SAXS' or
                 exp_type == 'IEC-SAXS'):

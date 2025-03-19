@@ -203,7 +203,8 @@ class BioFrame(wx.Frame):
             else:
                 num_paths = 1
             inst_settings['hplc'] = {'num_paths': num_paths,
-                'automator_callback': hplc_automator_callback}
+                'automator_callback': hplc_automator_callback,
+                'hplc_panel'    : hplc_panel,}
         if 'coflow' in self.settings['components']:
             coflow_panel = self.component_panels['coflow']
             coflow_automator_callback = coflow_panel.automator_callback
@@ -383,7 +384,7 @@ if __name__ == '__main__':
         'thresh': 0.04}, 'guard_vac' : {'check': True, 'thresh': 0.04},
         'sample_vac': {'check': True, 'thresh': 0.04}, 'sc_vac':
         {'check': True, 'thresh':0.04}}
-    exposure_settings['base_data_dir'] = '/nas_data/Eiger2x/2025_Run1/2025_01_15_Hopkins' #CHANGE ME and pipeline local_basedir
+    exposure_settings['base_data_dir'] = '/nas_data/Eiger2x/2025_Run1/2025_03_11_Hopkins/' #CHANGE ME and pipeline local_basedir
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']
 
 
@@ -402,8 +403,8 @@ if __name__ == '__main__':
         'remote_valve_port'         : '5558',
         'flow_units'                : 'mL/min',
         'sheath_pump'               : {'name': 'sheath', 'args': ['VICI M50', 'COM6'],
-                                        'kwargs': {'flow_cal': '627.72',
-                                        'backlash_cal': '9.814'},
+                                        'kwargs': {'flow_cal': '628.68',
+                                        'backlash_cal': '9.95'},
                                         'ctrl_args': {'flow_rate': 1}},
         # 'outlet_pump'               : {'name': 'outlet', 'args': ['VICI M50', 'COM4'],
         #                                 'kwargs': {'flow_cal': '628.68',
@@ -451,7 +452,7 @@ if __name__ == '__main__':
         'show_outlet_warning'       : True,
         'use_overflow_control'      : True,
         'buffer_change_fr'          : 1.19, #in ml/min
-        'buffer_change_vol'         : 12., #in ml
+        'buffer_change_vol'         : 11.1, #in ml
         'air_density_thresh'        : 700, #g/L
         'sheath_valve_water_pos'    : 10,
         'sheath_valve_hellmanex_pos': 8,
@@ -500,41 +501,41 @@ if __name__ == '__main__':
         'remote_valve_ip'       : '164.54.204.8',
         'remote_valve_port'     : '5558',
         'device_communication'  : 'remote',
-        'injection_valve'       : [{'name': 'Injection', 'args': ['Rheodyne', 'COM6'],  #Chaotic flow
-                                    'kwargs': {'positions' : 2}},],
-        'sample_valve'          : [],
-        'buffer1_valve'         : [],
-        'buffer2_valve'         : [],
-        # 'sample_pump'           : [{'name': 'Sample', 'args': ['SSI Next Gen', 'COM7'],
+        # 'injection_valve'       : [{'name': 'Injection', 'args': ['Rheodyne', 'COM6'],  #Chaotic flow
+        #                             'kwargs': {'positions' : 2}},],
+        # 'sample_valve'          : [],
+        # 'buffer1_valve'         : [],
+        # 'buffer2_valve'         : [],
+        # 'sample_pump'           : [{'name': 'Sample', 'args': ['SSI Next Gen', 'COM12'],
         #                             'kwargs': {'flow_rate_scale': 1.0204,
         #                             'flow_rate_offset': 15.346/1000,'scale_type': 'up'},
         #                             'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
         #                             'max_pressure': 1800, 'continuous': True}}],
-        # 'buffer1_pump'           : [{'name': 'Buffer 1', 'args': ['SSI Next Gen', 'COM15'],
+        # 'buffer1_pump'           : [{'name': 'Buffer 1', 'args': ['SSI Next Gen', 'COM14'],
         #                             'kwargs': {'flow_rate_scale': 1.0478,
         #                             'flow_rate_offset': -72.82/1000,'scale_type': 'up'},
         #                             'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
         #                             'max_pressure': 1800, 'continuous': True}}],
-        # 'buffer2_pump'          : [{'name': 'Buffer 2', 'args': ['SSI Next Gen', 'COM9'],
+        # 'buffer2_pump'          : [{'name': 'Buffer 2', 'args': ['SSI Next Gen', 'COM15'],
         #                             'kwargs': {'flow_rate_scale': 1.0179,
         #                             'flow_rate_offset': -20.842/10000,'scale_type': 'up'},
         #                             'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
         #                             'max_pressure': 1800, 'continuous': True}}],
-        # # 'sample_pump'           : [{'name': 'Sample', 'args': ['SSI Next Gen', 'COM7'],
-        # #                             'kwargs': {'flow_rate_scale': 1.01,
-        # #                             'flow_rate_offset': 15.346/1000,'scale_type': 'up'},
-        # #                             'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
-        # #                             'max_pressure': 1800, 'continuous': True}}],
-        # # 'buffer1_pump'           : [{'name': 'Buffer 1', 'args': ['SSI Next Gen', 'COM15'],
-        # #                             'kwargs': {'flow_rate_scale': 1.024,
-        # #                             'flow_rate_offset': -72.82/1000,'scale_type': 'up'},
-        # #                             'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
-        # #                             'max_pressure': 1800, 'continuous': True}}],
-        # # 'buffer2_pump'          : [{'name': 'Buffer 2', 'args': ['SSI Next Gen', 'COM9'],
-        # #                             'kwargs': {'flow_rate_scale': 1.009,
-        # #                             'flow_rate_offset': -20.842/10000,'scale_type': 'up'},
-        # #                             'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
-        # #                             'max_pressure': 1800, 'continuous': True}}],
+        # 'sample_pump'           : [{'name': 'Sample', 'args': ['SSI Next Gen', 'COM7'],
+        #                             'kwargs': {'flow_rate_scale': 1.01,
+        #                             'flow_rate_offset': 15.346/1000,'scale_type': 'up'},
+        #                             'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
+        #                             'max_pressure': 1800, 'continuous': True}}],
+        # 'buffer1_pump'           : [{'name': 'Buffer 1', 'args': ['SSI Next Gen', 'COM15'],
+        #                             'kwargs': {'flow_rate_scale': 1.024,
+        #                             'flow_rate_offset': -72.82/1000,'scale_type': 'up'},
+        #                             'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
+        #                             'max_pressure': 1800, 'continuous': True}}],
+        # 'buffer2_pump'          : [{'name': 'Buffer 2', 'args': ['SSI Next Gen', 'COM9'],
+        #                             'kwargs': {'flow_rate_scale': 1.009,
+        #                             'flow_rate_offset': -20.842/10000,'scale_type': 'up'},
+        #                             'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
+        #                             'max_pressure': 1800, 'continuous': True}}],
         # 'outlet_fm'             : {'name': 'outlet', 'args' : ['BFS', 'COM5'], 'kwargs': {}},
         # 'injection_valve_label' : 'Injection',
         # 'sample_valve_label'    : 'Sample',
@@ -567,7 +568,7 @@ if __name__ == '__main__':
                                     'pump_address': '00', 'dual_syringe': 'False'}, 'ctrl_args':
                                     {'flow_rate' : '0.009', 'refill_rate' : '1',
                                     'continuous': False}}],
-        'outlet_fm'             : {'name': 'outlet', 'args' : ['BFS', 'COM13'], 'kwargs': {}},
+        'outlet_fm'             : {'name': 'outlet', 'args' : ['BFS', 'COM14'], 'kwargs': {}},
         'injection_valve_label' : 'Injection',
         'sample_valve_label'    : 'Sample',
         'buffer1_valve_label'   : 'Buffer',
@@ -647,8 +648,8 @@ if __name__ == '__main__':
         'pressure_units'        : 'psi',
         'total_flow_rate'       : '0.149', # For laminar flow
         # 'total_flow_rate'       : '6', # For chaotic flow
-        'dilution_ratio'        : '10', # For chaotic flow
-        'max_dilution'          : 50, # For chaotic flow
+        # 'dilution_ratio'        : '10', # For chaotic flow
+        # 'max_dilution'          : 50, # For chaotic flow
         'max_flow'              : 2, # For laminar flow
         # 'max_flow'              : 8, # For chaotic flow
         'auto_set_valves'       : True,
@@ -723,7 +724,7 @@ if __name__ == '__main__':
                                     'trigger_pv_name' : '18ID:LJT4:2:Bo12',
                                     'out1_pv_name' : '18ID:E1608:Ao1',
                                     'out2_pv_name' : '18ID:E1608:Ao2',
-                                    'trigger_in_pv_name' : '18ID:E1608:Bi8'}}],
+                                    'trigger_in_pv_name' : '18ID:E1608:Bi8'}},],
         'max_int_t'             : 0.025, # in s
         'scan_avg'              : 1,
         'smoothing'             : 0,
@@ -755,8 +756,8 @@ if __name__ == '__main__':
         'com_thread'            : None,
         'remote_dir_prefix'     : {'local' : '/nas_data', 'remote' : 'Y:\\'},
         'inline_panel'          : True,
-        'plot_refresh_t'        : 1, #in s
-        'device_communication'      : 'remote',
+        'plot_refresh_t'        : 0.1, #in s
+        'device_communication'  : 'remote',
     }
 
 
@@ -774,14 +775,14 @@ if __name__ == '__main__':
     biocon_settings = {}
 
     components = OrderedDict([
-        # ('exposure', expcon.ExpPanel),
-        # ('coflow', coflowcon.CoflowPanel),
+        ('exposure', expcon.ExpPanel),
+        ('coflow', coflowcon.CoflowPanel),
         # ('trsaxs_scan', trcon.TRScanPanel),
         # ('trsaxs_flow', trcon.TRFlowPanel),
         # ('scan',    scancon.ScanPanel),
-        # ('metadata', metadata.ParamPanel),
-        # ('pipeline', pipeline_ctrl.PipelineControl),
-        # ('uv', spectrometercon.UVPanel),
+        ('metadata', metadata.ParamPanel),
+        ('pipeline', pipeline_ctrl.PipelineControl),
+        ('uv', spectrometercon.UVPanel),
         ('hplc', biohplccon.HPLCPanel),
         ('automator', autocon.AutoPanel)
         ])

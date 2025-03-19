@@ -4792,65 +4792,65 @@ if __name__ == '__main__':
         'remote_fm_port'        : '5557',
         'remote_valve_ip'       : '164.54.204.8',
         'remote_valve_port'     : '5558',
-        'device_communication'  : 'local',
-        # 'injection_valve'       : [{'name': 'Injection', 'args': ['Rheodyne', 'COM6'],  #Chaotic flow
-        #                             'kwargs': {'positions' : 2}},],
-        # 'sample_valve'          : [],
-        # 'buffer1_valve'         : [],
-        # 'buffer2_valve'         : [],
-        # 'sample_pump'           : [{'name': 'Sample', 'args': ['SSI Next Gen', 'COM7'],
-        #                             'kwargs': {'flow_rate_scale': 1.0204,
-        #                             'flow_rate_offset': 15.346/1000,'scale_type': 'up'},
-        #                             'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
-        #                             'max_pressure': 1800, 'continuous': True}}],
-        # 'buffer1_pump'           : [{'name': 'Buffer 1', 'args': ['SSI Next Gen', 'COM15'],
-        #                             'kwargs': {'flow_rate_scale': 1.0478,
-        #                             'flow_rate_offset': -72.82/1000,'scale_type': 'up'},
-        #                             'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
-        #                             'max_pressure': 1800, 'continuous': True}}],
-        # 'buffer2_pump'          : [{'name': 'Buffer 2', 'args': ['SSI Next Gen', 'COM9'],
-        #                             'kwargs': {'flow_rate_scale': 1.0179,
-        #                             'flow_rate_offset': -20.842/10000,'scale_type': 'up'},
-        #                             'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
-        #                             'max_pressure': 1800, 'continuous': True}}],
-        # 'outlet_fm'             : {'name': 'outlet', 'args' : ['BFS', 'COM5'], 'kwargs': {}},
-        # 'injection_valve_label' : 'Injection',
-        # 'sample_valve_label'    : 'Sample',
-        # 'buffer1_valve_label'   : 'Buffer 1',
-        # 'buffer2_valve_label'   : 'Buffer 2',
-        'injection_valve'       : [{'name': 'Injection', 'args': ['Rheodyne', 'COM6'], # Laminar flow
+        'device_communication'  : 'remote',
+        'injection_valve'       : [{'name': 'Injection', 'args': ['Rheodyne', 'COM6'],  #Chaotic flow
                                     'kwargs': {'positions' : 2}},],
-        'sample_valve'          : [{'name': 'Sample', 'args': ['Rheodyne', 'COM3'],
-                                    'kwargs': {'positions' : 6}},],
-        'buffer1_valve'         : [{'name': 'Buffer 1', 'args': ['Rheodyne', 'COM10'],
-                                    'kwargs': {'positions' : 6}},
-                                    {'name': 'Buffer 2', 'args': ['Rheodyne', 'COM4'],
-                                    'kwargs': {'positions' : 6}},],
-        'buffer2_valve'         : [{'name': 'Sheath 1', 'args': ['Rheodyne', 'COM21'],
-                                    'kwargs': {'positions' : 6}},
-                                    {'name': 'Sheath 2', 'args': ['Rheodyne', 'COM8'],
-                                    'kwargs': {'positions' : 6}},],
-        'buffer1_pump'           : [{'name': 'Buffer', 'args': ['Pico Plus', 'COM11'],
-                                    'kwargs': {'syringe_id': '3 mL, Medline P.C.',
-                                    'pump_address': '00', 'dual_syringe': 'False'},
-                                    'ctrl_args': {'flow_rate' : '0.068', 'refill_rate' : '3',
-                                    'continuous': False}},],
-        'buffer2_pump'          : [{'name': 'Sheath', 'args': ['Pico Plus', 'COM7'],
-                                    'kwargs': {'syringe_id': '1 mL, Medline P.C.',
-                                    'pump_address': '00', 'dual_syringe': 'False'}, 'ctrl_args':
-                                    {'flow_rate' : '0.002', 'refill_rate' : '1',
-                                    'continuous': False}},],
-        'sample_pump'           : [{'name': 'Sample', 'args': ['Pico Plus', 'COM9'],
-                                    'kwargs': {'syringe_id': '1 mL, Medline P.C.',
-                                    'pump_address': '00', 'dual_syringe': 'False'}, 'ctrl_args':
-                                    {'flow_rate' : '0.009', 'refill_rate' : '1',
-                                    'continuous': False}}],
-        'outlet_fm'             : {'name': 'outlet', 'args' : ['BFS', 'COM13'], 'kwargs': {}},
+        'sample_valve'          : [],
+        'buffer1_valve'         : [],
+        'buffer2_valve'         : [],
+        'sample_pump'           : [{'name': 'Sample', 'args': ['SSI Next Gen', 'COM12'],
+                                    'kwargs': {'flow_rate_scale': 1.0204,
+                                    'flow_rate_offset': 15.346/1000,'scale_type': 'up'},
+                                    'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
+                                    'max_pressure': 1800, 'continuous': True}}],
+        'buffer1_pump'           : [{'name': 'Buffer 1', 'args': ['SSI Next Gen', 'COM14'],
+                                    'kwargs': {'flow_rate_scale': 1.0478,
+                                    'flow_rate_offset': -72.82/1000,'scale_type': 'up'},
+                                    'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
+                                    'max_pressure': 1800, 'continuous': True}}],
+        'buffer2_pump'          : [{'name': 'Buffer 2', 'args': ['SSI Next Gen', 'COM15'],
+                                    'kwargs': {'flow_rate_scale': 1.0179,
+                                    'flow_rate_offset': -20.842/10000,'scale_type': 'up'},
+                                    'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
+                                    'max_pressure': 1800, 'continuous': True}}],
+        'outlet_fm'             : {'name': 'outlet', 'args' : ['BFS', 'COM5'], 'kwargs': {}},
         'injection_valve_label' : 'Injection',
         'sample_valve_label'    : 'Sample',
-        'buffer1_valve_label'   : 'Buffer',
-        'buffer2_valve_label'   : 'Sheath',
-        'device_communication'  : 'local',                                         # Simulated
+        'buffer1_valve_label'   : 'Buffer 1',
+        'buffer2_valve_label'   : 'Buffer 2',
+        # 'injection_valve'       : [{'name': 'Injection', 'args': ['Rheodyne', 'COM6'], # Laminar flow
+        #                             'kwargs': {'positions' : 2}},],
+        # 'sample_valve'          : [{'name': 'Sample', 'args': ['Rheodyne', 'COM3'],
+        #                             'kwargs': {'positions' : 6}},],
+        # 'buffer1_valve'         : [{'name': 'Buffer 1', 'args': ['Rheodyne', 'COM10'],
+        #                             'kwargs': {'positions' : 6}},
+        #                             {'name': 'Buffer 2', 'args': ['Rheodyne', 'COM4'],
+        #                             'kwargs': {'positions' : 6}},],
+        # 'buffer2_valve'         : [{'name': 'Sheath 1', 'args': ['Rheodyne', 'COM21'],
+        #                             'kwargs': {'positions' : 6}},
+        #                             {'name': 'Sheath 2', 'args': ['Rheodyne', 'COM8'],
+        #                             'kwargs': {'positions' : 6}},],
+        # 'buffer1_pump'           : [{'name': 'Buffer', 'args': ['Pico Plus', 'COM11'],
+        #                             'kwargs': {'syringe_id': '3 mL, Medline P.C.',
+        #                             'pump_address': '00', 'dual_syringe': 'False'},
+        #                             'ctrl_args': {'flow_rate' : '0.068', 'refill_rate' : '3',
+        #                             'continuous': False}},],
+        # 'buffer2_pump'          : [{'name': 'Sheath', 'args': ['Pico Plus', 'COM12'],
+        #                             'kwargs': {'syringe_id': '1 mL, Medline P.C.',
+        #                             'pump_address': '00', 'dual_syringe': 'False'}, 'ctrl_args':
+        #                             {'flow_rate' : '0.002', 'refill_rate' : '1',
+        #                             'continuous': False}},],
+        # 'sample_pump'           : [{'name': 'Sample', 'args': ['Pico Plus', 'COM14'],
+        #                             'kwargs': {'syringe_id': '1 mL, Medline P.C.',
+        #                             'pump_address': '00', 'dual_syringe': 'False'}, 'ctrl_args':
+        #                             {'flow_rate' : '0.009', 'refill_rate' : '1',
+        #                             'continuous': False}}],
+        # 'outlet_fm'             : {'name': 'outlet', 'args' : ['BFS', 'COM13'], 'kwargs': {}},
+        # 'injection_valve_label' : 'Injection',
+        # 'sample_valve_label'    : 'Sample',
+        # 'buffer1_valve_label'   : 'Buffer',
+        # 'buffer2_valve_label'   : 'Sheath',
+        # 'device_communication'  : 'remote',                                         # Simulated
         # 'injection_valve'       : [{'name': 'Injection', 'args': ['Soft', None],    # Simulated Chaotic w/syringe pump
         #                             'kwargs': {'positions' : 2}},],
         # 'sample_valve'          : [{'name': 'Sample', 'args': ['Soft', None],
@@ -4923,12 +4923,12 @@ if __name__ == '__main__':
         # 'buffer2_valve_label'   : 'Sheath',
         'flow_units'            : 'mL/min',
         'pressure_units'        : 'psi',
-        'total_flow_rate'       : '0.149', # For laminar flow
-        # 'total_flow_rate'       : '6', # For chaotic flow
+        # 'total_flow_rate'       : '0.149', # For laminar flow
+        'total_flow_rate'       : '6', # For chaotic flow
         'dilution_ratio'        : '10', # For chaotic flow
         'max_dilution'          : 50, # For chaotic flow
-        'max_flow'              : 2, # For laminar flow
-        # 'max_flow'              : 8, # For chaotic flow
+        # 'max_flow'              : 2, # For laminar flow
+        'max_flow'              : 8, # For chaotic flow
         'auto_set_valves'       : True,
         'valve_start_positions' : {'sample_valve': 2, 'buffer1_valve': 2,
                                     'buffer2_valve': 2, 'injection_valve': 2},
@@ -4943,8 +4943,8 @@ if __name__ == '__main__':
         'autoinject'            : 'After scan',
         'autoinject_scan'       : '5',
         'autoinject_valve_pos'  : 1,
-        #'mixer_type'            : 'chaotic', # laminar or chaotic
-        'mixer_type'            : 'laminar', # laminar or chaotic
+        'mixer_type'            : 'chaotic', # laminar or chaotic
+        # 'mixer_type'            : 'laminar', # laminar or chaotic
         'sample_ratio'          : '0.066', # For laminar flow
         'sheath_ratio'          : '0.032', # For laminar flow
         'simulated'             : False, # VERY IMPORTANT. MAKE SURE THIS IS FALSE FOR EXPERIMENTS

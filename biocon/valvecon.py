@@ -871,6 +871,12 @@ if __name__ == '__main__':
     #         'kwargs': {'positions': 10}},
     #     ]
 
+    # # MALS switching
+    setup_devices = [
+        {'name': 'MALS', 'args': ['Cheminert', 'COM8'],
+            'kwargs': {'positions': 2}},
+        ]
+
     # Local
     com_thread = ValveCommThread('ValveComm')
     com_thread.start()

@@ -285,6 +285,11 @@ class Automator(threading.Thread):
 
                             controls['status'] = status
 
+                        else:
+                            queue_name = copy.copy(name)
+                            for finish_callback in self._on_finish_cmd_callbacks:
+                                finish_callback(cmd_id, queue_name, state)
+
                 else:
                     status = cmd_kwargs
                     status['state'] = cmd_name
@@ -705,7 +710,7 @@ class SecSampleCommand(AutoCommand):
         self._add_automator_cmd(hplc_inst, 'inject', [], inj_settings)
         if cmd_info['stop_flow']:
             self._add_automator_cmd(hplc_inst, 'stop_flow', [],
-                {'flow_path': cmd_info['flow_path']})
+                {'flow_path': 0, 'use_active': True})
         #accounts for delayed update time between run queue and instrument status
         self._add_automator_cmd(hplc_inst, 'wait_time', [],
             {'condition': 'time', 't_wait': 1})
@@ -751,7 +756,7 @@ class EquilibrateCommand(AutoCommand):
         In fact, probably don't want to do coflow equil at all for a
         dual flow path, since other path might be running samples.
         """
-        # Not finisehd adding in coflow
+        # Not finished adding in coflow
         hplc_inst = cmd_info['inst']
 
         equil_settings = {
@@ -765,6 +770,16 @@ class EquilibrateCommand(AutoCommand):
             'equil_with_sample' : cmd_info['equil_with_sample'],
             'stop_after_equil'  : cmd_info['stop_after_equil'],
             'flow_path'     : cmd_info['flow_path'],
+            }
+
+        switch_buffer_bottle_settings = {
+            'buffer_position'   : cmd_info['buffer_position'],
+            'stop_flow'         : True,
+            'flow_accel'        : cmd_info['equil_accel'],
+            'restore_flow_after_switch' : False,
+            'switch_with_sample': cmd_info['equil_with_sample'],
+            'switch_with_activity': False,
+            'flow_path'         : cmd_info['flow_path'],
             }
 
         equil_coflow = cmd_info['coflow_equil']
@@ -791,6 +806,8 @@ class EquilibrateCommand(AutoCommand):
 
         self._add_automator_cmd(hplc_inst, start_wait_cmd, [],
                 {'condition' : 'status', 'inst_conds': start_conds })
+        self._add_automator_cmd(hplc_inst, 'switch_buffer_bottle', [],
+            switch_buffer_bottle_settings)
         self._add_automator_cmd(hplc_inst, 'equilibrate', [], equil_settings)
         self._add_automator_cmd(hplc_inst, finish_wait_cmd, [],
             {'condition' : 'status', 'inst_conds': finish_conds})
@@ -897,8 +914,65 @@ class SwitchPumpsCommand(AutoCommand):
                 self._add_automator_cmd('coflow', 'start', [],
                     {'flow_rate': cmd_info['coflow_rate']})
 
-            self._add_automator_cmd(cmd_name, finish_wait_cmd, [],
+            self._add_automator_cmd('coflow', finish_wait_cmd, [],
                 {'condition': 'status', 'inst_conds': finish_inst_conds})
+
+        self._post_initialize_cmd()
+
+class StopFlowCommand(AutoCommand):
+    """
+    A command for stopping flow on the HPLC and coflow
+    """
+    def __init__(self, *args, **kwargs):
+        AutoCommand.__init__(self, *args, **kwargs)
+
+    def _initialize_cmd(self, cmd_info):
+
+        hplc_inst = cmd_info['inst']
+
+        stop_flow1 = cmd_info['stop_flow1']
+        stop_flow2 = cmd_info['stop_flow2']
+        stop_coflow = cmd_info['stop_coflow']
+        num_paths = cmd_info['num_flow_paths']
+
+        if (stop_flow1 or stop_flow2) and stop_coflow:
+            coflow_wait_id = self.automator.get_wait_id()
+            coflow_wait_cmd = 'wait_sync_{}'.format(coflow_wait_id)
+            coflow_conds = [['coflow', [coflow_wait_cmd,]],]
+
+            if stop_flow1:
+                coflow_conds.append(['{}_pump1'.format(hplc_inst),
+                    [coflow_wait_cmd,]])
+
+            if stop_flow2:
+                coflow_conds.append(['{}_pump2'.format(hplc_inst),
+                    [coflow_wait_cmd,]])
+
+        if stop_flow1:
+            self._add_automator_cmd('{}_pump1'.format(hplc_inst), 'stop_flow',
+                [], {'flow_path': 1, 'flow_accel': cmd_info['flow_accel1'],
+                'use_active': False})
+
+        if stop_flow2:
+            self._add_automator_cmd('{}_pump2'.format(hplc_inst), 'stop_flow',
+                [], {'flow_path': 2, 'flow_accel': cmd_info['flow_accel2'],
+                'use_active': False})
+
+        if stop_coflow:
+            if stop_flow1:
+                self._add_automator_cmd('{}_pump1'.format(hplc_inst),
+                        coflow_wait_cmd, [], {'condition' : 'status',
+                        'inst_conds': coflow_conds })
+
+            if stop_flow2:
+                self._add_automator_cmd('{}_pump2'.format(hplc_inst),
+                        coflow_wait_cmd, [], {'condition' : 'status',
+                        'inst_conds': coflow_conds })
+
+            self._add_automator_cmd('coflow', coflow_wait_cmd, [],
+                {'condition' : 'status', 'inst_conds': coflow_conds })
+
+            self._add_automator_cmd('coflow', 'stop', [], {})
 
         self._post_initialize_cmd()
 
@@ -1066,7 +1140,7 @@ class AutoStatusPanel(wx.Panel):
 
             hplc_status_box = wx.StaticBox(ctrl_parent, label='HPLC')
 
-            hplc_stop_btn = wx.Button(hplc_status_box, label='Stop')
+            # hplc_stop_btn = wx.Button(hplc_status_box, label='Stop')
 
             self.hplc_flow_path = wx.StaticText(hplc_status_box, size=self._FromDIP((60,-1)),
                 style=wx.ST_NO_AUTORESIZE)
@@ -1113,7 +1187,8 @@ class AutoStatusPanel(wx.Panel):
 
             if num_paths == 2:
                 hplc_sub_status_sizer.AddSpacer(1)
-                hplc_sub_status_sizer.Add(hplc_stop_btn, flag=wx.ALIGN_CENTER_VERTICAL)
+                hplc_sub_status_sizer.AddSpacer(1)
+                # hplc_sub_status_sizer.Add(hplc_stop_btn, flag=wx.ALIGN_CENTER_VERTICAL)
                 hplc_sub_status_sizer.Add(wx.StaticText(hplc_status_box, label='Flow path:'),
                     flag=wx.ALIGN_CENTER_VERTICAL)
                 hplc_sub_status_sizer.Add(self.hplc_flow_path, flag=wx.ALIGN_CENTER_VERTICAL)
@@ -1137,14 +1212,16 @@ class AutoStatusPanel(wx.Panel):
             exp_status_box  = wx.StaticBox(ctrl_parent, label='Exposure')
 
             exp_stop_btn = wx.Button(exp_status_box, label='Stop Exposure')
+            exp_stop_btn.Bind(wx.EVT_BUTTON, self._on_stop_exp)
 
-            self.exp_status = wx.StaticText(exp_status_box, size=self._FromDIP((80,-1)),
+            self.exp_status = wx.StaticText(exp_status_box, size=self._FromDIP((130,-1)),
                 style=wx.ST_NO_AUTORESIZE)
             self.exp_runtime = wx.StaticText(exp_status_box, size=self._FromDIP((60,-1)),
                 style=wx.ST_NO_AUTORESIZE)
 
             if 'coflow' in self.settings['instruments']:
                 coflow_stop_btn = wx.Button(exp_status_box, label='Stop Coflow')
+                coflow_stop_btn.Bind(wx.EVT_BUTTON, self._on_stop_coflow)
 
                 self.coflow_status = wx.StaticText(exp_status_box, size=self._FromDIP((100,-1)),
                     style=wx.ST_NO_AUTORESIZE)
@@ -1259,6 +1336,14 @@ class AutoStatusPanel(wx.Panel):
                 self.coflow_status.SetLabel(status['status'])
                 self.coflow_fr.SetLabel(status['fr'])
 
+    def _on_stop_exp(self, evt):
+        exp_callback = self.settings['instruments']['exp']['automator_callback']
+        status, success = exp_callback('abort', [], {})
+
+    def _on_stop_coflow(self, evt):
+        coflow_callback = self.settings['instruments']['coflow']['automator_callback']
+        status, success = coflow_callback('stop', [], {})
+
 
 class AutoSettings(scrolled.ScrolledPanel):
     def __init__(self, auto_panel, *args, **kwargs):
@@ -1269,17 +1354,32 @@ class AutoSettings(scrolled.ScrolledPanel):
         self.auto_panel = auto_panel
         self._sec_saxs_settings = copy.copy(default_sec_saxs_settings)
         self._standalone_exp_settings = copy.copy(default_standalone_exp_settings)
+        self._equilibrate_settings = copy.copy(default_equilibrate_settings)
+        self._switch_pump_settings = copy.copy(default_switch_pump_settings)
+        self._stop_flow_settings = copy.copy(default_stop_flow_settings)
 
         self.ctrl_ids = {
             'sec_sample'    : {},
             'exposure'      : {},
+            'equilibrate'   : {},
+            'switch_pumps'  : {},
+            'stop_flow'     : {},
             }
 
         for key in self._sec_saxs_settings.keys():
-            self.ctrl_ids['sec_saxs'][key] = wx.NewIdRef()
+            self.ctrl_ids['sec_sample'][key] = wx.NewIdRef()
 
         for key in self._standalone_exp_settings.keys():
             self.ctrl_ids['exposure'][key] = wx.NewIdRef()
+
+        for key in self._equilibrate_settings.keys():
+            self.ctrl_ids['equilibrate'][key] = wx.NewIdRef()
+
+        for key in self._switch_pump_settings.keys():
+            self.ctrl_ids['switch_pumps'][key] = wx.NewIdRef()
+
+        for key in self._stop_flow_settings.keys():
+            self.ctrl_ids['stop_flow'][key] = wx.NewIdRef()
 
         self._create_layout()
         # self._init_values()
@@ -1323,37 +1423,96 @@ class AutoSettings(scrolled.ScrolledPanel):
         self.exp_panel = make_standalone_exp_panel(top_level, parent,
             self.ctrl_ids['exposure'], 'vert', read_only=True)
 
+        self.equilibrate_panel = make_equilibrate_info_panel(top_level, parent,
+            self.ctrl_ids['equilibrate'], 'vert', num_flow_paths, read_only=True)
+
+        self.switch_panel = make_switch_info_panel(top_level, parent,
+            self.ctrl_ids['switch_pumps'], 'vert', num_flow_paths, read_only=True)
+
+        self.stop_flow_panel = make_stop_flow_info_panel(top_level, parent,
+            self.ctrl_ids['stop_flow'], 'vert', num_flow_paths, read_only=True)
+
         self.top_sizer = wx.BoxSizer(wx.VERTICAL)
-        self.top_sizer.Add(self.sec_saxs_panel, flag=wx.EXPAND, proportion=1)
-        self.top_sizer.Add(self.exp_panel, flag=wx.EXPAND, proportion=1)
+        self.top_sizer.Add(self.sec_saxs_panel, flag=wx.ALL|wx.EXPAND, proportion=1,
+            border=self._FromDIP(5))
+        self.top_sizer.Add(self.exp_panel, flag=wx.ALL|wx.EXPAND, proportion=1,
+            border=self._FromDIP(5))
+        self.top_sizer.Add(self.equilibrate_panel, flag=wx.ALL|wx.EXPAND, proportion=1,
+            border=self._FromDIP(5))
+        self.top_sizer.Add(self.switch_panel, flag=wx.ALL|wx.EXPAND, proportion=1,
+            border=self._FromDIP(5))
+        self.top_sizer.Add(self.stop_flow_panel, flag=wx.ALL|wx.EXPAND, proportion=1,
+            border=self._FromDIP(5))
 
         self.top_sizer.Hide(self.sec_saxs_panel, recursive=True)
         self.top_sizer.Hide(self.exp_panel, recursive=True)
+        self.top_sizer.Hide(self.equilibrate_panel, recursive=True)
+        self.top_sizer.Hide(self.switch_panel, recursive=True)
+        self.top_sizer.Hide(self.stop_flow_panel, recursive=True)
 
         self.SetSizer(self.top_sizer)
 
     def on_item_selection(self, settings):
         item_type = settings['item_type']
-        for key, c_id in self.ctrl_ids[item_type].items():
-            default_val = settings[key]
-            ctrl = self.FindWindowById(c_id)
 
-            if ctrl is not None:
-                if isinstance(ctrl, wx.Choice):
-                    ctrl.SetStringSelection(str(default_val))
-                else:
-                    try:
-                        ctrl.SetValue(str(default_val))
-                    except TypeError:
-                        ctrl.SetValue(default_val)
+        if item_type in self.ctrl_ids:
+            for key, c_id in self.ctrl_ids[item_type].items():
+                default_val = settings[key]
+                ctrl = self.FindWindowById(c_id)
 
-        if item_type == 'sec_sample':
-            self.top_sizer.Show(self.sec_saxs_panel, recursive=True)
-            self.top_sizer.Hide(self.exp_panel, recursive=True)
+                if ctrl is not None:
+                    if isinstance(ctrl, wx.Choice):
+                        ctrl.SetStringSelection(str(default_val))
+                    else:
+                        try:
+                            ctrl.SetValue(str(default_val))
+                        except TypeError:
+                            ctrl.SetValue(default_val)
 
-        elif item_type == 'exposure':
+            if item_type == 'sec_sample':
+                self.top_sizer.Show(self.sec_saxs_panel, recursive=True)
+                self.top_sizer.Hide(self.exp_panel, recursive=True)
+                self.top_sizer.Hide(self.equilibrate_panel, recursive=True)
+                self.top_sizer.Hide(self.switch_panel, recursive=True)
+                self.top_sizer.Hide(self.stop_flow_panel, recursive=True)
+
+            elif item_type == 'exposure':
+                self.top_sizer.Hide(self.sec_saxs_panel, recursive=True)
+                self.top_sizer.Show(self.exp_panel, recursive=True)
+                self.top_sizer.Hide(self.equilibrate_panel, recursive=True)
+                self.top_sizer.Hide(self.switch_panel, recursive=True)
+                self.top_sizer.Hide(self.stop_flow_panel, recursive=True)
+
+            elif item_type == 'equilibrate':
+                self.top_sizer.Hide(self.sec_saxs_panel, recursive=True)
+                self.top_sizer.Hide(self.exp_panel, recursive=True)
+                self.top_sizer.Show(self.equilibrate_panel, recursive=True)
+                self.top_sizer.Hide(self.switch_panel, recursive=True)
+                self.top_sizer.Hide(self.stop_flow_panel, recursive=True)
+
+            elif item_type == 'switch_pumps':
+                self.top_sizer.Hide(self.sec_saxs_panel, recursive=True)
+                self.top_sizer.Hide(self.exp_panel, recursive=True)
+                self.top_sizer.Hide(self.equilibrate_panel, recursive=True)
+                self.top_sizer.Show(self.switch_panel, recursive=True)
+                self.top_sizer.Hide(self.stop_flow_panel, recursive=True)
+
+            elif item_type == 'stop_flow':
+                self.top_sizer.Hide(self.sec_saxs_panel, recursive=True)
+                self.top_sizer.Hide(self.exp_panel, recursive=True)
+                self.top_sizer.Hide(self.equilibrate_panel, recursive=True)
+                self.top_sizer.Hide(self.switch_panel, recursive=True)
+                self.top_sizer.Show(self.stop_flow_panel, recursive=True)
+
+            self.Layout()
+            self.Refresh()
+
+        else:
             self.top_sizer.Hide(self.sec_saxs_panel, recursive=True)
-            self.top_sizer.Show(self.exp_panel, recursive=True)
+            self.top_sizer.Hide(self.exp_panel, recursive=True)
+            self.top_sizer.Hide(self.equilibrate_panel, recursive=True)
+            self.top_sizer.Hide(self.switch_panel, recursive=True)
+            self.top_sizer.Hide(self.stop_flow_panel, recursive=True)
 
 default_sec_saxs_settings = {
     # General parameters
@@ -1364,7 +1523,6 @@ default_sec_saxs_settings = {
     'inst'          : '',
     'sample_name'   : '',
     'column'        : 'Superdex 200 10/300 Increase',
-    'temp'          : '20',
 
     # Injection parameters
     'acq_method'    : '',
@@ -1378,7 +1536,7 @@ default_sec_saxs_settings = {
     'sp_method'     : '',
     'wait_for_flow_ramp': True,
     'settle_time'   : 0.,
-    'flow_path'     : 1,
+    'flow_path'     : 0,
     'stop_flow'     : False,
 
     # Exposure parameters
@@ -1425,6 +1583,71 @@ default_standalone_exp_settings = {
     'num_trig'      : 0,
     #Not used, for completeness
     'struck_measurement_time' : 0.,
+    }
+
+
+default_equilibrate_settings = {
+    # General parameterss
+    'item_type' : 'equilibrate',
+    'buf'       : '',
+    'inst'      : '',
+
+    # HPLC equilibrate parameters
+    'equil_rate'        : 0.,
+    'equil_vol'         : 0.,
+    'equil_accel'       : 0.,
+    'purge'             : False,
+    'purge_rate'        : 0.,
+    'purge_volume'      : 0.,
+    'purge_accel'       : 0.,
+    'equil_with_sample' : False,
+    'stop_after_equil'  : True,
+    'flow_path'         : 1,
+    'buffer_position'   : 1,
+
+    # Coflow equilibrate parameters
+    'coflow_equil'      : True,
+    'coflow_buf_pos'    : 1,
+    'coflow_restart'    : True,
+    'coflow_rate'       : 0.,
+    }
+
+
+default_switch_pump_settings = {
+    'item_type' : 'switch_pumps',
+    'inst'      : '',
+
+    #Switch parameters
+    'purge_rate'    : 0.,
+    'purge_volume'  : 0.,
+    'purge_accel'   : 0.,
+    'restore_flow_after_switch' : True,
+    'switch_with_sample'    : False,
+    'stop_flow1'    : True,
+    'stop_flow2'    : True,
+    'purge_active'  : True,
+    'flow_path'     : 1,
+
+    #Coflow switch parameters
+    'coflow_equil'      : True,
+    'coflow_buf_pos'    : 1,
+    'coflow_restart'    : True,
+    'coflow_rate'       : 0.,
+    }
+
+default_stop_flow_settings = {
+    # General parameterss
+    'item_type' : 'stop_flow',
+    'inst'      : '',
+
+    # HPLC equilibrate parameters
+    'stop_flow1'    : True,
+    'flow_accel1'   : 0.,
+    'stop_flow2'    : True,
+    'flow_accel2'   : 0.,
+
+    # Coflow stop parameters
+    'stop_coflow'       : True,
     }
 
 
@@ -1496,7 +1719,6 @@ def make_sec_saxs_info_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
     metadata_settings = {
         'sample_name'   : ['Sample:', ctrl_ids['sample_name'], 'text'],
         'buf'           : ['Buffer:', ctrl_ids['buf'], 'text'],
-        'temp'          : ['Temperature [C]:', ctrl_ids['temp'], 'float'],
         'conc'          : ['Concentration [mg/ml]:', ctrl_ids['conc'], 'float'],
         'column'        : ['Column:', ctrl_ids['column'], 'choice', column_choices],
         }
@@ -1641,19 +1863,19 @@ def make_sec_saxs_info_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
 
     if cmd_sizer_dir == 'horiz':
         cmd_sizer=wx.BoxSizer(wx.HORIZONTAL)
-        cmd_sizer.Add(metadata_sizer, proportion=1, flag=wx.ALL|wx.EXPAND,
+        cmd_sizer.Add(metadata_sizer, proportion=1, flag=wx.RIGHT|wx.EXPAND,
             border=top_level._FromDIP(5))
-        cmd_sizer.Add(hplc_sizer, flag=wx.TOP|wx.RIGHT|wx.BOTTOM|wx.EXPAND,
+        cmd_sizer.Add(hplc_sizer, flag=wx.RIGHT|wx.EXPAND,
             border=top_level._FromDIP(5))
-        cmd_sizer.Add(exp_coflow_sizer, flag=wx.TOP|wx.RIGHT|wx.BOTTOM|wx.EXPAND,
+        cmd_sizer.Add(exp_coflow_sizer, flag=wx.EXPAND,
             border=top_level._FromDIP(5))
     else:
         cmd_sizer=wx.BoxSizer(wx.VERTICAL)
-        cmd_sizer.Add(metadata_sizer, flag=wx.ALL|wx.EXPAND,
+        cmd_sizer.Add(metadata_sizer, flag=wx.BOTTOM|wx.EXPAND,
             border=top_level._FromDIP(5))
-        cmd_sizer.Add(hplc_sizer, flag=wx.LEFT|wx.RIGHT|wx.BOTTOM|wx.EXPAND,
+        cmd_sizer.Add(hplc_sizer, flag=wx.BOTTOM|wx.EXPAND,
             border=top_level._FromDIP(5))
-        cmd_sizer.Add(exp_coflow_sizer, flag=wx.LEFT|wx.RIGHT|wx.BOTTOM|wx.EXPAND,
+        cmd_sizer.Add(exp_coflow_sizer, flag=wx.EXPAND,
             border=top_level._FromDIP(5))
 
     return cmd_sizer
@@ -1741,15 +1963,249 @@ def make_standalone_exp_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
 
     if cmd_sizer_dir == 'horiz':
         cmd_sizer=wx.BoxSizer(wx.HORIZONTAL)
-        cmd_sizer.Add(exp_sizer, flag=wx.TOP|wx.RIGHT|wx.BOTTOM|wx.EXPAND,
+        cmd_sizer.Add(exp_sizer, flag=wx.RIGHT|wx.EXPAND,
             border=top_level._FromDIP(5))
-        cmd_sizer.Add(metadata_sizer, proportion=1, flag=wx.ALL|wx.EXPAND,
+        cmd_sizer.Add(metadata_sizer, proportion=1, flag=wx.EXPAND,
             border=top_level._FromDIP(5))
     else:
         cmd_sizer=wx.BoxSizer(wx.VERTICAL)
-        cmd_sizer.Add(exp_sizer, flag=wx.ALL|wx.EXPAND,
+        cmd_sizer.Add(exp_sizer, flag=wx.BOTTOM|wx.EXPAND,
             border=top_level._FromDIP(5))
-        cmd_sizer.Add(metadata_sizer, flag=wx.ALL|wx.EXPAND,
+        cmd_sizer.Add(metadata_sizer, flag=wx.EXPAND,
+            border=top_level._FromDIP(5))
+
+    return cmd_sizer
+
+
+def make_equilibrate_info_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
+    num_flow_paths, read_only=False):
+    ################ HPLC #################
+    fp_choices = ['{}'.format(i+1) for i in range(int(num_flow_paths))]
+    buffer_choices = ['{}'.format(i) for i in range(1,11)]
+
+    equil_settings = {
+        'equil_rate'    : ['Equilibration rate [mL/min]:', ctrl_ids['equil_rate'], 'float'],
+        'equil_vol'     : ['Equilibration volume [mL]:', ctrl_ids['equil_vol'], 'float'],
+        'purge'         : ['Run purge', ctrl_ids['purge'], 'bool'],
+        'flow_path'     : ['Flow path:', ctrl_ids['flow_path'], 'choice', fp_choices],
+        'buffer_position': ['Buffer position:', ctrl_ids['buffer_position'],
+                            'choice', buffer_choices],
+        }
+
+    equil_adv_settings = {
+        'equil_accel'   : ['Equilibration acceleration [mL/min^2]:',
+                            ctrl_ids['equil_accel'], 'float'],
+        'purge_volume'  : ['Purge volume [mL]:', ctrl_ids['purge_volume'], 'float'],
+        'purge_rate'    : ['Purge rate [mL/min]:', ctrl_ids['purge_rate'], 'float'],
+        'purge_accel'   : ['Purge acceleration [mL/min^2]:',
+                            ctrl_ids['purge_accel'], 'float'],
+        'stop_after_equil': ['Stop flow after equilibration',
+                            ctrl_ids['stop_after_equil'], 'bool'],
+    }
+
+    equil_box = wx.StaticBox(parent, label='HPLC Settings')
+
+    equil_adv_pane = wx.CollapsiblePane(equil_box, label="Advanced Settings")
+    equil_adv_pane.Bind(wx.EVT_COLLAPSIBLEPANE_CHANGED, top_level.on_collapse)
+    equil_adv_win = equil_adv_pane.GetPane()
+
+    equil_sizer1 = create_info_sizer(equil_settings, top_level, equil_box,
+        read_only)
+    equil_sizer2 = create_info_sizer(equil_adv_settings, top_level, equil_adv_win,
+        read_only)
+
+    equil_adv_win.SetSizer(equil_sizer2)
+    equil_adv_pane.Collapse()
+
+    equil_sizer = wx.StaticBoxSizer(equil_box, wx.VERTICAL)
+    equil_sizer.Add(equil_sizer1, flag=wx.EXPAND|wx.ALL, border=top_level._FromDIP(5))
+    equil_sizer.Add(equil_adv_pane, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM,
+        border=top_level._FromDIP(5))
+
+
+    ################ Coflow #################
+    coflow_buffer_choices = ['{}'.format(i) for i in range(1,11)]
+    coflow_settings = {
+        'coflow_equil'  : ['Equilibrate coflow', ctrl_ids['coflow_equil'], 'bool'],
+        'coflow_buf_pos': ['Buffer position:', ctrl_ids['coflow_buf_pos'],
+                            'choice', coflow_buffer_choices],
+        }
+
+    coflow_adv_settings = {
+        'coflow_restart': ['Restart coflow after equilibration',
+                            ctrl_ids['coflow_restart'], 'bool'],
+        'coflow_rate'   : ['Restart flow rate [mL/min]:',
+                            ctrl_ids['coflow_rate'], 'float'],
+        }
+
+    coflow_box = wx.StaticBox(parent, label='Coflow Settings')
+
+    coflow_adv_pane = wx.CollapsiblePane(coflow_box, label="Advanced Settings")
+    coflow_adv_pane.Bind(wx.EVT_COLLAPSIBLEPANE_CHANGED, top_level.on_collapse)
+    coflow_adv_win = coflow_adv_pane.GetPane()
+
+    coflow_sizer1 = create_info_sizer(coflow_settings, top_level, coflow_box,
+        read_only)
+    coflow_sizer2 = create_info_sizer(coflow_adv_settings, top_level, coflow_adv_win,
+        read_only)
+
+    coflow_adv_win.SetSizer(coflow_sizer2)
+    coflow_adv_pane.Collapse()
+
+    coflow_sizer = wx.StaticBoxSizer(coflow_box, wx.VERTICAL)
+    coflow_sizer.Add(coflow_sizer1, flag=wx.ALL, border=top_level._FromDIP(5))
+    coflow_sizer.Add(coflow_adv_pane, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM,
+        border=top_level._FromDIP(5))
+
+    if cmd_sizer_dir == 'horiz':
+        cmd_sizer=wx.BoxSizer(wx.HORIZONTAL)
+        cmd_sizer.Add(equil_sizer, flag=wx.RIGHT|wx.EXPAND, border=top_level._FromDIP(5))
+        cmd_sizer.Add(coflow_sizer, flag=wx.EXPAND, border=top_level._FromDIP(5))
+    else:
+        cmd_sizer=wx.BoxSizer(wx.VERTICAL)
+        cmd_sizer.Add(equil_sizer, flag=wx.BOTTOM|wx.EXPAND, border=top_level._FromDIP(5))
+        cmd_sizer.Add(coflow_sizer, flag=wx.EXPAND, border=top_level._FromDIP(5))
+
+    return cmd_sizer
+
+def make_switch_info_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
+    num_flow_paths, read_only=False):
+    ################ HPLC #################
+    fp_choices = ['{}'.format(i+1) for i in range(int(num_flow_paths))]
+
+    switch_settings = {
+        'flow_path'     : ['Switch to flow path:', ctrl_ids['flow_path'],
+                            'choice', fp_choices],
+    }
+
+    switch_adv_settings = {
+        'restore_flow_after_switch' : ['Restore flow to current rate after switching',
+                                ctrl_ids['restore_flow_after_switch'], 'bool'],
+        'stop_flow1'     : ['Ramp pump 1 flow to 0 before switching',
+                                ctrl_ids['stop_flow1'], 'bool'],
+        'stop_flow2'     : ['Ramp pump 2 flow to 0 before switching',
+                            ctrl_ids['stop_flow2'], 'bool'],
+        'purge_active'   : ['Purge active flow path after switching',
+                            ctrl_ids['purge_active'], 'bool'],
+        'purge_rate'    : ['Purge rate [mL/min]:', ctrl_ids['purge_rate'], 'float'],
+        'purge_volume'  : ['Purge volume [mL]:', ctrl_ids['purge_volume'], 'float'],
+        'purge_accel'   : ['Purge acceleration [mL/min^2]:',
+                            ctrl_ids['purge_accel'], 'float'],
+    }
+
+    switch_box = wx.StaticBox(parent, label='HPLC Settings')
+
+    switch_adv_pane = wx.CollapsiblePane(switch_box, label="Advanced Settings")
+    switch_adv_pane.Bind(wx.EVT_COLLAPSIBLEPANE_CHANGED, top_level.on_collapse)
+    switch_adv_win = switch_adv_pane.GetPane()
+
+    switch_sizer1 = create_info_sizer(switch_settings, top_level, switch_box,
+        read_only)
+    switch_sizer2 = create_info_sizer(switch_adv_settings, top_level, switch_adv_win,
+        read_only)
+
+    switch_adv_win.SetSizer(switch_sizer2)
+    switch_adv_pane.Collapse()
+
+    switch_sizer = wx.StaticBoxSizer(switch_box, wx.VERTICAL)
+    switch_sizer.Add(switch_sizer1, flag=wx.EXPAND|wx.ALL, border=top_level._FromDIP(5))
+    switch_sizer.Add(switch_adv_pane, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM,
+        border=top_level._FromDIP(5))
+
+
+    ################ Coflow #################
+    coflow_buffer_choices = ['{}'.format(i) for i in range(1,11)]
+    coflow_settings = {
+        'coflow_buf_pos': ['Buffer position:', ctrl_ids['coflow_buf_pos'],
+                            'choice', coflow_buffer_choices],
+        'coflow_rate'   : ['Restart flow rate [mL/min]:',
+                            ctrl_ids['coflow_rate'], 'float'],
+        }
+
+    coflow_adv_settings = {
+        'coflow_equil'  : ['Equilibrate coflow', ctrl_ids['coflow_equil'], 'bool'],
+        'coflow_restart': ['Restart coflow after equilibration',
+                            ctrl_ids['coflow_restart'], 'bool'],
+        }
+
+    coflow_box = wx.StaticBox(parent, label='Coflow Settings')
+
+    coflow_adv_pane = wx.CollapsiblePane(coflow_box, label="Advanced Settings")
+    coflow_adv_pane.Bind(wx.EVT_COLLAPSIBLEPANE_CHANGED, top_level.on_collapse)
+    coflow_adv_win = coflow_adv_pane.GetPane()
+
+    coflow_sizer1 = create_info_sizer(coflow_settings, top_level, coflow_box,
+        read_only)
+    coflow_sizer2 = create_info_sizer(coflow_adv_settings, top_level, coflow_adv_win,
+        read_only)
+
+    coflow_adv_win.SetSizer(coflow_sizer2)
+    coflow_adv_pane.Collapse()
+
+    coflow_sizer = wx.StaticBoxSizer(coflow_box, wx.VERTICAL)
+    coflow_sizer.Add(coflow_sizer1, flag=wx.EXPAND|wx.ALL, border=top_level._FromDIP(5))
+    coflow_sizer.Add(coflow_adv_pane, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM,
+        border=top_level._FromDIP(5))
+
+    if cmd_sizer_dir == 'horiz':
+        cmd_sizer=wx.BoxSizer(wx.HORIZONTAL)
+        cmd_sizer.Add(switch_sizer, flag=wx.RIGHT|wx.EXPAND,
+            border=top_level._FromDIP(5))
+        cmd_sizer.Add(coflow_sizer, flag=wx.EXPAND,
+            border=top_level._FromDIP(5))
+    else:
+        cmd_sizer=wx.BoxSizer(wx.VERTICAL)
+        cmd_sizer.Add(switch_sizer, flag=wx.BOTTOM|wx.EXPAND,
+            border=top_level._FromDIP(5))
+        cmd_sizer.Add(coflow_sizer, flag=wx.EXPAND,
+            border=top_level._FromDIP(5))
+
+    return cmd_sizer
+
+def make_stop_flow_info_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
+    num_flow_paths, read_only=False):
+    ################ HPLC #################
+    fp_choices = ['{}'.format(i+1) for i in range(int(num_flow_paths))]
+
+    stop_settings = {
+        'stop_flow1'    : ['Stop pump 1 flow', ctrl_ids['stop_flow1'], 'bool'],
+        'stop_flow2'    : ['Stop pump 2 flow', ctrl_ids['stop_flow2'], 'bool'],
+        'stop_coflow'   : ['Stop coflow flow', ctrl_ids['stop_coflow'], 'bool'],
+    }
+
+    stop_adv_settings = {
+        'flow_accel1'   : ['Pump 1 acceleration [mL/min^2]:',
+                            ctrl_ids['flow_accel1'], 'float'],
+        'flow_accel2'   : ['Pump 2 acceleration [mL/min^2]:',
+                            ctrl_ids['flow_accel2'], 'float'],
+    }
+
+    stop_box = wx.StaticBox(parent, label='Flow Settings')
+
+    stop_adv_pane = wx.CollapsiblePane(stop_box, label="Advanced Settings")
+    stop_adv_pane.Bind(wx.EVT_COLLAPSIBLEPANE_CHANGED, top_level.on_collapse)
+    stop_adv_win = stop_adv_pane.GetPane()
+
+    stop_sizer1 = create_info_sizer(stop_settings, top_level, stop_box,
+        read_only)
+    stop_sizer2 = create_info_sizer(stop_adv_settings, top_level, stop_adv_win,
+        read_only)
+
+    stop_adv_win.SetSizer(stop_sizer2)
+    stop_adv_pane.Collapse()
+
+    stop_sizer = wx.StaticBoxSizer(stop_box, wx.VERTICAL)
+    stop_sizer.Add(stop_sizer1, flag=wx.EXPAND|wx.ALL, border=top_level._FromDIP(5))
+    stop_sizer.Add(stop_adv_pane, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM,
+        border=top_level._FromDIP(5))
+
+    if cmd_sizer_dir == 'horiz':
+        cmd_sizer=wx.BoxSizer(wx.HORIZONTAL)
+        cmd_sizer.Add(stop_sizer, flag=wx.RIGHT|wx.EXPAND,
+            border=top_level._FromDIP(5))
+    else:
+        cmd_sizer=wx.BoxSizer(wx.VERTICAL)
+        cmd_sizer.Add(stop_sizer, flag=wx.BOTTOM|wx.EXPAND,
             border=top_level._FromDIP(5))
 
     return cmd_sizer
@@ -1785,9 +2241,11 @@ class AutoListPanel(wx.Panel):
 
         self.top_sizer = wx.StaticBoxSizer(actions_box, wx.HORIZONTAL)
         self.top_sizer.Add(top_list_ctrl, proportion=5,
-            flag=wx.RIGHT|wx.EXPAND, border=self._FromDIP(5))
+            flag=wx.RIGHT|wx.TOP|wx.LEFT|wx.BOTTOM|wx.EXPAND,
+            border=self._FromDIP(5))
         self.top_sizer.Add(top_settings_ctrl, proportion=4,
-            flag=wx.EXPAND)
+            flag=wx.EXPAND|wx.TOP|wx.RIGHT|wx.BOTTOM,
+            border=self._FromDIP(5))
 
         self.SetSizer(self.top_sizer)
 
@@ -1828,6 +2286,9 @@ class AutoListPanel(wx.Panel):
 
         elif item_type == 'exposure':
             command = ExposureCommand(self.automator, item_info)
+
+        elif item_type == 'stop_flow':
+            command = StopFlowCommand(self.automator, item_info)
 
         return command
 
@@ -1901,7 +2362,7 @@ class AutoList(utils.ItemList):
                 'exp' in self.auto_panel.settings['instruments'] and
                 'coflow' in self.auto_panel.settings['instruments']):
                 actions.extend(['Run SEC-SAXS sample', 'Equilibrate column',
-                'Switch pumps'])
+                'Switch pumps', 'Stop flow'])
 
             actions.append('----Staff Methods----')
 
@@ -1932,6 +2393,8 @@ class AutoList(utils.ItemList):
                 choice = 'Switch pumps'
             elif settings['item_type'] == 'exposure':
                 choice = 'Standalone Exposure'
+            elif settings['item_type'] == 'stop_flow':
+                choice = 'Stop flow'
 
         cmd_settings = self._get_cmd_settings(choice, settings)
 
@@ -1944,24 +2407,26 @@ class AutoList(utils.ItemList):
             else:
                 with wx.MessageDialog(self, err_msg,
                     caption='Action Parameter Errors',
-                    style=wx.OK|wx.CANCEL|wx.OK_DEFAULT) as err_dialog:
+                    style=wx.YES_NO|wx.CANCEL|wx.YES_DEFAULT) as err_dialog:
 
-                    err_dialog.SetOKLabel('Fix errors')
+                    err_dialog.SetYesNoLabels('Fix errors', 'Continue without fixing')
 
                     ret = err_dialog.ShowModal()
 
-                    if ret == wx.ID_OK:
+                    if ret == wx.ID_YES:
                         wx.CallAfter(self._add_action, cmd_settings)
+                    elif ret == wx.ID_NO:
+                        self._add_item(cmd_settings)
 
     def _get_cmd_settings(self, choice, settings):
         if choice is not None and choice != '----Staff Methods----':
             if choice == 'Run SEC-SAXS sample':
+                hplc_panel = self.auto_panel.settings['instruments']['hplc']['hplc_panel']
+                default_inj_settings = hplc_panel.get_default_sample_settings()
+
                 if settings is None:
                     exp_panel = wx.FindWindowByName('exposure')
                     default_exp_settings, _ = exp_panel.get_exp_values(False)
-
-                    hplc_panel = self.auto_panel.settings['instruments']['hplc']['hplc_panel']
-                    default_inj_settings = hplc_panel.get_default_sample_settings()
 
                     coflow_panel = wx.FindWindowByName('coflow')
                     coflow_fr = coflow_panel.get_flow_rate()
@@ -1970,10 +2435,18 @@ class AutoList(utils.ItemList):
                     except ValueError:
                         coflow_fr = float(coflow_panel.settings['lc_flow_rate'])
 
+                    metadata_panel = wx.FindWindowByName('metadata')
+                    default_metadata = metadata_panel.metadata()
+
                     default_settings = copy.deepcopy(default_sec_saxs_settings)
 
                     # General parameters
-                    default_settings['inst'] = '{}_pump'.format(self.auto_panel.settings['hplc_inst']),
+                    default_settings['inst'] = '{}_pump'.format(self.auto_panel.settings['hplc_inst'])
+                    default_settings['notes'] = default_metadata['Notes:']
+                    default_settings['conc'] = default_metadata['Concentration [mg/ml]:']
+                    default_settings['buf'] = default_metadata['Buffer:']
+                    default_settings['sample_name'] = default_metadata['Sample:']
+                    default_settings['column'] = default_metadata['Column:']
 
                     # Injection parameters
                     default_settings['acq_method'] = default_inj_settings['acq_method']
@@ -1987,6 +2460,7 @@ class AutoList(utils.ItemList):
                     default_settings['sp_method'] = default_inj_settings['sp_method']
                     default_settings['wait_for_flow_ramp'] = default_inj_settings['wait_for_flow_ramp']
                     default_settings['settle_time'] = default_inj_settings['settle_time']
+                    default_settings['flow_path'] = default_inj_settings['flow_path']
 
                     # Exposure parameters
                     default_settings['num_frames'] = default_exp_settings['num_frames']
@@ -2008,6 +2482,7 @@ class AutoList(utils.ItemList):
 
                 else:
                     default_settings = settings
+                    default_settings['inst'] = '{}_pump'.format(self.auto_panel.settings['hplc_inst'])
 
                 cmd_dialog = SecSampleCmdDialog(self, default_settings,
                     default_inj_settings['all_acq_methods'],
@@ -2026,31 +2501,22 @@ class AutoList(utils.ItemList):
                     except ValueError:
                         coflow_fr = float(coflow_panel.settings['lc_flow_rate'])
 
-                    default_settings = {
-                        # General parameterss
-                        'item_type' : 'equilibrate',
-                        'buf'       : '',
-                        'inst'      : '{}_pump'.format(self.auto_panel.settings['hplc_inst']),
+                    default_settings = copy.deepcopy(default_equilibrate_settings)
 
-                        # HPLC equilibrate parameters
-                        'equil_rate'        : default_equil_settings['equil_rate'],
-                        'equil_vol'         : default_equil_settings['equil_vol'],
-                        'equil_accel'       : default_equil_settings['equil_accel'],
-                        'purge'             : default_equil_settings['purge'],
-                        'purge_rate'        : default_equil_settings['purge_rate'],
-                        'purge_volume'      : default_equil_settings['purge_vol'],
-                        'purge_accel'       : default_equil_settings['purge_accel'],
-                        'equil_with_sample' : False,
-                        'stop_after_equil'  : default_equil_settings['stop_after_equil'],
-                        'flow_path'         : 1,
-                        'buffer_position'   : 1,
+                    default_settings['inst'] = '{}_pump'.format(self.auto_panel.settings['hplc_inst'])
 
-                        # Coflow equilibrate parameters
-                        'coflow_equil'      : True,
-                        'coflow_buf_pos'    : 1,
-                        'coflow_restart'    : True,
-                        'coflow_rate'       : coflow_fr,
-                        }
+                    # HPLC equilibrate parameters
+                    default_settings['equil_rate'] = default_equil_settings['equil_rate']
+                    default_settings['equil_vol']  = default_equil_settings['equil_vol']
+                    default_settings['equil_accel'] = default_equil_settings['equil_accel']
+                    default_settings['purge']      = default_equil_settings['purge']
+                    default_settings['purge_rate'] = default_equil_settings['purge_rate']
+                    default_settings['purge_volume'] = default_equil_settings['purge_vol']
+                    default_settings['purge_accel'] = default_equil_settings['purge_accel']
+                    default_settings['stop_after_equil'] = default_equil_settings['stop_after_equil']
+
+                    # Coflow equilibrate parameters
+                    default_settings['coflow_rate']  = coflow_fr
 
                     inst = self.auto_panel.settings['hplc_inst']
                     num_flow_paths = self.auto_panel.settings['instruments'][inst]['num_paths']
@@ -2063,6 +2529,7 @@ class AutoList(utils.ItemList):
 
                 else:
                     default_settings = settings
+                    default_settings['inst'] = '{}_pump'.format(self.auto_panel.settings['hplc_inst'])
 
                 cmd_dialog = EquilibrateDialog(self, default_settings,
                     title='Equilibration Settings', size=self._FromDIP((200,200)))
@@ -2079,45 +2546,80 @@ class AutoList(utils.ItemList):
                     except ValueError:
                         coflow_fr = float(coflow_panel.settings['lc_flow_rate'])
 
-                    default_settings = {
-                        'item_type' : 'switch_pumps',
-                        'inst'      : self.auto_panel.settings['hplc_inst'],
+                    default_settings = copy.deepcopy(default_switch_pump_settings)
 
-                        #Switch parameters
-                        'purge_rate'    : default_switch_settings['purge_rate'],
-                        'purge_volume'  : default_switch_settings['purge_vol'],
-                        'purge_accel'   : default_switch_settings['purge_accel'],
-                        'restore_flow_after_switch' : default_switch_settings['restore_flow_after_switch'],
-                        'switch_with_sample'    : False,
-                        'stop_flow1'    : default_switch_settings['stop_flow1'],
-                        'stop_flow2'    : default_switch_settings['stop_flow2'],
-                        'purge_active'  : default_switch_settings['purge_active'],
-                        'flow_path'     : 1,
+                    default_settings['inst'] = self.auto_panel.settings['hplc_inst']
 
-                        #Coflow switch parameters
-                        'coflow_equil'      : True,
-                        'coflow_buf_pos'    : 1,
-                        'coflow_restart'    : True,
-                        'coflow_rate'       : coflow_fr,
-                        }
+                    #Switch parameters
+                    default_settings['purge_rate'] = default_switch_settings['purge_rate']
+                    default_settings['purge_volume'] = default_switch_settings['purge_vol']
+                    default_settings['purge_accel'] = default_switch_settings['purge_accel']
+                    default_settings['restore_flow_after_switch'] = default_switch_settings['restore_flow_after_switch']
+                    default_settings['stop_flow1'] = default_switch_settings['stop_flow1']
+                    default_settings['stop_flow2'] = default_switch_settings['stop_flow2']
+                    default_settings['purge_active'] = default_switch_settings['purge_active']
+
+                    #Coflow switch parameters
+                    default_settings['coflow_rate'] = coflow_fr
 
                     inst = self.auto_panel.settings['hplc_inst']
                     num_flow_paths = self.auto_panel.settings['instruments'][inst]['num_paths']
-                    # num_flow_paths = 2
                     default_settings['num_flow_paths'] = num_flow_paths
 
                 else:
                     default_settings = settings
+                    default_settings['inst'] = self.auto_panel.settings['hplc_inst']
 
                 cmd_dialog = SwitchDialog(self, default_settings,
                     title='Switch Pump Settings')
 
-            if choice == 'Standalone Exposure':
+            elif choice == 'Stop flow':
+                if settings is None:
+                    hplc_panel = self.auto_panel.settings['instruments']['hplc']['hplc_panel']
+                    default_hplc_stop_settings = hplc_panel.get_default_stop_flow_settings()
+
+                    default_settings = copy.deepcopy(default_stop_flow_settings)
+
+                    default_settings['inst'] = self.auto_panel.settings['hplc_inst']
+
+                    #Stop flow parameters
+                    default_settings['flow_accel1'] = default_hplc_stop_settings['flow_accel1']
+                    default_settings['flow_accel2'] = default_hplc_stop_settings['flow_accel2']
+
+                    inst = self.auto_panel.settings['hplc_inst']
+                    num_flow_paths = self.auto_panel.settings['instruments'][inst]['num_paths']
+                    default_settings['num_flow_paths'] = num_flow_paths
+
+                else:
+                    default_settings = settings
+                    default_settings['inst'] = self.auto_panel.settings['hplc_inst']
+
+                cmd_dialog = StopFlowDialog(self, default_settings,
+                    title='Stop Flow Settings')
+
+            elif choice == 'Standalone Exposure':
                 if settings is None:
                     exp_panel = wx.FindWindowByName('exposure')
                     default_exp_settings, _ = exp_panel.get_exp_values(False)
 
+                    metadata_panel = wx.FindWindowByName('metadata')
+                    default_metadata = metadata_panel.metadata()
+
                     default_settings = copy.deepcopy(default_standalone_exp_settings)
+
+                    # General parameters
+                    default_settings['notes'] = default_metadata['Notes:']
+                    default_settings['conc'] = default_metadata['Concentration [mg/ml]:']
+                    default_settings['buf'] = default_metadata['Buffer:']
+                    default_settings['sample_name'] = default_metadata['Sample:']
+                    default_settings['column'] = default_metadata['Column:']
+                    default_settings['exp_type'] = default_metadata['Experiment type:']
+                    default_settings['inj_vol'] = default_metadata['Loaded volume [uL]:']
+                    try:
+                        default_settings['temp'] = default_metadata['Temperature [C]:']
+                    except Exception:
+                        pass
+
                     default_settings['num_frames'] = default_exp_settings['num_frames']
                     default_settings['exp_time'] = default_exp_settings['exp_time']
                     default_settings['exp_period'] = default_exp_settings['exp_period']
@@ -2184,17 +2686,17 @@ class AutoList(utils.ItemList):
                 err_msg = 'The following field(s) have invalid values:'
 
                 if not exp_valid:
-                    err_msg += '\nExposure settings:'
+                    err_msg += '\n\nExposure settings:'
                     for err in exp_errors:
                         err_msg = err_msg + '\n- ' + err
 
                 if not coflow_valid:
-                    err_msg += '\nCoflow settings:'
+                    err_msg += '\n\nCoflow settings:'
                     for err in coflow_errors:
                         err_msg = err_msg + '\n- ' + err
 
                 if not hplc_valid > 0:
-                    err_msg += '\nInjection settings:'
+                    err_msg += '\n\nInjection settings:'
                     for err in hplc_errors:
                         err_msg = err_msg + '\n- ' + err
 
@@ -2221,6 +2723,17 @@ class AutoList(utils.ItemList):
                 err_msg = 'The following field(s) have invalid values:'
 
                 for err in hplc_errors:
+                    err_msg = err_msg + '\n- ' + err
+
+        elif cmd_settings['item_type'] == 'stop_flow':
+
+            cmd_settings, stop_valid, stop_errors = self._validate_stop_flow_params(
+                cmd_settings)
+
+            if not stop_valid:
+                err_msg = 'The following field(s) have invalid values:'
+
+                for err in stop_errors:
                     err_msg = err_msg + '\n- ' + err
 
         elif cmd_settings['item_type'] == 'exposure':
@@ -2285,7 +2798,7 @@ class AutoList(utils.ItemList):
 
         return cmd_settings, valid, errors
 
-    def _validate_coflow_parms(self, cmd_settings):
+    def _validate_coflow_params(self, cmd_settings):
         errors = []
 
         column = cmd_settings['column']
@@ -2337,6 +2850,35 @@ class AutoList(utils.ItemList):
         hplc_panel = self.auto_panel.settings['instruments']['hplc']['hplc_panel']
 
         valid, errors = hplc_panel.validate_switch_params(cmd_settings)
+
+        return cmd_settings, valid, errors
+
+    def _validate_stop_flow_params(self, cmd_settings):
+        errors = []
+        if cmd_settings['stop_flow1']:
+            try:
+                cmd_settings['flow_accel1'] = float(cmd_settings['flow_accel1'])
+            except Exception:
+                errors.append('Pump 1 acceleration must be a number')
+
+            if isinstance(cmd_settings['flow_accel1'], float):
+                if cmd_settings['flow_accel1'] <= 0:
+                    errors.append('Pump 1 acceleration must >0')
+
+        if cmd_settings['stop_flow2']:
+            try:
+                cmd_settings['flow_accel2'] = float(cmd_settings['flow_accel2'])
+            except Exception:
+                errors.append('Pump 2 acceleration must be a number')
+
+            if isinstance(cmd_settings['flow_accel2'], float):
+                if cmd_settings['flow_accel2'] <= 0:
+                    errors.append('Pump 2 acceleration must >0')
+
+        if len(errors) > 0:
+            valid = False
+        else:
+            valid = True
 
         return cmd_settings, valid, errors
 
@@ -2491,6 +3033,9 @@ class AutoList(utils.ItemList):
     def _get_shared_cmd_number(self, cmd_name, item):
         return item.command.auto_names.count(cmd_name)
 
+    def item_selected(self, item):
+        self.auto_panel.auto_settings.on_item_selection(item.item_info)
+
     def abort_item(self, aid):
         for item in self.all_items:
             if item.status != 'done' and item.status != 'abort':
@@ -2518,6 +3063,8 @@ class AutoListItem(utils.ListItem):
             item_label = 'Switch pumps'
         elif self.item_type == 'exposure':
             item_label = 'Standalone Exposure'
+        elif self.item_type == 'stop_flow':
+            item_label = 'Stop Flow'
         else:
             item_label = self.item_type.capitalize()
 
@@ -2600,6 +3147,26 @@ class AutoListItem(utils.ListItem):
         elif self.item_type == 'switch_pumps':
             item_sizer = wx.BoxSizer()
 
+        elif self.item_type == 'stop_flow':
+
+            self.stop_flow1_ctrl = wx.StaticText(item_parent, label='')
+            self.stop_flow2_ctrl = wx.StaticText(item_parent, label='')
+            self.stop_coflow_ctrl = wx.StaticText(item_parent, label='')
+
+            item_sizer = wx.BoxSizer(wx.HORIZONTAL)
+            item_sizer.Add(wx.StaticText(item_parent, label='Stop pump 1:'),
+                flag=wx.LEFT, border=self._FromDIP(5))
+            item_sizer.Add(self.stop_flow1_ctrl, flag=wx.LEFT,
+                border=self._FromDIP(5))
+            item_sizer.Add(wx.StaticText(item_parent, label='Stop pump 2:'),
+                flag=wx.LEFT, border=self._FromDIP(5))
+            item_sizer.Add(self.stop_flow2_ctrl, flag=wx.LEFT,
+                border=self._FromDIP(5))
+            item_sizer.Add(wx.StaticText(item_parent, label='Stop coflow:'),
+                flag=wx.LEFT, border=self._FromDIP(5))
+            item_sizer.Add(self.stop_coflow_ctrl, flag=wx.LEFT,
+                border=self._FromDIP(5))
+
         elif self.item_type == 'exposure':
             name_label = wx.StaticText(item_parent, label='Filename:')
             self.name_ctrl = wx.StaticText(item_parent, label='')
@@ -2635,6 +3202,11 @@ class AutoListItem(utils.ListItem):
         elif self.item_type == 'switch_pumps':
             pass
 
+        elif self.item_type == 'stop_flow':
+            self.stop_flow1_ctrl.SetLabel(str(self.item_info['stop_flow1']))
+            self.stop_flow2_ctrl.SetLabel(str(self.item_info['stop_flow2']))
+            self.stop_coflow_ctrl.SetLabel(str(self.item_info['stop_coflow']))
+
         elif self.item_type == 'exposure':
             name = self.item_info['filename']
             self.set_name(name)
@@ -2651,6 +3223,7 @@ class AutoListItem(utils.ListItem):
 
     def set_buffer_position(self, pos):
         self.buffer_pos_ctrl.SetLabel(str(pos))
+
     def set_buffer(self, buffer_info):
         self.buffer_ctrl.SetLabel(buffer_info)
 
@@ -2678,6 +3251,25 @@ class AutoListItem(utils.ListItem):
             self.status_ctrl.SetLabel('Done')
         elif self.status == 'pause' and label != 'Paused':
             self.status_ctrl.SetLabel('Paused')
+
+    def set_selected(self, selected):
+        self._selected = selected
+
+        if self._selected:
+
+            self.SetBackgroundColour(self.highlight_list_bkg_color)
+
+            for text_item in self.text_list:
+                text_item.SetForegroundColour(self.general_text_color)
+
+            self.item_list.item_selected(self)
+
+        else:
+            self.SetBackgroundColour(self.list_bkg_color)
+            for text_item in self.text_list:
+                text_item.SetForegroundColour(self.general_text_color)
+
+        self.Refresh()
 
     def abort(self):
         self.command.abort()
@@ -2767,7 +3359,8 @@ class SecSampleCmdDialog(AutoCmdDialog):
         self.acq_methods
         self.sample_methods
 
-        cmd_sizer = make_sec_saxs_info_panel(self, self, self.ctrl_ids, 'horiz')
+        cmd_sizer =  make_sec_saxs_info_panel(self, self, self.ctrl_ids, 'horiz',
+            num_flow_paths, self.acq_methods, self.sample_methods)
 
         button_sizer = self.CreateButtonSizer(wx.OK | wx.CANCEL)
 
@@ -2790,87 +3383,12 @@ class EquilibrateDialog(AutoCmdDialog):
         parent = self
         top_level = self
 
-        ################ HPLC #################
-        fp_choices = ['{}'.format(i+1) for i in range(int(self._default_settings['num_flow_paths']))]
-        buffer_choices = ['{}'.format(i) for i in range(1,11)]
+        num_flow_paths = self._default_settings['num_flow_paths']
 
-        equil_settings = {
-            'equil_rate'    : ['Equilibration rate [mL/min]:', self.ctrl_ids['equil_rate'], 'float'],
-            'equil_vol'     : ['Equilibration volume [mL]:', self.ctrl_ids['equil_vol'], 'float'],
-            'purge'         : ['Run purge', self.ctrl_ids['purge'], 'bool'],
-            'flow_path'     : ['Flow path:', self.ctrl_ids['flow_path'], 'choice', fp_choices],
-            'buffer_position': ['Buffer position:', self.ctrl_ids['buffer_position'],
-                                'choice', buffer_choices],
-            }
-
-        equil_adv_settings = {
-            'equil_accel'   : ['Equilibration acceleration [mL/min^2]:',
-                                self.ctrl_ids['equil_accel'], 'float'],
-            'purge_volume'  : ['Purge volume [mL]:', self.ctrl_ids['purge_volume'], 'float'],
-            'purge_rate'    : ['Purge rate [mL/min]:', self.ctrl_ids['purge_rate'], 'float'],
-            'purge_accel'   : ['Purge acceleration [mL/min^2]:',
-                                self.ctrl_ids['purge_accel'], 'float'],
-            'stop_after_equil': ['Stop flow after equilibration',
-                                self.ctrl_ids['stop_after_equil'], 'bool'],
-        }
-
-        equil_box = wx.StaticBox(parent, label='HPLC Settings')
-
-        equil_adv_pane = wx.CollapsiblePane(equil_box, label="Advanced Settings")
-        equil_adv_pane.Bind(wx.EVT_COLLAPSIBLEPANE_CHANGED, self.on_collapse)
-        equil_adv_win = equil_adv_pane.GetPane()
-
-        equil_sizer1 = create_info_sizer(equil_settings, top_level, equil_box)
-        equil_sizer2 = create_info_sizer(equil_adv_settings, top_level, equil_adv_win)
-
-        equil_adv_win.SetSizer(equil_sizer2)
-        equil_adv_pane.Collapse()
-
-        equil_sizer = wx.StaticBoxSizer(equil_box, wx.VERTICAL)
-        equil_sizer.Add(equil_sizer1, flag=wx.EXPAND|wx.ALL, border=self._FromDIP(5))
-        equil_sizer.Add(equil_adv_pane, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM,
-            border=self._FromDIP(5))
-
-
-        ################ Coflow #################
-        coflow_buffer_choices = ['{}'.format(i) for i in range(1,11)]
-        coflow_settings = {
-            'coflow_equil'  : ['Equilibrate coflow', self.ctrl_ids['coflow_equil'], 'bool'],
-            'coflow_buf_pos': ['Buffer position:', self.ctrl_ids['coflow_buf_pos'],
-                                'choice', coflow_buffer_choices],
-            }
-
-        coflow_adv_settings = {
-            'coflow_restart': ['Restart coflow after equilibration',
-                                self.ctrl_ids['coflow_restart'], 'bool'],
-            'coflow_rate'   : ['Restart flow rate [mL/min]:',
-                                self.ctrl_ids['coflow_rate'], 'float'],
-            }
-
-        coflow_box = wx.StaticBox(parent, label='Coflow Settings')
-
-        coflow_adv_pane = wx.CollapsiblePane(coflow_box, label="Advanced Settings")
-        coflow_adv_pane.Bind(wx.EVT_COLLAPSIBLEPANE_CHANGED, self.on_collapse)
-        coflow_adv_win = coflow_adv_pane.GetPane()
-
-        coflow_sizer1 = create_info_sizer(coflow_settings, top_level, coflow_box)
-        coflow_sizer2 = create_info_sizer(coflow_adv_settings, top_level, coflow_adv_win)
-
-        coflow_adv_win.SetSizer(coflow_sizer2)
-        coflow_adv_pane.Collapse()
-
-        coflow_sizer = wx.StaticBoxSizer(coflow_box, wx.VERTICAL)
-        coflow_sizer.Add(coflow_sizer1, flag=wx.ALL, border=self._FromDIP(5))
-        coflow_sizer.Add(coflow_adv_pane, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM,
-            border=self._FromDIP(5))
+        cmd_sizer = make_equilibrate_info_panel(top_level, parent, self.ctrl_ids,
+            'horiz', num_flow_paths)
 
         button_sizer = self.CreateButtonSizer(wx.OK | wx.CANCEL)
-
-        cmd_sizer=wx.BoxSizer(wx.HORIZONTAL)
-        cmd_sizer.Add(equil_sizer, flag=wx.TOP|wx.RIGHT|wx.BOTTOM|wx.EXPAND,
-            border=self._FromDIP(5))
-        cmd_sizer.Add(coflow_sizer, flag=wx.TOP|wx.RIGHT|wx.BOTTOM|wx.EXPAND,
-            border=self._FromDIP(5))
 
         top_sizer = wx.BoxSizer(wx.VERTICAL)
         top_sizer.Add(cmd_sizer, proportion=1, flag=wx.EXPAND|wx.ALL,
@@ -2891,87 +3409,38 @@ class SwitchDialog(AutoCmdDialog):
         parent = self
         top_level = self
 
-        ################ HPLC #################
-        fp_choices = ['1', '2']
+        num_flow_paths = self._default_settings['num_flow_paths']
 
-        switch_settings = {
-            'flow_path'     : ['Switch to flow path:', self.ctrl_ids['flow_path'],
-                                'choice', fp_choices],
-        }
-
-        switch_adv_settings = {
-            'restore_flow_after_switch' : ['Restore flow to current rate after switching',
-                                    self.ctrl_ids['restore_flow_after_switch'], 'bool'],
-            'stop_flow1'     : ['Ramp pump 1 flow to 0 before switching',
-                                    self.ctrl_ids['stop_flow1'], 'bool'],
-            'stop_flow2'     : ['Ramp pump 2 flow to 0 before switching',
-                                self.ctrl_ids['stop_flow2'], 'bool'],
-            'purge_active'   : ['Purge active flow path after switching',
-                                self.ctrl_ids['purge_active'], 'bool'],
-            'purge_rate'    : ['Purge rate [mL/min]:', self.ctrl_ids['purge_rate'], 'float'],
-            'purge_volume'  : ['Purge volume [mL]:', self.ctrl_ids['purge_volume'], 'float'],
-            'purge_accel'   : ['Purge acceleration [mL/min^2]:',
-                                self.ctrl_ids['purge_accel'], 'float'],
-        }
-
-        switch_box = wx.StaticBox(parent, label='HPLC Settings')
-
-        switch_adv_pane = wx.CollapsiblePane(switch_box, label="Advanced Settings")
-        switch_adv_pane.Bind(wx.EVT_COLLAPSIBLEPANE_CHANGED, self.on_collapse)
-        switch_adv_win = switch_adv_pane.GetPane()
-
-        switch_sizer1 = create_info_sizer(switch_settings, top_level, switch_box)
-        switch_sizer2 = create_info_sizer(switch_adv_settings, top_level, switch_adv_win)
-
-        switch_adv_win.SetSizer(switch_sizer2)
-        switch_adv_pane.Collapse()
-
-        switch_sizer = wx.StaticBoxSizer(switch_box, wx.VERTICAL)
-        switch_sizer.Add(switch_sizer1, flag=wx.EXPAND|wx.ALL, border=self._FromDIP(5))
-        switch_sizer.Add(switch_adv_pane, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM,
-            border=self._FromDIP(5))
-
-
-        ################ Coflow #################
-        coflow_buffer_choices = ['{}'.format(i) for i in range(1,11)]
-        coflow_settings = {
-            'coflow_buf_pos': ['Buffer position:', self.ctrl_ids['coflow_buf_pos'],
-                                'choice', coflow_buffer_choices],
-            'coflow_rate'   : ['Restart flow rate [mL/min]:',
-                                self.ctrl_ids['coflow_rate'], 'float'],
-            }
-
-        coflow_adv_settings = {
-            'coflow_equil'  : ['Equilibrate coflow', self.ctrl_ids['coflow_equil'], 'bool'],
-            'coflow_restart': ['Restart coflow after equilibration',
-                                self.ctrl_ids['coflow_restart'], 'bool'],
-            }
-
-        coflow_box = wx.StaticBox(parent, label='Coflow Settings')
-
-        coflow_adv_pane = wx.CollapsiblePane(coflow_box, label="Advanced Settings")
-        coflow_adv_pane.Bind(wx.EVT_COLLAPSIBLEPANE_CHANGED, self.on_collapse)
-        coflow_adv_win = coflow_adv_pane.GetPane()
-
-        coflow_sizer1 = create_info_sizer(coflow_settings, top_level, coflow_box)
-        coflow_sizer2 = create_info_sizer(coflow_adv_settings, top_level, coflow_adv_win)
-
-        coflow_adv_win.SetSizer(coflow_sizer2)
-        coflow_adv_pane.Collapse()
-
-        coflow_sizer = wx.StaticBoxSizer(coflow_box, wx.VERTICAL)
-        coflow_sizer.Add(coflow_sizer1, flag=wx.EXPAND|wx.ALL, border=self._FromDIP(5))
-        coflow_sizer.Add(coflow_adv_pane, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM,
-            border=self._FromDIP(5))
-
+        cmd_sizer = make_switch_info_panel(top_level, parent, self.ctrl_ids,
+            'horiz', num_flow_paths)
 
         button_sizer = self.CreateButtonSizer(wx.OK | wx.CANCEL)
 
-        cmd_sizer=wx.BoxSizer(wx.HORIZONTAL)
-        cmd_sizer.Add(switch_sizer, flag=wx.TOP|wx.RIGHT|wx.BOTTOM|wx.EXPAND,
+        top_sizer = wx.BoxSizer(wx.VERTICAL)
+        top_sizer.Add(cmd_sizer, proportion=1, flag=wx.EXPAND|wx.ALL,
             border=self._FromDIP(5))
-        cmd_sizer.Add(coflow_sizer, flag=wx.TOP|wx.RIGHT|wx.BOTTOM|wx.EXPAND,
+        top_sizer.Add(button_sizer ,flag=wx.BOTTOM|wx.RIGHT|wx.LEFT|wx.ALIGN_RIGHT,
             border=self._FromDIP(5))
+
+        self.SetSizer(top_sizer)
+
+class StopFlowDialog(AutoCmdDialog):
+    """
+    Allows addition/editing of the buffer info in the buffer list
+    """
+    def __init__(self, default_settings, *args, **kwargs):
+        AutoCmdDialog.__init__(self, default_settings, *args, **kwargs)
+
+    def _create_layout(self):
+        parent = self
+        top_level = self
+
+        num_flow_paths = self._default_settings['num_flow_paths']
+
+        cmd_sizer = make_stop_flow_info_panel(top_level, parent, self.ctrl_ids,
+            'horiz', num_flow_paths)
+
+        button_sizer = self.CreateButtonSizer(wx.OK | wx.CANCEL)
 
         top_sizer = wx.BoxSizer(wx.VERTICAL)
         top_sizer.Add(cmd_sizer, proportion=1, flag=wx.EXPAND|wx.ALL,

@@ -88,6 +88,8 @@ class AgilentHPLCStandard(AgilentHPLC):
         pump2_id: str
             The Agilent hashkey for pump 2
         """
+        self._dual_pump = False
+
         self._equil_flow1 = False
 
         self._buffer_monitor1 = utils.BufferMonitor(self._get_flow_rate1)
@@ -107,6 +109,8 @@ class AgilentHPLCStandard(AgilentHPLC):
             self._purging_flow1 = False
             self._purging_flow2 = False
             self._equil_flow2 = False
+            self._current_buffer1 = None
+            self._current_buffer2 = None
 
             self._connect_valves(purge1_valve_args, buffer1_valve_args)
 
@@ -175,6 +179,18 @@ class AgilentHPLCStandard(AgilentHPLC):
             target=self._monitor_equil)
         self._monitor_equil_thread.daemon = True
         self._monitor_equil_thread.start()
+
+        self._switching_buffer_bottle1 = False
+        self._switching_buffer_bottle2 = False
+
+        self._abort_switch_buffer_bottle1 = threading.Event()
+        self._abort_switch_buffer_bottle2 = threading.Event()
+        self._monitor_switch_buffer_bottle_evt = threading.Event()
+        self._terminate_monitor_switch_buffer_bottle = threading.Event()
+        self._monitor_switch_buffer_bottle_thread = threading.Thread(
+            target=self._monitor_switch_buffer_bottle)
+        self._monitor_switch_buffer_bottle_thread.daemon = True
+        self._monitor_switch_buffer_bottle_thread.start()
 
         self.set_active_buffer_position(self.get_valve_position('buffer1'), 1)
 
@@ -338,6 +354,30 @@ class AgilentHPLCStandard(AgilentHPLC):
             remaining_volume = copy.copy(self._remaining_equil2_vol)
 
         return is_equilibrating, remaining_volume
+
+    def get_switch_buffer_bottle_status(self, flow_path):
+        """
+        Gets the buffer bottle switching status of the specified flow path.
+
+        Parameters
+        ----------
+        flow_path: int
+            The flow path to get the status for. Either 1 or 2.
+
+        Returns
+        -------
+        is_switching: bool
+            True if the flow path is switching buffer bottles, False if not.
+        """
+        flow_path = int(flow_path)
+
+        if flow_path == 1:
+            is_switching = copy.copy(self._switching_buffer_bottle1)
+
+        elif flow_path == 2:
+            is_switching = copy.copy(self._switching_buffer_bottle2)
+
+        return is_switching
 
     def get_hplc_flow_rate(self, flow_path):
         """
@@ -728,6 +768,13 @@ class AgilentHPLCStandard(AgilentHPLC):
                 flow_path)
             success = False
 
+        elif ((flow_path == 1 and self._switching_buffer_bottle1) or
+            (flow_path == 2 and self._switching_buffer_bottle2)):
+            logger.error('HPLC %s flow path %s is switching buffer bottles, so '
+                'a new equilibration cannot be started', self.name,
+                flow_path)
+            success = False
+
         else:
             do_equil = self._check_equil_sample_status(flow_path,
                 equil_with_sample)
@@ -1033,6 +1080,13 @@ class AgilentHPLCStandard(AgilentHPLC):
             (flow_path == 2 and self._purging_flow2)):
             logger.error('HPLC %s flow path %s is already purging, so a new '
                 'purge cannot be started', self.name, flow_path)
+            success = False
+
+        elif ((flow_path == 1 and self._switching_buffer_bottle1) or
+            (flow_path == 2 and self._switching_buffer_bottle2)):
+            logger.error('HPLC %s flow path %s is switching buffer bottles, so '
+                'a new equilibration cannot be started', self.name,
+                flow_path)
             success = False
 
         else:
@@ -1424,6 +1478,264 @@ class AgilentHPLCStandard(AgilentHPLC):
             else:
                 time.sleep(0.1)
 
+    def switch_buffer_bottle(self, buffer_position, flow_path, stop_flow=True,
+        flow_accel=0.1, restore_flow_after_switch=True, switch_with_sample=False,
+        switch_with_activity=False):
+        """
+        Switches the buffer bottle in use on the specified flow path.
+
+        Parameters
+        ----------
+        buffer_position: int
+            The new position of the buffer valve.
+        flow_path: int
+            The active flow path to set. Either 1 or 2.
+        stop_flow: bool
+            Whether flow from the pump on the selected flow path should be
+            stopped while the buffer valve is switched.
+        flow_accel: float
+            The flow acceletration to stop and start the flow at.
+        restore_flow_after_switch: bool
+            Whether the flow rate should be restored to the current flow rate
+            after switching is done. Note that this is only needed if
+            stop_flow is True. If False, the flow will not be resumed after
+            switching.
+        switch_with_sample: bool
+            Checks whether there are samples in the run queue. If there are,
+            and the run queue is not paused you must pass True for this
+            value to switch the buffer bottle on the active flow path.
+        switch_with_activity: bool
+            Checks whether the system is equilibrating, purging, or
+            switching flow path. If you want to switch the buffer bottle
+            while one of these is ongoing pass True.
+        """
+        flow_path = int(flow_path)
+
+        success = True
+
+        if flow_path == 1 and self._current_buffer1 == str(buffer_position):
+            logger.info('HPLC %s flow path %s already set to buffer '
+                'position %s', self.name, flow_path, buffer_position)
+            success = False
+        elif flow_path == 2 and self._current_buffer2 == str(buffer_position):
+            logger.info('HPLC %s flow path %s already set to buffer '
+                'position %s', self.name, flow_path, buffer_position)
+            success = False
+
+
+        if success:
+            if self._active_flow_path == flow_path:
+                samples_being_run = self._check_samples_being_run()
+
+                if samples_being_run and not switch_with_sample:
+                    logger.info(('HPLC %s cannot switch  buffer bottles on '
+                        'the active flow path because samples are being run'),
+                        self.name)
+                    success = False
+
+            elif ((self._purging_flow1 and flow_path == 1) or
+                (self._purging_flow2 and flow_path == 2) or
+                (self._equil_flow1 and flow_path == 1) or
+                (self._equil_flow2 and flow_path == 2) or
+                (self._dual_pump and self._switching_flow_path)):
+
+                if not switch_with_activity:
+                    logger.info('HPLC %s cannot switch buffer bottles '
+                        'because the HPLC is busy.')
+                    success = False
+
+        if success:
+
+                if flow_path == 1:
+                    self._switch_buffer1_bottle_args = {
+                        'flow_path': flow_path,
+                        'buffer_position': buffer_position,
+                        'stop_flow': stop_flow,
+                        'restore_flow_after_switch': restore_flow_after_switch,
+                        'flow_accel': flow_accel,
+                        }
+
+                    self._abort_switch_buffer_bottle1.clear()
+
+                else:
+                    self._switch_buffer2_bottle_args = {
+                        'flow_path': flow_path,
+                        'buffer_position': buffer_position,
+                        'stop_flow': stop_flow,
+                        'restore_flow_after_switch': restore_flow_after_switch,
+                        'flow_accel': flow_accel,
+                        }
+
+                    self._abort_switch_buffer_bottle2.clear()
+
+                if flow_path == 1:
+                    self._switching_buffer_bottle1 = True
+                else:
+                    self._switching_buffer_bottle2 = True
+                self._monitor_switch_buffer_bottle_evt.set()
+
+                logger.info(('HPLC %s starting to switch buffer bottle on '
+                    'flow path %s'), self.name, flow_path)
+
+        return success
+
+    def _monitor_switch_buffer_bottle(self):
+        start_switch1 = False
+        start_switch2 = False
+        monitor_switch1 = False
+        monitor_switch2 = False
+        switch_buffer1 = False
+        switch_buffer2 = False
+        restart_flow1 = False
+        restart_flow2 = False
+
+        while not self._terminate_monitor_switch_buffer_bottle.is_set():
+            self._monitor_switch_buffer_bottle_evt.wait()
+
+            if (self._switching_buffer_bottle1 and not start_switch1
+                and not monitor_switch1 and not switch_buffer1
+                and not restart_flow1):
+                start_switch1 = True
+                monitor_switch1 = False
+                switch_buffer1 = False
+                restart_flow1 = False
+                initial_flow1 = self.get_hplc_flow_rate(1)
+                initial_accel1 = self.get_hplc_flow_accel(1)
+
+                buffer_position1 = self._switch_buffer1_bottle_args['buffer_position']
+                stop_flow1 = self._switch_buffer1_bottle_args['stop_flow']
+                restart_flow_after_switch1 = self._switch_buffer1_bottle_args['restore_flow_after_switch']
+                flow_accel1 = self._switch_buffer1_bottle_args['flow_accel']
+
+                if stop_flow1:
+                    self.set_hplc_flow_accel(flow_accel1, 1)
+
+            if (self._switching_buffer_bottle2 and not start_switch2
+                and not monitor_switch2 and not switch_buffer2
+                and not restart_flow2):
+                start_switch2 = True
+                monitor_switch2 = False
+                switch_buffer2 = False
+                restart_flow2 = False
+                initial_flow2 = self.get_hplc_flow_rate(2)
+                initial_accel2 = self.get_hplc_flow_accel(2)
+
+                buffer_position2 = self._switch_buffer2_bottle_args['buffer_position']
+                stop_flow2 = self._switch_buffer2_bottle_args['stop_flow']
+                restart_flow_after_switch2 = self._switch_buffer2_bottle_args['restore_flow_after_switch']
+                flow_accel2 = self._switch_buffer2_bottle_args['flow_accel']
+
+                if stop_flow2:
+                    self.set_hplc_flow_accel(flow_accel2, 2)
+
+
+            if start_switch1:
+                if stop_flow1:
+                    self.set_hplc_flow_rate(0, 1)
+
+                start_switch1 = False
+                monitor_switch1 = True
+
+            if start_switch2:
+                if stop_flow2:
+                    self.set_hplc_flow_rate(0, 2)
+
+                start_switch2 = False
+                monitor_switch2 = True
+
+
+            if monitor_switch1:
+                if not self._abort_switch_buffer_bottle1.is_set():
+                    current_flow1 = self.get_hplc_flow_rate(1)
+                    if ((stop_flow1 and current_flow1 == 0)
+                        or not stop_flow1):
+                        monitor_switch1 = False
+                        switch_buffer1 = True
+                else:
+                    monitor_switch1 = False
+                    switch_buffer1 = True
+
+            if monitor_switch2:
+                if not self._abort_switch_buffer_bottle2.is_set():
+                    current_flow2 = self.get_hplc_flow_rate(2)
+                    if ((stop_flow2 and current_flow2 == 0)
+                        or not stop_flow2):
+                        monitor_switch2 = False
+                        switch_buffer2 = True
+                else:
+                    monitor_switch2 = False
+                    switch_buffer2 = True
+
+            if switch_buffer1:
+                if not self._abort_switch_buffer_bottle1.is_set():
+                    self.set_valve_position('buffer1', buffer_position1)
+                    switch_buffer1 = False
+                    restart_flow1 = True
+
+                    if restart_flow_after_switch1:
+                        self.set_hplc_flow_rate(initial_flow1, 1)
+                else:
+                    switch_buffer1 = False
+                    restart_flow1 = True
+
+            if switch_buffer2:
+                if not self._abort_switch_buffer_bottle2.is_set():
+                    self.set_valve_position('buffer2', buffer_position2)
+                    switch_buffer2 = False
+                    restart_flow2 = True
+
+                    if restart_flow_after_switch2:
+                        self.set_hplc_flow_rate(initial_flow2, 2)
+                else:
+                    switch_buffer2 = False
+                    restart_flow2 = True
+
+            if restart_flow1:
+                if not self._abort_switch_buffer_bottle1.is_set():
+                    current_flow1 = self.get_hplc_flow_rate(1)
+
+                    if ((restart_flow_after_switch1 and current_flow1 == initial_flow1)
+                        or not restart_flow_after_switch1):
+
+                        restart_flow1 = False
+                        self._switching_buffer_bottle1 = False
+
+                        if stop_flow1:
+                            self.set_hplc_flow_accel(initial_accel1, 1)
+
+                        logger.info(('HPLC %s finished switching flow path 1 '
+                            'buffer bottle'),
+                            self.name)
+                else:
+                    restart_flow1 = False
+                    self._switching_buffer_bottle1 = False
+
+            if restart_flow2:
+                if not self._abort_switch_buffer_bottle2.is_set():
+                    current_flow2 = self.get_hplc_flow_rate(2)
+
+                    if ((restart_flow_after_switch2 and current_flow2 == initial_flow2)
+                        or not restart_flow_after_switch2):
+
+                        restart_flow2 = False
+                        self._switching_buffer_bottle2 = False
+
+                        if stop_flow2:
+                            self.set_hplc_flow_accel(initial_accel2, 2)
+
+                        logger.info(('HPLC %s finished switching flow path 2 '
+                            'buffer bottle'),
+                            self.name)
+                else:
+                    restart_flow2 = False
+                    self._switching_buffer_bottle2 = False
+
+
+            if not self._switching_buffer_bottle1 and not self._switching_buffer_bottle2:
+                self._monitor_switch_buffer_bottle_evt.clear()
+            else:
+                time.sleep(0.1)
+
     def set_valve_position(self, valve_id, position):
         """
         Sets the position of the specified valve.
@@ -1715,8 +2027,10 @@ class AgilentHPLCStandard(AgilentHPLC):
         """
         flow_path = int(flow_path)
         if flow_path == 1:
+            self._current_buffer1 = str(position)
             self._buffer_monitor1.set_active_buffer_position(position)
         elif flow_path == 2:
+            self._current_buffer2 = str(position)
             self._buffer_monitor2.set_active_buffer_position(position)
 
         return True
@@ -1898,6 +2212,7 @@ class AgilentHPLCStandard(AgilentHPLC):
                         else:
                             break
 
+                time.sleep(2) # Try to avoid issues with getting status while loading a sample
                 self._submitting_sample = False
                 self._monitor_submit_evt.clear()
 
@@ -1955,6 +2270,25 @@ class AgilentHPLCStandard(AgilentHPLC):
             self._abort_switch.set()
             logger.info('HPLC %s stoping switching of active flow path', self.name)
 
+    def stop_switch_buffer_bottle(self, flow_path):
+        """
+        Stops the buffer bottle switching on the specified flow path
+
+        Parameters
+        ----------
+        flow_path: int
+            The flow path to stop the buffer bottle switching on. Either 1 or 2.
+        """
+        flow_path = int(flow_path)
+
+        if flow_path == 1:
+            if self._switching_buffer_bottle1:
+                self._abort_switch_buffer_bottle1.set()
+
+        if flow_path == 2:
+            if self._switching_buffer_bottle2:
+                self._abort_switch_buffer_bottle2.set()
+
     def stop_submit_sample(self):
         """
         Stops current sample submission (will not abort the sample run if it's
@@ -1970,7 +2304,9 @@ class AgilentHPLCStandard(AgilentHPLC):
         Stops all current actions, including purging, switching, submitting a
         sample. Pauses the run queue and aborts the current run.
         """
+        self.stop_equilibration(1)
         self.stop_purge(1)
+        self.stop_switch_buffer_bottle(1)
         self.stop_submit_sample()
         self.pause_run_queue()
         try:
@@ -2042,6 +2378,14 @@ class AgilentHPLCStandard(AgilentHPLC):
         self._monitor_submit_evt.set()
         self._monitor_submit_thread.join()
 
+        self._terminate_monitor_equil.set()
+        self._monitor_equil_evt.set()
+        self._monitor_equil_thread.join()
+
+        self._terminate_monitor_switch_buffer_bottle.set()
+        self._monitor_switch_buffer_bottle_evt.set()
+        self._monitor_switch_buffer_bottle_thread.join()
+
         self.disconnect()
 
 class AgilentHPLC2Pumps(AgilentHPLCStandard):
@@ -2080,6 +2424,8 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
         pump2_id: str
             The Agilent hashkey for pump 2
         """
+
+        self._dual_pump = True
 
         self._buffer_monitor2 = utils.BufferMonitor(self._get_flow_rate2)
 
@@ -2613,8 +2959,12 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
         Stops all current actions, including purging, switching, submitting a
         sample. Pauses the run queue and aborts the current run.
         """
+        self.stop_equilibration(1)
+        self.stop_equilibration(2)
         self.stop_purge(1)
         self.stop_purge(2)
+        self.stop_switch_buffer_bottle(1)
+        self.stop_switch_buffer_bottle(2)
         self.stop_switch()
         self.stop_submit_sample()
         self.pause_run_queue()
@@ -2736,6 +3086,7 @@ class HPLCCommThread(utils.CommManager):
             'purge_flow_path'           : self._purge_flow_path,
             'equil_flow_path'           : self._equil_flow_path,
             'set_active_flow_path'      : self._set_active_flow_path,
+            'switch_buffer_bottle'      : self._switch_buffer_bottle,
             'set_flow_rate'             : self._set_flow_rate,
             'set_flow_accel'            : self._set_flow_accel,
             'set_high_pressure_lim'     : self._set_high_pressure_lim,
@@ -2758,6 +3109,7 @@ class HPLCCommThread(utils.CommManager):
             'stop_purge'                : self._stop_purge,
             'stop_equil'                : self._stop_equil,
             'stop_switch'               : self._stop_switch,
+            'stop_switch_buffer'        : self._stop_switch_buffer,
             'stop_sample_submission'    : self._stop_sample_submission,
             'stop_all'                  : self._stop_all,
             'stop_all_immediately'      : self._stop_all_immediately,
@@ -2843,6 +3195,11 @@ class HPLCCommThread(utils.CommManager):
 
         device = self._connected_devices[name]
 
+        connected = device.get_connected()
+
+        if not connected:
+            return
+
         status = device.get_instrument_status()
 
         # if status == 'PreRun' or status == 'Injecting' or status == 'PostRun':
@@ -2865,6 +3222,7 @@ class HPLCCommThread(utils.CommManager):
             'flow1'             : device.get_hplc_flow_rate(1),
             'pressure1'         : device.get_hplc_pressure(1),
             'all_buffer_info1'  : device.get_all_buffer_info(1),
+            'switch_buffer1_bot': device.get_switch_buffer_bottle_status(1),
             }
 
         if isinstance(device, AgilentHPLC2Pumps):
@@ -2875,6 +3233,7 @@ class HPLCCommThread(utils.CommManager):
             pump_status['pressure2'] = device.get_hplc_pressure(2)
             pump_status['switching_flow_path'] = device.get_flow_path_switch_status()
             pump_status['all_buffer_info2'] = device.get_all_buffer_info(2)
+            pump_status['switch_buffer2_bot'] = device.get_switch_buffer_bottle_status(2)
 
         autosampler_status = {
             'submitting_sample'         : device.get_submitting_sample_status(),
@@ -2911,6 +3270,11 @@ class HPLCCommThread(utils.CommManager):
         cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
+
+        connected = device.get_connected()
+
+        if not connected:
+            return
 
         status = device.get_instrument_status()
         sample_submission = device.get_submitting_sample_status()
@@ -2967,6 +3331,11 @@ class HPLCCommThread(utils.CommManager):
 
         comm_name = kwargs.pop('comm_name', None)
         cmd = kwargs.pop('cmd', None)
+
+        connected = device.get_connected()
+
+        if not connected:
+            return
 
         device = self._connected_devices[name]
 
@@ -3093,8 +3462,23 @@ class HPLCCommThread(utils.CommManager):
 
         self._return_value((name, cmd, success), comm_name)
 
-        logger.debug("%s active flow path %s started: %s", name, flow_path,
-            success)
+        logger.debug("%s active flow path %s switch started: %s", name,
+            flow_path, success)
+
+    def _switch_buffer_bottle(self, name, val, flow_path, **kwargs):
+        logger.debug("Setting %s flow path %s buffer bottle to %s", name,
+            flow_path, val)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        success = device.switch_buffer_bottle(val, flow_path, **kwargs)
+
+        self._return_value((name, cmd, success), comm_name)
+
+        logger.debug("%s flow path %s buffer bottle switch started: %s", name,
+            flow_path, success)
 
     def _set_flow_rate(self, name, val, flow_path, **kwargs):
         logger.debug("Setting %s flow path %s flow rate %s ", name, flow_path,
@@ -3411,6 +3795,21 @@ class HPLCCommThread(utils.CommManager):
 
         logger.debug("Stopped %s active flow path switching", name)
 
+    def _stop_switch_buffer(self, name, flow_path, **kwargs):
+        logger.debug("Stopping %s buffer bottle switch on flow path %s", name,
+            flow_path)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        device.stop_switch_buffer_bottle(flow_path, **kwargs)
+
+        self._return_value((name, cmd, True), comm_name)
+
+        logger.debug("Stopped %s buffer bottle switch on flow path %s", name,
+            flow_path)
+
     def _stop_sample_submission(self, name, **kwargs):
         logger.debug("Stopping %s sample submission", name)
 
@@ -3605,6 +4004,7 @@ class HPLCPanel(utils.DevicePanel):
         self._pump1_eq = ''
         self._pump1_eq_vol = ''
         self._pump1_flow_target = ''
+        self._pump1_buffer_bottle_switch = ''
         self._pump1_seal_wash_mode = ''
         self._pump1_seal_wash_single_duration = ''
         self._pump1_seal_wash_period = ''
@@ -3619,6 +4019,7 @@ class HPLCPanel(utils.DevicePanel):
         self._pump2_eq = ''
         self._pump2_eq_vol = ''
         self._pump2_flow_target = ''
+        self._pump2_buffer_bottle_switch = ''
         self._pump2_seal_wash_mode = ''
         self._pump2_seal_wash_single_duration = ''
         self._pump2_seal_wash_period = ''
@@ -4201,8 +4602,60 @@ class HPLCPanel(utils.DevicePanel):
             valve_sizer.Add(self._outlet_valve_ctrl,
                 flag=wx.ALIGN_CENTER_VERTICAL)
 
+
+        self._buffer1_valve_switch = wx.StaticText(valve_box,
+            size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
+        self._buffer1_valve_switch_btn = wx.Button(valve_box,
+            label='Set Buf. 1')
+        self._buffer1_valve_stop_switch_btn = wx.Button(valve_box,
+            label='Stop Buf. 1')
+
+        self._buffer1_valve_switch_btn.Bind(wx.EVT_BUTTON,
+            self._on_buffer_switch)
+        self._buffer1_valve_stop_switch_btn.Bind(wx.EVT_BUTTON,
+            self._on_stop_buffer_switch)
+
+        if self._device_type == 'AgilentHPLC2Pumps':
+            self._buffer2_valve_switch = wx.StaticText(valve_box,
+                size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
+            self._buffer2_valve_switch_btn = wx.Button(valve_box,
+                label='Set Buf. 2')
+            self._buffer2_valve_stop_switch_btn = wx.Button(valve_box,
+                label='Stop Buf. 2')
+
+            self._buffer2_valve_switch_btn.Bind(wx.EVT_BUTTON,
+                self._on_buffer_switch)
+            self._buffer2_valve_stop_switch_btn.Bind(wx.EVT_BUTTON,
+                self._on_stop_buffer_switch)
+
+        buffer_switch_sizer = wx.FlexGridSizer(cols=4, vgap=self._FromDIP(5),
+            hgap=self._FromDIP(5))
+        buffer_switch_sizer.Add(wx.StaticText(valve_box, label='Switching 1:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        buffer_switch_sizer.Add(self._buffer1_valve_switch,
+            flag=wx.ALIGN_CENTER_VERTICAL)
+
+        if self._device_type == 'AgilentHPLC2Pumps':
+            buffer_switch_sizer.Add(wx.StaticText(valve_box, label='Switching 2:'),
+                flag=wx.ALIGN_CENTER_VERTICAL)
+            buffer_switch_sizer.Add(self._buffer2_valve_switch,
+                flag=wx.ALIGN_CENTER_VERTICAL)
+
+        buffer_switch_ctrl_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(5),
+            hgap=self._FromDIP(5))
+        buffer_switch_ctrl_sizer.Add(self._buffer1_valve_switch_btn)
+        buffer_switch_ctrl_sizer.Add(self._buffer1_valve_stop_switch_btn)
+
+        if self._device_type == 'AgilentHPLC2Pumps':
+            buffer_switch_ctrl_sizer.Add(self._buffer2_valve_switch_btn)
+            buffer_switch_ctrl_sizer.Add(self._buffer2_valve_stop_switch_btn)
+
         top_sizer = wx.StaticBoxSizer(valve_box, wx.VERTICAL)
         top_sizer.Add(valve_sizer, flag=wx.ALL|wx.EXPAND, proportion=1,
+            border=self._FromDIP(5))
+        top_sizer.Add(buffer_switch_sizer, flag=wx.LEFT|wx.RIGHT|wx.BOTTOM,
+            border=self._FromDIP(5))
+        top_sizer.Add(buffer_switch_ctrl_sizer, flag=wx.LEFT|wx.RIGHT|wx.BOTTOM,
             border=self._FromDIP(5))
 
         return top_sizer
@@ -4636,18 +5089,21 @@ class HPLCPanel(utils.DevicePanel):
             val = None
 
         if val is not None:
-            cmd = ['set_flow_accel', [self.name, val, flow_path], {}]
-            self._send_cmd(cmd, False)
+            self._set_flow_accel(flow_path, val)
 
-            if flow_path == 1:
-                if str(val) != self._pump1_flow_accel:
-                    wx.CallAfter(self._pump1_flow_accel_ctrl.SetLabel, str(val))
-                    self._pump1_flow_accel = str(val)
+    def _set_flow_accel(self, flow_path, val):
+        cmd = ['set_flow_accel', [self.name, val, flow_path], {}]
+        self._send_cmd(cmd, False)
 
-            elif flow_path == 2:
-                if str(val) != self._pump2_flow_accel:
-                    wx.CallAfter(self._pump2_flow_accel_ctrl.SetLabel, str(val))
-                    self._pump2_flow_accel = str(val)
+        if flow_path == 1:
+            if str(val) != self._pump1_flow_accel:
+                wx.CallAfter(self._pump1_flow_accel_ctrl.SetLabel, str(val))
+                self._pump1_flow_accel = str(val)
+
+        elif flow_path == 2:
+            if str(val) != self._pump2_flow_accel:
+                wx.CallAfter(self._pump2_flow_accel_ctrl.SetLabel, str(val))
+                self._pump2_flow_accel = str(val)
 
     def _on_set_pressure_lim(self, evt):
         evt_obj = evt.GetEventObject()
@@ -4722,6 +5178,14 @@ class HPLCPanel(utils.DevicePanel):
             if '0.0' != self._pump2_flow_target:
                     wx.CallAfter(self._pump2_flow_target_ctrl.SetLabel, '0.0')
                     self._pump2_flow_target = '0.0'
+
+    def get_default_stop_flow_settings(self):
+        default_stop_flow_settings = {
+            'flow_accel1'   : self.settings['equil_accel'],
+            'flow_accel2'   : self.settings['equil_accel'],
+            }
+
+        return default_stop_flow_settings
 
     def _on_purge(self, evt):
         evt_obj = evt.GetEventObject()
@@ -4945,6 +5409,111 @@ class HPLCPanel(utils.DevicePanel):
         cmd = ['stop_equil', [self.name, flow_path,], {}]
         self._send_cmd(cmd, False)
 
+    def _on_buffer_switch(self, evt):
+        evt_obj = evt.GetEventObject()
+
+        device_data = self.settings['device_data']
+        kwargs = device_data['kwargs']
+
+        if self._buffer1_valve_switch_btn == evt_obj:
+            flow_path = 1
+            valve_max = kwargs['buffer1_valve_args']['kwargs']['positions']
+            cur_pos = copy.copy(self._buffer1_valve)
+        elif self._buffer2_valve_switch_btn == evt_obj:
+            flow_path = 2
+            valve_max = kwargs['buffer2_valve_args']['kwargs']['positions']
+            cur_pos = copy.copy(self._buffer2_valve)
+
+        default_switch_settings = {
+            'buffer_position'       : cur_pos,
+            'max_positions'         : valve_max,
+            'stop_flow'             : self.settings['buffer_switch_stop_flow'],
+            'flow_accel'            : self.settings['buffer_switch_accel'],
+            'restore_flow_after_switch' : self.settings['buffer_switch_restore_flow'],
+            'switch_with_sample'    : self.settings['buffer_switch_with_sample'],
+            'switch_with_activity'  : self.settings['buffer_switch_with_active'],
+        }
+
+        switch_dialog = SwitchBufferBottleDialog(self, default_switch_settings,
+            title='Buffer {} bottle switch settings'.format(flow_path))
+        result = switch_dialog.ShowModal()
+
+        if result == wx.ID_OK:
+            switch_settings = switch_dialog.get_settings()
+        else:
+            switch_settings = None
+
+        switch_dialog.Destroy()
+
+        if switch_settings is not None:
+            self._validate_and_buffer_bottle_switch(flow_path, switch_settings)
+
+    def _validate_and_buffer_bottle_switch(self, flow_path, switch_settings, verbose=True):
+        valid, errors = self.validate_buffer_bottle_switch_params(switch_settings)
+
+        if valid:
+            buffer_position = switch_settings.pop('buffer_position')
+            cmd = ['switch_buffer_bottle', [self.name, buffer_position, flow_path],
+                switch_settings]
+            self._send_cmd(cmd, False)
+
+            do_switch = True
+
+        else:
+            do_switch = False
+
+            if verbose:
+                msg = 'The following field(s) have invalid values:'
+                for err in errors:
+                    msg = msg + '\n- ' + err
+                msg = msg + ('\n\nPlease correct these errors, then start the '
+                    'switch.')
+
+                wx.CallAfter(wx.MessageBox, msg, ('Error in buffer bottle '
+                    'switch parameters'), style=wx.OK|wx.ICON_ERROR)
+
+        return do_switch
+
+    def validate_buffer_bottle_switch_params(self, switch_settings):
+        errors = []
+
+        try:
+            switch_settings['buffer_position'] = int(switch_settings['buffer_position'])
+        except Exception:
+            errors.append('Buffer position not valid')
+
+        if switch_settings['stop_flow']:
+            try:
+                switch_settings['flow_accel'] = float(switch_settings['flow_accel'])
+            except Exception:
+                errors.append('Flow acceleration must be a number')
+
+            if isinstance(switch_settings['flow_accel'], float):
+                if switch_settings['flow_accel'] <= 0:
+                    errors.append('Flow acceleration must be >0')
+
+
+        if len(errors) > 0:
+            valid = False
+        else:
+            valid =  True
+
+        return valid, errors
+
+    def _on_stop_buffer_switch(self, evt):
+        evt_obj = evt.GetEventObject()
+
+        if self._buffer1_valve_stop_switch_btn == evt_obj:
+            flow_path = 1
+        elif self._buffer2_valve_stop_switch_btn == evt_obj:
+            flow_path = 2
+
+        self._stop_buffer_switch(flow_path)
+
+    def _stop_buffer_switch(self, flow_path):
+        cmd = ['stop_switch_buffer', [self.name, flow_path,], {}]
+        self._send_cmd(cmd, False)
+
     def _on_pump_on(self, evt):
         evt_obj = evt.GetEventObject()
 
@@ -5108,28 +5677,52 @@ class HPLCPanel(utils.DevicePanel):
                 wx.CallAfter(self._sampler_setpoint_ctrl.SetLabel, str(val))
                 self._sampler_setpoint = str(val)
 
-            elif flow_path == 1:
-                if str(val) != self._pump2_flow_target:
-                        wx.CallAfter(self._pump2_flow_target_ctrl.SetLabel, str(val))
-                        self._pump2_flow_target = str(val)
-
     def get_default_sample_settings(self):
 
+        try:
+            flow_path = int(self._flow_path)
+        except Exception:
+            flow_path = 1
+
+        if flow_path == 1:
+            flow_rate = self._pump1_flow
+            flow_accel = self._pump1_flow_accel
+            pressure_lim = self._pump1_pressure_lim
+        else:
+            flow_rate = self._pump2_flow
+            flow_accel = self._pump2_flow_accel
+            pressure_lim = self._pump2_pressure_lim
+
+        try:
+            flow_rate = float(flow_rate)
+        except Exception:
+            flow_rate = self.settings['flow_rate']
+
+        try:
+            flow_accel = float(flow_accel)
+        except Exception:
+            flow_accel = self.settings['flow_accel']
+
+        try:
+            pressure_lim = float(pressure_lim)
+        except Exception:
+            pressure_lim = self.settings['sample_pressure_lim']
 
         default_sample_settings = {
             'acq_method'    : self.settings['acq_method'],
             'sample_loc'    : self.settings['sample_loc'],
             'inj_vol'       : self.settings['inj_vol'],
-            'flow_rate'     : self.settings['flow_rate'],
-            'flow_accel'    : self.settings['flow_accel'],
+            'flow_rate'     : flow_rate,
+            'flow_accel'    : flow_accel,
             'elution_vol'   : self.settings['elution_vol'],
-            'pressure_lim'  : self.settings['sample_pressure_lim'],
+            'pressure_lim'  : pressure_lim,
             'result_path'   : self.settings['result_path'],
             'sp_method'     : self.settings['sp_method'],
             'wait_for_flow_ramp'    : self.settings['wait_for_flow_ramp'],
             'settle_time'   : self.settings['settle_time'],
             'all_acq_methods'       : self._methods,
             'all_sample_methods'    : self._sp_methods,
+            'flow_path'     : flow_path,
             }
 
         default_method = default_sample_settings['acq_method']
@@ -5478,16 +6071,20 @@ class HPLCPanel(utils.DevicePanel):
             pump1_flow = str(round(float(pump_status['flow1']),3))
             pump1_pressure = str(round(float(pump_status['pressure1']),3))
             buffers1 = pump_status['all_buffer_info1']
+            switch_buffer1_bot = str(pump_status['switch_buffer1_bot'])
 
             if pump1_purge != self._pump1_purge:
                 wx.CallAfter(self._pump1_purge_ctrl.SetLabel, pump1_purge)
                 self._pump1_purge = pump1_purge
 
                 if pump1_purge.lower() == 'true':
+                    wx.CallAfter(self._buffer1_valve_switch_btn.Disable)
                     wx.CallAfter(self._pump1_purge_btn.Disable)
                     wx.CallAfter(self._pump1_eq_btn.Disable)
                 else:
-                    if pump1_eq.lower() == 'false':
+                    if (pump1_eq.lower() == 'false'
+                        and switch_buffer1_bot.lower() == 'false'):
+                        wx.CallAfter(self._buffer1_valve_switch_btn.Enable)
                         wx.CallAfter(self._pump1_purge_btn.Enable)
                         wx.CallAfter(self._pump1_eq_btn.Enable)
 
@@ -5503,10 +6100,13 @@ class HPLCPanel(utils.DevicePanel):
                 self._pump1_eq = pump1_eq
 
                 if pump1_eq.lower() == 'true':
+                    wx.CallAfter(self._buffer1_valve_switch_btn.Disable)
                     wx.CallAfter(self._pump1_eq_btn.Disable)
                     wx.CallAfter(self._pump1_purge_btn.Disable)
                 else:
-                    if pump1_purge.lower() == 'false':
+                    if (pump1_purge.lower() == 'false'
+                        and switch_buffer1_bot.lower() == 'false'):
+                        wx.CallAfter(self._buffer1_valve_switch_btn.Enable)
                         wx.CallAfter(self._pump1_eq_btn.Enable)
                         wx.CallAfter(self._pump1_purge_btn.Enable)
 
@@ -5534,6 +6134,21 @@ class HPLCPanel(utils.DevicePanel):
 
             self._buffer1_info = buffers1
 
+            if switch_buffer1_bot != self._pump1_buffer_bottle_switch:
+                wx.CallAfter(self._buffer1_valve_switch.SetLabel, switch_buffer1_bot)
+                self._pump1_buffer_bottle_switch = switch_buffer1_bot
+
+                if switch_buffer1_bot.lower() == 'true':
+                    wx.CallAfter(self._buffer1_valve_switch_btn.Disable)
+                    wx.CallAfter(self._pump1_eq_btn.Disable)
+                    wx.CallAfter(self._pump1_purge_btn.Disable)
+                else:
+                    if (pump1_purge.lower() == 'false'
+                        and pump1_eq.lower() == 'false'):
+                        wx.CallAfter(self._buffer1_valve_switch_btn.Enable)
+                        wx.CallAfter(self._pump1_eq_btn.Enable)
+                        wx.CallAfter(self._pump1_purge_btn.Enable)
+
             if self._device_type == 'AgilentHPLC2Pumps':
                 flow_path = str(pump_status['active_flow_path'])
                 flow_path_status = str(pump_status['switching_flow_path'])
@@ -5554,16 +6169,20 @@ class HPLCPanel(utils.DevicePanel):
                 pump2_flow = str(round(float(pump_status['flow2']),3))
                 pump2_pressure = str(round(float(pump_status['pressure2']),3))
                 buffers2 = pump_status['all_buffer_info2']
+                switch_buffer2_bot = str(pump_status['switch_buffer2_bot'])
 
                 if pump2_purge != self._pump2_purge:
                     wx.CallAfter(self._pump2_purge_ctrl.SetLabel, pump2_purge)
                     self._pump2_purge = pump2_purge
 
                     if pump2_purge.lower() == 'true':
+                        wx.CallAfter(self._buffer2_valve_switch_btn.Disable)
                         wx.CallAfter(self._pump2_purge_btn.Disable)
                         wx.CallAfter(self._pump2_eq_btn.Disable)
                     else:
-                        if pump2_eq.lower() == 'false':
+                        if (pump2_eq.lower() == 'false'
+                            and switch_buffer2_bot.lower() == 'false'):
+                            wx.CallAfter(self._buffer2_valve_switch_btn.Enable)
                             wx.CallAfter(self._pump2_purge_btn.Enable)
                             wx.CallAfter(self._pump2_eq_btn.Enable)
 
@@ -5579,10 +6198,13 @@ class HPLCPanel(utils.DevicePanel):
                     self._pump2_eq = pump2_eq
 
                     if pump2_eq.lower() == 'true':
+                        wx.CallAfter(self._buffer2_valve_switch_btn.Disable)
                         wx.CallAfter(self._pump2_eq_btn.Disable)
                         wx.CallAfter(self._pump2_purge_btn.Disable)
                     else:
-                        if pump2_purge.lower() == 'false':
+                        if (pump2_purge.lower() == 'false'
+                            and switch_buffer2_bot.lower() == 'false'):
+                            wx.CallAfter(self._buffer2_valve_switch_btn.Enable)
                             wx.CallAfter(self._pump2_eq_btn.Enable)
                             wx.CallAfter(self._pump2_purge_btn.Enable)
 
@@ -5609,6 +6231,21 @@ class HPLCPanel(utils.DevicePanel):
                     self._update_buffer_list(2, pos, vol, descrip)
 
                 self._buffer2_info = buffers2
+
+                if switch_buffer2_bot != self._pump2_buffer_bottle_switch:
+                    wx.CallAfter(self._buffer2_valve_switch.SetLabel, switch_buffer2_bot)
+                    self._pump2_buffer_bottle_switch = switch_buffer2_bot
+
+                    if switch_buffer2_bot.lower() == 'true':
+                        wx.CallAfter(self._buffer2_valve_switch_btn.Disable)
+                        wx.CallAfter(self._pump2_eq_btn.Disable)
+                        wx.CallAfter(self._pump2_purge_btn.Disable)
+                    else:
+                        if (pump2_purge.lower() == 'false'
+                            and pump2_eq.lower() == 'false'):
+                            wx.CallAfter(self._buffer2_valve_switch_btn.Enable)
+                            wx.CallAfter(self._pump2_eq_btn.Enable)
+                            wx.CallAfter(self._pump2_purge_btn.Enable)
 
 
             sampler_status = val['autosampler_status']
@@ -5895,6 +6532,8 @@ class HPLCPanel(utils.DevicePanel):
                 state = 'equil'
             elif self._pump1_eq.lower() == 'true':
                 state = 'equil'
+            elif self._pump1_buffer_bottle_switch.lower() == 'true':
+                state = 'equil'
             else:
                 state = 'idle'
 
@@ -5902,6 +6541,8 @@ class HPLCPanel(utils.DevicePanel):
             if self._pump2_purge.lower() == 'true':
                 state = 'equil'
             elif self._pump2_eq.lower() == 'true':
+                state = 'equil'
+            elif self._pump2_buffer_bottle_switch.lower() == 'true':
                 state = 'equil'
             else:
                 state = 'idle'
@@ -5982,6 +6623,21 @@ class HPLCPanel(utils.DevicePanel):
 
             state = 'run'
 
+        elif cmd_name == 'switch_buffer_bottle':
+            flow_path = cmd_kwargs.pop('flow_path')
+            buffer_position = cmd_kwargs['buffer_position']
+            success = self._validate_and_buffer_bottle_switch(flow_path,
+                cmd_kwargs, False)
+
+            if int(flow_path) == 1:
+                cur_buffer_pos = self._buffer1_valve
+            elif int(flow_path) == 2:
+                cur_buffer_pos = self._buffer2_valve
+            if str(buffer_position) == str(cur_buffer_pos):
+                state = 'idle'
+            else:
+                state = 'equil'
+
         elif cmd_name == 'equilibrate':
             flow_path = cmd_kwargs.pop('flow_path')
             success = self._validate_and_equilibrate(flow_path, cmd_kwargs, False)
@@ -5998,7 +6654,14 @@ class HPLCPanel(utils.DevicePanel):
                 state = self._get_automator_state(flow_path)
 
         elif cmd_name == 'stop_flow':
-            flow_path = cmd_kwargs['flow_path']
+            if not cmd_kwargs['use_active']:
+                flow_path = cmd_kwargs['flow_path']
+            else:
+                flow_path = self._flow_path
+
+            if 'flow_accel' in cmd_kwargs:
+                self._set_flow_accel(flow_path, cmd_kwargs['flow_accel'])
+
             self._stop_flow(flow_path)
 
             state = 'idle'
@@ -6050,7 +6713,7 @@ class HPLCPanel(utils.DevicePanel):
                 state = copy.copy(self._inst_status)
 
             runtime = float(self._inst_total_runtime)-float(self._inst_elapsed_runtime)
-            rountime = round(runtime, 1)
+            runtime = round(runtime, 1)
 
             if self._pump1_purge.lower() == 'true':
                 pump1_state = 'Equilibrating'
@@ -6682,6 +7345,102 @@ class SealWashDialog(wx.Dialog):
 
         return settings
 
+class SwitchBufferBottleDialog(wx.Dialog):
+    """
+    Allows addition/editing of the buffer info in the buffer list
+    """
+    def __init__(self, parent, settings, *args, **kwargs):
+        wx.Dialog.__init__(self, parent, *args,
+            style=wx.RESIZE_BORDER|wx.CAPTION|wx.CLOSE_BOX, **kwargs)
+
+        self.SetSize(self._FromDIP((400, 250)))
+
+        self._create_layout(settings)
+
+        self.CenterOnParent()
+
+    def _FromDIP(self, size):
+        # This is a hack to provide easy back compatibility with wxpython < 4.1
+        try:
+            return self.FromDIP(size)
+        except Exception:
+            return size
+
+    def _create_layout(self, settings):
+        parent = self
+
+        buffer_choices = [str(i) for i in range(1, settings['max_positions']+1)]
+
+        self._buffer_position = wx.Choice(parent, choices=buffer_choices)
+        self._flow_accel_ctrl = wx.TextCtrl(parent, size=self._FromDIP((60, -1)),
+            validator=utils.CharValidator('float'))
+
+        self._buffer_position.SetStringSelection(str(settings['buffer_position']))
+        self._flow_accel_ctrl.SetValue(str(settings['flow_accel']))
+
+        switch_sizer1 = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(5),
+            hgap=self._FromDIP(5))
+        switch_sizer1.Add(wx.StaticText(parent, label='Buffer valve position:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        switch_sizer1.Add(self._buffer_position, flag=wx.ALIGN_CENTER_VERTICAL)
+        switch_sizer1.Add(wx.StaticText(parent, label='Flow acceleration (mL/min^2):'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        switch_sizer1.Add(self._flow_accel_ctrl, flag=wx.ALIGN_CENTER_VERTICAL)
+
+        self._switch_stop_before = wx.CheckBox(parent,
+            label='Ramp flow to 0 before switching buffer valve')
+        self._switch_restore_flow = wx.CheckBox(parent,
+            label='Restore flow to current rate after switching valve')
+        self._switch_with_sample = wx.CheckBox(parent,
+            label='Switch buffer valve even if a sample is running')
+        self._switch_with_activity = wx.CheckBox(parent,
+            label='Switch buffer valve even if a flow is purging or equilibrating')
+
+        self._switch_stop_before.SetValue(settings['stop_flow'])
+        self._switch_restore_flow.SetValue(settings['restore_flow_after_switch'])
+        self._switch_with_sample.SetValue(settings['switch_with_sample'])
+        self._switch_with_activity.SetValue(settings['switch_with_activity'])
+
+        switch_sizer2 = wx.BoxSizer(wx.VERTICAL)
+        switch_sizer2.Add(self._switch_stop_before, flag=wx.BOTTOM,
+            border=self._FromDIP(5))
+        switch_sizer2.Add(self._switch_restore_flow, flag=wx.BOTTOM,
+            border=self._FromDIP(5))
+        switch_sizer2.Add(self._switch_with_sample, flag=wx.BOTTOM,
+            border=self._FromDIP(5))
+        switch_sizer2.Add(self._switch_with_activity, flag=wx.BOTTOM,
+            border=self._FromDIP(5))
+
+        button_sizer = self.CreateButtonSizer(wx.OK | wx.CANCEL)
+
+        top_sizer=wx.BoxSizer(wx.VERTICAL)
+        top_sizer.Add(switch_sizer1, flag=wx.ALL, border=self._FromDIP(5))
+        top_sizer.Add(switch_sizer2, flag=wx.LEFT|wx.RIGHT|wx.BOTTOM,
+            border=self._FromDIP(5))
+        top_sizer.Add(button_sizer ,flag=wx.BOTTOM|wx.RIGHT|wx.LEFT|wx.ALIGN_RIGHT,
+            border=self._FromDIP(10))
+
+        self.SetSizer(top_sizer)
+
+    def get_settings(self):
+        buffer_position = self._buffer_position.GetStringSelection()
+        flow_accel = self._flow_accel_ctrl.GetValue()
+        stop_flow = self._switch_stop_before.GetValue()
+        restore_flow_after_switch = self._switch_restore_flow.GetValue()
+        switch_with_sample = self._switch_with_sample.GetValue()
+        switch_with_activity = self._switch_with_activity.GetValue()
+
+        settings = {
+            'buffer_position'           : buffer_position,
+            'stop_flow'                 : stop_flow,
+            'flow_accel'                : flow_accel,
+            'restore_flow_after_switch' : restore_flow_after_switch,
+            'switch_with_sample'        : switch_with_sample,
+            'switch_with_activity'      : switch_with_activity,
+            }
+
+        return settings
+
 class RunList(wx.ListCtrl, wx.lib.mixins.listctrl.ListCtrlAutoWidthMixin):
 
     def __init__(self, *args, **kwargs):
@@ -6783,7 +7542,7 @@ default_hplc_2pump_settings = {
     'com_thread'    : None,
     # Default settings for hplc
     'purge_volume'              : 20,
-    'purge_rate'                : 5,
+    'purge_rate'                : 3,
     'purge_accel'               : 10,
     'purge_max_pressure'        : 250,
     'restore_flow_after_purge'  : True,
@@ -6804,10 +7563,15 @@ default_hplc_2pump_settings = {
     'switch_stop_flow1'         : True,
     'switch_stop_flow2'         : True,
     'restore_flow_after_switch' : True,
+    'buffer_switch_stop_flow'   : True,
+    'buffer_switch_accel'       : 0.1,
+    'buffer_switch_restore_flow': False,
+    'buffer_switch_with_sample' : False,
+    'buffer_switch_with_active' : False,
     'acq_method'                : 'SECSAXS_test',
     # 'acq_method'                : 'SEC-MALS',
     'sample_loc'                : 'D2F-A1',
-    'inj_vol'                   : 10.0,
+    'inj_vol'                   : 240.0,
     'flow_rate'                 : 0.6,
     'flow_accel'                : 0.1,
     'elution_vol'               : 30,
