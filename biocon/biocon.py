@@ -394,12 +394,12 @@ if __name__ == '__main__':
     coflow_settings = {
         'show_advanced_options'     : False,
         'device_communication'      : 'remote',
-        'remote_pump_ip'            : '164.54.204.53',
+        'remote_pump_ip'            : '164.54.204.192',
         'remote_pump_port'          : '5556',
-        'remote_fm_ip'              : '164.54.204.53',
+        'remote_fm_ip'              : '164.54.204.192',
         'remote_fm_port'            : '5557',
         'remote_overflow_ip'        : '164.54.204.75',
-        'remote_valve_ip'           : '164.54.204.53',
+        'remote_valve_ip'           : '164.54.204.192',
         'remote_valve_port'         : '5558',
         'flow_units'                : 'mL/min',
         'sheath_pump'               : {'name': 'sheath', 'args': ['VICI M50', 'COM6'],
@@ -735,7 +735,7 @@ if __name__ == '__main__':
         'auto_dark_t'           : 60*60, #in s
         'dark_avgs'             : 3,
         'ref_avgs'              : 2,
-        'history_t'             : 60*60*24, #in s
+        'history_t'             : 60*60, #in s
         'save_subdir'           : 'UV',
         'save_type'             : 'Absorbance',
         'series_ref_at_start'   : True,
@@ -749,12 +749,12 @@ if __name__ == '__main__':
         'analog_out_au_max'     : 10000, #mAu
         'analog_out_wav'        : {'out1': 280, 'out2': 260},
         'do_ao'                 : True,
-        'remote_ip'             : '164.54.204.53',
+        'remote_ip'             : '164.54.204.192',
         'remote_port'           : '5559',
         'remote'                : False,
         'remote_device'         : 'uv',
         'com_thread'            : None,
-        'remote_dir_prefix'     : {'local' : '/nas_data', 'remote' : 'Y:\\'},
+        'remote_dir_prefix'     : {'local' : '/nas_data/SAXS', 'remote' : 'Z:\\'},
         'inline_panel'          : True,
         'plot_refresh_t'        : 0.1, #in s
         'device_communication'  : 'remote',
