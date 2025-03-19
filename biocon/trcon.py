@@ -4792,7 +4792,7 @@ if __name__ == '__main__':
         'remote_fm_port'        : '5557',
         'remote_valve_ip'       : '164.54.204.8',
         'remote_valve_port'     : '5558',
-        'device_communication'  : 'remote',
+        'device_communication'  : 'local',
         # 'injection_valve'       : [{'name': 'Injection', 'args': ['Rheodyne', 'COM6'],  #Chaotic flow
         #                             'kwargs': {'positions' : 2}},],
         # 'sample_valve'          : [],
@@ -4835,12 +4835,12 @@ if __name__ == '__main__':
                                     'pump_address': '00', 'dual_syringe': 'False'},
                                     'ctrl_args': {'flow_rate' : '0.068', 'refill_rate' : '3',
                                     'continuous': False}},],
-        'buffer2_pump'          : [{'name': 'Sheath', 'args': ['Pico Plus', 'COM12'],
+        'buffer2_pump'          : [{'name': 'Sheath', 'args': ['Pico Plus', 'COM7'],
                                     'kwargs': {'syringe_id': '1 mL, Medline P.C.',
                                     'pump_address': '00', 'dual_syringe': 'False'}, 'ctrl_args':
                                     {'flow_rate' : '0.002', 'refill_rate' : '1',
                                     'continuous': False}},],
-        'sample_pump'           : [{'name': 'Sample', 'args': ['Pico Plus', 'COM14'],
+        'sample_pump'           : [{'name': 'Sample', 'args': ['Pico Plus', 'COM9'],
                                     'kwargs': {'syringe_id': '1 mL, Medline P.C.',
                                     'pump_address': '00', 'dual_syringe': 'False'}, 'ctrl_args':
                                     {'flow_rate' : '0.009', 'refill_rate' : '1',
@@ -4850,7 +4850,7 @@ if __name__ == '__main__':
         'sample_valve_label'    : 'Sample',
         'buffer1_valve_label'   : 'Buffer',
         'buffer2_valve_label'   : 'Sheath',
-        # 'device_communication'  : 'remote',                                         # Simulated
+        'device_communication'  : 'local',                                         # Simulated
         # 'injection_valve'       : [{'name': 'Injection', 'args': ['Soft', None],    # Simulated Chaotic w/syringe pump
         #                             'kwargs': {'positions' : 2}},],
         # 'sample_valve'          : [{'name': 'Sample', 'args': ['Soft', None],
@@ -4943,7 +4943,7 @@ if __name__ == '__main__':
         'autoinject'            : 'After scan',
         'autoinject_scan'       : '5',
         'autoinject_valve_pos'  : 1,
-        # 'mixer_type'            : 'chaotic', # laminar or chaotic
+        #'mixer_type'            : 'chaotic', # laminar or chaotic
         'mixer_type'            : 'laminar', # laminar or chaotic
         'sample_ratio'          : '0.066', # For laminar flow
         'sheath_ratio'          : '0.032', # For laminar flow

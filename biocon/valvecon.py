@@ -820,8 +820,8 @@ if __name__ == '__main__':
 
     # # TR-SAXS laminar flow
     setup_devices = [
-    # {'name': 'Injection', 'args': ['Rheodyne', 'COM6'],
-        #     'kwargs': {'positions' : 2}},
+    {'name': 'Injection', 'args': ['Rheodyne', 'COM6'],
+            'kwargs': {'positions' : 2}},
         {'name': 'Buffer 1', 'args': ['Rheodyne', 'COM10'],
             'kwargs': {'positions' : 6}},
         {'name': 'Buffer 2', 'args': ['Rheodyne', 'COM4'],
