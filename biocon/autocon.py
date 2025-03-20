@@ -1527,6 +1527,8 @@ default_sec_saxs_settings = {
     # Injection parameters
     'acq_method'    : '',
     'sample_loc'    : '',
+    'sample_drawer' : '',
+    'sample_well'   : '',
     'inj_vol'       : 0.,
     'flow_rate'     : 0.,
     'elution_vol'   : 0.,
@@ -1749,8 +1751,13 @@ def make_sec_saxs_info_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
     fp_choices = ['{}'.format(i+1) for i in
         range(int(num_flow_paths))]
 
+    drawer_choices = ['Drawer 3, Front', 'Drawer 3, Back', 'Drawer 2, Front',
+        'Drawer 2, Back', 'Drawer 1, Front', 'Drawer 1, Back', 'Vial Rack']
+
     hplc_settings = {
-        'sample_loc'    : ['Sample location:', ctrl_ids['sample_loc'], 'text'],
+        # 'sample_loc'    : ['Sample location:', ctrl_ids['sample_loc'], 'text'],
+        'sample_drawer' : ['Sample drawer:', ctrl_ids['sample_drawer'], 'choice', drawer_choices],
+        'sample_well'   : ['Sample well:', ctrl_ids['sample_well'], 'text'],
         'inj_vol'       : ['Injection volume [uL]:', ctrl_ids['inj_vol'], 'float'],
         'flow_rate'     : ['Flow rate [ml/min]:', ctrl_ids['flow_rate'], 'float'],
         'elution_vol'   : ['Elution volume [ml]:', ctrl_ids['elution_vol'], 'float'],
@@ -2462,6 +2469,24 @@ class AutoList(utils.ItemList):
                     default_settings['settle_time'] = default_inj_settings['settle_time']
                     default_settings['flow_path'] = default_inj_settings['flow_path']
 
+                    sl = default_settings['sample_loc']
+                    if sl.startswith('D2F'):
+                        drawer = 'Drawer 2, Front'
+                    elif sl.startswith('D2B'):
+                        drawer = 'Drawer 2, Back'
+                    elif sl.startswith('D1F'):
+                        drawer = 'Drawer 1, Front'
+                    elif sl.startswith('D1B'):
+                        drawer = 'Drawer 1, Back'
+                    elif sl.startswith('D3F'):
+                        drawer = 'Drawer 3, Front'
+                    elif sl.startswith('D3B'):
+                        drawer = 'Drawer 3, Back'
+                    else:
+                        drawer = 'Vial Rack'
+
+                    default_settings['sample_drawer'] = drawer
+
                     # Exposure parameters
                     default_settings['num_frames'] = default_exp_settings['num_frames']
                     default_settings['exp_time'] = default_exp_settings['exp_time']
@@ -2673,6 +2698,31 @@ class AutoList(utils.ItemList):
             if cmd_settings['coflow_from_fr']:
                 cmd_settings['coflow_fr'] = float(cmd_settings['flow_rate'])
 
+            drawer = cmd_settings['sample_drawer']
+            if drawer == 'Drawer 2, Front':
+                sl = 'D2F'
+            elif drawer == 'Drawer 2, Back':
+                sl = 'D2B'
+            elif drawer == 'Drawer 1, Front':
+                sl = 'D1F'
+            elif drawer == 'Drawer 1, Back':
+                sl = 'D1B'
+            elif drawer == 'Drawer 3, Front':
+                sl = 'D3F'
+            elif drawer == 'Drawer 3, Back':
+                sl = 'D3B'
+            elif drawer == 'Vial Rack':
+                sl = 'vial'
+
+            well = cmd_settings['sample_well'].strip().upper()
+
+            if sl != 'vial':
+                sample_loc = '{}-{}'.format(sl, well)
+            else:
+                sample_loc = well
+
+            cmd_settings['sample_loc'] = sample_loc
+
             cmd_settings, exp_valid, exp_errors = self._validate_exp_params(
                 cmd_settings)
 
@@ -2809,11 +2859,11 @@ class AutoList(utils.ItemList):
 
         if column is not None and flow_rate is not None:
             if '10/300' in column:
-                flow_range = (0.4, 0.8)
+                flow_range = (0.3, 0.8)
             elif '5/150' in column:
-                flow_range = (0.2, 0.5)
+                flow_range = (0.1, 0.5)
             elif 'Wyatt' in column:
-                flow_range = (0.4, 0.8)
+                flow_range = (0.3, 0.8)
             else:
                 flow_range = None
 
