@@ -286,7 +286,12 @@ class ControlServer(threading.Thread):
                         else:
                             answer = ['response', answer]
                             logger.debug('Sending command response: %s', answer)
-                            self.socket.send_pyobj(answer, protocol=2)
+                            self.socket.send_pyobj(answer, protocol=2, flags=zmq.NOBLOCK)
+
+                    except zmq.ZMQError:
+                        err = traceback.format_exc()
+                        if not 'Resource temporarily unavailable' in err:
+                            logger.error('Error in server thread:\n{}'.format(traceback.format_exc()))
 
                     except Exception:
                         device = command['device']
@@ -320,11 +325,15 @@ class ControlServer(threading.Thread):
 
                             status = ['status', status]
                             logger.debug('Sending status: %s', status)
-                            self.socket.send_pyobj(status, protocol=2)
-
+                            self.socket.send_pyobj(status, protocol=2, flags=zmq.NOBLOCK)
 
                 if not cmds_run:
                     time.sleep(0.01)
+
+            except zmq.ZMQError:
+                err = traceback.format_exc()
+                if not 'Resource temporarily unavailable' in err:
+                    logger.error('Error in server thread:\n{}'.format(traceback.format_exc()))
 
             except Exception:
                 logger.error('Error in server thread:\n{}'.format(traceback.format_exc()))
@@ -396,10 +405,10 @@ if __name__ == '__main__':
     port3 = '5558'
     port4 = '5559'
 
-    # exp_type = 'coflow' #coflow or trsaxs_laminar or trsaxs_chaotic or hplc
+    exp_type = 'coflow' #coflow or trsaxs_laminar or trsaxs_chaotic or hplc
     # exp_type = 'trsaxs_chaotic'
     # exp_type = 'trsaxs_laminar'
-    exp_type = 'hplc'
+    # exp_type = 'hplc'
 
 
     if exp_type == 'coflow':
@@ -408,8 +417,8 @@ if __name__ == '__main__':
         has_uv = True
         # has_uv = False
 
-        ip = '164.54.204.53'
-        # ip = '164.54.204.253'
+        # ip = '164.54.204.53'
+        ip = '164.54.204.192'
         # ip = '164.54.204.24'
 
         # setup_pumps = [
@@ -424,10 +433,10 @@ if __name__ == '__main__':
         ob1_comm_lock = threading.RLock()
 
         setup_pumps = [
-            {'name': 'sheath', 'args': ['VICI M50', 'COM6'],
+            {'name': 'sheath', 'args': ['VICI M50', 'COM5'],
                 'kwargs': {'flow_cal': '628.68', 'backlash_cal': '9.95'},
                 'ctrl_args': {'flow_rate': 1}},
-            {'name': 'outlet', 'args': ['OB1 Pump', 'COM14'],
+            {'name': 'outlet', 'args': ['OB1 Pump', 'COM8'],
                 'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
                 'min_pressure': -900, 'max_pressure': 1000, 'P': -2, 'I': -0.15,
                 'D': 0, 'bfs_instr_ID': None, 'comm_lock': ob1_comm_lock,
@@ -436,7 +445,7 @@ if __name__ == '__main__':
             ]
 
         setup_valves = [
-            {'name': 'Coflow Sheath', 'args': ['Cheminert', 'COM4'],
+            {'name': 'Coflow Sheath', 'args': ['Cheminert', 'COM7'],
                 'kwargs': {'positions' : 10}},
             ]
 
@@ -462,8 +471,8 @@ if __name__ == '__main__':
         outlet_fm_comm_lock = threading.Lock()
 
         setup_fms = [
-            {'name': 'sheath', 'args' : ['BFS', 'COM5'], 'kwargs': {}},
-            {'name': 'outlet', 'args' : ['BFS', 'COM3'], 'kwargs':
+            {'name': 'sheath', 'args' : ['BFS', 'COM6'], 'kwargs': {}},
+            {'name': 'outlet', 'args' : ['BFS', 'COM9'], 'kwargs':
                 {'comm_lock': outlet_fm_comm_lock}}
             ]
 
@@ -780,7 +789,6 @@ if __name__ == '__main__':
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        print('stopping stuff')
         if exp_type != 'hplc':
             control_server_pump.stop()
             control_server_pump.join()
