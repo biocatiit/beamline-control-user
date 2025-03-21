@@ -3332,12 +3332,12 @@ class HPLCCommThread(utils.CommManager):
         comm_name = kwargs.pop('comm_name', None)
         cmd = kwargs.pop('cmd', None)
 
+        device = self._connected_devices[name]
+
         connected = device.get_connected()
 
         if not connected:
             return
-
-        device = self._connected_devices[name]
 
         status = device.get_instrument_status()
         sample_submission = device.get_submitting_sample_status()
