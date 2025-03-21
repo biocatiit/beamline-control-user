@@ -214,6 +214,10 @@ class AgilentHPLCStandard(AgilentHPLC):
         self._pump_power_status1 = self.get_pump_power_status(self._pump1_id, True)
         self._pump_high_pressure_limit1 = self.get_high_pressure_limit(self._pump1_id,
                 False)
+        self._pump_target_flow_rate1 = self.get_target_flow_rate(self._pump1_id,
+            False)
+        self._pump_flow_accel1 = self.get_flow_accel(self._pump1_id, False)
+
         self._autosampler_therm_power_status = self.get_autosampler_thermostat_power_status()
         self._autosampler_temp_set_point = self.get_autosampler_temperature_set_point()
 
@@ -412,7 +416,7 @@ class AgilentHPLCStandard(AgilentHPLC):
 
         return float(flow_rate)
 
-    def get_hplc_target_flow_rate(self, flow_path, update_method=True):
+    def get_hplc_target_flow_rate(self, flow_path):
         """
         Gets the target flow rate of the specified flow path
 
@@ -420,10 +424,6 @@ class AgilentHPLCStandard(AgilentHPLC):
         ----------
         flow_path: int
             The flow path to get the rate for. Either 1 or 2.
-        update_method: bool
-            If true, get the current method from instrument. If doing multiple
-            things that use the current method status in a row, it can be useful
-            to set this to false for some cases, may be faster.
 
         Returns
         -------
@@ -433,15 +433,13 @@ class AgilentHPLCStandard(AgilentHPLC):
         flow_path = int(flow_path)
 
         if flow_path == 1:
-            target_flow_rate = self.get_target_flow_rate(self._pump1_id,
-                update_method)
+            target_flow_rate = copy.copy(self._pump_target_flow_rate1)
         elif flow_path == 2:
-            target_flow_rate = self.get_target_flow_rate(self._pump2_id,
-                update_method)
+            target_flow_rate = copy.copy(self._pump_target_flow_rate2)
 
         return target_flow_rate
 
-    def get_hplc_flow_accel(self, flow_path, update_method=True):
+    def get_hplc_flow_accel(self, flow_path):
         """
         Gets the flow acceleration of the specified flow path
 
@@ -462,9 +460,9 @@ class AgilentHPLCStandard(AgilentHPLC):
         flow_path = int(flow_path)
 
         if flow_path == 1:
-            flow_accel = self.get_flow_accel(self._pump1_id, update_method)
+            flow_accel = copy.copy(self._pump_flow_accel1)
         elif flow_path == 2:
-            flow_accel = self.get_flow_accel(self._pump2_id, update_method)
+            flow_accel = copy.copy(self._pump_flow_accel1)
 
         return flow_accel
 
@@ -1857,7 +1855,11 @@ class AgilentHPLCStandard(AgilentHPLC):
 
         success = self.set_flow_rate(flow_rate, pump_id)
 
-        # run_queue = self.get_run_queue()
+        if success:
+            if flow_path == 1:
+                self._pump_target_flow_rate1 = flow_rate
+            elif flow_path == 2:
+                self._pump_target_flow_rate2 = flow_rate
 
         return success
 
@@ -1887,6 +1889,12 @@ class AgilentHPLCStandard(AgilentHPLC):
             pump_id = self._pump2_id
 
         success = self.set_flow_accel(flow_accel, pump_id)
+
+        if success:
+            if flow_path == 1:
+                self._pump_flow_accel1 = flow_accel
+            elif flow_path == 2:
+                self._pump_flow_accel1 = flow_accel
 
         return success
 
@@ -2699,6 +2707,9 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
         self._pump_power_status2 = self.get_pump_power_status(self._pump2_id, True)
         self._pump_high_pressure_limit2 = self.get_high_pressure_limit(self._pump2_id,
                 False)
+        self._pump_target_flow_rate2 = self.get_target_flow_rate(self._pump2_id,
+            False)
+        self._pump_flow_accel2 = self.get_flow_accel(self._pump2_id, False)
 
     def _connect_valves(self, sv_args, ov_args, p1_args, p2_args, b1_args,
         b2_args):
@@ -3520,12 +3531,12 @@ class HPLCCommThread(utils.CommManager):
 
         pump_status = {
             'target_flow1'      : device.get_hplc_target_flow_rate(1),
-            'flow_accel1'       : device.get_hplc_flow_accel(1, False),
+            'flow_accel1'       : device.get_hplc_flow_accel(1),
             }
 
         if isinstance(device, AgilentHPLC2Pumps):
             pump_status['target_flow2'] = device.get_hplc_target_flow_rate(2)
-            pump_status['flow_accel2'] = device.get_hplc_flow_accel(2, False)
+            pump_status['flow_accel2'] = device.get_hplc_flow_accel(2)
 
         autosampler_status = {
             }
