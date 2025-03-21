@@ -55,6 +55,7 @@ try:
     sys.path.append('C:\\Users\\biocat\\Stellarnet\\stellarnet_driverLibs')#add the path of the stellarnet_demo.py
     import stellarnet_driver3 as sn
 except ImportError:
+    traceback.print_exc()
     pass
 
 import client
