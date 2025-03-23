@@ -3471,7 +3471,13 @@ class HPLCCommThread(utils.CommManager):
             'errors'            : device.get_instrument_errors(),
             'run_queue_status'  : device.get_run_queue_status(),
             'run_queue'         : device.get_run_queue(),
+            'elapsed_runtime'   : 0,
+            'total_runtime'     : 0,
             }
+
+        if status == 'Run':
+            instrument_status['elapsed_runtime'] = device.get_hplc_elapsed_runtime()
+            instrument_status['total_runtime'] = device.get_hplc_total_runtime()
 
         pump_status = {
             'purging_pump1'     : device.get_purge_status(1),
@@ -5103,8 +5109,8 @@ class HPLCPanel(utils.DevicePanel):
             get_fast_hplc_status_cmd = ['get_fast_hplc_status', [self.name,], {}]
             self._update_status_cmd(get_fast_hplc_status_cmd, 2)
 
-            get_slow_hplc_status_cmd = ['get_slow_hplc_status', [self.name,], {}]
-            self._update_status_cmd(get_slow_hplc_status_cmd, 35)
+            # get_slow_hplc_status_cmd = ['get_slow_hplc_status', [self.name,], {}]
+            # self._update_status_cmd(get_slow_hplc_status_cmd, 35)
 
             get_valve_status_cmd = ['get_valve_status', [self.name,], {}]
             self._update_status_cmd(get_valve_status_cmd, 15)
@@ -6225,6 +6231,8 @@ class HPLCPanel(utils.DevicePanel):
             status = str(inst_status['status'])
             run_queue_status = str(inst_status['run_queue_status'])
             run_queue = inst_status['run_queue']
+            elapsed_runtime = inst_status['elapsed_runtime']
+            total_runtime = inst_status['total_runtime']
 
             if connected != self._inst_connected:
                 wx.CallAfter(self._inst_connected_ctrl.SetLabel,
@@ -6260,8 +6268,28 @@ class HPLCPanel(utils.DevicePanel):
                 self._inst_errs = err_string
 
             if run_queue != self._inst_run_queue:
-                self._update_run_queue(run_queue)
+                display_run_queue = []
+                for item in run_queue:
+                    if item[1] != 'Aborted' and item[1] != 'Completed':
+                        display_run_queue.append(item)
+
+                self._update_run_queue(display_run_queue)
                 self._inst_run_queue = run_queue
+
+            if (status != 'Run' and status != 'Injecting'
+                and status != 'PostRun' and status != 'PreRun'):
+                total_runtime = '0.0'
+                elapsed_runtime = '0.0'
+            else:
+                total_runtime = str(round(total_runtime,1))
+                elapsed_runtime = str(round(elapsed_runtime, 1))
+
+            if((elapsed_runtime != self._inst_elapsed_runtime) or
+                (total_runtime != self._inst_total_runtime)):
+                wx.CallAfter(self._inst_runtime_ctrl.SetLabel,
+                    '{}/{}'.format(elapsed_runtime, total_runtime))
+                self._inst_elapsed_runtime =  elapsed_runtime
+                self._inst_total_runtime =  total_runtime
 
 
             pump_status = val['pump_status']
