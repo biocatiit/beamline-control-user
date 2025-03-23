@@ -3231,6 +3231,8 @@ class AutoListItem(utils.ListItem):
         top_sizer.Add(std_sizer, flag=wx.TOP|wx.BOTTOM, border=self._FromDIP(5))
         top_sizer.Add(item_sizer, flag=wx.BOTTOM, border=self._FromDIP(5))
 
+        for child in item_parent.GetChildren():
+            child.Bind(wx.EVT_LEFT_DOWN, self._on_left_mouse_btn)
 
         # This should be moved into the list item?
         if self.item_type == 'sec_sample':
