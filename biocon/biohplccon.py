@@ -209,9 +209,8 @@ class AgilentHPLCStandard(AgilentHPLC):
                     self._uv_abs_traces[wav] = trace
 
 
-
     def _get_initial_status(self):
-        self._pump_power_status1 = self.get_pump_power_status(self._pump1_id, True)
+        self._pump_power_status1 = self.get_pump_power_status(self._pump1_id, False)
         self._pump_high_pressure_limit1 = self.get_high_pressure_limit(self._pump1_id,
                 False)
         self._pump_target_flow_rate1 = self.get_target_flow_rate(self._pump1_id,
@@ -663,12 +662,14 @@ class AgilentHPLCStandard(AgilentHPLC):
             if time cannot be acquired.
         """
 
-        if self._active_flow_path == 1:
-            run_time = self.get_elapsed_runtime(self._pump1_id,
-                update)
-        elif self._active_flow_path == 2:
-            run_time = self.get_elapsed_runtime(self._pump2_id,
-                update)
+        # if self._active_flow_path == 1:
+        #     run_time = self.get_elapsed_runtime(self._pump1_id,
+        #         update)
+        # elif self._active_flow_path == 2:
+        #     run_time = self.get_elapsed_runtime(self._pump2_id,
+        #         update)
+
+        run_time = self.get_elapsed_runtime()
 
         return run_time
 
@@ -687,12 +688,14 @@ class AgilentHPLCStandard(AgilentHPLC):
             if time cannot be acquired.
         """
 
-        if self._active_flow_path == 1:
-            run_time = self.get_total_runtime(self._pump1_id,
-                update)
-        elif self._active_flow_path == 2:
-            run_time = self.get_total_runtime(self._pump2_id,
-                update)
+        # if self._active_flow_path == 1:
+        #     run_time = self.get_total_runtime(self._pump1_id,
+        #         update)
+        # elif self._active_flow_path == 2:
+        #     run_time = self.get_total_runtime(self._pump2_id,
+        #         update)
+
+        run_time = self.get_total_runtime()
 
         return run_time
 
@@ -1853,7 +1856,7 @@ class AgilentHPLCStandard(AgilentHPLC):
         elif flow_path == 2:
             pump_id = self._pump2_id
 
-        success = self.set_flow_rate(flow_rate, pump_id)
+        success = self.set_flow_rate(flow_rate, pump_id, False)
 
         if success:
             if flow_path == 1:
@@ -1888,7 +1891,7 @@ class AgilentHPLCStandard(AgilentHPLC):
         elif flow_path == 2:
             pump_id = self._pump2_id
 
-        success = self.set_flow_accel(flow_accel, pump_id)
+        success = self.set_flow_accel(flow_accel, pump_id, False)
 
         if success:
             if flow_path == 1:
@@ -1922,7 +1925,7 @@ class AgilentHPLCStandard(AgilentHPLC):
         elif flow_path == 2:
             pump_id = self._pump2_id
 
-        success = self.set_high_pressure_limit(pressure, pump_id)
+        success = self.set_high_pressure_limit(pressure, pump_id, False)
 
         if success:
             if flow_path == 1:
@@ -2703,8 +2706,29 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
 
         self.set_active_buffer_position(self.get_valve_position('buffer2'), 2)
 
+    def _on_run_start(self, source, args):
+        """
+        Overrides the method in the base hplc class to make it useful for
+        the two pump system
+        """
+        self._method_start_time = time.time()
+        start_time = args.MarkerPosition
+
+        with self._trace_lock:
+            self._run_starts.append(start_time)
+
+        self.get_current_method_from_instrument()
+
+        if self._active_flow_path == 1:
+            pump_id = self._pump1_id
+        elif self._active_flow_path == 2:
+            pump_id = self._pump1_id
+
+        self._method_total_time = self.get_pump_stop_time(pump_id=pump_id,
+            update_method=False)
+
     def _get_initial_status_dual_pump(self):
-        self._pump_power_status2 = self.get_pump_power_status(self._pump2_id, True)
+        self._pump_power_status2 = self.get_pump_power_status(self._pump2_id, False)
         self._pump_high_pressure_limit2 = self.get_high_pressure_limit(self._pump2_id,
                 False)
         self._pump_target_flow_rate2 = self.get_target_flow_rate(self._pump2_id,
