@@ -935,11 +935,11 @@ class StopFlowCommand(AutoCommand):
         stop_coflow = cmd_info['stop_coflow']
         num_paths = cmd_info['num_flow_paths']
 
-        if (stop_flow1 or stop_flow2) and stop_coflow:
-            coflow_wait_id = self.automator.get_wait_id()
-            coflow_wait_cmd = 'wait_sync_{}'.format(coflow_wait_id)
-            coflow_conds = [['coflow', [coflow_wait_cmd,]],]
+        coflow_wait_id = self.automator.get_wait_id()
+        coflow_wait_cmd = 'wait_sync_{}'.format(coflow_wait_id)
+        coflow_conds = [['coflow', [coflow_wait_cmd,]],]
 
+        if (stop_flow1 or stop_flow2) and stop_coflow:
             if stop_flow1:
                 coflow_conds.append(['{}_pump1'.format(hplc_inst),
                     [coflow_wait_cmd,]])
