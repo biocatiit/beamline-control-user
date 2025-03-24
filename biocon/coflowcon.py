@@ -545,18 +545,26 @@ class CoflowControl(object):
         return copy.copy(self._buffer_change_remain)
 
     def change_buffer(self, buffer_change_seq):
+        logger.info('Changing buffer')
         self._buffer_change_seq = buffer_change_seq
-        self._buffer_change_remain = 0
+        excess = self.settings['sheath_excess']
+        sheath_flow = buffer_change_seq[0][0]*excess
+        vol = buffer_change_seq[0][1]
+
+        self._buffer_change_remain = vol/sheath_flow
         self._changing_buffer = True
 
         if self._flow_timer:
             self._abort_flow_timer.set()
+            while self._flow_timer:
+                time.sleep(0.1)
 
         self._abort_change_buffer.clear()
         self._monitor_change_buffer_evt.set()
 
     def stop_change_buffer(self):
         if self._changing_buffer:
+            logger.info('Aborting buffer change')
             self._abort_change_buffer.set()
 
     def _monitor_change_buffer(self):
@@ -572,14 +580,14 @@ class CoflowControl(object):
                 self.stop_flow()
                 self.set_sheath_valve_position(target_valve_pos)
                 self.change_flow_rate(flow_rate)
+                self.start_flow()
+
+                start_time = time.time()
 
                 sheath_fr = self.sheath_setpoint
-                run_time = 60*(self.settings['buffer_change_vol']/sheath_fr)
+                run_time = 60*(volume/sheath_fr)
 
-                self.start_flow()
-                start_time = time.time()
                 elapsed_time = time.time() - start_time
-
                 while  elapsed_time < run_time:
                     if self._abort_change_buffer.is_set():
                         break
@@ -589,6 +597,9 @@ class CoflowControl(object):
                     time.sleep(0.1)
 
                     elapsed_time = time.time() - start_time
+
+                if self._abort_change_buffer.is_set():
+                    self.stop_flow()
 
             else:
                 self._abort_change_buffer.clear()
@@ -603,6 +614,7 @@ class CoflowControl(object):
         return copy.copy(self._remaining_flow_time)
 
     def start_flow_timer(self, flow_time):
+        logger.info('Starting flow timer for %s minutes', flow_time/60)
         self._remaining_flow_time = flow_time
         self._flow_timer = True
         self._abort_flow_timer.clear()
@@ -610,33 +622,36 @@ class CoflowControl(object):
 
     def stop_flow_timer(self):
         if self._flow_timer:
+            logger.info('Stopping flow timer')
             self._abort_flow_timer.set()
-
 
     def _monitor_flow_timer(self):
         while not self._terminate_monitor_flow_timer.is_set():
             self._monitor_flow_timer_evt.wait()
+            # print('starting monitor_flow_timer loop')
 
-            start_time = time.time()
-            run_time = copy.copy(self._remaining_flow_time)
-            elapsed_time = 0
+            if not self._abort_flow_timer.is_set():
+                start_time = time.time()
+                run_time = copy.copy(self._remaining_flow_time)
+                elapsed_time = 0
 
-            while  self._remaining_flow_time > 0:
-                if self._abort_change_buffer.is_set():
-                    break
+                while  self._remaining_flow_time > 0:
+                    if self._abort_flow_timer.is_set():
+                        break
 
-                self._remaining_flow_time = run_time - elapsed_time
+                    self._remaining_flow_time = run_time - elapsed_time
 
-                time.sleep(0.1)
+                    time.sleep(0.1)
 
-                elapsed_time = time.time() - start_time
+                    elapsed_time = time.time() - start_time
 
-            if not self._abort_change_buffer.is_set():
+            if not self._abort_flow_timer.is_set():
                 self.stop_flow()
 
             self._abort_flow_timer.clear()
             self._monitor_flow_timer_evt.clear()
             self._flow_timer = False
+            self._remaining_flow_time = 0
 
     def _get_buffer_monitor_flow_rate(self):
         return self._sheath_flow_rate
@@ -771,9 +786,13 @@ class CoflowControl(object):
             self.coflow_valve_con.join(5)
 
         self._terminate_monitor_change_buffer.set()
+        self._abort_change_buffer.set()
+        self._monitor_change_buffer_evt.set()
         self._monitor_change_buffer_thread.join(5)
 
         self._terminate_monitor_flow_timer.set()
+        self._abort_flow_timer.set()
+        self._monitor_flow_timer_evt.set()
         self._monitor_flow_timer_thread.join(5)
 
 class CoflowPanel(wx.Panel):
@@ -1334,6 +1353,8 @@ class CoflowPanel(wx.Panel):
             self.start_flow(False)
 
     def _on_stopbutton(self, evt):
+        self.coflow_control.stop_flow_timer()
+        self.coflow_control.stop_change_buffer()
         self.stop_flow()
 
     def _on_changebutton(self, evt):
@@ -1394,13 +1415,13 @@ class CoflowPanel(wx.Panel):
         wx.CallAfter(self.set_status, 'Changing buffer')
 
         #Start flow timer
-        fr = self.coflow_control.sheath_setpoint
-        time = 60*(self.settings['buffer_change_vol']/fr)
-        self._start_flow_timer(time)
-
         self.doing_buffer_change = True
+        self._start_flow_timer(self.coflow_control.get_buffer_change_time_remaining(),
+            start_ft_monitor=False)
+        self._set_start_flow_button_status()
 
     def _on_put_in_water(self, evt):
+        logger.info('Putting coflow cell into water')
         self._put_in_water()
 
     def _put_in_water(self):
@@ -1408,6 +1429,7 @@ class CoflowPanel(wx.Panel):
         self.change_buffer([self.settings['sheath_valve_water_pos'],], False)
 
     def _on_put_in_ethanol(self, evt):
+        logger.info('Putting coflow cell into ethanol')
         self._put_in_ethanol()
 
     def _put_in_ethanol(self):
@@ -1420,18 +1442,20 @@ class CoflowPanel(wx.Panel):
         self.change_buffer(valve_positions, False)
 
     def _on_put_in_hellmanex(self, evt):
+        logger.info('Putting coflow cell into hellmanex')
         self._put_in_hellmanex()
 
     def _put_in_hellmanex(self):
         self.stop_flow_timer()
 
-         valve_positions = [self.settings['sheath_valve_water_pos'],
+        valve_positions = [self.settings['sheath_valve_water_pos'],
             self.settings['sheath_valve_hellmanex_pos'],
             ]
 
         self.change_buffer(valve_positions, False)
 
     def _on_clean(self, evt):
+        logger.info('Cleaning coflow cell')
         self._clean_cell()
 
     def _clean_cell(self):
@@ -1495,9 +1519,10 @@ class CoflowPanel(wx.Panel):
         if flow_time is not None:
             self._start_flow_timer(flow_time)
 
-    def _start_flow_timer(self, flow_time):
+    def _start_flow_timer(self, flow_time, start_ft_monitor=True):
         self.set_flow_timer_time_remaining(flow_time)
-        self.coflow_control.start_flow_timer(flow_time)
+        if start_ft_monitor:
+            self.coflow_control.start_flow_timer(flow_time)
 
         wx.CallAfter(self.flow_timer.Start, 5000)
 
@@ -1507,12 +1532,13 @@ class CoflowPanel(wx.Panel):
     def _on_stop_flow_timer(self, evt):
         self.coflow_control.stop_flow_timer()
         self.coflow_control.stop_change_buffer()
-        self.stop_flow_timer()
+        self.stop_flow(verbose=False)
 
     def stop_flow_timer(self):
         wx.CallAfter(self.stop_flow_timer_btn.Disable)
         wx.CallAfter(self.start_flow_timer_btn.Enable)
         wx.CallAfter(self.flow_timer_status.SetLabel, '')
+        wx.CallAfter(self.flow_timer.Stop)
 
         # Any time the flow timer stops it interrupts the buffer change sequence
         self.doing_buffer_change = False
@@ -1529,41 +1555,35 @@ class CoflowPanel(wx.Panel):
 
     def _on_flow_timer(self, evt):
 
-        if self.coflow_control.coflow_on:
-            if self.doing_buffer_change:
-                stop_flow_timer = not self.coflow_control.get_buffer_change_status()
-                time_remaining = self.coflow_control.get_buffer_change_time_remaining()
-            else:
-                stop_flow_timer = not self.coflow_control.get_flow_timer_status()
-                time_remaining = self.coflow_control.get_flow_timer_time_remaining()
+        if self.doing_buffer_change:
+            stop_flow_timer = not self.coflow_control.get_buffer_change_status()
+            time_remaining = self.coflow_control.get_buffer_change_time_remaining()
+        else:
+            stop_flow_timer = not self.coflow_control.get_flow_timer_status()
+            time_remaining = self.coflow_control.get_flow_timer_time_remaining()
 
-            if stop_flow_timer:
+        if stop_flow_timer:
+            change_buf = copy.copy(self.doing_buffer_change)
+            self.stop_flow()
+            self.stop_flow_timer()
 
-                change_buf = copy.copy(self.doing_buffer_change)
+            if change_buf:
 
-                self.stop_flow()
-                self.stop_flow_timer()
+                if self.verbose_buffer_change:
+                    msg = ('Buffer change complete. Do you want to restart '
+                        'flow at the previous rate?')
 
-                if change_buf:
+                    dialog = wx.MessageDialog(self, msg, 'Buffer change finished',
+                        style=wx.YES_NO|wx.YES_DEFAULT|wx.ICON_QUESTION)
 
-                    if self.verbose_buffer_change:
-                        msg = ('Buffer change complete. Do you want to restart '
-                            'flow at the previous rate?')
+                    ret = dialog.ShowModal()
+                    dialog.Destroy()
 
-                        dialog = wx.MessageDialog(self, msg, 'Buffer change finished',
-                            style=wx.YES_NO|wx.YES_DEFAULT|wx.ICON_QUESTION)
-
-                        ret = dialog.ShowModal()
-                        dialog.Destroy()
-
-                        if ret == wx.ID_YES:
-                            self.start_flow()
-
-            else:
-                self.set_flow_timer_time_remaining(time_remaining)
+                    if ret == wx.ID_YES:
+                        self.start_flow()
 
         else:
-            self.stop_flow_timer()
+            self.set_flow_timer_time_remaining(time_remaining)
 
     def _onRightMouseButton(self, event):
 
@@ -1625,10 +1645,7 @@ class CoflowPanel(wx.Panel):
                 self._start_flow()
 
     def _start_flow(self, start_monitor=True):
-        wx.CallAfter(self.start_flow_button.Disable)
-        wx.CallAfter(self.change_buffer_button.Disable)
-        wx.CallAfter(self.stop_flow_button.Enable)
-        wx.CallAfter(self.change_flow_button.Enable)
+        self._set_start_flow_button_status()
 
         self.coflow_control.start_flow()
 
@@ -1636,6 +1653,12 @@ class CoflowPanel(wx.Panel):
 
         if start_monitor:
             wx.CallAfter(self.monitor_timer.Start, self.settings['settling_time'])
+
+    def _set_start_flow_button_status(self):
+        wx.CallAfter(self.start_flow_button.Disable)
+        wx.CallAfter(self.change_buffer_button.Disable)
+        wx.CallAfter(self.stop_flow_button.Enable)
+        wx.CallAfter(self.change_flow_button.Enable)
 
     def stop_flow(self, verbose=True):
         logger.debug('Stopping flow')
@@ -1666,16 +1689,13 @@ class CoflowPanel(wx.Panel):
             self.change_buffer_button.Enable()
             self.stop_flow_button.Disable()
             self.change_flow_button.Disable()
-
-        if stop_coflow and self.coflow_control.coflow_on:
             self.monitor_timer.Stop()
             self.coflow_control.monitor = False
-
-            self.coflow_control.stop_flow()
-
             self.set_status('Coflow off')
+            self.stop_flow_timer()
 
-            logger.info('Stopped coflow pumps')
+        if stop_coflow and self.coflow_control.coflow_on:
+            self.coflow_control.stop_flow()
 
     def change_flow(self, validate=True, start_monitor=False):
         logger.debug('Changing flow rate')
@@ -2664,6 +2684,75 @@ class CoflowFrame(wx.Frame):
 
         self.Destroy()
 
+default_coflow_settings = {
+    'show_advanced_options'     : False,
+    'device_communication'      : 'remote',
+    'remote_pump_ip'            : '164.54.204.192',
+    'remote_pump_port'          : '5556',
+    'remote_fm_ip'              : '164.54.204.192',
+    'remote_fm_port'            : '5557',
+    'remote_overflow_ip'        : '164.54.204.75',
+    'remote_valve_ip'           : '164.54.204.192',
+    'remote_valve_port'         : '5558',
+    'flow_units'                : 'mL/min',
+    'sheath_pump'               : {'name': 'sheath', 'args': ['VICI M50', 'COM6'],
+                                    'kwargs': {'flow_cal': '628.68',
+                                    'backlash_cal': '9.95'},
+                                    'ctrl_args': {'flow_rate': 1}},
+    # 'outlet_pump'               : {'name': 'outlet', 'args': ['VICI M50', 'COM4'],
+    #                                 'kwargs': {'flow_cal': '628.68',
+    #                                 'backlash_cal': '9.962'},
+    #                                 'ctrl_args': {'flow_rate': 1}},
+    'outlet_pump'               : {'name': 'outlet', 'args': ['OB1 Pump', 'COM7'],
+                                    'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
+                                    'min_pressure': -1000, 'max_pressure': 1000, 'P': -2, 'I': -0.15,
+                                    'D': 0, 'bfs_instr_ID': None, 'comm_lock': None,
+                                    'calib_path': './resources/ob1_calib.txt'},
+                                    'ctrl_args': {}},
+    'sheath_fm'                 : {'name': 'sheath', 'args': ['BFS', 'COM5'],
+                                    'kwargs':{}},
+    'outlet_fm'                 : {'name': 'outlet', 'args': ['BFS', 'COM3'],
+                                    'kwargs':{}},
+    'sheath_valve'              : {'name': 'Coflow Sheath',
+                                    'args':['Cheminert', 'COM4'],
+                                    'kwargs': {'positions' : 10}},
+    # 'sheath_pump'               : {'name': 'sheath', 'args': ['Soft', None], # Simulated devices for testing
+    #                                 'kwargs': {}},
+    # 'outlet_pump'               : {'name': 'outlet', 'args': ['Soft', None],
+    #                                 'kwargs': {}},
+    # 'sheath_fm'                 : {'name': 'sheath', 'args': ['Soft', None],
+    #                                 'kwargs':{}},
+    # 'outlet_fm'                 : {'name': 'outlet', 'args': ['Soft', None],
+    #                                 'kwargs':{}},
+    # 'sheath_valve'              : {'name': 'Coflow Sheath',
+    #                                 'args': ['Soft', None],
+    #                                 'kwargs': {'positions' : 10}},
+    'sheath_ratio'              : 0.3,
+    'sheath_excess'             : 1.5,
+    'sheath_warning_threshold_low'  : 0.8,
+    'sheath_warning_threshold_high' : 1.2,
+    # 'outlet_warning_threshold_low'  : 0.8,
+    # 'outlet_warning_threshold_high' : 1.2,
+    'outlet_warning_threshold_low'  : 0.98,
+    'outlet_warning_threshold_high' : 1.02,
+    'sheath_fr_mult'            : 1,
+    'outlet_fr_mult'            : 1,
+    # 'outlet_fr_mult'            : -1,
+    # 'settling_time'             : 5000, #in ms
+    'settling_time'             : 120000, #in ms
+    'lc_flow_rate'              : '0.6',
+    'show_sheath_warning'       : True,
+    'show_outlet_warning'       : True,
+    'use_overflow_control'      : True,
+    'buffer_change_fr'          : 1.19, #in ml/min
+    # 'buffer_change_vol'         : 11.1, #in ml
+    'buffer_change_vol'         : 1, #in ml
+    'air_density_thresh'        : 700, #g/L
+    'sheath_valve_water_pos'    : 10,
+    'sheath_valve_hellmanex_pos': 8,
+    'sheath_valve_ethanol_pos'  : 9,
+    }
+
 if __name__ == '__main__':
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
@@ -2686,73 +2775,7 @@ if __name__ == '__main__':
     # logger.addHandler(h1)
 
     #Settings
-    coflow_settings = {
-        'show_advanced_options'     : False,
-        'device_communication'      : 'remote',
-        'remote_pump_ip'            : '164.54.204.53',
-        'remote_pump_port'          : '5556',
-        'remote_fm_ip'              : '164.54.204.53',
-        'remote_fm_port'            : '5557',
-        'remote_overflow_ip'        : '164.54.204.75',
-        'remote_valve_ip'           : '164.54.204.53',
-        'remote_valve_port'         : '5558',
-        'flow_units'                : 'mL/min',
-        'sheath_pump'               : {'name': 'sheath', 'args': ['VICI M50', 'COM3'],
-                                        'kwargs': {'flow_cal': '627.72',
-                                        'backlash_cal': '9.814'},
-                                        'ctrl_args': {'flow_rate': 1}},
-        # 'outlet_pump'               : {'name': 'outlet', 'args': ['VICI M50', 'COM4'],
-        #                                 'kwargs': {'flow_cal': '628.68',
-        #                                 'backlash_cal': '9.962'},
-        #                                 'ctrl_args': {'flow_rate': 1}},
-        'outlet_pump'               : {'name': 'outlet', 'args': ['OB1 Pump', 'COM8'],
-                                        'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
-                                        'min_pressure': -1000, 'max_pressure': 1000, 'P': 5, 'I': 0.00015,
-                                        'D': 0, 'bfs_instr_ID': None, 'comm_lock': None,
-                                        'calib_path': './resources/ob1_calib.txt'},
-                                        'ctrl_args': {}},
-        'sheath_fm'                 : {'name': 'sheath', 'args': ['BFS', 'COM6'],
-                                        'kwargs':{}},
-        'outlet_fm'                 : {'name': 'outlet', 'args': ['BFS', 'COM5'],
-                                        'kwargs':{}},
-        'sheath_valve'              : {'name': 'Coflow Sheath',
-                                        'args':['Cheminert', 'COM4'],
-                                        'kwargs': {'positions' : 10}},
-        # 'sheath_pump'               : {'name': 'sheath', 'args': ['Soft', None], # Simulated devices for testing
-        #                                 'kwargs': {}},
-        # 'outlet_pump'               : {'name': 'outlet', 'args': ['Soft', None],
-        #                                 'kwargs': {}},
-        # 'sheath_fm'                 : {'name': 'sheath', 'args': ['Soft', None],
-        #                                 'kwargs':{}},
-        # 'outlet_fm'                 : {'name': 'outlet', 'args': ['Soft', None],
-        #                                 'kwargs':{}},
-        # 'sheath_valve'              : {'name': 'Coflow Sheath',
-        #                                 'args': ['Soft', None],
-        #                                 'kwargs': {'positions' : 10}},
-        'sheath_ratio'              : 0.3,
-        'sheath_excess'             : 1.5,
-        'sheath_warning_threshold_low'  : 0.8,
-        'sheath_warning_threshold_high' : 1.2,
-        'outlet_warning_threshold_low'  : 0.8,
-        'outlet_warning_threshold_high' : 1.2,
-        # 'outlet_warning_threshold_low'  : 0.98,
-        # 'outlet_warning_threshold_high' : 1.02,
-        'sheath_fr_mult'            : 1,
-        'outlet_fr_mult'            : 1,
-        # 'outlet_fr_mult'            : -1,
-        'settling_time'             : 5000, #in ms
-        # 'settling_time'             : 120000, #in ms
-        'lc_flow_rate'              : '0.6',
-        'show_sheath_warning'       : True,
-        'show_outlet_warning'       : True,
-        'use_overflow_control'      : True,
-        'buffer_change_fr'          : 2., #in ml/min
-        'buffer_change_vol'         : 25., #in ml
-        'air_density_thresh'        : 700, #g/L
-        'sheath_valve_water_pos'    : 10,
-        'sheath_valve_hellmanex_pos': 8,
-        'sheath_valve_ethanol_pos'  : 9,
-        }
+    coflow_settings = default_coflow_settings
 
     coflow_settings['components'] = ['coflow']
 

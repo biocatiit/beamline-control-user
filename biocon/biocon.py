@@ -391,73 +391,7 @@ if __name__ == '__main__':
     ###################################################################
     # Coflow
 
-    coflow_settings = {
-        'show_advanced_options'     : False,
-        'device_communication'      : 'remote',
-        'remote_pump_ip'            : '164.54.204.192',
-        'remote_pump_port'          : '5556',
-        'remote_fm_ip'              : '164.54.204.192',
-        'remote_fm_port'            : '5557',
-        'remote_overflow_ip'        : '164.54.204.75',
-        'remote_valve_ip'           : '164.54.204.192',
-        'remote_valve_port'         : '5558',
-        'flow_units'                : 'mL/min',
-        'sheath_pump'               : {'name': 'sheath', 'args': ['VICI M50', 'COM6'],
-                                        'kwargs': {'flow_cal': '628.68',
-                                        'backlash_cal': '9.95'},
-                                        'ctrl_args': {'flow_rate': 1}},
-        # 'outlet_pump'               : {'name': 'outlet', 'args': ['VICI M50', 'COM4'],
-        #                                 'kwargs': {'flow_cal': '628.68',
-        #                                 'backlash_cal': '9.962'},
-        #                                 'ctrl_args': {'flow_rate': 1}},
-        'outlet_pump'               : {'name': 'outlet', 'args': ['OB1 Pump', 'COM7'],
-                                        'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
-                                        'min_pressure': -1000, 'max_pressure': 1000, 'P': -2, 'I': -0.15,
-                                        'D': 0, 'bfs_instr_ID': None, 'comm_lock': None,
-                                        'calib_path': './resources/ob1_calib.txt'},
-                                        'ctrl_args': {}},
-        'sheath_fm'                 : {'name': 'sheath', 'args': ['BFS', 'COM5'],
-                                        'kwargs':{}},
-        'outlet_fm'                 : {'name': 'outlet', 'args': ['BFS', 'COM3'],
-                                        'kwargs':{}},
-        'sheath_valve'              : {'name': 'Coflow Sheath',
-                                        'args':['Cheminert', 'COM4'],
-                                        'kwargs': {'positions' : 10}},
-        # 'sheath_pump'               : {'name': 'sheath', 'args': ['Soft', None], # Simulated devices for testing
-        #                                 'kwargs': {}},
-        # 'outlet_pump'               : {'name': 'outlet', 'args': ['Soft', None],
-        #                                 'kwargs': {}},
-        # 'sheath_fm'                 : {'name': 'sheath', 'args': ['Soft', None],
-        #                                 'kwargs':{}},
-        # 'outlet_fm'                 : {'name': 'outlet', 'args': ['Soft', None],
-        #                                 'kwargs':{}},
-        # 'sheath_valve'              : {'name': 'Coflow Sheath',
-        #                                 'args': ['Soft', None],
-        #                                 'kwargs': {'positions' : 10}},
-        'sheath_ratio'              : 0.3,
-        'sheath_excess'             : 1.5,
-        'sheath_warning_threshold_low'  : 0.8,
-        'sheath_warning_threshold_high' : 1.2,
-        # 'outlet_warning_threshold_low'  : 0.8,
-        # 'outlet_warning_threshold_high' : 1.2,
-        'outlet_warning_threshold_low'  : 0.98,
-        'outlet_warning_threshold_high' : 1.02,
-        'sheath_fr_mult'            : 1,
-        'outlet_fr_mult'            : 1,
-        # 'outlet_fr_mult'            : -1,
-        # 'settling_time'             : 5000, #in ms
-        'settling_time'             : 120000, #in ms
-        'lc_flow_rate'              : '0.6',
-        'show_sheath_warning'       : True,
-        'show_outlet_warning'       : True,
-        'use_overflow_control'      : True,
-        'buffer_change_fr'          : 1.19, #in ml/min
-        'buffer_change_vol'         : 11.1, #in ml
-        'air_density_thresh'        : 700, #g/L
-        'sheath_valve_water_pos'    : 10,
-        'sheath_valve_hellmanex_pos': 8,
-        'sheath_valve_ethanol_pos'  : 9,
-        }
+    coflow_settings = coflowcon.default_coflow_settings
 
     trsaxs_settings = {
         'position_units'        : 'mm',
@@ -784,7 +718,7 @@ if __name__ == '__main__':
         ('pipeline', pipeline_ctrl.PipelineControl),
         ('uv', spectrometercon.UVPanel),
         ('hplc', biohplccon.HPLCPanel),
-        ('automator', autocon.AutoPanel)
+        ('automator', autocon.AutoPanel),
         ])
 
     settings = {
