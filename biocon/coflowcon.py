@@ -86,6 +86,27 @@ class CoflowControl(object):
 
         self._buffer_monitor = utils.BufferMonitor(self._get_buffer_monitor_flow_rate)
 
+        self._buffer_change_seq = []
+        self._buffer_change_remain = 0
+        self._changing_buffer = False
+        self._abort_change_buffer = threading.Event()
+        self._monitor_change_buffer_evt = threading.Event()
+        self._terminate_monitor_change_buffer = threading.Event()
+        self._monitor_change_buffer_thread = threading.Thread(
+            target=self._monitor_change_buffer)
+        self._monitor_change_buffer_thread.daemon = True
+        self._monitor_change_buffer_thread.start()
+
+        self._remaining_flow_time = 0
+        self._flow_timer = False
+        self._abort_flow_timer = threading.Event()
+        self._monitor_flow_timer_evt = threading.Event()
+        self._terminate_monitor_flow_timer = threading.Event()
+        self._monitor_flow_timer_thread = threading.Thread(
+            target=self._monitor_flow_timer)
+        self._monitor_flow_timer_thread.daemon = True
+        self._monitor_flow_timer_thread.start()
+
     def init_connections(self):
         self.coflow_pump_cmd_q = deque()
         self.coflow_pump_return_q = deque()
@@ -517,6 +538,106 @@ class CoflowControl(object):
 
         return success
 
+    def get_buffer_change_status(self):
+        return copy.copy(self._changing_buffer)
+
+    def get_buffer_change_time_remaining(self):
+        return copy.copy(self._buffer_change_remain)
+
+    def change_buffer(self, buffer_change_seq):
+        self._buffer_change_seq = buffer_change_seq
+        self._buffer_change_remain = 0
+        self._changing_buffer = True
+
+        if self._flow_timer:
+            self._abort_flow_timer.set()
+
+        self._abort_change_buffer.clear()
+        self._monitor_change_buffer_evt.set()
+
+    def stop_change_buffer(self):
+        if self._changing_buffer:
+            self._abort_change_buffer.set()
+
+    def _monitor_change_buffer(self):
+        while not self._terminate_monitor_change_buffer.is_set():
+            self._monitor_change_buffer_evt.wait()
+
+            if len(self._buffer_change_seq) > 0 and not self._abort_change_buffer.is_set():
+                buffer_change = self._buffer_change_seq.pop(0)
+                flow_rate = buffer_change[0]
+                volume = buffer_change[1]
+                target_valve_pos = buffer_change[2]
+
+                self.stop_flow()
+                self.set_sheath_valve_position(target_valve_pos)
+                self.change_flow_rate(flow_rate)
+
+                sheath_fr = self.sheath_setpoint
+                run_time = 60*(self.settings['buffer_change_vol']/sheath_fr)
+
+                self.start_flow()
+                start_time = time.time()
+                elapsed_time = time.time() - start_time
+
+                while  elapsed_time < run_time:
+                    if self._abort_change_buffer.is_set():
+                        break
+
+                    self._buffer_change_remain = run_time - elapsed_time
+
+                    time.sleep(0.1)
+
+                    elapsed_time = time.time() - start_time
+
+            else:
+                self._abort_change_buffer.clear()
+                self._monitor_change_buffer_evt.clear()
+                self._changing_buffer = False
+                self._buffer_change_seq = []
+
+    def get_flow_timer_status(self):
+        return copy.copy(self._flow_timer)
+
+    def get_flow_timer_time_remaining(self):
+        return copy.copy(self._remaining_flow_time)
+
+    def start_flow_timer(self, flow_time):
+        self._remaining_flow_time = flow_time
+        self._flow_timer = True
+        self._abort_flow_timer.clear()
+        self._monitor_flow_timer_evt.set()
+
+    def stop_flow_timer(self):
+        if self._flow_timer:
+            self._abort_flow_timer.set()
+
+
+    def _monitor_flow_timer(self):
+        while not self._terminate_monitor_flow_timer.is_set():
+            self._monitor_flow_timer_evt.wait()
+
+            start_time = time.time()
+            run_time = copy.copy(self._remaining_flow_time)
+            elapsed_time = 0
+
+            while  self._remaining_flow_time > 0:
+                if self._abort_change_buffer.is_set():
+                    break
+
+                self._remaining_flow_time = run_time - elapsed_time
+
+                time.sleep(0.1)
+
+                elapsed_time = time.time() - start_time
+
+            if not self._abort_change_buffer.is_set():
+                self.stop_flow()
+
+            self._abort_flow_timer.clear()
+            self._monitor_flow_timer_evt.clear()
+            self._flow_timer = False
+
     def _get_buffer_monitor_flow_rate(self):
         return self._sheath_flow_rate
 
@@ -649,6 +770,11 @@ class CoflowControl(object):
             self.coflow_fm_con.join(5)
             self.coflow_valve_con.join(5)
 
+        self._terminate_monitor_change_buffer.set()
+        self._monitor_change_buffer_thread.join(5)
+
+        self._terminate_monitor_flow_timer.set()
+        self._monitor_flow_timer_thread.join(5)
 
 class CoflowPanel(wx.Panel):
     """
@@ -1216,28 +1342,23 @@ class CoflowPanel(wx.Panel):
     def _on_change_buffer(self, evt):
         self.stop_flow_timer()
 
-        self.change_buffer(interactive=True)
+        valve_pos = [self.get_sheath_valve_position(),]
+
+        self.change_buffer(valve_pos, interactive=True)
 
     def get_flow_rate(self):
         return self.flow_rate.GetValue()
 
-    def change_buffer(self, target_valve_pos=1, change_valve_pos=False,
-        interactive=True):
-        #Stop flow
-        self.stop_flow()
-
-        if change_valve_pos:
-            self.set_sheath_valve_position(target_valve_pos)
-
-        valve_pos = self.get_sheath_valve_position()
+    def change_buffer(self, valve_positions, interactive=True):
 
         self.verbose_buffer_change = interactive
 
         if interactive:
-            if int(valve_pos) != int(target_valve_pos):
+            valve_pos = valve_positions[0]
+            if int(valve_pos) > 7:
 
                 msg = ('The sheath buffer valve position is set to {}. For buffer '
-                    'it is usually 1. Please verify that the valve position '
+                    'it is usually 1-7. Please verify that the valve position '
                     'is correct before proceeding and change if necessary. '
                     'Click okay to continue.'.format(valve_pos))
 
@@ -1261,30 +1382,30 @@ class CoflowPanel(wx.Panel):
             if ret == wx.ID_CANCEL:
                 return
 
-        #Change flow rate
-        self._change_flow_rate(self.settings['buffer_change_fr'])
 
-        #Start flow
-        self._start_flow(False)
+        buffer_change_seq = []
+
+        for pos in valve_positions:
+            buffer_change_seq.append([self.settings['buffer_change_fr'],
+                self.settings['buffer_change_vol'], pos])
+
+        self.coflow_control.change_buffer(buffer_change_seq)
+
         wx.CallAfter(self.set_status, 'Changing buffer')
+
         #Start flow timer
         fr = self.coflow_control.sheath_setpoint
         time = 60*(self.settings['buffer_change_vol']/fr)
         self._start_flow_timer(time)
+
         self.doing_buffer_change = True
-
-    def _next_buffer_change(self):
-        if len(self.buffer_change_sequence) > 0:
-            next_buffer = self.buffer_change_sequence.pop(0)
-
-            self.change_buffer(next_buffer, True, False)
 
     def _on_put_in_water(self, evt):
         self._put_in_water()
 
     def _put_in_water(self):
         self.stop_flow_timer()
-        self.change_buffer(self.settings['sheath_valve_water_pos'], True, False)
+        self.change_buffer([self.settings['sheath_valve_water_pos'],], False)
 
     def _on_put_in_ethanol(self, evt):
         self._put_in_ethanol()
@@ -1292,11 +1413,11 @@ class CoflowPanel(wx.Panel):
     def _put_in_ethanol(self):
         self.stop_flow_timer()
 
-        self.buffer_change_sequence = [self.settings['sheath_valve_water_pos'],
+        valve_positions = [self.settings['sheath_valve_water_pos'],
             self.settings['sheath_valve_ethanol_pos'],
             ]
 
-        self._next_buffer_change()
+        self.change_buffer(valve_positions, False)
 
     def _on_put_in_hellmanex(self, evt):
         self._put_in_hellmanex()
@@ -1304,11 +1425,11 @@ class CoflowPanel(wx.Panel):
     def _put_in_hellmanex(self):
         self.stop_flow_timer()
 
-        self.buffer_change_sequence = [self.settings['sheath_valve_water_pos'],
+         valve_positions = [self.settings['sheath_valve_water_pos'],
             self.settings['sheath_valve_hellmanex_pos'],
             ]
 
-        self._next_buffer_change()
+        self.change_buffer(valve_positions, False)
 
     def _on_clean(self, evt):
         self._clean_cell()
@@ -1316,14 +1437,14 @@ class CoflowPanel(wx.Panel):
     def _clean_cell(self):
         self.stop_flow_timer()
 
-        self.buffer_change_sequence = [self.settings['sheath_valve_water_pos'],
+        valve_positions = [self.settings['sheath_valve_water_pos'],
             self.settings['sheath_valve_hellmanex_pos'],
             self.settings['sheath_valve_water_pos'],
             self.settings['sheath_valve_ethanol_pos'],
             self.settings['sheath_valve_water_pos']
             ]
 
-        self._next_buffer_change()
+        self.change_buffer(valve_positions, False)
 
     def _on_start_overflow(self, evt):
         wx.CallAfter(self._start_overflow)
@@ -1353,7 +1474,6 @@ class CoflowPanel(wx.Panel):
             wx.CallAfter(self.overflow_status.SetLabel, status)
 
     def _on_start_flow_timer(self, evt):
-        self.buffer_change_sequence = []
         self.start_flow_timer()
 
     def start_flow_timer(self):
@@ -1364,7 +1484,7 @@ class CoflowPanel(wx.Panel):
             flow_time= float(flow_time)*60
 
         except Exception:
-            msg = ('The flow time must be a float.')
+            msg = ('The flow time must be a number.')
             title = 'Flow time not set'
             style=wx.OK|wx.ICON_WARNING
 
@@ -1376,10 +1496,8 @@ class CoflowPanel(wx.Panel):
             self._start_flow_timer(flow_time)
 
     def _start_flow_timer(self, flow_time):
-        self.flow_timer_run_time = flow_time
-        self.flow_timer_start_time = time.time()
-
-        self.set_flow_timer_time_remaining(self.flow_timer_run_time)
+        self.set_flow_timer_time_remaining(flow_time)
+        self.coflow_control.start_flow_timer(flow_time)
 
         wx.CallAfter(self.flow_timer.Start, 5000)
 
@@ -1387,12 +1505,11 @@ class CoflowPanel(wx.Panel):
         wx.CallAfter(self.start_flow_timer_btn.Disable)
 
     def _on_stop_flow_timer(self, evt):
-        self.buffer_change_sequence = []
+        self.coflow_control.stop_flow_timer()
+        self.coflow_control.stop_change_buffer()
         self.stop_flow_timer()
 
     def stop_flow_timer(self):
-        self.flow_timer.Stop()
-
         wx.CallAfter(self.stop_flow_timer_btn.Disable)
         wx.CallAfter(self.start_flow_timer_btn.Enable)
         wx.CallAfter(self.flow_timer_status.SetLabel, '')
@@ -1413,15 +1530,21 @@ class CoflowPanel(wx.Panel):
     def _on_flow_timer(self, evt):
 
         if self.coflow_control.coflow_on:
-            tr = time.time() - self.flow_timer_start_time
-            if tr >= self.flow_timer_run_time:
+            if self.doing_buffer_change:
+                stop_flow_timer = not self.coflow_control.get_buffer_change_status()
+                time_remaining = self.coflow_control.get_buffer_change_time_remaining()
+            else:
+                stop_flow_timer = not self.coflow_control.get_flow_timer_status()
+                time_remaining = self.coflow_control.get_flow_timer_time_remaining()
+
+            if stop_flow_timer:
 
                 change_buf = copy.copy(self.doing_buffer_change)
 
                 self.stop_flow()
                 self.stop_flow_timer()
 
-                if change_buf and len(self.buffer_change_sequence) == 0:
+                if change_buf:
 
                     if self.verbose_buffer_change:
                         msg = ('Buffer change complete. Do you want to restart '
@@ -1436,11 +1559,8 @@ class CoflowPanel(wx.Panel):
                         if ret == wx.ID_YES:
                             self.start_flow()
 
-                elif change_buf and len(self.buffer_change_sequence) > 0:
-                    self._next_buffer_change()
-
             else:
-                self.set_flow_timer_time_remaining(self.flow_timer_run_time - tr)
+                self.set_flow_timer_time_remaining(time_remaining)
 
         else:
             self.stop_flow_timer()
