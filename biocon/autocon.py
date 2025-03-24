@@ -664,7 +664,7 @@ class SecSampleCommand(AutoCommand):
         hplc_inst = cmd_info['inst']
 
         sample_wait_id = self.automator.get_wait_id()
-        sample_wait_cmd = 'wait_sync_{}'.format(sample_wait_id)
+        sample_wait_cmd = '_{}'.format(sample_wait_id)
         sample_conds = [[hplc_inst, [sample_wait_cmd,]], ['exp', [sample_wait_cmd,]],
             ['coflow', [sample_wait_cmd,]],]
 
@@ -797,6 +797,12 @@ class EquilibrateCommand(AutoCommand):
             start_conds.append(['coflow', [start_wait_cmd,]])
             finish_conds.append(['coflow', [finish_wait_cmd,]])
 
+            if cmd_info['coflow_restart']:
+                wait_id = self.automator.get_wait_id()
+                equil_wait_cmd = 'wait_sync_{}'.format(wait_id)
+                equil_conds = [[hplc_inst, [equil_wait_cmd,]],
+                    ['coflow', [equil_wait_cmd,]]]
+
         if num_paths == 1:
             start_conds.append(['exp', [start_wait_cmd,]])
             finish_conds.append(['exp', [finish_wait_cmd,]])
@@ -809,8 +815,14 @@ class EquilibrateCommand(AutoCommand):
         self._add_automator_cmd(hplc_inst, 'switch_buffer_bottle', [],
             switch_buffer_bottle_settings)
         self._add_automator_cmd(hplc_inst, 'equilibrate', [], equil_settings)
+
+        if equil_coflow and cmd_info['coflow_restart']:
+            self._add_automator_cmd(hplc_inst, equil_wait_cmd, [],
+                {'condition' : 'status', 'inst_conds': equil_conds})
+
         self._add_automator_cmd(hplc_inst, finish_wait_cmd, [],
             {'condition' : 'status', 'inst_conds': finish_conds})
+
 
         if num_paths == 1:
             self._add_automator_cmd('exp', start_wait_cmd, [],
@@ -818,10 +830,8 @@ class EquilibrateCommand(AutoCommand):
             self._add_automator_cmd('exp', finish_wait_cmd, [],
                 {'condition' : 'status', 'inst_conds': finish_conds})
 
-        if equil_coflow:
-            wait_id = self.automator.get_wait_id()
-            equil_wait_cmd = 'wait_sync_{}'.format(wait_id)
 
+        if equil_coflow:
             self._add_automator_cmd('coflow', start_wait_cmd, [],
                 {'condition' : 'status', 'inst_conds': start_conds})
 
@@ -830,8 +840,8 @@ class EquilibrateCommand(AutoCommand):
 
             if cmd_info['coflow_restart']:
                 self._add_automator_cmd('coflow', equil_wait_cmd, [],
-                    {'condition' : 'status', 'inst_conds': [[hplc_inst,
-                    [finish_wait_cmd,]],]})
+                    {'condition' : 'status', 'inst_conds': equil_conds})
+
                 self._add_automator_cmd('coflow', 'start', [],
                     {'flow_rate': cmd_info['coflow_rate']})
 

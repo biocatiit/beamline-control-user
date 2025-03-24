@@ -2229,7 +2229,7 @@ class CoflowPanel(wx.Panel):
 
         elif cmd_name == 'change_buf':
             buffer_pos = int(cmd_kwargs['buffer_pos'])
-            self.change_buffer(buffer_pos, True, False)
+            self.change_buffer([buffer_pos,], False)
             state = 'change_buf'
 
         elif cmd_name == 'clean':
