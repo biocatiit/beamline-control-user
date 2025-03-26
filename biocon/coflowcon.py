@@ -2282,8 +2282,7 @@ class CoflowPanel(wx.Panel):
             self.stop_get_fr_event.set()
 
             if not self.coflow_control.timeout_event.is_set():
-                self.get_fr_thread.join()
-                # self.stop_flow()
+                self.get_fr_thread.join(5)
 
             try:
                 plot_window = wx.FindWindowByName('CoflowPlot')
@@ -2745,8 +2744,7 @@ default_coflow_settings = {
     'show_outlet_warning'       : True,
     'use_overflow_control'      : True,
     'buffer_change_fr'          : 1.19, #in ml/min
-    # 'buffer_change_vol'         : 11.1, #in ml
-    'buffer_change_vol'         : 1, #in ml
+    'buffer_change_vol'         : 11.1, #in ml
     'air_density_thresh'        : 700, #g/L
     'sheath_valve_water_pos'    : 10,
     'sheath_valve_hellmanex_pos': 8,

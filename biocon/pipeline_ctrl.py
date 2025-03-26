@@ -160,7 +160,7 @@ class PipelineControl(object):
         Stops client cleanly
         """
         self.control_client.stop()
-        self.control_client.join()
+        self.control_client.join(5)
 
 class ControlClient(threading.Thread):
     """
