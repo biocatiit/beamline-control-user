@@ -2093,10 +2093,16 @@ class CoflowPanel(wx.Panel):
                 metadata['Coflow incubator humidity [C]:'] = self.coflow_inc_humid.GetLabel()
                 metadata['HPLC incubator temperature [C]:'] = self.hplc_inc_temp.GetLabel()
                 metadata['HPLC incubator humidity [C]:'] = self.hplc_inc_humid.GetLabel()
-            metadata['Outlet flow rate [{}]:'.format(self.settings['flow_units'])] = round(self.coflow_control.outlet_setpoint,3)
+            try:
+                metadata['Outlet flow rate [{}]:'.format(self.settings['flow_units'])] = round(self.coflow_control.outlet_setpoint,3)
+            except Exception:
+                metadata['Outlet flow rate [{}]:'.format(self.settings['flow_units'])] = self.coflow_control.outlet_setpoint
             metadata['Sheath ratio:'] = self.settings['sheath_ratio']
             metadata['Sheath excess ratio:'] = self.settings['sheath_excess']
-            metadata['Sheath inlet flow rate (including excess) [{}]:'.format(self.settings['flow_units'])] = round(self.coflow_control.sheath_setpoint, 3)
+            try:
+                metadata['Sheath inlet flow rate (including excess) [{}]:'.format(self.settings['flow_units'])] = round(self.coflow_control.sheath_setpoint, 3)
+            except Exception:
+                metadata['Sheath inlet flow rate (including excess) [{}]:'.format(self.settings['flow_units'])] = self.coflow_control.sheath_setpoint
             metadata['Sheath valve position:'] = self.get_sheath_valve_position()
 
         else:

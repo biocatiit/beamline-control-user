@@ -3715,6 +3715,10 @@ class ExpPanel(wx.Panel):
 
             valid = False
 
+            local_data_dir = ''
+            data_dir = ''
+            struck_num_meas = 0
+
         else:
             local_data_dir = copy.copy(data_dir)
             data_dir = data_dir.replace(self.settings['local_dir_root'],
