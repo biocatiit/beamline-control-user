@@ -1288,16 +1288,16 @@ class CoflowPanel(wx.Panel):
         if self.settings['use_incubator_pvs']:
             status_grid_sizer.Add(wx.StaticText(status_panel, label='Coflow Inc. Temp. [C]:'),
                 flag=wx.ALIGN_CENTER_VERTICAL)
-            status_grid_sizer.Add(self.coflow_inc_temp_temp, flag=wx.ALIGN_CENTER_VERTICAL)
+            status_grid_sizer.Add(self.coflow_inc_temp, flag=wx.ALIGN_CENTER_VERTICAL)
             status_grid_sizer.Add(wx.StaticText(status_panel, label='Coflow Inc. Humidity [%]:'),
                 flag=wx.ALIGN_CENTER_VERTICAL)
-            status_grid_sizer.Add(self.coflow_inc_temp_temp, flag=wx.ALIGN_CENTER_VERTICAL)
+            status_grid_sizer.Add(self.coflow_inc_humid, flag=wx.ALIGN_CENTER_VERTICAL)
             status_grid_sizer.Add(wx.StaticText(status_panel, label='HPLC Inc. Temp. [C]:'),
                 flag=wx.ALIGN_CENTER_VERTICAL)
-            status_grid_sizer.Add(self.hplc_inc_temp_temp, flag=wx.ALIGN_CENTER_VERTICAL)
+            status_grid_sizer.Add(self.hplc_inc_temp, flag=wx.ALIGN_CENTER_VERTICAL)
             status_grid_sizer.Add(wx.StaticText(status_panel, label='HPLC Inc. Humidity [%]:'),
                 flag=wx.ALIGN_CENTER_VERTICAL)
-            status_grid_sizer.Add(self.hplc_inc_temp_temp, flag=wx.ALIGN_CENTER_VERTICAL)
+            status_grid_sizer.Add(self.hplc_inc_humid, flag=wx.ALIGN_CENTER_VERTICAL)
 
         coflow_buffer_sizer = self._create_buffer_ctrls(status_panel)
 
@@ -1305,7 +1305,7 @@ class CoflowPanel(wx.Panel):
             label='Coflow Status'), wx.HORIZONTAL)
         coflow_status_sizer.Add(status_grid_sizer, border=self._FromDIP(5), flag=wx.ALL)
         coflow_status_sizer.Add(coflow_buffer_sizer, border=self._FromDIP(5),
-            flag=wx.LEFT|wx.RIGHT|wx.BOTTOM)
+            flag=wx.LEFT|wx.RIGHT|wx.BOTTOM|wx.EXPAND)
 
         coflow_status_sizer.AddStretchSpacer(1)
 

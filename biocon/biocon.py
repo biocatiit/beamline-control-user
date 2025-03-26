@@ -110,14 +110,14 @@ class BioFrame(wx.Frame):
 
                 sub_sub_sizer = wx.BoxSizer(wx.HORIZONTAL)
                 sub_sub_sizer.Add(component_sizers['metadata'], proportion=1,
-                    border=self._FromDIP(10), flag=wx.EXPAND|wx.ALL)
+                    border=self._FromDIP(5), flag=wx.EXPAND|wx.ALL)
                 sub_sub_sizer.Add(component_sizers['exposure'], proportion=2,
-                    border=self._FromDIP(10), flag=wx.EXPAND|wx.ALL)
+                    border=self._FromDIP(5), flag=wx.EXPAND|wx.ALL)
 
                 sub_sizer = wx.BoxSizer(wx.VERTICAL)
                 sub_sizer.Add(sub_sub_sizer, flag=wx.EXPAND)
                 sub_sizer.Add(component_sizers['trsaxs_flow'], proportion=1,
-                    border=self._FromDIP(10), flag=wx.EXPAND|wx.ALL)
+                    border=self._FromDIP(5), flag=wx.EXPAND|wx.ALL)
 
                 exp_sizer.Add(sub_sizer, flag=wx.EXPAND, proportion=1)
 
@@ -125,38 +125,63 @@ class BioFrame(wx.Frame):
                 and 'trsaxs_flow' in component_sizers):
                 sub_sizer = wx.BoxSizer(wx.VERTICAL)
                 sub_sizer.Add(component_sizers['exposure'],
-                    border=self._FromDIP(10), flag=wx.EXPAND|wx.ALL)
+                    border=self._FromDIP(5), flag=wx.EXPAND|wx.ALL)
                 sub_sizer.Add(component_sizers['trsaxs_flow'], proportion=1,
-                    border=self._FromDIP(10), flag=wx.EXPAND|wx.ALL)
+                    border=self._FromDIP(5), flag=wx.EXPAND|wx.ALL)
+
+                exp_sizer.Add(sub_sizer, flag=wx.EXPAND, proportion=1)
+
+            elif ('exposure' in component_sizers and 'uv' in component_sizers and
+                'metadata' in component_sizers and 'coflow' in component_sizers):
+                sub_sizer = wx.BoxSizer(wx.VERTICAL)
+
+                sub_sub_sizer1 = wx.BoxSizer(wx.HORIZONTAL)
+                sub_sub_sizer1.Add(component_sizers['metadata'],
+                    border=self._FromDIP(5), flag=wx.EXPAND|wx.ALL, proportion=1)
+                sub_sub_sizer1.Add(component_sizers['exposure'],
+                    border=self._FromDIP(5), flag=wx.EXPAND|wx.ALL, proportion=2)
+
+                sub_sub_sizer2 = wx.BoxSizer(wx.HORIZONTAL)
+                sub_sub_sizer2.Add(component_sizers['uv'],
+                    border=self._FromDIP(5), flag=wx.EXPAND|wx.ALL)
+                sub_sub_sizer2.Add(component_sizers['coflow'],
+                    border=self._FromDIP(5), flag=wx.EXPAND|wx.ALL)
+
+                sub_sizer.Add(sub_sub_sizer1, flag=wx.EXPAND)
+                sub_sizer.Add(sub_sub_sizer2, flag=wx.EXPAND)
 
                 exp_sizer.Add(sub_sizer, flag=wx.EXPAND, proportion=1)
 
             elif ('exposure' in component_sizers
                 and 'metadata' in component_sizers):
                 exp_sizer.Add(component_sizers['metadata'], proportion=1,
-                    border=self._FromDIP(10), flag=wx.EXPAND|wx.ALL)
+                    border=self._FromDIP(5), flag=wx.EXPAND|wx.ALL)
                 exp_sizer.Add(component_sizers['exposure'], proportion=2,
-                    border=self._FromDIP(10), flag=wx.EXPAND|wx.ALL)
+                    border=self._FromDIP(5), flag=wx.EXPAND|wx.ALL)
 
             elif 'exposure' in component_sizers:
                 exp_sizer.Add(component_sizers['exposure'], proportion=1,
-                    border=self._FromDIP(10), flag=wx.EXPAND|wx.ALL)
+                    border=self._FromDIP(5), flag=wx.EXPAND|wx.ALL)
 
             if 'coflow' in component_sizers:
-                exp_sizer.Add(component_sizers['coflow'],
-                    border=self._FromDIP(10), flag=wx.EXPAND|wx.ALL)
+                if not ('exposure' in component_sizers and 'uv' in component_sizers and
+                'metadata' in component_sizers and 'coflow' in component_sizers):
+                    exp_sizer.Add(component_sizers['coflow'],
+                        border=self._FromDIP(5), flag=wx.EXPAND|wx.ALL)
 
             if 'trsaxs_scan' in component_sizers:
                 exp_sizer.Add(component_sizers['trsaxs_scan'],
-                    border=self._FromDIP(10), flag=wx.EXPAND|wx.ALL)
+                    border=self._FromDIP(5), flag=wx.EXPAND|wx.ALL)
 
             if 'scan' in component_sizers:
                 exp_sizer.Add(component_sizers['scan'], border=self._FromDIP(5),
                     flag=wx.EXPAND|wx.ALL)
 
             if 'uv' in component_sizers:
-                exp_sizer.Add(component_sizers['uv'], border=self._FromDIP(5),
-                    flag=wx.EXPAND|wx.ALL)
+                if not ('exposure' in component_sizers and 'uv' in component_sizers and
+                'metadata' in component_sizers and 'coflow' in component_sizers):
+                    exp_sizer.Add(component_sizers['uv'], border=self._FromDIP(5),
+                        flag=wx.EXPAND|wx.ALL)
 
             panel_sizer.Add(exp_sizer, flag=wx.EXPAND)
 
@@ -384,7 +409,7 @@ if __name__ == '__main__':
         'thresh': 0.04}, 'guard_vac' : {'check': True, 'thresh': 0.04},
         'sample_vac': {'check': True, 'thresh': 0.04}, 'sc_vac':
         {'check': True, 'thresh':0.04}}
-    exposure_settings['base_data_dir'] = '/nas_data/Eiger2x/2025_Run1/2025_03_23_Colbert/' #CHANGE ME and pipeline local_basedir
+    exposure_settings['base_data_dir'] = '/nas_data/Eiger2x/2025_Run1/2025_03_19_Watkins/' #CHANGE ME and pipeline local_basedir
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']
 
 

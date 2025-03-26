@@ -2962,11 +2962,11 @@ class ExpPanel(wx.Panel):
         else:
             self.d_shutter_pv = None
 
-        cols_pv, connected = self._initialize_pv(self.settings['cols_vac_pv'])
+        col_pv, connected = self._initialize_pv(self.settings['col_vac_pv'])
         if connected:
-            self.cols_vac_pv = cols_pv
+            self.col_vac_pv = col_pv
         else:
-            self.cols_vac_pv = None
+            self.col_vac_pv = None
 
         guard_pv, connected = self._initialize_pv(self.settings['guard_vac_pv'])
         if connected:
@@ -3152,6 +3152,7 @@ class ExpPanel(wx.Panel):
         # want the right metdata, but check components starts some things,
         # so you don't want to run that if the metadata is otherwise invalid
         metadata, metadata_valid = self._get_metadata(metadata_vals, False)
+        exp_values['metadata'] = metadata
 
         cont = True
 
@@ -3426,6 +3427,7 @@ class ExpPanel(wx.Panel):
             vac_valid, vac_msg = self._check_vacuum(verbose)
         else:
             vac_valid = True
+            vac_message = ''
 
         valid = shutter_valid and vac_valid
 

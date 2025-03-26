@@ -263,12 +263,13 @@ class Automator(threading.Thread):
 
                             state = self.get_automator_state()
                             for check_callback in self._on_check_cmd_callbacks:
-                                check_callback(cmd_id, cmd_name, name, state)
+                                check_callback(cmd_id, name, state)
 
                             while True:
                                 if len(self.check_response_queue) > 0:
                                     resp = self.check_response_queue[0]
                                     break
+                                time.sleep(0.1)
 
                             if resp:
                                 for con, state_list in inst_conds:
@@ -578,12 +579,13 @@ class AutoCommand(object):
         self._status_change_callbacks = []
         self._check_cmd_callbacks = []
 
+    def initialize(self):
         state = self.automator.get_automator_state()
 
         if state == 'run':
             self.automator.set_automator_state('pause')
 
-        self._initialize_cmd(cmd_info)
+        self._initialize_cmd(self.cmd_info)
 
         if state == 'run':
             self.automator.set_automator_state('run')
@@ -620,15 +622,15 @@ class AutoCommand(object):
     def _on_automator_finish_callback(self, aid, queue_name, state):
         self.set_command_status(aid, 'done', state)
 
-    def _on_automator_check_callback(self, aid, cmd_name, queue_name, state):
+    def _on_automator_check_callback(self, aid, queue_name, state):
         if aid in self.auto_ids:
             if state == 'run' and len(self._check_cmd_callbacks) > 0:
                 for cb_func in self._check_cmd_callbacks:
                     cb_func(self.cmd_info)
             elif state == 'run' and len(self._check_cmd_callbacks) == 0:
-                self.check_response_queue.append(True)
+                self.automator.check_response_queue.append(True)
             else:
-                self.check_response_queue.append(False)
+                self.automator.check_response_queue.append(False)
 
     def set_command_status(self, aid, status, state):
         if aid in self.auto_ids:
@@ -718,7 +720,7 @@ class AutoCommand(object):
             self._status_change_callbacks.remove(callback_func)
 
     def add_check_cmd_callback(self, callback_func):
-        self._on_check_cmd_callbacks.append(callback_func)
+        self._check_cmd_callbacks.append(callback_func)
 
     def remove_check_cmd_callback(self, callback_func):
         if callback_func in self._check_cmd_callbacks:
@@ -759,8 +761,15 @@ class SecSampleCommand(AutoCommand):
         finish_conds2 = [[hplc_inst, [finish_wait_cmd2,]], ['exp', [finish_wait_cmd2,]],
             ['coflow', [finish_wait_cmd2,]],]
 
+        check_wait_id = self.automator.get_wait_id()
+        check_wait_cmd = 'wait_check_{}'.format(check_wait_id)
+        check_conds = [[hplc_inst, [check_wait_cmd,]],['exp', [check_wait_cmd,]],
+            ['coflow', [check_wait_cmd,]],]
+
         self._add_automator_cmd('exp', sample_wait_cmd, [], {'condition': 'status',
             'inst_conds': sample_conds})
+        self._add_automator_cmd('exp', check_wait_cmd, [], {'condition': 'check',
+            'inst_conds': check_conds})
         self._add_automator_cmd('exp', 'expose', [], cmd_info)
         self._add_automator_cmd('exp', finish_wait_cmd, [], {'condition': 'status',
             'inst_conds': finish_conds})
@@ -785,6 +794,8 @@ class SecSampleCommand(AutoCommand):
 
         self._add_automator_cmd(hplc_inst, sample_wait_cmd, [],
             {'condition': 'status', 'inst_conds': sample_conds})
+        self._add_automator_cmd(hplc_inst, check_wait_cmd, [], {'condition': 'check',
+            'inst_conds': check_conds})
         self._add_automator_cmd(hplc_inst, hplc_wait_cmd, [],
             {'condition': 'status', 'inst_conds': [[hplc_inst,
             [hplc_wait_cmd,]], ['exp', ['exposing',]]]})
@@ -800,6 +811,8 @@ class SecSampleCommand(AutoCommand):
 
         self._add_automator_cmd('coflow', sample_wait_cmd, [],
             {'condition': 'status', 'inst_conds': sample_conds})
+        self._add_automator_cmd('coflow', check_wait_cmd, [], {'condition': 'check',
+            'inst_conds': check_conds})
         if cmd_info['start_coflow']:
             self._add_automator_cmd('coflow', 'start', [],
                 {'flow_rate': cmd_info['coflow_fr']})
@@ -2423,7 +2436,7 @@ class AutoList(utils.ItemList):
         utils.ItemList.__init__(self, *args)
 
         self.auto_panel = auto_panel
-        self.automator = self.auto_panel.automator
+        self.automator = self.auto_panel.settings['automator_thread']
 
         self._on_add_item_callback = on_add_item_callback
         self._on_remove_item_callback = on_remove_item_callback
@@ -3050,9 +3063,10 @@ class AutoList(utils.ItemList):
         warn_valid, shutter_msg, vac_msg = exp_panel.check_warnings(verbose=False,
             check_all=True)
 
-        data_dir = cmd_kwargs['data_dir']
-        filename = cmd_kwargs['filename']
-        run_num = expcon.run_number
+        data_dir = cmd_info['data_dir']
+        filename = cmd_info['filename']
+        run_num = exp_panel.run_number
+        num_frames = int(cmd_info['num_frames'])
 
         fprefix = filename+run_num
 
@@ -3062,11 +3076,11 @@ class AutoList(utils.ItemList):
         overwrite_valid = exp_panel.inner_check_overwrite(data_dir, fprefix,
             num_frames)
 
-        if not warn_valid or not overwrite_valid:
+        if len(shutter_msg) > 0 or len(vac_msg) > 0 or not overwrite_valid:
             msg = 'The following issues were detected prior to starting exposure:'
             if len(shutter_msg) > 0:
                 msg += '\n- {}'.format(shutter_msg)
-            if len(vac) > 0:
+            if len(vac_msg) > 0:
                 msg += vac_msg
 
             if not overwrite_valid:
@@ -3083,19 +3097,20 @@ class AutoList(utils.ItemList):
 
 
     def _add_item(self, item_info):
-
         command = self._on_add_item_callback(item_info)
         # auto_names = ['test']
         # auto_ids = [0]
 
         item_type = item_info['item_type']
 
-        if item_type == 'sec_sample':
+        if item_type == 'sec_sample' or item_type == 'exposure':
             command.add_check_cmd_callback(self._check_exposure_cmd)
 
         new_item = AutoListItem(self, item_type, command)
 
         self.add_items([new_item])
+
+        command.initialize()
 
 
     def _on_remove_item(self, evt):
