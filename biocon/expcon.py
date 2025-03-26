@@ -2950,6 +2950,12 @@ class ExpPanel(wx.Panel):
         return top_sizer
 
     def _initialize(self):
+        bc_pv, connected = self._initialize_pv(self.settings['beam_current_pv'])
+        if connected:
+            self.beam_current_pv = bc_pv
+        else:
+            self.beam_current_pv = None
+
         fe_pv, connected = self._initialize_pv(self.settings['fe_shutter_pv'])
         if connected:
             self.fe_shutter_pv = fe_pv
@@ -4009,6 +4015,17 @@ class ExpPanel(wx.Panel):
             if 'eig' in self.settings['detector'].lower():
                 metadata['Number of images per file:'] = self.settings['det_args']['images_per_file']
 
+            if self.beam_current_pv is not None:
+                bc_val = self.beam_current_pv.get(timeout=2)
+
+                if bc_val is not None:
+                    if bc_val == 0:
+                        bc = False
+                    else:
+                        bc = True
+
+                    metadata['Starting storage ring current [mA]:'] = bc
+
             if self.fe_shutter_pv is not None:
                 fes_val = self.fe_shutter_pv.get(timeout=2)
 
@@ -4445,6 +4462,7 @@ default_exposure_settings = {
     'wait_for_trig'         : True,
     'num_trig'              : '1',
     'show_advanced_options' : True,
+    'beam_current_pv'       : 'XFD:srCurrent',
     'fe_shutter_pv'         : 'PA:18ID:STA_A_FES_OPEN_PL',
     'd_shutter_pv'          : 'PA:18ID:STA_D_SDS_OPEN_PL.VAL',
     'col_vac_pv'            : '18ID:VAC:D:Cols',
