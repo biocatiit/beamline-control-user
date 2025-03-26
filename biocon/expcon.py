@@ -4019,12 +4019,11 @@ class ExpPanel(wx.Panel):
                 bc_val = self.beam_current_pv.get(timeout=2)
 
                 if bc_val is not None:
-                    if bc_val == 0:
-                        bc = False
-                    else:
-                        bc = True
-
-                    metadata['Starting storage ring current [mA]:'] = bc
+                    try:
+                        bc_val = round(bc_val, 2)
+                    except Exception:
+                        pass
+                    metadata['Starting storage ring current [mA]:'] = bc_val
 
             if self.fe_shutter_pv is not None:
                 fes_val = self.fe_shutter_pv.get(timeout=2)
