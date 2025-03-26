@@ -1243,8 +1243,24 @@ class CoflowPanel(wx.Panel):
         self.outlet_flow = wx.StaticText(status_panel, label='0', style=wx.ST_NO_AUTORESIZE,
             size=self._FromDIP((50,-1)))
 
-        self.cell_temp = epics.wx.PVText(status_panel, '18ID:ETC:Ti1',
-            auto_units=False, fg='black', style=wx.ST_NO_AUTORESIZE, size=self._FromDIP((50,-1)))
+        self.cell_temp = epics.wx.PVText(status_panel,
+            self.settings['coflow_cell_T_pv'], auto_units=False, fg='black',
+            style=wx.ST_NO_AUTORESIZE, size=self._FromDIP((50,-1)))
+
+        if self.settings['use_incubator_pvs']:
+            self.coflow_inc_temp = epics.wx.PVText(status_panel,
+                self.settings['coflow_inc_esensor_T_pv'], auto_units=False,
+                fg='black', style=wx.ST_NO_AUTORESIZE, size=self._FromDIP((50,-1)))
+            self.coflow_inc_humid = epics.wx.PVText(status_panel,
+                self.settings['coflow_inc_esensor_H_pv'], auto_units=False,
+                fg='black', style=wx.ST_NO_AUTORESIZE, size=self._FromDIP((50,-1)))
+            self.hplc_inc_temp = epics.wx.PVText(status_panel,
+                self.settings['hplc_inc_esensor_T_pv'], auto_units=False,
+                fg='black', style=wx.ST_NO_AUTORESIZE, size=self._FromDIP((50,-1)))
+            self.hplc_inc_humid = epics.wx.PVText(status_panel,
+                self.settings['hplc_inc_esensor_H_pv'], auto_units=False,
+                fg='black', style=wx.ST_NO_AUTORESIZE, size=self._FromDIP((50,-1)))
+
 
         self.status = wx.StaticText(status_panel, label='Coflow off', style=wx.ST_NO_AUTORESIZE,
             size=self._FromDIP((125, -1)))
@@ -1258,6 +1274,7 @@ class CoflowPanel(wx.Panel):
         outlet_label = wx.StaticText(status_panel, label='Outlet flow [{}]:'.format(units))
         temp_label = wx.StaticText(status_panel, label='Cell Temp. [C]:')
 
+
         status_grid_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(5), hgap=self._FromDIP(2))
         status_grid_sizer.Add(status_label, flag=wx.ALIGN_CENTER_VERTICAL)
         status_grid_sizer.Add(self.status, flag=wx.ALIGN_CENTER_VERTICAL)
@@ -1267,6 +1284,20 @@ class CoflowPanel(wx.Panel):
         status_grid_sizer.Add(self.outlet_flow, flag=wx.ALIGN_CENTER_VERTICAL)
         status_grid_sizer.Add(temp_label, flag=wx.ALIGN_CENTER_VERTICAL)
         status_grid_sizer.Add(self.cell_temp, flag=wx.ALIGN_CENTER_VERTICAL)
+
+        if self.settings['use_incubator_pvs']:
+            status_grid_sizer.Add(wx.StaticText(status_panel, label='Coflow Inc. Temp. [C]:'),
+                flag=wx.ALIGN_CENTER_VERTICAL)
+            status_grid_sizer.Add(self.coflow_inc_temp_temp, flag=wx.ALIGN_CENTER_VERTICAL)
+            status_grid_sizer.Add(wx.StaticText(status_panel, label='Coflow Inc. Humidity [%]:'),
+                flag=wx.ALIGN_CENTER_VERTICAL)
+            status_grid_sizer.Add(self.coflow_inc_temp_temp, flag=wx.ALIGN_CENTER_VERTICAL)
+            status_grid_sizer.Add(wx.StaticText(status_panel, label='HPLC Inc. Temp. [C]:'),
+                flag=wx.ALIGN_CENTER_VERTICAL)
+            status_grid_sizer.Add(self.hplc_inc_temp_temp, flag=wx.ALIGN_CENTER_VERTICAL)
+            status_grid_sizer.Add(wx.StaticText(status_panel, label='HPLC Inc. Humidity [%]:'),
+                flag=wx.ALIGN_CENTER_VERTICAL)
+            status_grid_sizer.Add(self.hplc_inc_temp_temp, flag=wx.ALIGN_CENTER_VERTICAL)
 
         coflow_buffer_sizer = self._create_buffer_ctrls(status_panel)
 
@@ -2056,11 +2087,16 @@ class CoflowPanel(wx.Panel):
         if self.coflow_control.coflow_on or self.auto_flow.GetValue():
             metadata['Coflow on:'] = True
             metadata['LC flow rate [{}]:'.format(self.settings['flow_units'])] = self.coflow_control.lc_flow_rate
-            metadata['Sample cell temperature [C]:'] = self.cell_temp.GetValue()
-            metadata['Outlet flow rate [{}]:'.format(self.settings['flow_units'])] = self.coflow_control.outlet_setpoint
+            metadata['Sample cell temperature [C]:'] = self.cell_temp.GetLabel()
+            if self.settings['use_incubator_pvs']:
+                metadata['Coflow incubator temperature [C]:'] = self.coflow_inc_temp.GetLabel()
+                metadata['Coflow incubator humidity [C]:'] = self.coflow_inc_humid.GetLabel()
+                metadata['HPLC incubator temperature [C]:'] = self.hplc_inc_temp.GetLabel()
+                metadata['HPLC incubator humidity [C]:'] = self.hplc_inc_humid.GetLabel()
+            metadata['Outlet flow rate [{}]:'.format(self.settings['flow_units'])] = round(self.coflow_control.outlet_setpoint,3)
             metadata['Sheath ratio:'] = self.settings['sheath_ratio']
             metadata['Sheath excess ratio:'] = self.settings['sheath_excess']
-            metadata['Sheath inlet flow rate (including excess) [{}]:'.format(self.settings['flow_units'])] = self.coflow_control.sheath_setpoint
+            metadata['Sheath inlet flow rate (including excess) [{}]:'.format(self.settings['flow_units'])] = round(self.coflow_control.sheath_setpoint, 3)
             metadata['Sheath valve position:'] = self.get_sheath_valve_position()
 
         else:
@@ -2749,6 +2785,12 @@ default_coflow_settings = {
     'sheath_valve_water_pos'    : 10,
     'sheath_valve_hellmanex_pos': 8,
     'sheath_valve_ethanol_pos'  : 9,
+    'coflow_cell_T_pv'          : '18ID:ETC:Ti1',
+    'coflow_inc_esensor_T_pv'   : '18ID:EnvMon:CoflowInc:TempC',
+    'coflow_inc_esensor_H_pv'   : '18ID:EnvMon:CoflowInc:Humid',
+    'hplc_inc_esensor_T_pv'     : '18ID:EnvMon:HPLCInc:TempC',
+    'hplc_inc_esensor_H_pv'     : '18ID:EnvMon:HPLCInc:Humid',
+    'use_incubator_pvs'         : True,
     }
 
 if __name__ == '__main__':
