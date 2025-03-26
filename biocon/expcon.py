@@ -2734,7 +2734,7 @@ class ExpPanel(wx.Panel):
         self.settings = settings
         self._exp_status = 'Ready'
         self._time_remaining = 0
-        self._run_number = '_{:03d}'.format(self.settings['run_num'])
+        self.run_number = '_{:03d}'.format(self.settings['run_num'])
         self._preparing_exposure = False
 
         self.exp_cmd_q = deque()
@@ -2785,7 +2785,7 @@ class ExpPanel(wx.Panel):
             size=self._FromDIP((60,-1)), validator=utils.CharValidator('float'))
         self.exp_period = wx.TextCtrl(self, value=self.settings['exp_period'],
             size=self._FromDIP((60,-1)), validator=utils.CharValidator('float'))
-        self.run_num = wx.StaticText(self, label=self._run_number)
+        self.run_num = wx.StaticText(self, label=self.run_number)
         self.wait_for_trig = wx.CheckBox(self, label='Wait for external trigger')
         self.wait_for_trig.SetValue(self.settings['wait_for_trig'])
         self.num_trig = wx.TextCtrl(self, value=self.settings['num_trig'],
@@ -3055,7 +3055,7 @@ class ExpPanel(wx.Panel):
         self.exp_event.clear()
         self.timeout_event.clear()
 
-        warnings_valid = self._check_warnings(verbose)
+        warnings_valid, shutter_msg, vac_msg = self.check_warnings(verbose)
 
         if not warnings_valid:
             self._preparing_exposure = False
@@ -3080,15 +3080,15 @@ class ExpPanel(wx.Panel):
             self._preparing_exposure = False
             return
 
+        if self.pipeline_ctrl is not None:
+            data_dir = os.path.join(self.current_exposure_values['data_dir'], 'images')
+            self.current_exposure_values['data_dir'] = data_dir
+
         overwrite_valid = self._check_overwrite(exp_values, verbose)
 
         if not overwrite_valid:
             self._preparing_exposure = False
             return
-
-        if self.pipeline_ctrl is not None:
-            data_dir = os.path.join(self.current_exposure_values['data_dir'], 'images')
-            self.current_exposure_values['data_dir'] = data_dir
 
         comp_valid, comp_settings = self._check_components(exp_only, verbose)
 
@@ -3172,8 +3172,8 @@ class ExpPanel(wx.Panel):
         self.set_time_remaining(0)
         old_rn = self.run_num.GetLabel()
         run_num = int(old_rn[1:])+1
-        self._run_number = '_{:03d}'.format(run_num)
-        self.run_num.SetLabel(self._run_number)
+        self.run_number = '_{:03d}'.format(run_num)
+        self.run_num.SetLabel(self.run_number)
 
 
         if 'coflow' in self.settings['components']:
@@ -3362,18 +3362,17 @@ class ExpPanel(wx.Panel):
     def _on_close_timeout_dialog(self):
         self.timeout_dialog = None
 
-    def _check_warnings(self, verbose=True):
-        shutter_valid = self._check_shutters(verbose)
+    def check_warnings(self, verbose=True, check_all=False):
+        shutter_valid, shutter_msg = self._check_shutters(verbose)
 
-        if not shutter_valid:
-            return shutter_valid
+        if check_all or shutter_valid:
+            vac_valid, vac_msg = self._check_vacuum(verbose)
+        else:
+            vac_valid = True
 
-        vac_valid = self._check_vacuum(verbose)
+        valid = shutter_valid and vac_valid
 
-        if not vac_valid:
-            return vac_valid
-
-        return True
+        return valid, shutter_msg, vac_msg
 
     def _check_shutters(self, verbose=True):
 
@@ -3401,18 +3400,16 @@ class ExpPanel(wx.Panel):
 
             if not fes and not ds:
                 msg = ('Both the Front End shutter and the D Hutch '
-                    'shutter are closed. Are you sure you want to '
-                    'continue?')
+                    'shutter are closed.')
 
             elif not fes:
-                msg = ('The Front End shutter is closed. Are you sure '
-                    'you want to continue?')
+                msg = ('The Front End shutter is closed.')
 
             elif not ds:
-                msg = ('The D Hutch shutter is closed. Are you sure you '
-                    'want to continue?')
+                msg = ('The D Hutch shutter is closed.')
 
             if msg != '' and verbose:
+                msg += ' Are you sure you want to continue?'
                 dlg = wx.MessageDialog(None, msg, "Shutter Closed",
                     wx.YES_NO|wx.ICON_EXCLAMATION|wx.NO_DEFAULT)
                 result = dlg.ShowModal()
@@ -3430,7 +3427,7 @@ class ExpPanel(wx.Panel):
                     elif not ds:
                         logger.info('D Hutch shutter is closed.')
 
-        return cont
+        return cont, msg
 
     def _check_vacuum(self, verbose=True):
         cont = True
@@ -3461,7 +3458,7 @@ class ExpPanel(wx.Panel):
                 vac = 0
 
             if  vac > thresh:
-                msg = msg + ('\nGuard slit vacuum (< {} mtorr): {} mtorr'.format(
+                msg = msg + ('\n- Guard slit vacuum (< {} mtorr): {} mtorr'.format(
                     int(round(thresh*1000)), int(round(vac*1000))))
 
         if self.settings['warnings']['sample_vac']['check']:
@@ -3475,7 +3472,7 @@ class ExpPanel(wx.Panel):
                 vac = 0
 
             if  vac > thresh:
-                msg = msg + ('\nSample vacuum (< {} mtorr): {} mtorr'.format(
+                msg = msg + ('\n- Sample vacuum (< {} mtorr): {} mtorr'.format(
                     int(round(thresh*1000)), int(round(vac*1000))))
 
         if self.settings['warnings']['sc_vac']['check']:
@@ -3489,13 +3486,13 @@ class ExpPanel(wx.Panel):
                 vac = 0
 
             if  vac > thresh:
-                msg = msg + ('\nFlight tube vacuum (< {} mtorr): {} mtorr'.format(
+                msg = msg + ('\n- Flight tube vacuum (< {} mtorr): {} mtorr'.format(
                     int(round(thresh*1000)), int(round(vac*1000))))
 
         if msg != '' and verbose:
             msg = ('The following vacuum readings are too high, are you sure '
                 'you want to continue?') + msg
-            dlg = wx.MessageDialog(None, msg, "Shutter Closed",
+            dlg = wx.MessageDialog(None, msg, "Possible Bad Vacuum",
                 wx.YES_NO|wx.ICON_EXCLAMATION|wx.NO_DEFAULT)
             result = dlg.ShowModal()
             dlg.Destroy()
@@ -3503,7 +3500,7 @@ class ExpPanel(wx.Panel):
             if result == wx.ID_NO:
                 cont = False
 
-        return cont
+        return cont, msg
 
     def get_exp_values(self, verbose=True):
         num_frames = self.num_frames.GetValue()
@@ -3511,7 +3508,7 @@ class ExpPanel(wx.Panel):
         exp_period = self.exp_period.GetValue()
         data_dir = self.data_dir.GetValue()
         filename = self.filename.GetValue()
-        run_num = self._run_number
+        run_num = self.run_number
         wait_for_trig = self.wait_for_trig.GetValue()
         num_trig = self.num_trig.GetValue()
         shutter_speed_open = self.settings['shutter_speed_open']
@@ -3766,6 +3763,24 @@ class ExpPanel(wx.Panel):
 
         data_dir = data_dir.replace(self.settings['remote_dir_root'], self.settings['local_dir_root'], 1)
 
+        cont = self.inner_check_overwrite(data_dir, fprefix, num_frames)
+
+        if not cont and verbose:
+            msg = ("Warning: data collection will overwrite existing files "
+                "with the same name. Do you want to proceed?")
+            dlg = wx.MessageDialog(None, msg, "Confirm data overwrite",
+                wx.YES_NO|wx.ICON_EXCLAMATION|wx.NO_DEFAULT)
+            result = dlg.ShowModal()
+            dlg.Destroy()
+
+            if result == wx.ID_YES:
+                cont = True
+        else:
+            cont = True
+
+        return cont
+
+    def inner_check_overwrite(self, data_dir, fprefix, num_frames):
         log_file = os.path.join(data_dir, '{}.log'.format(fprefix))
 
         img_check_step = int(num_frames/10)
@@ -3784,19 +3799,6 @@ class ExpPanel(wx.Panel):
             if os.path.exists(f):
                 cont = False
                 break
-
-        if not cont and verbose:
-            msg = ("Warning: data collection will overwrite existing files "
-                "with the same name. Do you want to proceed?")
-            dlg = wx.MessageDialog(None, msg, "Confirm data overwrite",
-                wx.YES_NO|wx.ICON_EXCLAMATION|wx.NO_DEFAULT)
-            result = dlg.ShowModal()
-            dlg.Destroy()
-
-            if result == wx.ID_YES:
-                cont = True
-        else:
-            cont = True
 
         return cont
 
@@ -4016,7 +4018,7 @@ class ExpPanel(wx.Panel):
 
         exp_settings['data_dir'] = self.data_dir.GetValue()
         exp_settings['filename'] = self.filename.GetValue()
-        exp_settings['run_num'] = self._run_number
+        exp_settings['run_num'] = self.run_number
         exp_settings['wait_for_trig'] = self.wait_for_trig.GetValue()
 
         return exp_settings
@@ -4088,7 +4090,7 @@ class ExpPanel(wx.Panel):
             exp_period = float(cmd_kwargs['exp_period'])
             data_dir = cmd_kwargs['data_dir']
             filename = cmd_kwargs['filename']
-            run_num = self._run_number
+            run_num = self.run_number
             wait_for_trig = cmd_kwargs['wait_for_trig']
             num_trig = int(cmd_kwargs['num_trig'])
             shutter_speed_open = self.settings['shutter_speed_open']
