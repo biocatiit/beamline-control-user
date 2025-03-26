@@ -752,7 +752,7 @@ class ExpCommThread(threading.Thread):
                 wait_for_motor = True
                 while wait_for_motor:
                     status, descrip = motor.get_group_status(tr_scan_settings['motor_group_name'])
-                    logger.debug(status)
+                    # logger.debug(status)
                     if status == 12:
                         wait_for_motor = False
 
@@ -762,7 +762,7 @@ class ExpCommThread(threading.Thread):
                 wait_for_motor = True
                 while wait_for_motor:
                     status, descrip = motor.get_group_status(tr_scan_settings['motor_group_name'])
-                    logger.debug(status)
+                    # logger.debug(status)
                     if status == 12:
                         wait_for_motor = False
 
@@ -1722,7 +1722,7 @@ class ExpCommThread(threading.Thread):
             ab_burst.get_status() #Maybe need to clear this status?
             waiting = True
             while waiting:
-                logger.debug(ab_burst.get_status())
+                # logger.debug(ab_burst.get_status())
                 waiting = np.any([ab_burst.get_status() == 16777216 for i in range(5)])
                 time.sleep(0.01)
 
@@ -2950,41 +2950,93 @@ class ExpPanel(wx.Panel):
         return top_sizer
 
     def _initialize(self):
-        try:
-            self.fe_shutter_pv = mpca.PV(self.settings['fe_shutter_pv'])
-        except mp.Timed_Out_Error:
+        fe_pv, connected = self._initialize_pv(self.settings['fe_shutter_pv'])
+        if connected:
+            self.fe_shutter_pv = fe_pv
+        else:
             self.fe_shutter_pv = None
 
-        try:
-            self.d_shutter_pv = mpca.PV(self.settings['d_shutter_pv'])
-        except mp.Timed_Out_Error:
+        d_pv, connected = self._initialize_pv(self.settings['d_shutter_pv'])
+        if connected:
+            self.d_shutter_pv = d_pv
+        else:
             self.d_shutter_pv = None
 
-        try:
-            self.col_vac_pv = mpca.PV(self.settings['col_vac_pv'])
-        except mp.Timed_Out_Error:
-            self.col_vac_pv = None
+        cols_pv, connected = self._initialize_pv(self.settings['cols_vac_pv'])
+        if connected:
+            self.cols_vac_pv = cols_pv
+        else:
+            self.cols_vac_pv = None
 
-        try:
-            self.guard_vac_pv = mpca.PV(self.settings['guard_vac_pv'])
-        except mp.Timed_Out_Error:
+        guard_pv, connected = self._initialize_pv(self.settings['guard_vac_pv'])
+        if connected:
+            self.guard_vac_pv = guard_pv
+        else:
             self.guard_vac_pv = None
 
-        try:
-            self.sample_vac_pv = mpca.PV(self.settings['sample_vac_pv'])
-        except mp.Timed_Out_Error:
+        sample_pv, connected = self._initialize_pv(self.settings['sample_vac_pv'])
+        if connected:
+            self.sample_vac_pv = sample_pv
+        else:
             self.sample_vac_pv = None
 
-        try:
-            self.sc_vac_pv = mpca.PV(self.settings['sc_vac_pv'])
-        except mp.Timed_Out_Error:
+        sc_pv, connected = self._initialize_pv(self.settings['sc_vac_pv'])
+        if connected:
+            self.sc_vac_pv = sc_pv
+        else:
             self.sc_vac_pv = None
+
+        a_T_pv, connected = self._initialize_pv(self.settings['a_hutch_T_pv'])
+        if connected:
+            self.a_hutch_T_pv = a_T_pv
+        else:
+            self.a_hutch_T_pv = None
+
+        a_H_pv, connected = self._initialize_pv(self.settings['a_hutch_H_pv'])
+        if connected:
+            self.a_hutch_H_pv = a_H_pv
+        else:
+            self.a_hutch_H_pv = None
+
+        c_T_pv, connected = self._initialize_pv(self.settings['c_hutch_T_pv'])
+        if connected:
+            self.c_hutch_T_pv = c_T_pv
+        else:
+            self.c_hutch_T_pv = None
+
+        c_H_pv, connected = self._initialize_pv(self.settings['c_hutch_H_pv'])
+        if connected:
+            self.c_hutch_H_pv = c_H_pv
+        else:
+            self.c_hutch_H_pv = None
+
+        d_T_pv, connected = self._initialize_pv(self.settings['d_hutch_T_pv'])
+        if connected:
+            self.d_hutch_T_pv = d_T_pv
+        else:
+            self.d_hutch_T_pv = None
+
+        d_H_pv, connected = self._initialize_pv(self.settings['d_hutch_H_pv'])
+        if connected:
+            self.d_hutch_H_pv = d_H_pv
+        else:
+            self.d_hutch_H_pv = None
 
         self.warning_dialog = None
         self.timeout_dialog = None
 
         self.pipeline_ctrl = None
         self.pipeline_timer = None
+
+    def _initialize_pv(self, pv_name):
+        pv = epics.PV(pv_name)
+        connected = pv.wait_for_connection(5)
+
+        if not connected:
+            logger.error('Failed to connect to EPICS PV %s on startup', pv_name)
+
+        return pv, connected
+
 
     def _on_change_dir(self, evt):
         with wx.DirDialog(self, "Select Directory", self.data_dir.GetValue()) as fd:
@@ -3095,6 +3147,11 @@ class ExpPanel(wx.Panel):
         if not comp_valid:
             self._preparing_exposure = False
             return
+
+        # Do this twice as some settings get set in _check components and you
+        # want the right metdata, but check components starts some things,
+        # so you don't want to run that if the metadata is otherwise invalid
+        metadata, metadata_valid = self._get_metadata(metadata_vals, False)
 
         cont = True
 
@@ -3380,23 +3437,27 @@ class ExpPanel(wx.Panel):
         msg = ''
 
         if self.settings['warnings']['shutter']:
-            try:
-                if (self.fe_shutter_pv is not None and
-                    self.fe_shutter_pv.caget(timeout=2) == 0):
-                    fes = False
-                else:
-                    fes = True
-            except mp.Timed_Out_Error:
-                fes = True #REVISIT
+            if self.fe_shutter_pv is not None:
+                fes_val = self.fe_shutter_pv.get(timeout=2)
 
-            try:
-                if (self.d_shutter_pv is not None and
-                    self.d_shutter_pv.caget(timeout=2) == 0):
-                    ds = False
-                else:
-                    ds = True
-            except mp.Timed_Out_Error:
-                ds = True #REVISIT
+                if fes_val is not None:
+                    if fes_val == 0:
+                        fes = False
+                    else:
+                        fes = True
+            else:
+                fes = True
+
+            if self.d_shutter_pv is not None:
+                ds_val = self.d_shutter_pv.get(timeout=2)
+
+                if ds_val is not None:
+                    if ds_val == 0:
+                        ds = False
+                    else:
+                        ds = True
+            else:
+                ds = True
 
             if not fes and not ds:
                 msg = ('Both the Front End shutter and the D Hutch '
@@ -3435,12 +3496,12 @@ class ExpPanel(wx.Panel):
 
         if self.settings['warnings']['col_vac']['check']:
             thresh = self.settings['warnings']['col_vac']['thresh']
-            try:
-                if self.col_vac_pv is not None:
-                    vac = self.col_vac_pv.caget(timeout=2)
-                else:
+
+            if self.col_vac_pv is not None:
+                vac = self.col_vac_pv.get(timeout=2)
+                if vac is None:
                     vac = 0
-            except mp.Timed_Out_Error:
+            else:
                 vac = 0
 
             if  vac > thresh:
@@ -3449,12 +3510,12 @@ class ExpPanel(wx.Panel):
 
         if self.settings['warnings']['guard_vac']['check']:
             thresh = self.settings['warnings']['guard_vac']['thresh']
-            try:
-                if self.guard_vac_pv is not None:
-                    vac = self.guard_vac_pv.caget(timeout=2)
-                else:
+
+            if self.guard_vac_pv is not None:
+                vac = self.guard_vac_pv.get(timeout=2)
+                if vac is None:
                     vac = 0
-            except mp.Timed_Out_Error:
+            else:
                 vac = 0
 
             if  vac > thresh:
@@ -3463,12 +3524,12 @@ class ExpPanel(wx.Panel):
 
         if self.settings['warnings']['sample_vac']['check']:
             thresh = self.settings['warnings']['sample_vac']['thresh']
-            try:
-                if self.sample_vac_pv is not None:
-                    vac = self.sample_vac_pv.caget(timeout=2)
-                else:
+
+            if self.sample_vac_pv is not None:
+                vac = self.sample_vac_pv.get(timeout=2)
+                if vac is None:
                     vac = 0
-            except mp.Timed_Out_Error:
+            else:
                 vac = 0
 
             if  vac > thresh:
@@ -3477,12 +3538,12 @@ class ExpPanel(wx.Panel):
 
         if self.settings['warnings']['sc_vac']['check']:
             thresh = self.settings['warnings']['sc_vac']['thresh']
-            try:
-                if self.sc_vac_pv is not None:
-                    vac = self.sc_vac_pv.caget(timeout=2)
-                else:
+
+            if self.sc_vac_pv is not None:
+                vac = self.sc_vac_pv.get(timeout=2)
+                if vac is None:
                     vac = 0
-            except mp.Timed_Out_Error:
+            else:
                 vac = 0
 
             if  vac > thresh:
@@ -3942,54 +4003,104 @@ class ExpPanel(wx.Panel):
             if 'eig' in self.settings['detector'].lower():
                 metadata['Number of images per file:'] = self.settings['det_args']['images_per_file']
 
-            try:
-                if self.fe_shutter_pv is not None:
-                    if self.fe_shutter_pv.caget(timeout=2) == 0:
+            if self.fe_shutter_pv is not None:
+                fes_val = self.fe_shutter_pv.get(timeout=2)
+
+                if fes_val is not None:
+                    if fes_val == 0:
                         fes = False
                     else:
                         fes = True
-                    metadata['Front end shutter open:'] = fes
-            except mp.Timed_Out_Error:
-                pass
 
-            try:
-                if self.d_shutter_pv is not None:
-                    if self.d_shutter_pv.caget(timeout=2) == 0:
+                    metadata['Front end shutter open:'] = fes
+
+            if self.d_shutter_pv is not None:
+                ds_val = self.d_shutter_pv.get(timeout=2)
+
+                if ds_val is not None:
+                    if ds_val == 0:
                         ds = False
                     else:
                         ds = True
 
                     metadata['D hutch shutter open:'] = ds
-            except mp.Timed_Out_Error:
-                pass
 
-            try:
-                if self.col_vac_pv is not None:
-                    vac = self.col_vac_pv.caget(timeout=2)
-                    metadata['Collimator vacuum [mtorr]:'] = round(vac*1000, 1)
-            except mp.Timed_Out_Error:
-                pass
+            if self.col_vac_pv is not None:
+                vac = self.col_vac_pv.get(timeout=2)
 
-            try:
-                if self.guard_vac_pv is not None:
-                    vac = self.guard_vac_pv.caget(timeout=2)
-                    metadata['Guard slit vacuum [mtorr]:'] = round(vac*1000, 1)
-            except mp.Timed_Out_Error:
-                pass
+                if vac is not None:
+                    vac = round(vac*1000, 1)
 
-            try:
-                if self.sample_vac_pv is not None:
-                    vac = self.sample_vac_pv.caget(timeout=2)
-                    metadata['Sample vacuum [mtorr]:'] = round(vac*1000, 1)
-            except mp.Timed_Out_Error:
-                pass
+                    metadata['Collimator vacuum [mtorr]:'] = vac
 
-            try:
-                if self.sc_vac_pv is not None:
-                    vac = self.sc_vac_pv.caget(timeout=2)
-                    metadata['Flight tube vacuum [mtorr]:'] = round(vac*1000, 1)
-            except mp.Timed_Out_Error:
-                pass
+            if self.guard_vac_pv is not None:
+                vac = self.guard_vac_pv.get(timeout=2)
+
+                if vac is not None:
+                    vac = round(vac*1000, 1)
+
+                    metadata['Guard slit vacuum [mtorr]:'] = vac
+
+            if self.sample_vac_pv is not None:
+                vac = self.sample_vac_pv.get(timeout=2)
+
+                if vac is not None:
+                    vac = round(vac*1000, 1)
+
+                    metadata['Sample vacuum [mtorr]:'] = vac
+
+            if self.sc_vac_pv is not None:
+                vac = self.sc_vac_pv.get(timeout=2)
+
+                if vac is not None:
+                    vac = round(vac*1000, 1)
+
+                    metadata['Flight tube vacuum [mtorr]:'] = vac
+
+            if self.sc_vac_pv is not None:
+                vac = self.sc_vac_pv.get(timeout=2)
+
+                if vac is not None:
+                    vac = round(vac*1000, 1)
+
+                    metadata['Flight tube vacuum [mtorr]:'] = vac
+
+            if self.a_hutch_T_pv is not None:
+                env = self.a_hutch_T_pv.get(timeout=2)
+
+                if env is not None:
+                    metadata['A hutch temperature [C]:'] = env
+
+            if self.a_hutch_H_pv is not None:
+                env = self.a_hutch_H_pv.get(timeout=2)
+
+                if env is not None:
+                    metadata['A hutch humidity [%]:'] = env
+
+            if self.c_hutch_T_pv is not None:
+                env = self.c_hutch_T_pv.get(timeout=2)
+
+                if env is not None:
+                    metadata['C hutch temperature [C]:'] = env
+
+            if self.c_hutch_H_pv is not None:
+                env = self.c_hutch_H_pv.get(timeout=2)
+
+                if env is not None:
+                    metadata['C hutch humidity [%]:'] = env
+
+            if self.d_hutch_T_pv is not None:
+                env = self.d_hutch_T_pv.get(timeout=2)
+
+                if env is not None:
+                    metadata['D hutch temperature [C]:'] = env
+
+            if self.d_hutch_H_pv is not None:
+                env = self.d_hutch_H_pv.get(timeout=2)
+
+                if env is not None:
+                    metadata['D hutch humidity [%]:'] = env
+
 
         return metadata
 
@@ -4328,12 +4439,18 @@ default_exposure_settings = {
     'wait_for_trig'         : True,
     'num_trig'              : '1',
     'show_advanced_options' : True,
-    'fe_shutter_pv'         : 'FE:18:ID:FEshutter',
+    'fe_shutter_pv'         : 'PA:18ID:STA_A_FES_OPEN_PL',
     'd_shutter_pv'          : 'PA:18ID:STA_D_SDS_OPEN_PL.VAL',
     'col_vac_pv'            : '18ID:VAC:D:Cols',
     'guard_vac_pv'          : '18ID:VAC:D:Guards',
     'sample_vac_pv'         : '18ID:VAC:D:Sample',
     'sc_vac_pv'             : '18ID:VAC:D:ScatterChamber',
+    'a_hutch_T_pv'          : '18ID:EnvMon:A:TempC',
+    'a_hutch_H_pv'          : '18ID:EnvMon:A:Humid',
+    'c_hutch_T_pv'          : '18ID:EnvMon:C:TempC',
+    'c_hutch_H_pv'          : '18ID:EnvMon:C:Humid',
+    'd_hutch_T_pv'          : '18ID:EnvMon:D:TempC',
+    'd_hutch_H_pv'          : '18ID:EnvMon:D:Humid',
     'use_old_i0_gain'       : True,
     'i0_gain_pv'            : '18ID_D_BPM_Gain:Level-SP',
 
