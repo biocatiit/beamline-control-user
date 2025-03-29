@@ -107,6 +107,28 @@ class CoflowControl(object):
         self._monitor_flow_timer_thread.daemon = True
         self._monitor_flow_timer_thread.start()
 
+        self.get_plot_data_lock = threading.Lock()
+        self.sheath_fr_list = deque(maxlen=10000)
+        self.outlet_fr_list = deque(maxlen=10000)
+        self.sheath_density_list = deque(maxlen=4800)
+        self.outlet_density_list = deque(maxlen=4800)
+        self.sheath_t_list = deque(maxlen=4800)
+        self.outlet_t_list = deque(maxlen=4800)
+        self.fr_time_list = deque(maxlen=10000)
+        self.aux_time_list = deque(maxlen=4800)
+        self._sheath_oob_error = False
+        self._sheath_oob_flow = -1
+        self._outlet_oob_error = False
+        self._outlet_oob_flow = -1
+        self._sheath_air_error = True
+        self._outlet_air_error = True
+
+        self._terminate_monitor_flow = threading.Event()
+        self._monitor_flow_thread = threading.Thread(
+            target=self._monitor_flow)
+        self._monitor_flow_thread.daemon = True
+        self._monitor_flow_thread.start()
+
     def init_connections(self):
         self.coflow_pump_cmd_q = deque()
         self.coflow_pump_return_q = deque()
@@ -426,6 +448,27 @@ class CoflowControl(object):
         self._send_pumpcmd(outlet_fr_cmd)
 
     def get_sheath_flow_rate(self):
+        return copy.copy(self._sheath_flow_rate)
+
+    def get_sheath_density(self):
+        return copy.copy(self._sheath_density)
+
+    def get_sheath_temperature(self):
+        return copy.copy(self._sheath_temperature)
+
+    def get_outlet_flow_rate(self):
+        return copy.copy(self._outlet_flow_rate)
+
+    def get_outlet_density(self):
+        return copy.copy(self._outlet_density)
+
+    def get_outlet_temperature(self):
+        return copy.copy(self._outlet_temperature)
+
+    def get_sheath_valve_position(self):
+        return copy.copy(self._sheath_valve_position)
+
+    def _update_sheath_flow_rate(self):
         sheath_fr_cmd = ('get_flow_rate', (self.sheath_fm_name,), {})
 
         ret = self._send_fmcmd(sheath_fr_cmd, True)
@@ -439,76 +482,83 @@ class CoflowControl(object):
 
         return ret_val, ret_type
 
-    def get_sheath_density(self):
+    def _update_sheath_density(self):
         sheath_density_cmd = ('get_density', (self.sheath_fm_name,), {})
 
         ret = self._send_fmcmd(sheath_density_cmd, True)
         if ret is not None:
             ret_type = 'density'
             ret_val = ret
+            self._sheath_density = ret_val
         else:
             ret_type = None
             ret_val = None
 
         return ret_val, ret_type
 
-    def get_sheath_temperature(self):
+    def _update_sheath_temperature(self):
         sheath_t_cmd = ('get_temperature', (self.sheath_fm_name,), {})
 
         ret = self._send_fmcmd(sheath_t_cmd, True)
         if ret is not None:
             ret_type = 'temperature'
             ret_val = ret
+            self._sheath_temperature = ret_val
         else:
             ret_type = None
             ret_val = None
 
         return ret_val, ret_type
 
-    def get_outlet_flow_rate(self):
+    def _update_outlet_flow_rate(self):
         outlet_fr_cmd = ('get_flow_rate', (self.outlet_fm_name,), {})
 
         ret = self._send_fmcmd(outlet_fr_cmd, True)
         if ret is not None:
             ret_type = 'flow_rate'
             ret_val = ret*self.outlet_fr_mult
+            self._outlet_flow_rate = ret_val
         else:
             ret_type = None
             ret_val = None
 
         return ret_val, ret_type
 
-    def get_outlet_density(self):
+    def _update_outlet_density(self):
         outlet_density_cmd = ('get_density', (self.outlet_fm_name,), {})
 
         ret = self._send_fmcmd(outlet_density_cmd, True)
         if ret is not None:
             ret_type = 'density'
             ret_val = ret
+            self._outlet_density = ret_val
         else:
             ret_type = None
             ret_val = None
 
         return ret_val, ret_type
 
-    def get_outlet_temperature(self):
+    def _update_outlet_temperature(self):
         outlet_t_cmd = ('get_temperature', (self.outlet_fm_name,), {})
 
         ret = self._send_fmcmd(outlet_t_cmd, True)
         if ret is not None:
             ret_type = 'temperature'
             ret_val = ret
+            self._outlet_temperature = ret_val
         else:
             ret_type = None
             ret_val = None
 
         return ret_val, ret_type
 
-    def get_sheath_valve_position(self):
+    def _update_sheath_valve_position(self):
         get_sheath_valve_position_cmd = ('get_position',
             (self.sheath_valve_name,), {})
 
         position = self._send_valvecmd(get_sheath_valve_position_cmd, True)
+
+        self._sheath_valve_position = position
 
         self.set_active_buffer_position(position)
 
@@ -655,6 +705,166 @@ class CoflowControl(object):
 
     def _get_buffer_monitor_flow_rate(self):
         return self._sheath_flow_rate
+
+    def get_sheath_oob_error(self):
+        """
+        Gets the sheath flow out of bounds error
+        """
+        error = copy.copy(self._sheath_oob_error)
+        fr = copy.copy(self._sheath_oob_flow)
+
+        self._sheath_oob_error = False
+
+        return error, fr
+
+    def get_outlet_oob_error(self):
+        """
+        Gets the outlet flow out of bounds error
+        """
+        error = copy.copy(self._outlet_oob_error)
+        fr = copy.copy(self._outlet_oob_flow)
+
+        self._outlet_oob_error = False
+
+        return error, fr
+
+    def get_sheath_air_error(self):
+        """
+        Gets the sheath flow out of bounds error
+        """
+        error = copy.copy(self._sheath_air_error)
+
+        self._sheath_air_error = False
+
+        return error
+
+    def get_outlet_air_error(self):
+        """
+        Gets the outlet flow out of bounds error
+        """
+        error = copy.copy(self._outlet_air_error)
+
+        self._outlet_air_error = False
+
+        return error
+
+    def _monitor_flow(self):
+        logger.info('Starting continuous logging of flow rates')
+
+        sheath_low_warning = self.settings['sheath_warning_threshold_low']
+        sheath_high_warning = self.settings['sheath_warning_threshold_high']
+
+        outlet_low_warning = self.settings['outlet_warning_threshold_low']
+        outlet_high_warning = self.settings['outlet_warning_threshold_high']
+
+        s1_type = None
+        o1_type = None
+        s2_type = None
+        o2_type = None
+
+        start_time = time.time()
+        cycle_time = 0
+        long_cycle_time = 0
+        log_time = 0
+
+
+        while not self._terminate_monitor_flow.is_set():
+
+            if self.timeout_event.is_set():
+                logger.error('Lost connection to the coflow control server.')
+
+                while self.timeout_event.is_set():
+                    time.sleep(0.1)
+                    if self._terminate_monitor_flow.is_set():
+                        break
+
+            if (time.time() - cycle_time > 0.25 and
+                not self._terminate_monitor_flow.is_set()):
+                if not self._terminate_monitor_flow.is_set():
+                    sheath_density, s1_type = self._update_sheath_density()
+
+                if not self._terminate_monitor_flow.is_set():
+                    outlet_density, o1_type = self._update_outlet_density()
+
+                if not self._terminate_monitor_flow.is_set():
+                    sheath_t, s2_type = self._update_sheath_temperature()
+
+                if not self._terminate_monitor_flow.is_set():
+                    outlet_t, o2_type = self._update_outlet_temperature()
+
+                if (s1_type == o1_type and s1_type == 'density'
+                    and s2_type == o2_type and s2_type == 'temperature'):
+                    with self.get_plot_data_lock:
+                        self.sheath_density_list.append(sheath_density)
+                        self.outlet_density_list.append(outlet_density)
+
+                        self.sheath_t_list.append(sheath_t)
+                        self.outlet_t_list.append(outlet_t)
+
+                        cycle_time = time.time()
+
+                        self.aux_time_list.append(cycle_time-start_time)
+
+                    if sheath_density < self.settings['air_density_thresh']:
+                        self._sheath_air_error = True
+
+                    elif outlet_density < self.settings['air_density_thresh']:
+                        self._outlet_air_error = True
+
+            if not self._terminate_monitor_flow.is_set():
+                sheath_fr, s_type = self._update_sheath_flow_rate()
+
+            if not self._terminate_monitor_flow.is_set():
+                outlet_fr, o_type = self._update_outlet_flow_rate()
+
+            if s_type == 'flow_rate' and o_type == 'flow_rate':
+
+                with self.get_plot_data_lock:
+                    self.sheath_fr_list.append(sheath_fr)
+                    self.outlet_fr_list.append(outlet_fr)
+
+                    self.fr_time_list.append(time.time()-start_time)
+
+                if self.monitor:
+                    if ((sheath_fr < sheath_low_warning*self.sheath_setpoint or
+                        sheath_fr > sheath_high_warning*self.sheath_setpoint)):
+                        logger.error('Sheath flow out of bounds (%f to %f): %f',
+                            sheath_low_warning*self.sheath_setpoint,
+                            sheath_high_warning*self.sheath_setpoint,
+                            sheath_fr)
+
+                        self._sheath_oob_error = True
+                        self._sheath_oob_flow = sheath_fr
+
+
+                    if ((outlet_fr < outlet_low_warning*self.outlet_setpoint or
+                        outlet_fr > outlet_high_warning*self.outlet_setpoint)):
+                        logger.error('Outlet flow out of bounds (%f to %f): %f',
+                            outlet_low_warning*self.outlet_setpoint,
+                            outlet_high_warning*self.outlet_setpoint,
+                            outlet_fr)
+
+                        self._outlet_oob_error = True
+                        self._outlet_oob_flow = outlet_fr
+
+
+            if (not self._terminate_monitor_flow.is_set()
+                and time.time() - log_time > 300 and self.coflow_on):
+                logger.info('Sheath flow rate: %f', sheath_fr)
+                logger.info('Outlet flow rate: %f', outlet_fr)
+                logger.info('Sheath density: %f', sheath_density)
+                logger.info('Outlet density: %f', outlet_density)
+                logger.info('Sheath temperature: %f', sheath_t)
+                logger.info('Outlet temperature: %f', outlet_t)
+
+                log_time = time.time()
+
+            if time.time() - long_cycle_time > 5:
+                self._update_sheath_valve_position()
+
+                long_cycle_time = time.time()
+
+        logger.info('Stopping continuous logging of flow rates')
 
     def get_buffer_info(self, position):
         """
@@ -885,17 +1095,17 @@ class CoflowPanel(wx.Panel):
             self.flow_timer = wx.Timer(self)
             self.Bind(wx.EVT_TIMER, self._on_flow_timer, self.flow_timer)
 
-            self.stop_get_fr_event = threading.Event()
-            self.get_plot_data_lock = threading.Lock()
+            # self.stop_get_fr_event = threading.Event()
+            # self.get_plot_data_lock = threading.Lock()
 
-            self.sheath_fr_list = deque(maxlen=10000)
-            self.outlet_fr_list = deque(maxlen=10000)
-            self.sheath_density_list = deque(maxlen=4800)
-            self.outlet_density_list = deque(maxlen=4800)
-            self.sheath_t_list = deque(maxlen=4800)
-            self.outlet_t_list = deque(maxlen=4800)
-            self.fr_time_list = deque(maxlen=10000)
-            self.aux_time_list = deque(maxlen=4800)
+            # self.sheath_fr_list = deque(maxlen=10000)
+            # self.outlet_fr_list = deque(maxlen=10000)
+            # self.sheath_density_list = deque(maxlen=4800)
+            # self.outlet_density_list = deque(maxlen=4800)
+            # self.sheath_t_list = deque(maxlen=4800)
+            # self.outlet_t_list = deque(maxlen=4800)
+            # self.fr_time_list = deque(maxlen=10000)
+            # self.aux_time_list = deque(maxlen=4800)
             self.start_time = None
 
             if (not self.coflow_control.timeout_event.is_set() and self.coflow_control.pump_sheath_init
@@ -1833,20 +2043,11 @@ class CoflowPanel(wx.Panel):
             self.current_sheath_valve_position = int(pos)
 
     def _get_flow_rates(self):
-        logger.info('Starting continuous logging of flow rates')
 
-        sheath_low_warning = self.settings['sheath_warning_threshold_low']
-        sheath_high_warning = self.settings['sheath_warning_threshold_high']
 
-        outlet_low_warning = self.settings['outlet_warning_threshold_low']
-        outlet_high_warning = self.settings['outlet_warning_threshold_high']
-
-        cycle_time = time.time()
-        long_cycle_time = copy.copy(cycle_time)
-        if self.start_time is None:
-            self.start_time = copy.copy(cycle_time)
-        log_time = time.time()
-
+        cycle_time = 0
+        long_cycle_time = 0
+        log_time = 0
 
         while not self.stop_get_fr_event.is_set():
 
@@ -1863,78 +2064,54 @@ class CoflowPanel(wx.Panel):
 
                 wx.CallAfter(self.connection_timer.Start, 1000)
 
-            if not self.stop_get_fr_event.is_set():
-                sheath_fr, s_type = self.coflow_control.get_sheath_flow_rate()
-
-            if not self.stop_get_fr_event.is_set():
-                outlet_fr, o_type = self.coflow_control.get_outlet_flow_rate()
-
-            if s_type == 'flow_rate' and o_type == 'flow_rate':
-
-                with self.get_plot_data_lock:
-                    self.sheath_fr_list.append(sheath_fr)
-                    self.outlet_fr_list.append(outlet_fr)
-
-                    self.fr_time_list.append(time.time()-self.start_time)
-
-                if self.coflow_control.monitor:
-                    if ((sheath_fr < sheath_low_warning*self.coflow_control.sheath_setpoint or
-                        sheath_fr > sheath_high_warning*self.coflow_control.sheath_setpoint)
-                        and self.settings['show_sheath_warning']):
-                        wx.CallAfter(self._show_warning_dialog, 'sheath', sheath_fr)
-                        logger.error('Sheath flow out of bounds (%f to %f): %f',
-                            sheath_low_warning*self.coflow_control.sheath_setpoint,
-                            sheath_high_warning*self.coflow_control.sheath_setpoint,
-                            sheath_fr)
-
-                    if ((outlet_fr < outlet_low_warning*self.coflow_control.outlet_setpoint or
-                        outlet_fr > outlet_high_warning*self.coflow_control.outlet_setpoint)
-                        and self.settings['show_outlet_warning']):
-                        wx.CallAfter(self._show_warning_dialog, 'outlet', outlet_fr)
-                        logger.error('Outlet flow out of bounds (%f to %f): %f',
-                            outlet_low_warning*self.coflow_control.outlet_setpoint,
-                            outlet_high_warning*self.coflow_control.outlet_setpoint,
-                            outlet_fr)
-
             if time.time() - cycle_time > 0.25:
-                if not self.stop_get_fr_event.is_set():
-                    sheath_density, s1_type = self.coflow_control.get_sheath_density()
+                with self.get_plot_data_lock:
+                    with self.coflow_control.get_plot_data_lock:
+                        self.sheath_density_list = copy.copy(self.coflow_control.sheath_density_list)
+                        self.outlet_density_list = copy.copy(self.coflow_control.outlet_density_list)
+                        self.sheath_fr_list = copy.copy(self.coflow_control.sheath_fr_list)
+                        self.outlet_fr_list = copy.copy(self.coflow_control.outlet_fr_list)
 
-                if not self.stop_get_fr_event.is_set():
-                    outlet_density, o1_type = self.coflow_control.get_outlet_density()
+                        self.sheath_t_list = copy.copy(self.coflow_control.sheath_t_list)
+                        self.outlet_t_list = copy.copy(self.coflow_control.outlet_t_list)
+                        self.aux_time_list = copy.copy(self.coflow_control.aux_time_list)
 
-                if not self.stop_get_fr_event.is_set():
-                    sheath_t, s2_type = self.coflow_control.get_sheath_temperature()
+                    cycle_time = time.time()
 
-                if not self.stop_get_fr_event.is_set():
-                    outlet_t, o2_type = self.coflow_control.get_outlet_temperature()
+                sheath_oob_err, sheath_fr = self.coflow_control.get_sheath_oob_error()
 
-                if s1_type == o1_type and s1_type == 'density' and s2_type == o2_type and s2_type == 'temperature':
-                    with self.get_plot_data_lock:
-                        self.sheath_density_list.append(sheath_density)
-                        self.outlet_density_list.append(outlet_density)
+                if sheath_oob_err and self.settings['show_sheath_warning']:
+                    wx.CallAfter(self._show_warning_dialog, 'sheath', sheath_fr)
+                    # logger.error('Sheath flow out of bounds (%f to %f): %f',
+                    #     sheath_low_warning*self.coflow_control.sheath_setpoint,
+                    #     sheath_high_warning*self.coflow_control.sheath_setpoint,
+                    #     sheath_fr)
 
-                        self.sheath_t_list.append(sheath_t)
-                        self.outlet_t_list.append(outlet_t)
+                outlet_oob_err, outlet_fr = self.coflow_control.get_outlet_oob_error()
 
-                        cycle_time = time.time()
+                if outlet_oob_err and self.settings['show_outlet_warning']:
+                    wx.CallAfter(self._show_warning_dialog, 'outlet', outlet_fr)
+                    # logger.error('Outlet flow out of bounds (%f to %f): %f',
+                    #     outlet_low_warning*self.coflow_control.outlet_setpoint,
+                    #     outlet_high_warning*self.coflow_control.outlet_setpoint,
+                    #     outlet_fr)
 
-                        self.aux_time_list.append(cycle_time-self.start_time)
-
-                    if (sheath_density < self.settings['air_density_thresh']
-                        and outlet_density < self.settings['air_density_thresh']):
-                        wx.CallAfter(self.air_detected, 'both')
-
-                    elif sheath_density < self.settings['air_density_thresh']:
-                        wx.CallAfter(self.air_detected, 'sheath')
-
-                    elif outlet_density < self.settings['air_density_thresh']:
-                        wx.CallAfter(self.air_detected, 'outlet')
+                sheath_air_err = self.coflow_control.get_sheath_air_error()
+                outlet_air_err = self.coflow_control.get_outlet_air_error()
 
 
-                if s_type == 'flow_rate' and o_type == 'flow_rate':
-                    wx.CallAfter(self.sheath_flow.SetLabel, str(round(sheath_fr, 3)))
-                    wx.CallAfter(self.outlet_flow.SetLabel, str(round(outlet_fr,3 )))
+                if sheath_air_err and outlet_air_err:
+                    wx.CallAfter(self.air_detected, 'both')
+
+                elif sheath_air_err:
+                    wx.CallAfter(self.air_detected, 'sheath')
+
+                elif outlet_air_err:
+                    wx.CallAfter(self.air_detected, 'outlet')
+
+
+                wx.CallAfter(self.sheath_flow.SetLabel, str(round(self.sheath_fr_list[-1], 3)))
+                wx.CallAfter(self.outlet_flow.SetLabel, str(round(self.outlet_fr_list[-1],3 )))
 
                 # if not self.stop_get_fr_event.is_set():
                     # logger.debug('Sheath flow rate: %f', sheath_fr)
@@ -1946,12 +2123,12 @@ class CoflowPanel(wx.Panel):
 
                 if (not self.stop_get_fr_event.is_set() and time.time() - log_time > 300
                     and self.coflow_control.coflow_on):
-                    logger.info('Sheath flow rate: %f', sheath_fr)
-                    logger.info('Outlet flow rate: %f', outlet_fr)
-                    logger.info('Sheath density: %f', sheath_density)
-                    logger.info('Outlet density: %f', outlet_density)
-                    logger.info('Sheath temperature: %f', sheath_t)
-                    logger.info('Outlet temperature: %f', outlet_t)
+                    # logger.info('Sheath flow rate: %f', sheath_fr)
+                    # logger.info('Outlet flow rate: %f', outlet_fr)
+                    # logger.info('Sheath density: %f', sheath_density)
+                    # logger.info('Outlet density: %f', outlet_density)
+                    # logger.info('Sheath temperature: %f', sheath_t)
+                    # logger.info('Outlet temperature: %f', outlet_t)
 
                     log_time = time.time()
 
