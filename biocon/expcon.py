@@ -3433,7 +3433,7 @@ class ExpPanel(wx.Panel):
             vac_valid, vac_msg = self._check_vacuum(verbose)
         else:
             vac_valid = True
-            vac_message = ''
+            vac_msg = ''
 
         valid = shutter_valid and vac_valid
 
