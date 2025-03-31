@@ -461,7 +461,7 @@ class AgilentHPLCStandard(AgilentHPLC):
         if flow_path == 1:
             flow_accel = copy.copy(self._pump_flow_accel1)
         elif flow_path == 2:
-            flow_accel = copy.copy(self._pump_flow_accel1)
+            flow_accel = copy.copy(self._pump_flow_accel2)
 
         return flow_accel
 

@@ -1478,7 +1478,7 @@ class ASCommThread(utils.CommManager):
         logger.debug("%s injected sample", name)
 
     def _get_status(self, name, **kwargs):
-        logger.debug("Getting %sstatus", name)
+        logger.debug("Getting %s status", name)
 
         comm_name = kwargs.pop('comm_name', None)
         cmd = kwargs.pop('cmd', None)

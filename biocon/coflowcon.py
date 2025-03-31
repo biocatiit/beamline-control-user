@@ -312,11 +312,13 @@ class CoflowControl(object):
             logger.info('Valve initializiation successful.')
 
     def start_overflow(self):
+        logger.info('Turning on overflow pump')
         ip = self.settings['remote_overflow_ip']
         params = {'c':'1','s':'1', 'u':'user'}
         self.session.get('http://{}/?'.format(ip), params=params, timeout=5)
 
     def stop_overflow(self):
+        logger.info('Turning off overflow pump')
         ip = self.settings['remote_overflow_ip']
         params = {'c':'1','s':'0', 'u':'user'}
         self.session.get('http://{}/?'.format(ip), params=params, timeout=5)
@@ -627,6 +629,9 @@ class CoflowControl(object):
                 volume = buffer_change[1]
                 target_valve_pos = buffer_change[2]
 
+                logger.info('Changing buffer on port %s with %s mL at %s '
+                    'mL/min setpoint', target_valve_pos, volume, flow_rate)
+
                 self.stop_flow()
                 self.set_sheath_valve_position(target_valve_pos)
                 self.change_flow_rate(flow_rate)
@@ -664,7 +669,7 @@ class CoflowControl(object):
         return copy.copy(self._remaining_flow_time)
 
     def start_flow_timer(self, flow_time):
-        logger.info('Starting flow timer for %s minutes', flow_time/60)
+        logger.info('Starting flow timer for %s minutes', round(flow_time/60,2))
         self._remaining_flow_time = flow_time
         self._flow_timer = True
         self._abort_flow_timer.clear()
@@ -747,6 +752,12 @@ class CoflowControl(object):
         self._outlet_air_error = False
 
         return error
+
+    def start_flow_stability_monitor(self):
+        self.monitor = True
+
+    def stop_flow_stability_monitor(self):
+        self.monitor = False
 
     def _monitor_flow(self):
         logger.info('Starting continuous logging of flow rates')
@@ -1004,6 +1015,313 @@ class CoflowControl(object):
         self._abort_flow_timer.set()
         self._monitor_flow_timer_evt.set()
         self._monitor_flow_timer_thread.join(5)
+
+
+class CoflowCommThread(utils.CommManager):
+
+    def __init__(self, name):
+        utils.CommManager.__init__(self, name)
+
+        self._commands = {
+            'connect'               : self._connect_device,
+            'disconnect'            : self._disconnect_device,
+            'start_flow'            : self._start_flow,
+            'stop_flow'             : self._stop_flow,
+            'change_flow_rate'      : self._change_flow_rate,
+            'change_buffer'         : self._change_buffer,
+            'stop_change_buffer'    : self._stop_change_buffer,
+            'start_overflow'        : self._start_overflow,
+            'stop_overflow'         : self._stop_overflow,
+            'start_flow_timer'      : self._start_flow_timer,
+            'stop_flow_timer'       : self._stop_flow_timer,
+            'start_flow_stab_mon'   : self._start_flow_stab_mon,
+            'stop_flow_stab_mon'    : self._stop_flow_stab_mon,
+            'validate_flow_rate'    : self._validate_flow_rate,
+            'get_sheath_valve_pos'  : self._get_sheath_valve_pos,
+            'set_sheath_valve_pos'  : self._set_sheath_valve_pos,
+            'get_sheath_oob_error'  : self._get_sheath_oob_error,
+            'get_outlet_oob_error'  : self._get_outlet_oob_error,
+            'get_sheath_air_error'  : self._get_sheath_air_error,
+            'get_outlet_air_error'  : self._get_outlet_air_error,
+            'set_buffer_info'       : self._set_buffer_info,
+            'remove_buffer'         : self._remove_buffer,
+            'get_status'            : self._get_status,
+        }
+
+        self._connected_devices = OrderedDict()
+        self._connected_coms = OrderedDict()
+
+        self.known_devices = {
+            'Coflow' : Autosampler,
+            }
+
+    def _additional_new_comm(self, name):
+        pass
+
+    def _additional_connect_device(self, name, device_type, device, **kwargs):
+        pass
+
+    def _start_flow(self, name, **kwargs):
+
+        logger.debug("%s starting flow", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        device.start_flow()
+
+        logger.debug("%s flow started", name)
+
+    def _stop_flow(self, name, **kwargs):
+
+        logger.debug("%s stopping flow", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        device.stop_flow()
+
+        logger.debug("%s flow stopped", name)
+
+    def _change_flow_rate(self, name, val, **kwargs):
+
+        logger.debug("%s starting flow_rate change", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        device.change_flow_rate(val)
+
+        logger.debug("%s flow_rate change started", name)
+
+    def _change_buffer(self, name, val, **kwargs):
+
+        logger.debug("%s starting buffer change", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        device.change_buffer(val)
+
+        logger.debug("%s buffer change started", name)
+
+    def _stop_change_buffer(self, name, **kwargs):
+
+        logger.debug("%s stopping buffer change", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        device.stop_change_buffer()
+
+        logger.debug("%s stopped buffer change", name)
+
+    def _start_overflow(self, name, **kwargs):
+
+        logger.debug("%s starting overflow pump", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        device.start_overflow()
+
+        logger.debug("%s overflow pump started", name)
+
+    def _stop_overflow(self, name, **kwargs):
+
+        logger.debug("%s starting overflow pump", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        device.stop_overflow()
+
+        logger.debug("%s overflow pump started", name)
+
+    def _start_flow_timer(self, name, val, **kwargs):
+
+        logger.debug("%s starting buffer change", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        device.start_flow_timer(val)
+
+        logger.debug("%s buffer change started", name)
+
+    def _stop_flow_timer(self, name, **kwargs):
+
+        logger.debug("%s stopping flow timer", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        device.stop_flow_timer()
+
+        logger.debug("%s stopped flow timer", name)
+
+    def _start_stab_mon(self, name, **kwargs):
+
+        logger.debug("%s starting flow stability monitoring", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        device.start_flow_stability_monitor()
+
+        logger.debug("%s flow stability monitoring started", name)
+
+    def _stop_stab_mon(self, name, **kwargs):
+
+        logger.debug("%s stopping flow stability monitoring", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        device.stop_flow_stability_monitor()
+
+        logger.debug("%s stopped flow stability monitoring", name)
+
+    def _validate_flow_rate(self, name, val, **kwargs):
+        logger.debug("%s validating flow rate", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        ret = device.validate_flow_rate(val, **kwargs)
+
+        self._return_value((name, cmd, ret), comm_name)
+
+        logger.debug("%s validated flow rate", name)
+
+    def _get_sheath_valve_pos(self, name, **kwargs):
+        logger.debug("%s getting sheath valve position", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        ret = device.get_sheath_valve_position(**kwargs)
+
+        self._return_value((name, cmd, ret), comm_name)
+
+        logger.debug("%s got sheath valve position", name)
+
+    def _set_sheath_valve_pos(self, name, val, **kwargs):
+        logger.debug("%s setting sheath valve position %s", name, val)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        device.set_sheath_valve_position(val, **kwargs)
+
+        self._return_value((name, cmd, val), 'status')
+
+        logger.debug("%s set sheath valve position", name)
+
+    def _get_sheath_oob_error(self, name, **kwargs):
+        logger.debug("%s getting sheath out of bounds error", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        ret = device.get_sheath_oob_error(**kwargs)
+
+        self._return_value((name, cmd, ret), comm_name)
+
+        logger.debug("%s got sheath out of bounds error", name)
+
+    def _get_outlet_oob_error(self, name, **kwargs):
+        logger.debug("%s getting outlet out of bounds error", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        ret = device.get_outlet_oob_error(**kwargs)
+
+        self._return_value((name, cmd, ret), comm_name)
+
+        logger.debug("%s got outlet out of bounds error", name)
+
+    def _get_sheath_air_error(self, name, **kwargs):
+        logger.debug("%s getting sheath air error", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        ret = device.get_sheath_air_error(**kwargs)
+
+        self._return_value((name, cmd, ret), comm_name)
+
+        logger.debug("%s got sheath air error", name)
+
+    def _get_outlet_air_error(self, name, **kwargs):
+        logger.debug("%s getting outlet air error", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        ret = device.get_outlet_air_error(**kwargs)
+
+        self._return_value((name, cmd, ret), comm_name)
+
+        logger.debug("%s got outlet air error", name)
+
+    def _set_buffer_info(self, name, pos, vol, descrip, **kwargs):
+        logger.debug("%s setting buffer info", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        device.set_buffer_info(pos, vol, descrip)
+
+        logger.debug("%s set buffer info", name)
+
+    def _remove_buffer(self, name, val, **kwargs):
+        logger.debug("%s removing buffer %s", name, val)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        device.remove_buffer(val)
+
+        logger.debug("%s removed buffer", name)
+
+    def _get_status(self, name, **kwargs):
+        logger.debug("%s getting status", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        self._return_value((name, cmd, val), comm_name)
+
+        logger.debug("%s got status", name)
+
+
+    def _additional_abort(self):
+        for name in self._connected_devices:
+            device = self._connected_devices[name]
+            device.stop()
+
 
 class CoflowPanel(wx.Panel):
     """
@@ -1931,7 +2249,7 @@ class CoflowPanel(wx.Panel):
             self.stop_flow_button.Disable()
             self.change_flow_button.Disable()
             self.monitor_timer.Stop()
-            self.coflow_control.monitor = False
+            self.coflow_control.stop_flow_stability_monitor()
             self.set_status('Coflow off')
             self.stop_flow_timer()
 
@@ -1955,7 +2273,7 @@ class CoflowPanel(wx.Panel):
 
         if start_monitor:
             self.monitor_timer.Stop()
-            self.coflow_control.monitor = False
+            self.coflow_control.stop_flow_stability_monitor()
 
         self.coflow_control.change_flow_rate(flow_rate)
 
@@ -1966,7 +2284,7 @@ class CoflowPanel(wx.Panel):
         logger.debug('Validating flow rate')
         lc_flow_rate = self.flow_rate.GetValue()
 
-        lc_flow_rate, is_number, is_extreme = self.coflow_control.validate_flow_rate(lc_flow_rate)
+        lc_flow_rate, is_number, is_extreme = self._inner_validate_flow_rate(lc_flow_rate)
 
         valid = True
 
@@ -1997,6 +2315,53 @@ class CoflowPanel(wx.Panel):
             logger.error('Flow rate not valid')
 
         return valid, lc_flow_rate
+
+    def _inner_validate_flow_rate(self, lc_flow_rate):
+        try:
+            lc_flow_rate = float(lc_flow_rate)
+            is_number = True
+        except Exception:
+            is_number = False
+            logger.error('Flow rate is not a number')
+
+        if is_number:
+            base_units = self.settings['flow_units']
+            units = 'mL/min'
+
+            if units in ['nL/s', 'nL/min', 'uL/s', 'uL/min', 'mL/s', 'mL/min']:
+                base_vu, base_tu = base_units.split('/')
+                new_vu, new_tu = units.split('/')
+                if base_vu != new_vu:
+                    if (base_vu == 'nL' and new_vu == 'uL') or (base_vu == 'uL' and new_vu == 'mL'):
+                        flow_mult = 1./1000.
+                    elif base_vu == 'nL' and new_vu == 'mL':
+                        flow_mult = 1./1000000.
+                    elif (base_vu == 'mL' and new_vu == 'uL') or (base_vu == 'uL' and new_vu == 'nL'):
+                        flow_mult = 1000.
+                    elif base_vu == 'mL' and new_vu == 'nL':
+                        flow_mult = 1000000.
+                else:
+                    flow_mult = 1.
+
+                if base_tu != new_tu:
+                    if base_tu == 'min':
+                        flow_mult = flow_mult/60.
+                    else:
+                        flow_mult = flow_mult*60.
+
+            lc_flow_rate = lc_flow_rate*flow_mult
+            logger.debug('Flow rate mult: %f', flow_mult)
+            logger.debug('Flow rate is %f %s', lc_flow_rate, units)
+
+            if lc_flow_rate < 0.1 or lc_flow_rate > 2:
+                is_extreme = True
+                logger.warning('Flow rate is outside of usual range')
+            else:
+                is_extreme = False
+        else:
+            is_extreme = False
+
+        return lc_flow_rate, is_number, is_extreme
 
     def _on_sheath_valve_position_change(self, evt):
         pos = self.sheath_valve_pos.GetValue()
@@ -2431,7 +2796,7 @@ class CoflowPanel(wx.Panel):
 
         elif cmd_name == 'start':
             flow_rate = float(cmd_kwargs['flow_rate'])
-            self._change_flow_rate(flow_rate)
+            self._change_flow_rate(flow_rate, True)
             self._start_flow()
             state = self._get_automator_state()
             wx.CallAfter(self.flow_rate.ChangeValue, str(flow_rate))
@@ -2442,7 +2807,7 @@ class CoflowPanel(wx.Panel):
 
         elif cmd_name == 'change_flow':
             flow_rate = float(cmd_kwargs['flow_rate'])
-            self._change_flow_rate(flow_rate)
+            self._change_flow_rate(flow_rate, True)
             state = self._get_automator_state()
             wx.CallAfter(self.flow_rate.ChangeValue, str(flow_rate))
 
