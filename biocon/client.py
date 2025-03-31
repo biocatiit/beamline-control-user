@@ -90,16 +90,16 @@ class ControlClient(threading.Thread):
 
         # Clear backlog of incomming messages on startup
         start = time.time()
-        while time.time()-start < 0.1:
+        while time.time()-start < 1:
             if self.socket.poll(10) > 0:
                 resp = self.socket.recv_pyobj()
 
                 res_type, response = resp
 
-                if res_type != 'status':
-                    break
-                else:
-                    start = time.time()
+                # if res_type != 'status':
+                #     break
+                # else:
+                #     start = time.time()
 
         while True:
             action_taken = False
@@ -110,8 +110,12 @@ class ControlClient(threading.Thread):
                         self.last_ping = time.time()
                         self._ping(new_connection)
                 else:
-                    if self.socket.closed:
-                        self._ping()
+                    if time.time() - self.last_ping > self.heartbeat*self.hb_scale:
+                        self.last_ping = time.time()
+                        self._ping(new_connection)
+
+                if new_connection:
+                    new_connection = False
 
                 if len(self.command_queue) > 0:
                     # logger.debug("Getting new command")
@@ -268,7 +272,6 @@ class ControlClient(threading.Thread):
         # logger.debug("Checking if server is active")
         cmd = {'device': 'server', 'command': ('ping', (), {}), 'response': False}
 
-        connect_tries = self.connect_error
         retry = True
 
         if not self.socket.closed:
@@ -284,7 +287,6 @@ class ControlClient(threading.Thread):
                     self.hb_scale = 1
                 else:
                     logger.error("Could not get a response from the server on ping")
-                    connect_tries = connect_tries+1
 
                     if not new_connection:
                         self.connect_error += 1
@@ -298,17 +300,20 @@ class ControlClient(threading.Thread):
                         self.timeout_event.set()
                         self.socket.disconnect("tcp://{}:{}".format(self.ip, self.port))
                         self.socket.close(0)
-                        self.hb_scale = 0.5
+                        self.hb_scale = 0.25
+                        retry = False
 
         else:
+            logger.info('Trying to reconnect to server')
             self.socket = self.context.socket(zmq.PAIR)
             self.socket.set(zmq.LINGER, 0)
             self.socket.connect("tcp://{}:{}".format(self.ip, self.port))
+            connect_tries = 0
 
             while connect_tries < 5:
                 self.socket.send_json(cmd)
 
-                answer = self._wait_for_response(0.1)
+                answer = self._wait_for_response(1)
 
                 if answer == 'ping received':
                     logger.debug("Connection to server verified")

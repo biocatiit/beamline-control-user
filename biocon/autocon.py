@@ -63,12 +63,15 @@ class Automator(threading.Thread):
 
         self._on_run_cmd_callbacks = []
         self._on_finish_cmd_callbacks = []
+        self._on_check_cmd_callbacks = []
         self._on_error_cmd_callbacks = []
         self._on_state_change_callbacks = []
         self._on_abort_callbacks = []
 
         self._cmd_id = 0
         self._wait_id = 0
+
+        self.check_response_queue = deque()
 
     def run(self):
         """
@@ -234,6 +237,48 @@ class Automator(threading.Thread):
 
                         if wait_done:
                             self._check_status(name)
+
+                elif cond == 'check':
+                    inst_conds = status['inst_conds']
+
+                    wait_done = True
+
+                    if status['state'].startswith('wait_check'):
+                        all_states = []
+
+                        for con, state_list in inst_conds:
+                            cur_state = self._auto_cons[con]['status']['state']
+
+                            if cur_state not in state_list:
+                                all_states.append(False)
+                            else:
+                                all_states.append(True)
+
+                        if not all(all_states):
+                            wait_done = False
+
+                        if wait_done:
+                            self.check_response_queue.clear()
+                            cmd_id = controls['run_id']
+
+                            state = self.get_automator_state()
+                            for check_callback in self._on_check_cmd_callbacks:
+                                check_callback(cmd_id, name, state)
+
+                            while True:
+                                if len(self.check_response_queue) > 0:
+                                    resp = self.check_response_queue[0]
+                                    break
+                                time.sleep(0.1)
+
+                            if resp:
+                                for con, state_list in inst_conds:
+                                    self._check_status(con)
+                                self._check_status(name)
+
+                            else:
+                                self.set_automator_state('pause')
+
 
     def _run_next_cmd(self, name):
         with self._auto_con_lock:
@@ -445,6 +490,9 @@ class Automator(threading.Thread):
     def add_on_finish_cmd_callback(self, callback_func):
         self._on_finish_cmd_callbacks.append(callback_func)
 
+    def add_on_check_cmd_callback(self, callback_func):
+        self._on_check_cmd_callbacks.append(callback_func)
+
     def add_on_error_cmd_callback(self, callback_func):
         self._on_error_cmd_callbacks.append(callback_func)
 
@@ -461,6 +509,10 @@ class Automator(threading.Thread):
     def remove_on_finish_cmd_callback(self, callback_func):
         if callback_func in self._on_finish_cmd_callbacks:
             self._on_finish_cmd_callbacks.remove(callback_func)
+
+    def remove_on_check_cmd_callback(self, callback_func):
+        if callback_func in self._on_check_cmd_callbacks:
+            self._on_check_cmd_callbacks.remove(callback_func)
 
     def remove_on_error_cmd_callback(self, callback_func):
         if callback_func in self._on_error_cmd_callbacks:
@@ -524,8 +576,19 @@ class AutoCommand(object):
         self.auto_names = []
         self.auto_ids = []
         self.status = ''
-        self._initialize_cmd(cmd_info)
         self._status_change_callbacks = []
+        self._check_cmd_callbacks = []
+
+    def initialize(self):
+        state = self.automator.get_automator_state()
+
+        if state == 'run':
+            self.automator.set_automator_state('pause')
+
+        self._initialize_cmd(self.cmd_info)
+
+        if state == 'run':
+            self.automator.set_automator_state('run')
 
     def _initialize_cmd(self, cmd_info):
         """
@@ -544,6 +607,7 @@ class AutoCommand(object):
         self.auto_id_status = ['queue' for aid in self.auto_ids]
         self.automator.add_on_run_cmd_callback(self._on_automator_run_callback)
         self.automator.add_on_finish_cmd_callback(self._on_automator_finish_callback)
+        self.automator.add_on_check_cmd_callback(self._on_automator_check_callback)
 
     def _on_automator_run_callback(self, aid, cmd_name, prev_aid, state):
         self.set_command_status(prev_aid, 'done', state)
@@ -557,6 +621,16 @@ class AutoCommand(object):
 
     def _on_automator_finish_callback(self, aid, queue_name, state):
         self.set_command_status(aid, 'done', state)
+
+    def _on_automator_check_callback(self, aid, queue_name, state):
+        if aid in self.auto_ids:
+            if state == 'run' and len(self._check_cmd_callbacks) > 0:
+                for cb_func in self._check_cmd_callbacks:
+                    cb_func(self.cmd_info)
+            elif state == 'run' and len(self._check_cmd_callbacks) == 0:
+                self.automator.check_response_queue.append(True)
+            else:
+                self.automator.check_response_queue.append(False)
 
     def set_command_status(self, aid, status, state):
         if aid in self.auto_ids:
@@ -582,6 +656,7 @@ class AutoCommand(object):
             if self.status == 'done':
                 self.automator.remove_on_run_cmd_callback(self._on_automator_run_callback)
                 self.automator.remove_on_finish_cmd_callback(self._on_automator_finish_callback)
+                self.automator.remove_on_check_cmd_callback(self._on_automator_check_callback)
 
             if old_status != self.status:
                 for cb_func in self._status_change_callbacks:
@@ -619,6 +694,7 @@ class AutoCommand(object):
 
         self.automator.remove_on_run_cmd_callback(self._on_automator_run_callback)
         self.automator.remove_on_finish_cmd_callback(self._on_automator_finish_callback)
+        self.automator.remove_on_check_cmd_callback(self._on_automator_check_callback)
         self.remove_command_from_automator()
 
         if state == 'run':
@@ -643,6 +719,13 @@ class AutoCommand(object):
         if callback_func in self._status_change_callbacks:
             self._status_change_callbacks.remove(callback_func)
 
+    def add_check_cmd_callback(self, callback_func):
+        self._check_cmd_callbacks.append(callback_func)
+
+    def remove_check_cmd_callback(self, callback_func):
+        if callback_func in self._check_cmd_callbacks:
+            self._check_cmd_callbacks.remove(callback_func)
+
     def _add_automator_cmd(self, inst, cmd, cmd_args, cmd_kwargs):
         cmd_id = self.automator.add_cmd(inst, cmd, cmd_args, cmd_kwargs)
         self.auto_names.append(inst)
@@ -664,7 +747,7 @@ class SecSampleCommand(AutoCommand):
         hplc_inst = cmd_info['inst']
 
         sample_wait_id = self.automator.get_wait_id()
-        sample_wait_cmd = 'wait_sync_{}'.format(sample_wait_id)
+        sample_wait_cmd = '_{}'.format(sample_wait_id)
         sample_conds = [[hplc_inst, [sample_wait_cmd,]], ['exp', [sample_wait_cmd,]],
             ['coflow', [sample_wait_cmd,]],]
 
@@ -678,8 +761,15 @@ class SecSampleCommand(AutoCommand):
         finish_conds2 = [[hplc_inst, [finish_wait_cmd2,]], ['exp', [finish_wait_cmd2,]],
             ['coflow', [finish_wait_cmd2,]],]
 
+        check_wait_id = self.automator.get_wait_id()
+        check_wait_cmd = 'wait_check_{}'.format(check_wait_id)
+        check_conds = [[hplc_inst, [check_wait_cmd,]],['exp', [check_wait_cmd,]],
+            ['coflow', [check_wait_cmd,]],]
+
         self._add_automator_cmd('exp', sample_wait_cmd, [], {'condition': 'status',
             'inst_conds': sample_conds})
+        self._add_automator_cmd('exp', check_wait_cmd, [], {'condition': 'check',
+            'inst_conds': check_conds})
         self._add_automator_cmd('exp', 'expose', [], cmd_info)
         self._add_automator_cmd('exp', finish_wait_cmd, [], {'condition': 'status',
             'inst_conds': finish_conds})
@@ -704,6 +794,8 @@ class SecSampleCommand(AutoCommand):
 
         self._add_automator_cmd(hplc_inst, sample_wait_cmd, [],
             {'condition': 'status', 'inst_conds': sample_conds})
+        self._add_automator_cmd(hplc_inst, check_wait_cmd, [], {'condition': 'check',
+            'inst_conds': check_conds})
         self._add_automator_cmd(hplc_inst, hplc_wait_cmd, [],
             {'condition': 'status', 'inst_conds': [[hplc_inst,
             [hplc_wait_cmd,]], ['exp', ['exposing',]]]})
@@ -719,6 +811,8 @@ class SecSampleCommand(AutoCommand):
 
         self._add_automator_cmd('coflow', sample_wait_cmd, [],
             {'condition': 'status', 'inst_conds': sample_conds})
+        self._add_automator_cmd('coflow', check_wait_cmd, [], {'condition': 'check',
+            'inst_conds': check_conds})
         if cmd_info['start_coflow']:
             self._add_automator_cmd('coflow', 'start', [],
                 {'flow_rate': cmd_info['coflow_fr']})
@@ -797,6 +891,12 @@ class EquilibrateCommand(AutoCommand):
             start_conds.append(['coflow', [start_wait_cmd,]])
             finish_conds.append(['coflow', [finish_wait_cmd,]])
 
+            if cmd_info['coflow_restart']:
+                wait_id = self.automator.get_wait_id()
+                equil_wait_cmd = 'wait_sync_{}'.format(wait_id)
+                equil_conds = [[hplc_inst, [equil_wait_cmd,]],
+                    ['coflow', [equil_wait_cmd,]]]
+
         if num_paths == 1:
             start_conds.append(['exp', [start_wait_cmd,]])
             finish_conds.append(['exp', [finish_wait_cmd,]])
@@ -809,8 +909,14 @@ class EquilibrateCommand(AutoCommand):
         self._add_automator_cmd(hplc_inst, 'switch_buffer_bottle', [],
             switch_buffer_bottle_settings)
         self._add_automator_cmd(hplc_inst, 'equilibrate', [], equil_settings)
+
+        if equil_coflow and cmd_info['coflow_restart']:
+            self._add_automator_cmd(hplc_inst, equil_wait_cmd, [],
+                {'condition' : 'status', 'inst_conds': equil_conds})
+
         self._add_automator_cmd(hplc_inst, finish_wait_cmd, [],
             {'condition' : 'status', 'inst_conds': finish_conds})
+
 
         if num_paths == 1:
             self._add_automator_cmd('exp', start_wait_cmd, [],
@@ -818,10 +924,8 @@ class EquilibrateCommand(AutoCommand):
             self._add_automator_cmd('exp', finish_wait_cmd, [],
                 {'condition' : 'status', 'inst_conds': finish_conds})
 
-        if equil_coflow:
-            wait_id = self.automator.get_wait_id()
-            equil_wait_cmd = 'wait_sync_{}'.format(wait_id)
 
+        if equil_coflow:
             self._add_automator_cmd('coflow', start_wait_cmd, [],
                 {'condition' : 'status', 'inst_conds': start_conds})
 
@@ -830,8 +934,8 @@ class EquilibrateCommand(AutoCommand):
 
             if cmd_info['coflow_restart']:
                 self._add_automator_cmd('coflow', equil_wait_cmd, [],
-                    {'condition' : 'status', 'inst_conds': [[hplc_inst,
-                    [finish_wait_cmd,]],]})
+                    {'condition' : 'status', 'inst_conds': equil_conds})
+
                 self._add_automator_cmd('coflow', 'start', [],
                     {'flow_rate': cmd_info['coflow_rate']})
 
@@ -935,11 +1039,11 @@ class StopFlowCommand(AutoCommand):
         stop_coflow = cmd_info['stop_coflow']
         num_paths = cmd_info['num_flow_paths']
 
-        if (stop_flow1 or stop_flow2) and stop_coflow:
-            coflow_wait_id = self.automator.get_wait_id()
-            coflow_wait_cmd = 'wait_sync_{}'.format(coflow_wait_id)
-            coflow_conds = [['coflow', [coflow_wait_cmd,]],]
+        coflow_wait_id = self.automator.get_wait_id()
+        coflow_wait_cmd = 'wait_sync_{}'.format(coflow_wait_id)
+        coflow_conds = [['coflow', [coflow_wait_cmd,]],]
 
+        if (stop_flow1 or stop_flow2) and stop_coflow:
             if stop_flow1:
                 coflow_conds.append(['{}_pump1'.format(hplc_inst),
                     [coflow_wait_cmd,]])
@@ -995,6 +1099,12 @@ class ExposureCommand(AutoCommand):
         finish_wait_cmd = 'wait_sync_{}'.format(finish_wait_id)
         finish_conds = [['exp', [finish_wait_cmd,]],]
 
+        check_wait_id = self.automator.get_wait_id()
+        check_wait_cmd = 'wait_check_{}'.format(check_wait_id)
+        check_conds = [['exp', [check_wait_cmd,]],]
+
+        self._add_automator_cmd('exp', check_wait_cmd, [], {'condition': 'check',
+            'inst_conds': check_conds})
         self._add_automator_cmd('exp', 'expose', [], cmd_info)
         self._add_automator_cmd('exp', finish_wait_cmd, [], {'condition': 'status',
             'inst_conds': finish_conds})
@@ -2326,6 +2436,7 @@ class AutoList(utils.ItemList):
         utils.ItemList.__init__(self, *args)
 
         self.auto_panel = auto_panel
+        self.automator = self.auto_panel.settings['automator_thread']
 
         self._on_add_item_callback = on_add_item_callback
         self._on_remove_item_callback = on_remove_item_callback
@@ -2932,17 +3043,74 @@ class AutoList(utils.ItemList):
 
         return cmd_settings, valid, errors
 
-    def _add_item(self, item_info):
+    def _show_check_dialog(self, msg, caption):
+        with wx.MessageDialog(self, msg, caption=caption,
+            style=wx.YES_NO|wx.YES_DEFAULT) as check_dialog:
 
+            check_dialog.SetYesNoLabels('Continue', 'Pause Queue')
+
+            ret = check_dialog.ShowModal()
+
+            if ret == wx.ID_YES:
+                check_response = True
+            elif ret == wx.ID_NO:
+                check_response = False
+
+        self.automator.check_response_queue.append(check_response)
+
+    def _check_exposure_cmd(self, cmd_info):
+        exp_panel = wx.FindWindowByName('exposure')
+        warn_valid, shutter_msg, vac_msg = exp_panel.check_warnings(verbose=False,
+            check_all=True)
+
+        data_dir = cmd_info['data_dir']
+        filename = cmd_info['filename']
+        run_num = exp_panel.run_number
+        num_frames = int(cmd_info['num_frames'])
+
+        fprefix = filename+run_num
+
+        if exp_panel.pipeline_ctrl is not None:
+            data_dir = os.path.join(data_dir, 'images')
+
+        overwrite_valid = exp_panel.inner_check_overwrite(data_dir, fprefix,
+            num_frames)
+
+        if len(shutter_msg) > 0 or len(vac_msg) > 0 or not overwrite_valid:
+            msg = 'The following issues were detected prior to starting exposure:'
+            if len(shutter_msg) > 0:
+                msg += '\n- {}'.format(shutter_msg)
+            if len(vac_msg) > 0:
+                msg += vac_msg
+
+            if not overwrite_valid:
+                msg += ('\n- Data collection will overwrite existing files '
+                        'with the same name.')
+
+            msg += ('\n\nDo you want to continue with the exposure or pause '
+                'the action queue to fix the issue(s)?')
+
+            wx.CallAfter(self._show_check_dialog, msg, 'Exposure Warning')
+
+        else:
+            self.automator.check_response_queue.append(True)
+
+
+    def _add_item(self, item_info):
         command = self._on_add_item_callback(item_info)
         # auto_names = ['test']
         # auto_ids = [0]
 
         item_type = item_info['item_type']
 
+        if item_type == 'sec_sample' or item_type == 'exposure':
+            command.add_check_cmd_callback(self._check_exposure_cmd)
+
         new_item = AutoListItem(self, item_type, command)
 
         self.add_items([new_item])
+
+        command.initialize()
 
 
     def _on_remove_item(self, evt):
@@ -3231,6 +3399,8 @@ class AutoListItem(utils.ListItem):
         top_sizer.Add(std_sizer, flag=wx.TOP|wx.BOTTOM, border=self._FromDIP(5))
         top_sizer.Add(item_sizer, flag=wx.BOTTOM, border=self._FromDIP(5))
 
+        for child in item_parent.GetChildren():
+            child.Bind(wx.EVT_LEFT_DOWN, self._on_left_mouse_btn)
 
         # This should be moved into the list item?
         if self.item_type == 'sec_sample':
