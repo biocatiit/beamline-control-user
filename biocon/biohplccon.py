@@ -857,7 +857,7 @@ class AgilentHPLCStandard(AgilentHPLC):
         do_equil = True
 
         if self._active_flow_path == flow_path:
-            samples_being_run = self._check_samples_being_run()
+            samples_being_run = self.check_samples_being_run()
 
             if samples_being_run and not equil_with_sample:
                 logger.error(('HPLC %s cannot equilibrate flow path %s because '
@@ -1221,7 +1221,7 @@ class AgilentHPLCStandard(AgilentHPLC):
         do_purge = True
 
         if self._active_flow_path == flow_path:
-            samples_being_run = self._check_samples_being_run()
+            samples_being_run = self.check_samples_being_run()
 
             if samples_being_run and not purge_with_sample:
                 logger.error(('HPLC %s cannot purge flow path %s because '
@@ -1230,7 +1230,7 @@ class AgilentHPLCStandard(AgilentHPLC):
 
         return do_purge
 
-    def _check_samples_being_run(self):
+    def check_samples_being_run(self):
         run_queue_status = self.get_run_queue_status()
         run_queue = self.get_run_queue()
         acquiring = False
@@ -1585,7 +1585,7 @@ class AgilentHPLCStandard(AgilentHPLC):
 
         if success:
             if self._active_flow_path == flow_path:
-                samples_being_run = self._check_samples_being_run()
+                samples_being_run = self.check_samples_being_run()
 
                 if samples_being_run and not switch_with_sample:
                     logger.info(('HPLC %s cannot switch  buffer bottles on '
@@ -2940,7 +2940,7 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
                 'is already underway.', self.name)
             success = False
         else:
-            samples_being_run = self._check_samples_being_run()
+            samples_being_run = self.check_samples_being_run()
 
             if samples_being_run and not switch_with_sample:
                 logger.error(('HPLC %s cannot switch active flow path because '
@@ -3471,6 +3471,7 @@ class HPLCCommThread(utils.CommManager):
             'errors'            : device.get_instrument_errors(),
             'run_queue_status'  : device.get_run_queue_status(),
             'run_queue'         : device.get_run_queue(),
+            'samples_being_run' : device.check_samples_being_run()
             'elapsed_runtime'   : 0,
             'total_runtime'     : 0,
             }
@@ -3537,63 +3538,6 @@ class HPLCCommThread(utils.CommManager):
         # print(time.time()-a)
 
         logger.debug("%s fast status: %s", name, val)
-
-    def _get_slow_hplc_status(self, name, **kwargs):
-        logger.debug("Getting %s slow status", name)
-
-        comm_name = kwargs.pop('comm_name', None)
-        cmd = kwargs.pop('cmd', None)
-
-        device = self._connected_devices[name]
-
-        connected = device.get_connected()
-
-        if not connected:
-            return
-
-        status = device.get_instrument_status()
-        sample_submission = device.get_submitting_sample_status()
-
-        if (status == 'PreRun' or status == 'Injecting' or status == 'PostRun'
-            or sample_submission):
-            # This seems to get hung up when the instrument is busy, so just
-            # don't bother it when it's running
-            return
-
-        instrument_status = {
-            'elapsed_runtime'   : 0,
-            'total_runtime'     : 0,
-            'status'            : status,
-            }
-
-        if status == 'Run':
-            instrument_status['elapsed_runtime'] = device.get_hplc_elapsed_runtime()
-            instrument_status['total_runtime'] = device.get_hplc_total_runtime( update=False)
-
-        pump_status = {
-            }
-
-        autosampler_status = {
-            }
-
-        if (isinstance(device, AgilentHPLCStandard)
-            and not isinstance(device, AgilentHPLC2Pumps)):
-            uv_status = {
-                }
-
-        else:
-            uv_status = {}
-
-        val = {
-            'instrument_status' : instrument_status,
-            'pump_status'       : pump_status,
-            'autosampler_status': autosampler_status,
-            'uv_status'         : uv_status,
-        }
-
-        self._return_value((name, cmd, val), comm_name)
-
-        logger.debug("%s slow status: %s", name, val)
 
     def _get_valve_status(self, name, **kwargs):
         logger.debug("Getting %s valve status", name)
@@ -4198,6 +4142,7 @@ class HPLCPanel(utils.DevicePanel):
         self._inst_elapsed_runtime = ''
         self._inst_total_runtime = ''
         self._inst_run_queue_status = ''
+        self._inst_samples_being_run = False
         self._inst_err_status = ''
         self._inst_errs = ''
         self._inst_run_queue = []
@@ -5109,8 +5054,6 @@ class HPLCPanel(utils.DevicePanel):
             get_fast_hplc_status_cmd = ['get_fast_hplc_status', [self.name,], {}]
             self._update_status_cmd(get_fast_hplc_status_cmd, 2)
 
-            # get_slow_hplc_status_cmd = ['get_slow_hplc_status', [self.name,], {}]
-            # self._update_status_cmd(get_slow_hplc_status_cmd, 35)
 
             get_valve_status_cmd = ['get_valve_status', [self.name,], {}]
             self._update_status_cmd(get_valve_status_cmd, 15)
@@ -6231,6 +6174,7 @@ class HPLCPanel(utils.DevicePanel):
             status = str(inst_status['status'])
             run_queue_status = str(inst_status['run_queue_status'])
             run_queue = inst_status['run_queue']
+            self._inst_samples_being_run = inst_status['samples_being_run']
             elapsed_runtime = inst_status['elapsed_runtime']
             total_runtime = inst_status['total_runtime']
 
@@ -6581,28 +6525,6 @@ class HPLCPanel(utils.DevicePanel):
                         vis_lamp_status)
                     self._uv_vis_lamp_status = vis_lamp_status
 
-
-        elif cmd == 'get_slow_hplc_status':
-            inst_status = val['instrument_status']
-            elapsed_runtime = inst_status['elapsed_runtime']
-            total_runtime = inst_status['total_runtime']
-            status = str(inst_status['status'])
-
-            if (status != 'Run' and status != 'Injecting'
-                and status != 'PostRun' and status != 'PreRun'):
-                total_runtime = '0.0'
-                elapsed_runtime = '0.0'
-            else:
-                total_runtime = str(round(total_runtime,1))
-                elapsed_runtime = str(round(elapsed_runtime, 1))
-
-            if((elapsed_runtime != self._inst_elapsed_runtime) or
-                (total_runtime != self._inst_total_runtime)):
-                wx.CallAfter(self._inst_runtime_ctrl.SetLabel,
-                    '{}/{}'.format(elapsed_runtime, total_runtime))
-                self._inst_elapsed_runtime =  elapsed_runtime
-                self._inst_total_runtime =  total_runtime
-
         elif cmd == 'get_valve_status':
             buffer1 = int(val['buffer1'])
             purge1 = int(val['purge1'])
@@ -6759,7 +6681,20 @@ class HPLCPanel(utils.DevicePanel):
         success = True
 
         if cmd_name == 'status':
-            if (self._inst_status == 'Offline' or self._inst_status == 'Unknown'
+            if (self._inst_status == 'Run' or self._inst_status == 'Injecting'
+                or self._inst_status == 'PostRun' or self._inst_status == 'PreRun'
+                or self._inst_samples_being_run):
+                inst_name = cmd_kwargs['inst_name']
+                flow_path = int(inst_name.split('_')[-1].lstrip('pump'))
+                if self._device_type == 'AgilentHPLC2Pumps':
+                    if flow_path == int(self._flow_path):
+                        state = 'run'
+                    else:
+                        state = self._get_automator_state(flow_path)
+                else:
+                    state = 'run'
+
+            elif (self._inst_status == 'Offline' or self._inst_status == 'Unknown'
                 or self._inst_status == 'Error' or self._inst_status == 'Idle' or
                 self._inst_status == 'NotReady' or self._inst_status == 'Standby'):
 
@@ -6775,17 +6710,7 @@ class HPLCPanel(utils.DevicePanel):
 
                 state = self._get_automator_state(flow_path)
 
-            elif (self._inst_status == 'Run' or self._inst_status == 'Injecting'
-                or self._inst_status == 'PostRun' or self._inst_status == 'PreRun'):
-                inst_name = cmd_kwargs['inst_name']
-                flow_path = int(inst_name.split('_')[-1].lstrip('pump'))
-                if self._device_type == 'AgilentHPLC2Pumps':
-                    if flow_path == int(self._flow_path):
-                        state = 'run'
-                    else:
-                        state = self._get_automator_state(flow_path)
-                else:
-                    state = 'run'
+
 
             else:
                 state = 'idle'
