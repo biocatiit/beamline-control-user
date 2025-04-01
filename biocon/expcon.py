@@ -1716,6 +1716,7 @@ class ExpCommThread(threading.Thread):
             dio_out10.write(1)
             time.sleep(0.1)
             dio_out10.write(0)
+            real_start_time = datetime.datetime.now().isoformat(str(' '))
         else:
             logger.info("Waiting for trigger {}".format(cur_trig))
             self.return_queue.append(['waiting', None])
@@ -1734,7 +1735,11 @@ class ExpCommThread(threading.Thread):
                 if det.get_status() == 0:
                     break #In case you miss the srs trigger
 
+            real_start_time = datetime.datetime.now().isoformat(str(' '))
+
             self.return_queue.append(['exposing', None])
+
+        return real_start_time
 
     def get_experiment_status(self, ab_burst, ab_burst_2, det, timeouts):
         # logger.debug('getting experiment status')
@@ -1783,6 +1788,8 @@ class ExpCommThread(threading.Thread):
         dark_counts, cur_trig, exp_time, exp_period, num_frames, struck_num_meas,
         struck_meas_time, kwargs):
 
+        metadata = kwargs['metadata']
+
         if det.get_status() !=0:
             try:
                 det.abort()
@@ -1826,13 +1833,9 @@ class ExpCommThread(threading.Thread):
             if not exp_type == 'muscle' and not wait_for_trig:
                 dio_out9.write(1)
 
-        if exp_type != 'muscle':
-            self.write_log_header(data_dir, cur_fprefix, log_vals,
-                kwargs['metadata'], extra_vals)
-
         time.sleep(1)
 
-        self.wait_for_trigger(wait_for_trig, cur_trig, exp_time, ab_burst,
+        real_start_time = self.wait_for_trigger(wait_for_trig, cur_trig, exp_time, ab_burst,
             ab_burst_2, det, struck, dio_out6, dio_out9, dio_out10)
 
         if self._abort_event.is_set():
@@ -1840,6 +1843,12 @@ class ExpCommThread(threading.Thread):
                 dio_out9, dio_out6, exp_time)
             aborted = True
             return False
+
+        metadata['Date:'] = real_start_time
+
+        if exp_type != 'muscle':
+            self.write_log_header(data_dir, cur_fprefix, log_vals,
+                metadata, extra_vals)
 
         logger.debug('Exposures started')
         self._exp_event.set()
@@ -4001,7 +4010,7 @@ class ExpPanel(wx.Panel):
 
         if len(self.current_exposure_values)>0:
             metadata['Instrument:'] = 'BioCAT (Sector 18, APS)'
-            metadata['Date:'] = datetime.datetime.now().isoformat(str(' '))
+            metadata['Nominal start date:'] = datetime.datetime.now().isoformat(str(' '))
             metadata['File prefix:'] = self.current_exposure_values['fprefix']
             metadata['Save directory:'] = self.current_exposure_values['data_dir']
             metadata['Number of frames:'] = self.current_exposure_values['num_frames']
