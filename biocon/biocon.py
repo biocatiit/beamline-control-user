@@ -363,17 +363,17 @@ if __name__ == '__main__':
     # Exposure
     exposure_settings = expcon.default_exposure_settings
 
-    # # Fast in-air shutters
-    # exposure_settings['shutter_speed_open'] = 0.001
-    # exposure_settings['shutter_speed_close'] = 0.001
-    # exposure_settings['shutter_speed_pad'] = 0.00
-    # exposure_settings['shutter_speed_cycle'] = 0.002
+    # Fast in-air shutters
+    exposure_settings['shutter_speed_open'] = 0.001
+    exposure_settings['shutter_speed_close'] = 0.001
+    exposure_settings['shutter_speed_pad'] = 0.00
+    exposure_settings['shutter_speed_cycle'] = 0.002
 
-    # Normal vacuum shutter (uniblitz)
-    exposure_settings['shutter_speed_open'] = 0.0045
-    exposure_settings['shutter_speed_close'] = 0.004
-    exposure_settings['shutter_speed_pad'] = 0.002
-    exposure_settings['shutter_speed_cycle'] = 0.1
+    # # Normal vacuum shutter (uniblitz)
+    # exposure_settings['shutter_speed_open'] = 0.0045
+    # exposure_settings['shutter_speed_close'] = 0.004
+    # exposure_settings['shutter_speed_pad'] = 0.002
+    # exposure_settings['shutter_speed_cycle'] = 0.1
 
     exposure_settings['det_args'] =  {'use_tiff_writer': False,
         'use_file_writer': True, 'photon_energy' : 12.0,
@@ -381,7 +381,7 @@ if __name__ == '__main__':
 
     # Muscle settings
     exposure_settings['struck_measurement_time'] = '0.001'
-    exposure_settings['tr_muscle_exp'] = False
+    exposure_settings['tr_muscle_exp'] = True
 
     #Other settings
     exposure_settings['wait_for_trig'] = True
@@ -407,9 +407,9 @@ if __name__ == '__main__':
         ]
     exposure_settings['warnings'] = {'shutter' : True, 'col_vac' : {'check': True,
         'thresh': 0.04}, 'guard_vac' : {'check': True, 'thresh': 0.04},
-        'sample_vac': {'check': True, 'thresh': 0.04}, 'sc_vac':
+        'sample_vac': {'check': False, 'thresh': 0.04}, 'sc_vac':
         {'check': True, 'thresh':0.04}}
-    exposure_settings['base_data_dir'] = '/nas_data/Eiger2x/2025_Run1/2025_03_30_Hall/' #CHANGE ME and pipeline local_basedir
+    exposure_settings['base_data_dir'] = '/nas_data/Eiger2x/2025_Run1/' #CHANGE ME and pipeline local_basedir
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']
 
 
@@ -660,8 +660,8 @@ if __name__ == '__main__':
                                 'preparation'   : 'Intact',
                                 'notes'         : '',
                                 },
-        'metadata_type'     : 'auto',
-        # 'metadata_type'     : 'muscle',
+        # 'metadata_type'     : 'auto',
+        'metadata_type'     : 'muscle',
         }
 
     pipeline_settings = {
@@ -735,15 +735,15 @@ if __name__ == '__main__':
 
     components = OrderedDict([
         ('exposure', expcon.ExpPanel),
-        ('coflow', coflowcon.CoflowPanel),
+        # ('coflow', coflowcon.CoflowPanel),
         # ('trsaxs_scan', trcon.TRScanPanel),
         # ('trsaxs_flow', trcon.TRFlowPanel),
         # ('scan',    scancon.ScanPanel),
         ('metadata', metadata.ParamPanel),
-        ('pipeline', pipeline_ctrl.PipelineControl),
-        ('uv', spectrometercon.UVPanel),
-        ('hplc', biohplccon.HPLCPanel),
-        ('automator', autocon.AutoPanel),
+        # ('pipeline', pipeline_ctrl.PipelineControl),
+        # ('uv', spectrometercon.UVPanel),
+        # ('hplc', biohplccon.HPLCPanel),
+        # ('automator', autocon.AutoPanel),
         ])
 
     settings = {

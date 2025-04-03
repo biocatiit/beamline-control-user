@@ -3471,7 +3471,7 @@ class HPLCCommThread(utils.CommManager):
             'errors'            : device.get_instrument_errors(),
             'run_queue_status'  : device.get_run_queue_status(),
             'run_queue'         : device.get_run_queue(),
-            'samples_being_run' : device.check_samples_being_run()
+            'samples_being_run' : device.check_samples_being_run(),
             'elapsed_runtime'   : 0,
             'total_runtime'     : 0,
             }
