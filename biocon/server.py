@@ -406,9 +406,9 @@ if __name__ == '__main__':
     port4 = '5559'
 
     # exp_type = 'coflow' #coflow or trsaxs_laminar or trsaxs_chaotic or hplc
-    # exp_type = 'trsaxs_chaotic'
+    exp_type = 'trsaxs_chaotic'
     # exp_type = 'trsaxs_laminar'
-    exp_type = 'hplc'
+    # exp_type = 'hplc'
 
 
     if exp_type == 'coflow':
@@ -503,17 +503,17 @@ if __name__ == '__main__':
             # Chaotic flow
 
             setup_pumps = [
-                {'name': 'Buffer 2', 'args': ['SSI Next Gen', 'COM15'],
+                {'name': 'Buffer 2', 'args': ['SSI Next Gen', 'COM14'],
                     'kwargs': {'flow_rate_scale': 1.0179,
                     'flow_rate_offset': -20.842/10000,'scale_type': 'up'},
                     'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
                     'max_pressure': 1800}},
-                {'name': 'Sample', 'args': ['SSI Next Gen', 'COM12'],
+                {'name': 'Sample', 'args': ['SSI Next Gen', 'COM17'],
                     'kwargs': {'flow_rate_scale': 1.0204,
                     'flow_rate_offset': 15.346/1000,'scale_type': 'up'},
                     'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
                     'max_pressure': 1500}},
-                {'name': 'Buffer 1', 'args': ['SSI Next Gen', 'COM14'],
+                {'name': 'Buffer 1', 'args': ['SSI Next Gen', 'COM18'],
                     'kwargs': {'flow_rate_scale': 1.0478,
                     'flow_rate_offset': -72.82/1000,'scale_type': 'up'},
                     'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
@@ -616,11 +616,11 @@ if __name__ == '__main__':
                     'kwargs': {'positions' : 6}},
                 {'name': 'Buffer 2', 'args': ['Rheodyne', 'COM4'],
                     'kwargs': {'positions' : 6}},
+                 {'name': 'Sample', 'args': ['Rheodyne', 'COM3'],
+                    'kwargs': {'positions' : 6}},
                 {'name': 'Sheath 1', 'args': ['Rheodyne', 'COM21'],
                     'kwargs': {'positions' : 6}},
                 {'name': 'Sheath 2', 'args': ['Rheodyne', 'COM8'],
-                    'kwargs': {'positions' : 6}},
-                {'name': 'Sample', 'args': ['Rheodyne', 'COM3'],
                     'kwargs': {'positions' : 6}},
                 ]
 
