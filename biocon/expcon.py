@@ -3263,6 +3263,10 @@ class ExpPanel(wx.Panel):
             uv_panel = wx.FindWindowByName('uv')
             uv_panel.on_exposure_stop(self)
 
+        if 'trsaxs_flow' in self.settings['components']:
+            trsaxs_flow_panel = wx.FindWindowByName('trsaxs_flow')
+            trsaxs_flow_panel.on_exposure_stop(self)
+
     def set_status(self, status):
         wx.CallAfter(self.status.SetLabel, status)
         self._exp_status = status
