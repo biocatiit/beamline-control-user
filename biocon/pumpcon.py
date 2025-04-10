@@ -5844,8 +5844,8 @@ if __name__ == '__main__':
     # my_pump.flow_rate = 10
     # my_pump.refill_rate = 10
 
-    my_pump = HamiltonPSD6Pump('Pump1', 'COM7', '1', 1.46, 0.1, 1,
-        '0.1 mL, Hamilton Glass', False, comm_lock=comm_lock)
+    # my_pump = HamiltonPSD6Pump('Pump1', 'COM7', '1', 1.46, 0.1, 1,
+    #     '0.1 mL, Hamilton Glass', False, comm_lock=comm_lock)
     # my_pump.flow_rate = 10
     # my_pump.refill_rate = 10
 
@@ -5980,7 +5980,7 @@ if __name__ == '__main__':
 
     # Teledyne SSI Reaxus pumps without scaling
     setup_devices = [
-        {'name': 'Pump 4', 'args': ['SSI Next Gen', 'COM15'],
+        {'name': 'Pump 4', 'args': ['SSI Next Gen', 'COM16'],
             'kwargs': {'flow_rate_scale': 1,
             'flow_rate_offset': 0,'scale_type': 'up'},
             'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
