@@ -316,7 +316,7 @@ class Autosampler(object):
 
         return not abort
 
-    def move_motors_absolute(self, position, motor='all'):
+    def move_motors_absolute(self, position, motor='all', y_offset=True):
         self._active_count += 1
         abort = False
 
@@ -329,7 +329,10 @@ class Autosampler(object):
                 needle_y_pos = position[2]
 
                 coflow_y_pos = self.coflow_y_motor.position
-                offset = coflow_y_pos - self.coflow_y_ref
+                if y_offset:
+                    offset = coflow_y_pos - self.coflow_y_ref
+                else:
+                    offset = 0
                 needle_y_pos += offset
 
                 self.plate_x_motor.move_absolute(plate_x_pos)
@@ -364,7 +367,10 @@ class Autosampler(object):
 
             elif motor == 'needle_y':
                 coflow_y_pos = self.coflow_y_motor.position
-                offset = coflow_y_pos - self.coflow_y_ref
+                if y_offset:
+                    offset = coflow_y_pos - self.coflow_y_ref
+                else:
+                    offset = 0
                 position += offset
 
                 self.needle_y_motor.move_absolute(position)
@@ -663,7 +669,8 @@ class Autosampler(object):
 
         self.move_plate_out()
 
-        success = self.move_motors_absolute(self.needle_in_position, 'needle_y')
+        success = self.move_motors_absolute(self.needle_in_position, 'needle_y',
+            y_offset=False)
 
         self._active_count -= 1
 
@@ -1471,7 +1478,7 @@ class ASCommThread(utils.CommManager):
         logger.debug("%s injected sample", name)
 
     def _get_status(self, name, **kwargs):
-        logger.debug("Getting %sstatus", name)
+        logger.debug("Getting %s status", name)
 
         comm_name = kwargs.pop('comm_name', None)
         cmd = kwargs.pop('cmd', None)

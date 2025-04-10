@@ -576,9 +576,9 @@ class ValveCommThread(utils.CommManager):
         device = self._connected_devices[name]
         success = device.set_position(val)
         if success:
-            logger.info("Valve %s position set to %i", name, val)
+            logger.info("Valve %s position set to %s", name, val)
         else:
-            logger.info("Failed setting valve %s position to %i", name, val)
+            logger.info("Failed setting valve %s position to %s", name, val)
 
         self._return_value((name, cmd, success), comm_name)
 
@@ -594,9 +594,9 @@ class ValveCommThread(utils.CommManager):
             valve = self._connected_devices[name]
             t_success = valve.set_position(positions[i], **kwargs)
             if t_success:
-                logger.info("Valve %s position set to %i", name, positions[i])
+                logger.info("Valve %s position set to %s", name, positions[i])
             else:
-                logger.info("Failed setting valve %s position to %i", name,
+                logger.info("Failed setting valve %s position to %s", name,
                     positions[i])
             success.append(t_success)
 

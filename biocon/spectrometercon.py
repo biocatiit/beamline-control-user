@@ -55,6 +55,7 @@ try:
     sys.path.append('C:\\Users\\biocat\\Stellarnet\\stellarnet_driverLibs')#add the path of the stellarnet_demo.py
     import stellarnet_driver3 as sn
 except ImportError:
+    traceback.print_exc()
     pass
 
 import client
@@ -3064,7 +3065,7 @@ class UVPanel(utils.DevicePanel):
 
                 uv_time = max(int_time*self.settings['int_t_scale'], 0.05)*scan_avgs
 
-                delta_t_min = (exp_time-uv_time)*1.05
+                delta_t_min = (exp_period-uv_time)*1.05
 
                 if delta_t_min < 0.01:
                     delta_t_min = 0
@@ -3623,17 +3624,17 @@ class UVPanel(utils.DevicePanel):
             num_frames = exp_params['num_frames']
             num_trig = int(exp_params['num_trig'])
 
-            if exp_time < 0.125 or exp_period - exp_time < 0.01:
+            if exp_period < 0.125 or exp_period - exp_time < 0.01:
                 uv_valid = False
 
             else:
                 max_int_t = float(self.int_time.GetValue())
 
-                int_time = min(exp_time/2, max_int_t)
+                int_time = min(exp_period/2, max_int_t)
 
                 spec_t = max(int_time*self.settings['int_t_scale'], 0.05)
 
-                scan_avgs = exp_time // spec_t
+                scan_avgs = exp_period // spec_t
 
                 abort_cmd = ['abort_collection', [self.name,], {}]
                 self._send_cmd(abort_cmd)
