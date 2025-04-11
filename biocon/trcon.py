@@ -1881,6 +1881,10 @@ class TRFlowPanel(wx.Panel):
         self.fms = {}
 
         self.error_dialog = None
+        self._purging_pumps = False
+        self._refilling_pumps = False
+        self._changing_buffer = False
+        self._buffer_change_cycle = 0
 
         self.stop_valve_monitor = threading.Event()
         self.pause_valve_monitor = threading.Event()
@@ -2179,12 +2183,21 @@ class TRFlowPanel(wx.Panel):
                     break
 
         if not all_continuous:
-            refill_all = wx.Button(basic_flow_parent, label = 'Refill pumps')
+            self.refill_after_run = wx.CheckBox(basic_flow_parent, label='Refill pumps after experiment')
+            self.refill_after_run.SetValue(True)
 
+            refill_all = wx.Button(basic_flow_parent, label='Refill pumps')
             refill_all.Bind(wx.EVT_BUTTON, self._on_refill_all)
 
             purge_all = wx.Button(basic_flow_parent, label='Purge pumps')
             purge_all.Bind(wx.EVT_BUTTON, self._on_purge_all)
+
+            self.change_buffer = wx.Button(basic_flow_parent, label='Change Buffer')
+            self.change_buffer.Bind(wx.EVT_BUTTON, self._on_change_buffer)
+
+            self.stop_change_buffer = wx.Button(basic_flow_parent, label='Stop Buffer Change')
+            self.stop_change_buffer.Bind(wx.EVT_BUTTON, self._on_stop_change_buffer)
+            self.stop_change_buffer.Disable()
 
         flow_button_sizer = wx.GridBagSizer(vgap=self._FromDIP(2), hgap=self._FromDIP(2))
         flow_button_sizer.Add(start_all, (0,0), flag=wx.ALIGN_CENTER_VERTICAL)
@@ -2193,10 +2206,16 @@ class TRFlowPanel(wx.Panel):
             flag=wx.ALIGN_CENTER_VERTICAL)
 
         if not all_continuous:
-            flow_button_sizer.Add(refill_all, (2,0), span=(1,1),
-                flag=wx.ALIGN_CENTER_HORIZONTAL|wx.ALIGN_CENTER_VERTICAL)
-            flow_button_sizer.Add(purge_all, (2,1), span=(1,1),
-                flag=wx.ALIGN_CENTER_HORIZONTAL|wx.ALIGN_CENTER_VERTICAL)
+            flow_button_sizer.Add(self.refill_after_run, (2,0), span=(1,2),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+            flow_button_sizer.Add(refill_all, (3,0), span=(1,1),
+                flag=wx.ALIGN_CENTER_VERTICAL)
+            flow_button_sizer.Add(purge_all, (3,1), span=(1,1),
+                flag=wx.ALIGN_CENTER_VERTICAL)
+            flow_button_sizer.Add(self.change_buffer, (4,0), span=(1,1),
+                flag=wx.ALIGN_CENTER_VERTICAL)
+            flow_button_sizer.Add(self.stop_change_buffer, (4,1), span=(1,1),
+                flag=wx.ALIGN_CENTER_VERTICAL)
 
         basic_flow_box_sizer.Add(flow_sizer, flag=wx.ALL, border=self._FromDIP(2))
         basic_flow_box_sizer.Add(flow_button_sizer, flag=wx.ALL, border=self._FromDIP(2))
@@ -2328,16 +2347,6 @@ class TRFlowPanel(wx.Panel):
         self.buffer2_pump_panels = []
         self.pump_panels = {}
 
-        for pump in self.settings['sample_pump']:
-            panel = TRPumpPanel(pump_parent, self, pump)
-
-            pump_sizer.Add(panel, flag=wx.LEFT|wx.TOP|wx.BOTTOM,
-                border=self._FromDIP(2))
-
-            self.pump_panels[pump['name']] = panel
-
-            self.sample_pump_panels.append(panel)
-
         for pump in self.settings['buffer1_pump']:
             panel = TRPumpPanel(pump_parent, self, pump)
 
@@ -2347,6 +2356,16 @@ class TRFlowPanel(wx.Panel):
             self.pump_panels[pump['name']] = panel
 
             self.buffer1_pump_panels.append(panel)
+
+        for pump in self.settings['sample_pump']:
+            panel = TRPumpPanel(pump_parent, self, pump)
+
+            pump_sizer.Add(panel, flag=wx.LEFT|wx.TOP|wx.BOTTOM,
+                border=self._FromDIP(2))
+
+            self.pump_panels[pump['name']] = panel
+
+            self.sample_pump_panels.append(panel)
 
         for pump in self.settings['buffer2_pump']:
             panel = TRPumpPanel(pump_parent, self, pump)
@@ -2690,6 +2709,11 @@ class TRFlowPanel(wx.Panel):
         wx.CallAfter(self.stop_all)
 
     def stop_all(self):
+        self._buffer_change_cycle = 0
+        self._changing_buffer = False
+        self.change_buffer.Enable()
+        self.stop_change_buffer.Disable()
+
         success = self.stop_all_pumps()
 
         if not success:
@@ -2706,6 +2730,8 @@ class TRFlowPanel(wx.Panel):
         logger.info('Refilling all pumps')
         self.pause_valve_monitor.set()
         self.pause_pump_monitor.set()
+
+        self._refilling_pumps = False
 
         self.get_all_valve_positions()
         self.get_all_pump_status()
@@ -2777,6 +2803,8 @@ class TRFlowPanel(wx.Panel):
             self.pause_pump_monitor.clear()
             return False
 
+        self._refilling_pumps = True
+
         self.pause_valve_monitor.clear()
         self.pause_pump_monitor.clear()
         return True
@@ -2791,6 +2819,9 @@ class TRFlowPanel(wx.Panel):
 
         self.get_all_valve_positions()
         self.get_all_pump_status()
+
+        self.purge_starting_frs = {}
+        self._purging_pumps = False
 
 
         for pump_panel in self.pump_panels.values():
@@ -2840,9 +2871,12 @@ class TRFlowPanel(wx.Panel):
             return False
 
         else:
-            for pump_panel in self.pump_panels.values():
+            for pump_name, pump_panel in self.pump_panels.items():
                 if pump_panel.pump_mode == 'syringe':
                     pump_panel.set_pump_direction(True)
+                    self.purge_starting_frs[pump_name] = pump_panel.get_target_flow_rate()
+                    refill_rate = pump_panel.get_target_refill_rate()
+                    pump_panel.change_flowrate(flow_rate=refill_rate)
                     success = pump_panel.run_pump()
 
         if not success:
@@ -2855,13 +2889,43 @@ class TRFlowPanel(wx.Panel):
             logger.error('Failed to purge all pumps, not all pumps started correctly.')
 
             self.stop_all()
+
+            for pump_name, rate in self.purge_starting_frs.items():
+                pump_panel = self.pump_panels[pump_name]
+                pump_panel.change_flowrate(flow_rate=rate)
+
             self.pause_valve_monitor.clear()
             self.pause_pump_monitor.clear()
             return False
 
+        self._purging_pumps = True
         self.pause_valve_monitor.clear()
         self.pause_pump_monitor.clear()
         return True
+
+    def _on_change_buffer(self, evt):
+        wx.CallAfter(self.do_change_buffer)
+
+    def do_change_buffer(self):
+        self._buffer_change_cycle = 0
+        self._changing_buffer = True
+
+        success = self.purge_all()
+        if not success:
+            self._changing_buffer = False
+        else:
+            self.change_buffer.Disable()
+            self.stop_change_buffer.Enable()
+            logger.info('Starting buffer change cycle 1')
+
+    def _on_stop_change_buffer(self, evt):
+        wx.CallAfter(self.do_stop_change_buffer)
+
+    def do_stop_change_buffer(self):
+        self._buffer_change_cycle = 0
+        self._changing_buffer = False
+        logger.info('Stopped buffer change')
+        self.stop_all()
 
     def update_flow_info(self):
         flow_times = []
@@ -3229,6 +3293,54 @@ class TRFlowPanel(wx.Panel):
             if (not self.stop_pump_monitor.is_set() and
                 not self.pause_pump_monitor.is_set()):
                 self.get_all_pump_status()
+
+            if self._purging_pumps:
+                all_done = True
+                finished_pumps = []
+                for pump_name, rate in self.purge_starting_frs.items():
+                    pump_panel = self.pump_panels[pump_name]
+
+                    moving = pump_panel.moving
+                    if not moving:
+                        wx.CallAfter(pump_panel.change_flowrate, flow_rate=rate)
+                        finished_pumps.append(pump_name)
+
+                    all_done = all_done and not moving
+
+                for pump in finished_pumps:
+                    del self.purge_starting_frs[pump]
+
+                if all_done:
+                    self._purging_pumps = False
+
+                    if self._changing_buffer:
+                        if self._buffer_change_cycle < self.settings['buffer_change_cycles']:
+                            wx.CallAfter(self.refill_all)
+                            self._buffer_change_cycle += 1
+                        else:
+                            self._changing_buffer = False
+                            wx.CallAfter(self.change_buffer.Enable)
+                            wx.CallAfter(self.stop_change_buffer.Disable)
+                            logger.info('Finished buffer change')
+
+            if self._refilling_pumps:
+                all_done = True
+                for pump_panel in self.pump_panels.values():
+                    moving = pump_panel.moving
+                    all_done = all_done and not moving
+
+                if all_done:
+                    self._refilling_pumps = False
+
+                    if self._changing_buffer:
+                        if self._buffer_change_cycle < self.settings['buffer_change_cycles']:
+                            wx.CallAfter(self.purge_all)
+                            logger.info('Starting buffer change cycle %s', self._buffer_change_cycle+1)
+                        else:
+                            self._changing_buffer = False
+                            wx.CallAfter(self.change_buffer.Enable)
+                            wx.CallAfter(self.stop_change_buffer.Disable)
+                            logger.info('Finished buffer change')
 
             while time.time() - start_time < self.pump_monitor_interval:
                 time.sleep(0.1)
@@ -3649,6 +3761,10 @@ class TRFlowPanel(wx.Panel):
     def on_exposure_stop(self):
         if self.stop_after_run.GetValue():
             self.stop_all()
+
+        if self.refill_after_run.GetValue():
+            self.stop_all()
+            self.refill_all()
 
     def _send_valvecmd(self, cmd, response=False):
         ret_val = None
@@ -4644,13 +4760,15 @@ class TRPumpPanel(wx.Panel):
 
     def get_max_volume(self):
         max_vol = float(self.known_syringes[self.syringe_type.GetStringSelection()]['max_volume'])
-
         return max_vol
 
     def get_target_flow_rate(self):
         flow_rate = float(self.flow_rate_ctrl.GetValue())
-
         return flow_rate
+
+    def get_target_refill_rate(self):
+        refill_rate = float(self.refill_rate_ctrl.GetValue())
+        return refill_rate
 
     def get_dual_syringe(self):
         return self.dual_syringe.GetStringSelection()=='True'
@@ -4791,63 +4909,63 @@ default_trsaxs_settings = {
     'remote_valve_ip'       : '164.54.204.8',
     'remote_valve_port'     : '5558',
     'device_communication'  : 'remote',
-    'injection_valve'       : [{'name': 'Injection', 'args': ['Rheodyne', 'COM6'],  #Chaotic flow
-                                'kwargs': {'positions' : 2}},],
-    'sample_valve'          : [],
-    'buffer1_valve'         : [],
-    'buffer2_valve'         : [],
-    'buffer2_pump'          : [{'name': 'Buffer 2', 'args': ['SSI Next Gen', 'COM14'],
-                                'kwargs': {'flow_rate_scale': 1.0179,
-                                'flow_rate_offset': -20.842/10000,'scale_type': 'up'},
-                                'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
-                                'max_pressure': 1800, 'continuous': True}}],
-    'sample_pump'           : [{'name': 'Sample', 'args': ['SSI Next Gen', 'COM17'],
-                                'kwargs': {'flow_rate_scale': 1.0204,
-                                'flow_rate_offset': 15.346/1000,'scale_type': 'up'},
-                                'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
-                                'max_pressure': 1800, 'continuous': True}}],
-    'buffer1_pump'           : [{'name': 'Buffer 1', 'args': ['SSI Next Gen', 'COM18'],
-                                'kwargs': {'flow_rate_scale': 1.0478,
-                                'flow_rate_offset': -72.82/1000,'scale_type': 'up'},
-                                'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
-                                'max_pressure': 1800, 'continuous': True}}],
-    'outlet_fm'             : {'name': 'outlet', 'args' : ['BFS', 'COM5'], 'kwargs': {}},
-    'injection_valve_label' : 'Injection',
-    'sample_valve_label'    : 'Sample',
-    'buffer1_valve_label'   : 'Buffer 1',
-    'buffer2_valve_label'   : 'Buffer 2',
-    # 'injection_valve'       : [{'name': 'Injection', 'args': ['Rheodyne', 'COM6'], # Laminar flow
+    # 'injection_valve'       : [{'name': 'Injection', 'args': ['Rheodyne', 'COM6'],  #Chaotic flow
     #                             'kwargs': {'positions' : 2}},],
-    # 'sample_valve'          : [{'name': 'Sample', 'args': ['Rheodyne', 'COM3'],
-    #                             'kwargs': {'positions' : 6}},],
-    # 'buffer1_valve'         : [{'name': 'Buffer 1', 'args': ['Rheodyne', 'COM10'],
-    #                             'kwargs': {'positions' : 6}},
-    #                             {'name': 'Buffer 2', 'args': ['Rheodyne', 'COM4'],
-    #                             'kwargs': {'positions' : 6}},],
-    # 'buffer2_valve'         : [{'name': 'Sheath 1', 'args': ['Rheodyne', 'COM21'],
-    #                             'kwargs': {'positions' : 6}},
-    #                             {'name': 'Sheath 2', 'args': ['Rheodyne', 'COM8'],
-    #                             'kwargs': {'positions' : 6}},],
-    # 'buffer1_pump'           : [{'name': 'Buffer', 'args': ['Pico Plus', 'COM11'],
-    #                             'kwargs': {'syringe_id': '3 mL, Medline P.C.',
-    #                             'pump_address': '00', 'dual_syringe': 'False'},
-    #                             'ctrl_args': {'flow_rate' : '0.068', 'refill_rate' : '3',
-    #                             'continuous': False}},],
-    # 'sample_pump'           : [{'name': 'Sample', 'args': ['Pico Plus', 'COM9'],
-    #                             'kwargs': {'syringe_id': '1 mL, Medline P.C.',
-    #                             'pump_address': '00', 'dual_syringe': 'False'}, 'ctrl_args':
-    #                             {'flow_rate' : '0.009', 'refill_rate' : '1',
-    #                             'continuous': False}}],
-    # 'buffer2_pump'          : [{'name': 'Sheath', 'args': ['Pico Plus', 'COM7'],
-    #                             'kwargs': {'syringe_id': '1 mL, Medline P.C.',
-    #                             'pump_address': '00', 'dual_syringe': 'False'}, 'ctrl_args':
-    #                             {'flow_rate' : '0.002', 'refill_rate' : '1',
-    #                             'continuous': False}},],
-    # 'outlet_fm'             : {'name': 'outlet', 'args' : ['BFS', 'COM13'], 'kwargs': {}},
+    # 'sample_valve'          : [],
+    # 'buffer1_valve'         : [],
+    # 'buffer2_valve'         : [],
+    # 'buffer2_pump'          : [{'name': 'Buffer 2', 'args': ['SSI Next Gen', 'COM14'],
+    #                             'kwargs': {'flow_rate_scale': 1.0179,
+    #                             'flow_rate_offset': -20.842/10000,'scale_type': 'up'},
+    #                             'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
+    #                             'max_pressure': 1800, 'continuous': True}}],
+    # 'sample_pump'           : [{'name': 'Sample', 'args': ['SSI Next Gen', 'COM17'],
+    #                             'kwargs': {'flow_rate_scale': 1.0204,
+    #                             'flow_rate_offset': 15.346/1000,'scale_type': 'up'},
+    #                             'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
+    #                             'max_pressure': 1800, 'continuous': True}}],
+    # 'buffer1_pump'           : [{'name': 'Buffer 1', 'args': ['SSI Next Gen', 'COM18'],
+    #                             'kwargs': {'flow_rate_scale': 1.0478,
+    #                             'flow_rate_offset': -72.82/1000,'scale_type': 'up'},
+    #                             'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
+    #                             'max_pressure': 1800, 'continuous': True}}],
+    # 'outlet_fm'             : {'name': 'outlet', 'args' : ['BFS', 'COM5'], 'kwargs': {}},
     # 'injection_valve_label' : 'Injection',
     # 'sample_valve_label'    : 'Sample',
-    # 'buffer1_valve_label'   : 'Buffer',
-    # 'buffer2_valve_label'   : 'Sheath',
+    # 'buffer1_valve_label'   : 'Buffer 1',
+    # 'buffer2_valve_label'   : 'Buffer 2',
+    'injection_valve'       : [{'name': 'Injection', 'args': ['Rheodyne', 'COM6'], # Laminar flow
+                                'kwargs': {'positions' : 2}},],
+    'sample_valve'          : [{'name': 'Sample', 'args': ['Rheodyne', 'COM3'],
+                                'kwargs': {'positions' : 6}},],
+    'buffer1_valve'         : [{'name': 'Buffer 1', 'args': ['Rheodyne', 'COM10'],
+                                'kwargs': {'positions' : 6}},
+                                {'name': 'Buffer 2', 'args': ['Rheodyne', 'COM4'],
+                                'kwargs': {'positions' : 6}},],
+    'buffer2_valve'         : [{'name': 'Sheath 1', 'args': ['Rheodyne', 'COM21'],
+                                'kwargs': {'positions' : 6}},
+                                {'name': 'Sheath 2', 'args': ['Rheodyne', 'COM8'],
+                                'kwargs': {'positions' : 6}},],
+    'buffer1_pump'           : [{'name': 'Buffer', 'args': ['Pico Plus', 'COM11'],
+                                'kwargs': {'syringe_id': '3 mL, Medline P.C.',
+                                'pump_address': '00', 'dual_syringe': 'False'},
+                                'ctrl_args': {'flow_rate' : '0.068', 'refill_rate' : '3',
+                                'continuous': False}},],
+    'sample_pump'           : [{'name': 'Sample', 'args': ['Pico Plus', 'COM9'],
+                                'kwargs': {'syringe_id': '1 mL, Medline P.C.',
+                                'pump_address': '00', 'dual_syringe': 'False'}, 'ctrl_args':
+                                {'flow_rate' : '0.009', 'refill_rate' : '1',
+                                'continuous': False}}],
+    'buffer2_pump'          : [{'name': 'Sheath', 'args': ['Pico Plus', 'COM7'],
+                                'kwargs': {'syringe_id': '1 mL, Medline P.C.',
+                                'pump_address': '00', 'dual_syringe': 'False'}, 'ctrl_args':
+                                {'flow_rate' : '0.002', 'refill_rate' : '1',
+                                'continuous': False}},],
+    'outlet_fm'             : {'name': 'outlet', 'args' : ['BFS', 'COM13'], 'kwargs': {}},
+    'injection_valve_label' : 'Injection',
+    'sample_valve_label'    : 'Sample',
+    'buffer1_valve_label'   : 'Buffer',
+    'buffer2_valve_label'   : 'Sheath',
     # 'injection_valve'       : [{'name': 'Injection', 'args': ['Soft', None],    # Simulated Chaotic w/continuous pump
     #                             'kwargs': {'positions' : 2}},],
     # 'sample_valve'          : [],
@@ -4895,11 +5013,11 @@ default_trsaxs_settings = {
     # 'buffer2_valve_label'   : 'Sheath',
     'flow_units'            : 'mL/min',
     'pressure_units'        : 'psi',
-    # 'total_flow_rate'       : '0.149', # For laminar flow
-    'total_flow_rate'       : '6', # For chaotic flow
+    'total_flow_rate'       : '0.149', # For laminar flow
+    # 'total_flow_rate'       : '6', # For chaotic flow
     'dilution_ratio'        : '10', # For chaotic flow
-    'max_dilution'          : 50, # For chaotic flow
-    # 'max_flow'              : 2, # For laminar flow
+    # 'max_dilution'          : 50, # For chaotic flow
+    'max_flow'              : 2, # For laminar flow
     'max_flow'              : 8, # For chaotic flow
     'auto_set_valves'       : True,
     'valve_start_positions' : {'sample_valve': 2, 'buffer1_valve': 2,
@@ -4915,10 +5033,11 @@ default_trsaxs_settings = {
     'autoinject'            : 'After scan',
     'autoinject_scan'       : '5',
     'autoinject_valve_pos'  : 1,
-    'mixer_type'            : 'chaotic', # laminar or chaotic
-    # 'mixer_type'            : 'laminar', # laminar or chaotic
+    # 'mixer_type'            : 'chaotic', # laminar or chaotic
+    'mixer_type'            : 'laminar', # laminar or chaotic
     'sample_ratio'          : '0.066', # For laminar flow
     'sheath_ratio'          : '0.032', # For laminar flow
+    'buffer_change_cycles'  : 1, # For syringe pumps
     'simulated'             : False, # VERY IMPORTANT. MAKE SURE THIS IS FALSE FOR EXPERIMENTS
     }
 
@@ -4934,7 +5053,7 @@ if __name__ == '__main__':
     logger.addHandler(h1)
 
     #Settings
-    trsaxs_settings =default_trsaxs_settings
+    trsaxs_settings = default_trsaxs_settings
 
     # trsaxs_settings['components'] = ['trsaxs_scan', 'trsaxs_flow']
     trsaxs_settings['components'] = ['trsaxs_flow']
