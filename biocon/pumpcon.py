@@ -5722,6 +5722,24 @@ class PumpPanel(utils.DevicePanel):
 
         elif cmd == 'get_flow_dir':
             if val is not None:
+                if self._current_flow_dir != val:
+                    if self._current_move_status:
+                        if self.pump_mode == 'continuous':
+                            if self.mode_ctrl.GetStringSelection() == 'Fixed volume':
+                                if val == 1:
+                                    pump_dir = 'Dispense'
+                                else:
+                                    pump_dir = 'Aspirate'
+                                self._set_status_label(pump_dir.capitalize())
+                            else:
+                                self._set_status_label('Flowing')
+                        else:
+                            if val == 1:
+                                pump_dir ='Dispense'
+                            else:
+                                pump_dir = 'Aspirate'
+                            self._set_status_label(pump_dir.capitalize())
+
                 self._current_flow_dir = val
 
         elif cmd == 'get_pressure':
