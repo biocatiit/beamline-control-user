@@ -4032,7 +4032,8 @@ class TRPumpPanel(wx.Panel):
         self.connected = False
         self.moving = False
         self.syringe_volume_val = 0
-        self.pump_direction = 'Dispense'
+        self.pump_ctrl_direction = 'Dispense'
+        self._actual_pump_direction = 'Dispense'
         self.continuous_flow = pump_settings['ctrl_args']['continuous']
         self.faults_dialog = None
 
@@ -4362,9 +4363,9 @@ class TRPumpPanel(wx.Panel):
 
     def _on_direction_change(self, evt):
         if self.direction_ctrl.GetStringSelection() == 'Dispense':
-            self.pump_direction = 'Dispense'
+            self.pump_ctrl_direction = 'Dispense'
         else:
-            self.pump_direction = 'Aspirate'
+            self.pump_ctrl_direction = 'Aspirate'
 
     def on_pump_run(self):
         """
@@ -4375,16 +4376,16 @@ class TRPumpPanel(wx.Panel):
 
             if self.pump_mode == 'continuous':
                 if mode == 'Fixed volume':
-                    cmd = self.pump_direction
+                    cmd = self.pump_ctrl_direction
                     self.set_status(cmd.capitalize())
                 else:
                     self.set_status('Flowing')
             else:
                 if mode == 'Fixed volume':
-                    cmd = self.pump_direction
+                    cmd = self.pump_ctrl_direction
                     self.set_status(cmd.capitalize())
                 else:
-                    direction = self.pump_direction
+                    direction = self.pump_ctrl_direction
                     self.set_status(direction.capitalize())
 
             self.fr_button.Show()
@@ -4442,7 +4443,7 @@ class TRPumpPanel(wx.Panel):
                 wx.MessageBox(msg, "Error setting flow rate")
                 cont = False
 
-        if self.pump_direction == 'Dispense':
+        if self.pump_ctrl_direction == 'Dispense':
             dispense = True
         else:
             dispense = False
@@ -4537,7 +4538,7 @@ class TRPumpPanel(wx.Panel):
                     vol = None
                     fixed = False
 
-                if self.pump_direction.lower() == 'dispense':
+                if self.pump_ctrl_direction.lower() == 'dispense':
                     dispense = True
                 else:
                     dispense = False
@@ -4659,12 +4660,13 @@ class TRPumpPanel(wx.Panel):
         self.status.SetLabel(status)
 
     def set_status_direction(self, dispensing):
-        # # self.set_pump_direction(dispensing)
-        # if dispensing:
-        #     wx.CallAfter(self.set_status, 'Dispense')
-        # else:
-        #     wx.CallAfter(self.set_status, 'Aspirate')
-        pass
+        # self.set_pump_direction(dispensing)
+        if dispensing == 1:
+            self._actual_pump_direction = 'Dispense'
+        elif dispensing == -1:
+            self._actual_pump_direction = 'Aspirate'
+        if self.moving and (dispensing == 1 or dispensing == -1):
+            wx.CallAfter(self.set_status, self._actual_pump_direction)
 
     def set_status_volume(self, vol):
         try:
@@ -4686,7 +4688,7 @@ class TRPumpPanel(wx.Panel):
         try:
             val = float(val)
 
-            if self.pump_direction == 'Dispense':
+            if self._actual_pump_direction == 'Dispense':
                 wx.CallAfter(self._set_status_flow_rate, val)
 
         except ValueError:
@@ -4696,7 +4698,7 @@ class TRPumpPanel(wx.Panel):
         try:
             val = float(val)
 
-            if self.pump_direction == 'Aspirate':
+            if self._actual_pump_direction == 'Aspirate':
                 wx.CallAfter(self._set_status_flow_rate, val)
 
         except ValueError:
@@ -4756,7 +4758,7 @@ class TRPumpPanel(wx.Panel):
         return float(self.pressure.GetLabel())
 
     def get_pump_direction(self):
-        return self.pump_direction
+        return self._actual_pump_direction
 
     def get_max_volume(self):
         max_vol = float(self.known_syringes[self.syringe_type.GetStringSelection()]['max_volume'])
@@ -4793,10 +4795,12 @@ class TRPumpPanel(wx.Panel):
     def set_pump_direction(self, dispense):
         if not self.continuous_flow:
             if dispense:
-                self.pump_direction = 'Dispense'
+                self.pump_ctrl_direction = 'Dispense'
+                self._actual_pump_direction = 'Dispense'
                 ret = wx.CallAfter(self.direction_ctrl.SetStringSelection, 'Dispense')
             else:
-                self.pump_direction = 'Aspirate'
+                self.pump_ctrl_direction = 'Aspirate'
+                self._actual_pump_direction = 'Aspirate'
                 ret = wx.CallAfter(self.direction_ctrl.SetStringSelection, 'Aspirate')
 
 
