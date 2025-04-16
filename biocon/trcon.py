@@ -112,9 +112,18 @@ class TRScanPanel(wx.Panel):
         self.xps = None
 
         self._abort_event = threading.Event()
+        self._centering_abort_event = threading.Event()
+        self.centering_done_event = threading.Event()
 
         self._create_layout()
         self._init_values()
+
+    def _FromDIP(self, size):
+        # This is a hack to provide easy back compatibility with wxpython < 4.1
+        try:
+            return self.FromDIP(size)
+        except Exception:
+            return size
 
     def _create_layout(self):
         """Creates the layout for the panel."""
@@ -300,11 +309,82 @@ class TRScanPanel(wx.Panel):
 
         adv_win.SetSizer(adv_sizer)
 
+        centering_settings_pane = wx.CollapsiblePane(self, label='Centering Settings')
+        centering_settings_pane.Bind(wx.EVT_COLLAPSIBLEPANE_CHANGED, self._on_collapse)
+        ctr_win = centering_settings_pane.GetPane()
+
+        self.auto_center = wx.CheckBox(ctr_win, label='Center before exposure')
+        self.center_scan_axis = wx.Choice(ctr_win, choices=['X', 'Y'])
+        self.center_scan_axis.SetStringSelection('Y')
+        self.center_start = wx.TextCtrl(ctr_win, size=(60, -1),
+            validator=utils.CharValidator('float'))
+        self.center_stop = wx.TextCtrl(ctr_win, size=(60, -1),
+            validator=utils.CharValidator('float'))
+        self.center_step = wx.TextCtrl(ctr_win, size=(60, -1),
+            validator=utils.CharValidator('float'))
+        self.center_alt_pos = wx.TextCtrl(ctr_win, size=(60, -1),
+            validator=utils.CharValidator('float'))
+        self.center_offset = wx.TextCtrl(ctr_win, size=(60, -1),
+            validator=utils.CharValidator('float'))
+        self.run_centering = wx.Button(ctr_win, label='Center Mixer')
+        self.run_centering.Bind(wx.EVT_BUTTON, self._on_run_centering)
+
+        ctr_sub_sizer1 = wx.BoxSizer(wx.HORIZONTAL)
+        ctr_sub_sizer1.Add(wx.StaticText(ctr_win, label='Center in:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        ctr_sub_sizer1.Add(self.center_scan_axis, border=self._FromDIP(5),
+            flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT)
+
+        ctr_sub_sizer2 = wx.FlexGridSizer(cols=3, hgap=self._FromDIP(5),
+            vgap=self._FromDIP(5))
+        ctr_sub_sizer2.Add(wx.StaticText(ctr_win, label='Start'),
+            flag=wx.ALIGN_CENTER_VERTICAL|wx.ALIGN_CENTER_HORIZONTAL)
+        ctr_sub_sizer2.Add(wx.StaticText(ctr_win, label='Stop'),
+            flag=wx.ALIGN_CENTER_VERTICAL|wx.ALIGN_CENTER_HORIZONTAL)
+        ctr_sub_sizer2.Add(wx.StaticText(ctr_win, label='Step'),
+            flag=wx.ALIGN_CENTER_VERTICAL|wx.ALIGN_CENTER_HORIZONTAL)
+        ctr_sub_sizer2.Add(self.center_start,
+            flag=wx.ALIGN_CENTER_VERTICAL|wx.ALIGN_CENTER_HORIZONTAL)
+        ctr_sub_sizer2.Add(self.center_stop,
+            flag=wx.ALIGN_CENTER_VERTICAL|wx.ALIGN_CENTER_HORIZONTAL)
+        ctr_sub_sizer2.Add(self.center_step,
+            flag=wx.ALIGN_CENTER_VERTICAL|wx.ALIGN_CENTER_HORIZONTAL)
+
+        ctr_sub_sizer3 = wx.FlexGridSizer(cols=2, hgap=self._FromDIP(5),
+            vgap=self._FromDIP(5))
+        ctr_sub_sizer3.Add(wx.StaticText(ctr_win, label='2nd axis pos.:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        ctr_sub_sizer3.Add(self.center_alt_pos, border=self._FromDIP(5),
+            flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT)
+        ctr_sub_sizer3.Add(wx.StaticText(ctr_win, label='Center offset:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        ctr_sub_sizer3.Add(self.center_offset, border=self._FromDIP(5),
+            flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT)
+
+
+        centering_sizer = wx.BoxSizer(wx.VERTICAL)
+        centering_sizer.Add(self.auto_center, border=self._FromDIP(5),
+            flag=wx.ALL)
+        centering_sizer.Add(ctr_sub_sizer1, border=self._FromDIP(5),
+            flag=wx.LEFT|wx.RIGHT|wx.BOTTOM)
+        centering_sizer.Add(ctr_sub_sizer2, border=self._FromDIP(5),
+            flag=wx.LEFT|wx.RIGHT|wx.BOTTOM)
+        centering_sizer.Add(ctr_sub_sizer3, border=self._FromDIP(5),
+            flag=wx.LEFT|wx.RIGHT|wx.BOTTOM)
+        centering_sizer.Add(self.run_centering, border=self._FromDIP(5),
+            flag=wx.LEFT|wx.RIGHT|wx.ALIGN_CENTER_HORIZONTAL)
+
+        ctr_win.SetSizer(centering_sizer)
+
         tr_ctrl_sizer = wx.StaticBoxSizer(wx.StaticBox(self, label='Scan Controls'),
             wx.VERTICAL)
         tr_ctrl_sizer.Add(scan_sizer, border=5, flag=wx.ALL)
-        tr_ctrl_sizer.Add(settings_sizer, border=5, flag=wx.ALL)
-        tr_ctrl_sizer.Add(advanced_settings_pane, border=5, flag=wx.ALL)
+        tr_ctrl_sizer.Add(settings_sizer, border=5,
+            flag=wx.LEFT|wx.RIGHT|wx.BOTTOM)
+        tr_ctrl_sizer.Add(advanced_settings_pane, border=5,
+            flag=wx.LEFT|wx.RIGHT|wx.BOTTOM)
+        tr_ctrl_sizer.Add(centering_settings_pane, border=5,
+            flag=wx.LEFT|wx.RIGHT|wx.BOTTOM)
 
 
         self.scan_length = wx.StaticText(self)
@@ -314,7 +394,7 @@ class TRScanPanel(wx.Panel):
         self.total_scan_time = wx.StaticText(self)
         self.num_images = wx.StaticText(self)
 
-        scan_calcs_sizer = wx.FlexGridSizer(rows=6, cols=2, vgap=2, hgap=5)
+        scan_calcs_sizer = wx.FlexGridSizer(cols=2, vgap=2, hgap=5)
         scan_calcs_sizer.Add(wx.StaticText(self, label='Images per scan:'))
         scan_calcs_sizer.Add(self.num_images)
         scan_calcs_sizer.Add(wx.StaticText(self,
@@ -376,13 +456,13 @@ class TRScanPanel(wx.Panel):
             self.scan_start_offset_dist.Enable()
             self.scan_end_offset_dist.Enable()
 
-        if self.settings['motor_type'] == 'Newport_XPS':
-            if self.xps is None:
-                self.xps = xps_drivers.XPS()
+        # if self.settings['motor_type'] == 'Newport_XPS':
+        #     if self.xps is None:
+        #         self.xps = xps_drivers.XPS()
 
-            self.motor = motorcon.NewportXPSMotor('TRSAXS', self.xps, self.settings['motor_ip'],
-                int(self.settings['motor_port']), 20, self.settings['motor_group_name'],
-                2)
+        #     self.motor = motorcon.NewportXPSMotor('TRSAXS', self.xps, self.settings['motor_ip'],
+        #         int(self.settings['motor_port']), 20, self.settings['motor_group_name'],
+        #         2)
 
     def _on_collapse(self, evt):
         self.Layout()
@@ -1714,10 +1794,347 @@ class TRScanPanel(wx.Panel):
         # return round(float(base)*round(x/base), prec)
         return x.quantize(base)
 
+    def _on_run_centering(self, evt):
+        if self.run_centering.GetLabel() == 'Center Mixer':
+            self.run_centering.SetLabel('Stop Centering')
+
+            wx.CallAfter(self.start_centering)
+
+        else:
+            self._centering_abort_event.set()
+            self.run_centering.SetLabel('Center Mixer')
+
+    def start_centering(self):
+        scan_settings, valid = self.get_centering_values()
+
+        if valid:
+            self._centering_abort_event.clear()
+            self.centering_done_event.clear()
+            centering_thread = threading.Thread(target=self.do_centering_scan,
+                args=(scan_settings,))
+            centering_thread.daemon = True
+            centering_thread.start()
+
+
+    def get_centering_values(self):
+        axis = self.center_scan_axis.GetStringSelection()
+        start = self.center_start.GetValue()
+        stop = self.center_stop.GetValue()
+        step = self.center_step.GetValue()
+        alt_pos = self.center_alt_pos.GetValue()
+        center_offset = self.center_offset.GetValue()
+
+        if axis.lower() == 'x':
+            speed = self.settings['center_x_speed']
+            accel = self.settings['center_x_accel']
+            alt_speed = self.settings['center_y_speed']
+            alt_accel = self.settings['center_y_accel']
+            scan_start = self.x_start.GetValue()
+            scan_stop = self.x_stop.GetValue()
+        else:
+            speed = self.settings['center_y_speed']
+            accel = self.settings['center_y_accel']
+            alt_speed = self.settings['center_x_speed']
+            alt_accel = self.settings['center_x_accel']
+            scan_start = self.y_start.GetValue()
+            scan_stop = self.y_stop.GetValue()
+
+        meas_pv = self.settings['center_meas_pv']
+        scaler_pv = self.settings['center_scaler_pv']
+        meas_time = self.settings['center_meas_time']
+        fw_height = self.settings['center_fw_height']
+        motor_type = self.settings['motor_type']
+        motor = self.motor
+
+        errors = []
+
+        try:
+            start = float(start)
+        except Exception:
+            errors.append('Start position')
+
+        try:
+            stop = float(stop)
+        except Exception:
+            errors.append('Stop position')
+
+        try:
+            step = float(step)
+        except Exception:
+            errors.append('Step size')
+
+        try:
+            alt_pos = float(alt_pos)
+        except Exception:
+            errors.append('2nd axis position')
+
+        try:
+            center_offset = float(center_offset)
+        except Exception:
+            errors.append('Center offset')
+
+        try:
+            scan_start = float(scan_start)
+        except Exception:
+            scan_start = None
+
+        try:
+            scan_stop = float(scan_stop)
+        except Exception:
+            scan_stop = None
+
+        if len(errors) > 0:
+            valid = False
+            scan_settings = {}
+
+            msg = 'The following field(s) have invalid values:'
+            for err in errors:
+                msg = msg + '\n- ' + err
+            msg = msg + ('\n\nPlease correct these errors, then start the centering.')
+
+            wx.CallAfter(wx.MessageBox, msg, 'Error in centering parameters',
+                style=wx.OK|wx.ICON_ERROR)
+
+        else:
+            valid = True
+            scan_settings = {
+                'axis'          : axis,
+                'start'         : start,
+                'end'           : end,
+                'step'          : step,
+                'alt_pos'       : alt_pos,
+                'speed'         : speed,
+                'accel'         : accel,
+                'alt_speed'     : alt_speed,
+                'alt_accel'     : alt_accel,
+                'meas_pv'       : meas_pv,
+                'scaler_pv'     : scaler_pv,
+                'meas_time'     : meas_time,
+                'fw_height'     : fw_height,
+                'center_offset' : center_offset,
+                'motor_type'    : motor_type,
+                'motor'         : motor,
+                'scan_start'    : scan_start,
+                'scan_stop'     : scan_stop,
+            }
+
+        return scan_settings, valid
+
+    def do_centering_scan(self, scan_settings):
+        axis = scan_settings['axis']
+        start = scan_settings['start']
+        end = scan_settings['end']
+        step = scan_settings['step']
+        alt_pos = scan_settings['alt_pos']
+        speed = scan_settings['speed']
+        accel = scan_settings['accel']
+        alt_speed = scan_settings['speed']
+        alt_accel = scan_settings['accel']
+        meas_pv_name = scan_settings['meas_pv']
+        scaler_pv_name = scan_settings['scaler_pv']
+        meas_time = scan_settings['meas_time']
+        fw_height = scan_settings['fw_height']
+        center_offset = scan_settings['center_offset']
+        scan_start = scan_settings['scan_start']
+        scan_stop = scan_settings['scan_stop']
+
+        motor_type = scan_settings['motor_type']
+        motor = scan_settings['motor']
+
+        meas_pv = epics.PV(meas_pv_name)
+        count_time = epics.PV('{}.TP'.format(scaler_pv_name))
+        count_start = epics.PV('{}.CNT')
+
+        if motor_type == 'Newport_XPS':
+            x_motor = str(scan_settings['motor_x_name'])
+            y_motor = str(scan_settings['motor_y_name'])
+
+        if motor_type == 'Newport_XPS':
+            if axis.lower() == 'x':
+                motor.set_velocity(speed, x_motor, 0)
+                motor.set_velocity(alt_speed, y_motor, 1)
+                motor.set_acceleration(accel, x_motor, 0)
+                motor.set_acceleration(alt_accel, y_motor, 1)
+                scan_positioner = x_motor
+                alt_positioner = y_motor
+                scan_mindex = 0
+                alt_mindex = 1
+
+            else:
+                motor.set_velocity(alt_speed, x_motor, 0)
+                motor.set_velocity(speed, y_motor, 1)
+                motor.set_acceleration(alt_accel, x_motor, 0)
+                motor.set_acceleration(accel, y_motor, 1)
+                scan_positioner = y_motor
+                alt_positioner = x_motor
+                scan_mindex = 1
+                alt_mindex = 0
+
+        initial_pos_alt = motor.get_positioner_position(alt_positioner,
+                alt_index)
+
+        if axis.lower() == 'x':
+            motor.move_absolute((start, alt_pos))
+        else:
+            motor.move_absolute((alt_pos, start))
+
+
+        if start < stop:
+            mtr1_positions = np.arange(start, stop+step, step)
+        else:
+            mtr1_positions = np.arange(stop, start+step, step)
+            mtr1_positions = mtr1_positions[::-1]
+
+        count_time.put(meas_time)
+
+        if self._centering_abort_event.is_set():
+            self.centering_done_event.set()
+            return
+
+        scaler_vals = np.zeros_like(mtr1_positions)
+
+        for num, mtr1_pos in enumerate(mtr1_positions):
+            if mtr1_pos != mtr1_positions[0]:
+                # logger.info('Moving motor 1 position to {}'.format(mtr1_pos))
+                motor.move_positioner_absolute(scan_positioner,
+                    scan_mindex, mtr1_pos)
+            # mtr1.wait_for_motor_stop()
+            while motor.is_moving(scan_positioner):
+                time.sleep(0.01)
+                if self._centering_abort_event.is_set():
+                    motor.stop()
+                    self.centering_done_event.set()
+                    return
+
+            count_start.put(1)
+
+            while count_start.get() != 0:
+                time.sleep(0.01)
+                if self._centering_abort_event.is_set():
+                    self.centering_done_event.set()
+                    return
+
+            counts = meas_pv.get()
+            scaler_vals[num] = counts
+
+        center, fwhm = self._calc_fw_position(mtr1_positions, scaler_vals,
+            fw_height)
+
+        center -= center_offset
+        center = round(center, 6)
+
+        if axis.lower() == 'x':
+            motor.move_absolute((center, initial_pos_alt))
+            wx.CallAfter(self.x_start.SetValue, center)
+            if scan_start is not None and scan_stop is not None:
+                diff = center - scan_start
+                new_stop = scan_stop + diff
+                wx.CallAfter(self.x_stop.SetValue, new_stop)
+        else:
+            motor.move_absolute((initial_pos_alt, center))
+            wx.CallAfter(self.y_start.SetValue, center)
+            if scan_start is not None and scan_stop is not None:
+                diff = center - scan_start
+                new_stop = scan_stop + diff
+                wx.CallAfter(self.y_stop.SetValue, new_stop)
+
+        meas_pv.disconnect()
+        count_time.disconnect()
+        count_start.disconnect()
+        self.centering_done_event.set()
+
+    def _calc_fw_position(self, mtr_pos, scaler_vals, fw_height):
+        """
+        FW height is the value at which to calulcate the FW. So fw_height
+        of 0.5 calcultes FW half max, a fw_height of 0.25 would be FW quarter max,
+        and so on.
+        """
+        if mtr_pos is not None and len(mtr_pos)>3:
+            y = scaler_vals - np.max(scaler_vals)*fw_height
+            if mtr_pos[0]>mtr_pos[1]:
+                spline = scipy.interpolate.UnivariateSpline(mtr_pos[::-1], y[::-1], s=0)
+            else:
+                spline = scipy.interpolate.UnivariateSpline(mtr_pos, y, s=0)
+
+            try:
+                roots = spline.roots()
+                if roots.size == 2:
+                    r1 = roots[0]
+                    r2 = roots[1]
+
+                    if mtr_pos[1]>mtr_pos[0]:
+                        if r1>r2:
+                            index1 = np.searchsorted(mtr_pos, r1, side='right')
+                            index2 = np.searchsorted(mtr_pos, r2, side='right')
+                        else:
+                            index1 = np.searchsorted(mtr_pos, r2, side='right')
+                            index2 = np.searchsorted(mtr_pos, r1, side='right')
+
+                        mean = np.mean(y[index1:index2])
+                    else:
+                        if r1>r2:
+                            index1 = np.searchsorted(mtr_pos[::-1], r1, side='right')
+                            index2 = np.searchsorted(mtr_pos[::-1], r2, side='right')
+                        else:
+                            index1 = np.searchsorted(mtr_pos[::-1], r2, side='right')
+                            index2 = np.searchsorted(mtr_pos[::-1], r1, side='right')
+
+                        mean = np.mean(y[::-1][index1:index2])
+
+                    if mean<=0:
+                        r1 = 0
+                        r2 = 0
+
+                elif roots.size>2:
+                    max_diffs = np.argsort(abs(np.diff(roots)))[::-1]
+                    for rmax in max_diffs:
+                        r1 = roots[rmax]
+                        r2 = roots[rmax+1]
+
+                        if mtr_pos[1]>mtr_pos[0]:
+                            if r1<r2:
+                                index1 = np.searchsorted(mtr_pos, r1, side='right')
+                                index2 = np.searchsorted(mtr_pos, r2, side='right')
+                            else:
+                                index1 = np.searchsorted(mtr_pos, r2, side='right')
+                                index2 = np.searchsorted(mtr_pos, r1, side='right')
+
+                            mean = np.mean(y[index1:index2])
+                        else:
+                            if r1<r2:
+                                index1 = np.searchsorted(mtr_pos[::-1], r1, side='right')
+                                index2 = np.searchsorted(mtr_pos[::-1], r2, side='right')
+                            else:
+                                index1 = np.searchsorted(mtr_pos[::-1], r2, side='right')
+                                index2 = np.searchsorted(mtr_pos[::-1], r1, side='right')
+
+                            mean = np.mean(y[::-1][index1:index2])
+
+                        if mean>0:
+                            break
+                else:
+                    r1 = 0
+                    r2 = 0
+            except Exception:
+              r1 = 0
+              r2 = 0
+
+            fwhm = np.fabs(r2-r1)
+
+            if r1 < r2:
+                center = r1 + fwhm/2.
+            else:
+                center = r2 + fwhm/2.
+
+        return center, fwhm
+
     def update_params(self):
         self._param_change()
 
     def on_exit(self):
+        self._centering_abort_event.set()
+        self._abort_event.set()
+
         if self.motor is not None:
             self.motor.disconnect()
 
@@ -4906,6 +5323,14 @@ default_trsaxs_settings = {
     'y_range'               : (-5, 25),
     'speed_lim'             : (0, 300),
     'acceleration_lim'      : (0, 2500),
+    'center_x_speed'        : 300,
+    'center_y_speed'        : 10,
+    'center_x_accel'        : 2500,
+    'center_y_accel'        : 40,
+    'center_meas_pv'        : '18ID:scaler2.S4',
+    'center_scaler_pv'      : '18ID:scaler2',
+    'center_meas_time'      : 0.1,
+    'center_fw_height'      : 0.75,
     'remote_pump_ip'        : '164.54.204.8',
     'remote_pump_port'      : '5556',
     'remote_fm_ip'          : '164.54.204.8',
@@ -5060,7 +5485,8 @@ if __name__ == '__main__':
     trsaxs_settings = default_trsaxs_settings
 
     # trsaxs_settings['components'] = ['trsaxs_scan', 'trsaxs_flow']
-    trsaxs_settings['components'] = ['trsaxs_flow']
+    # trsaxs_settings['components'] = ['trsaxs_flow']
+    trsaxs_settings['components'] = ['trsaxs_scan']
 
     app = wx.App()
 
@@ -5079,7 +5505,7 @@ if __name__ == '__main__':
     # logger.addHandler(h2)
 
     logger.debug('Setting up wx app')
-    frame = TRFrame(trsaxs_settings, 'flow', None, title='TRSAXS Control')
+    frame = TRFrame(trsaxs_settings, 'scan', None, title='TRSAXS Control')
     frame.Show()
     app.MainLoop()
 
