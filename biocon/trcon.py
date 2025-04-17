@@ -37,6 +37,8 @@ if __name__ != '__main__':
 
 import wx
 import numpy as np
+import epics
+import scipy
 
 import motorcon
 import pumpcon
@@ -455,6 +457,9 @@ class TRScanPanel(wx.Panel):
         else:
             self.scan_start_offset_dist.Enable()
             self.scan_end_offset_dist.Enable()
+
+        meas_pv_name = self.settings['center_meas_pv']
+        epics.get_pv(meas_pv_name) # initializing epics in the main thread is recommended
 
         # if self.settings['motor_type'] == 'Newport_XPS':
         #     if self.xps is None:
@@ -1804,6 +1809,13 @@ class TRScanPanel(wx.Panel):
             self._centering_abort_event.set()
             self.run_centering.SetLabel('Center Mixer')
 
+    def run_and_wait_for_centering(self):
+        if self.auto_center.GetValue():
+            self.start_centering()
+
+            while not self.centering_done_event.is_set():
+                time.sleep(0.1)
+
     def start_centering(self):
         scan_settings, valid = self.get_centering_values()
 
@@ -1900,7 +1912,7 @@ class TRScanPanel(wx.Panel):
             scan_settings = {
                 'axis'          : axis,
                 'start'         : start,
-                'end'           : end,
+                'stop'           : stop,
                 'step'          : step,
                 'alt_pos'       : alt_pos,
                 'speed'         : speed,
@@ -1923,7 +1935,7 @@ class TRScanPanel(wx.Panel):
     def do_centering_scan(self, scan_settings):
         axis = scan_settings['axis']
         start = scan_settings['start']
-        end = scan_settings['end']
+        stop = scan_settings['stop']
         step = scan_settings['step']
         alt_pos = scan_settings['alt_pos']
         speed = scan_settings['speed']
@@ -1941,9 +1953,9 @@ class TRScanPanel(wx.Panel):
         motor_type = scan_settings['motor_type']
         motor = scan_settings['motor']
 
-        meas_pv = epics.PV(meas_pv_name)
-        count_time = epics.PV('{}.TP'.format(scaler_pv_name))
-        count_start = epics.PV('{}.CNT')
+        meas_pv = epics.get_pv(meas_pv_name)
+        count_time = epics.get_pv('{}.TP'.format(scaler_pv_name))
+        count_start = epics.get_pv('{}.CNT')
 
         if motor_type == 'Newport_XPS':
             x_motor = str(scan_settings['motor_x_name'])
@@ -1971,7 +1983,7 @@ class TRScanPanel(wx.Panel):
                 alt_mindex = 0
 
         initial_pos_alt = motor.get_positioner_position(alt_positioner,
-                alt_index)
+                alt_mindex)
 
         if axis.lower() == 'x':
             motor.move_absolute((start, alt_pos))
@@ -2025,18 +2037,32 @@ class TRScanPanel(wx.Panel):
 
         if axis.lower() == 'x':
             motor.move_absolute((center, initial_pos_alt))
-            wx.CallAfter(self.x_start.SetValue, center)
+            wx.CallAfter(self.x_start.SetValue, str(center))
+
+            while self.x_start.GetValue() != str(center):
+                time.sleep(0.01)
+
             if scan_start is not None and scan_stop is not None:
                 diff = center - scan_start
                 new_stop = scan_stop + diff
-                wx.CallAfter(self.x_stop.SetValue, new_stop)
+                wx.CallAfter(self.x_stop.SetValue, str(new_stop))
+
+                while self.x_stop.GetValue() != str(new_stop):
+                    time.sleep(0.01)
         else:
             motor.move_absolute((initial_pos_alt, center))
             wx.CallAfter(self.y_start.SetValue, center)
+
+            while self.y_start.GetValue() != str(center):
+                time.sleep(0.01)
+
             if scan_start is not None and scan_stop is not None:
                 diff = center - scan_start
                 new_stop = scan_stop + diff
-                wx.CallAfter(self.y_stop.SetValue, new_stop)
+                wx.CallAfter(self.y_stop.SetValue, str(new_stop))
+
+                while self.y_stop.GetValue() != str(new_stop):
+                    time.sleep(0.01)
 
         meas_pv.disconnect()
         count_time.disconnect()
@@ -5447,7 +5473,7 @@ default_trsaxs_settings = {
     'dilution_ratio'        : '10', # For chaotic flow
     # 'max_dilution'          : 50, # For chaotic flow
     'max_flow'              : 2, # For laminar flow
-    'max_flow'              : 8, # For chaotic flow
+    # 'max_flow'              : 8, # For chaotic flow
     'auto_set_valves'       : True,
     'valve_start_positions' : {'sample_valve': 2, 'buffer1_valve': 2,
                                 'buffer2_valve': 2, 'injection_valve': 2},

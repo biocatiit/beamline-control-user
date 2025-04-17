@@ -203,7 +203,7 @@ class ExpCommThread(threading.Thread):
         if self._settings['use_old_i0_gain']:
             mx_data['ki0'] = mx_database.get_record('ki0')
         else:
-            mx_data['ki0'] = epics.PV(self._settings['i0_gain_pv'])
+            mx_data['ki0'] = epics.get_pv(self._settings['i0_gain_pv'])
             mx_data['ki0'].get()
 
         logger.debug("Generated mx_data")
@@ -3044,7 +3044,7 @@ class ExpPanel(wx.Panel):
         self.pipeline_timer = None
 
     def _initialize_pv(self, pv_name):
-        pv = epics.PV(pv_name)
+        pv = epics.get_pv(pv_name)
         connected = pv.wait_for_connection(5)
 
         if not connected:
@@ -3770,6 +3770,9 @@ class ExpPanel(wx.Panel):
         if 'trsaxs_scan' in self.settings['components'] and not exp_only:
             trsaxs_panel = wx.FindWindowByName('trsaxs_scan')
             trsaxs_values, trsaxs_scan_valid = trsaxs_panel.get_scan_values()
+            if trsaxs_scan_valid:
+                trsaxs_panel.run_and_wait_for_centering()
+                trsaxs_values, trsaxs_scan_valid = trsaxs_panel.get_scan_values()
             comp_settings['trsaxs_scan'] = trsaxs_values
         else:
             trsaxs_scan_valid = True
