@@ -405,7 +405,7 @@ class ScanProcess(multiprocessing.Process):
             while self.np_motor.positioner_is_moving(self.positioner):
                 time.sleep(0.01)
                 if self._abort_event.is_set():
-                    self.motor.stop()
+                    self.np_motor.stop()
                     self.return_queue.put_nowait(['stop_live_plotting'])
                     return
 
@@ -424,7 +424,7 @@ class ScanProcess(multiprocessing.Process):
                     while self.np_motor.positioner_is_moving(self.positioner):
                         time.sleep(0.01)
                         if self._abort_event.is_set():
-                            self.motor2.stop()
+                            self.np_motor.stop()
                             self.return_queue.put_nowait(['stop_live_plotting'])
                             return
 
