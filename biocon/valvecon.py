@@ -352,12 +352,6 @@ class RheodyneValveTTL(Valve):
 
         :param str name: A unique identifier for the pump
         """
-        Valve.__init__(self, name, device, comm_lock=comm_lock)
-
-        logstr = ("Initializing valve {} on port {}".format(self.name,
-            self.device))
-        logger.info(logstr)
-
         self._position_trans = {
             1   : 1,
             2   : 0
@@ -368,6 +362,12 @@ class RheodyneValveTTL(Valve):
             0   : 2,
         }
 
+        Valve.__init__(self, name, device, comm_lock=comm_lock)
+
+        logstr = ("Initializing valve {} on port {}".format(self.name,
+            self.device))
+        logger.info(logstr)
+
         self._positions = int(positions)
 
         # logger.exception('Initialization error: {}'.format(error))
@@ -376,7 +376,7 @@ class RheodyneValveTTL(Valve):
         if not self.connected:
             self.valve_pv = epics.get_pv(self.device)
 
-            connected = pv.wait_for_connection(5)
+            connected = self.valve_pv.wait_for_connection(5)
 
             if not connected:
                 logger.error('Failed to connect to valve %s EPICS PV %s on startup',
@@ -384,7 +384,7 @@ class RheodyneValveTTL(Valve):
 
             else:
                 val = self.valve_pv.get()
-                self.position = self._rev_position_trans[val]
+                self._position = self._rev_position_trans[val]
                 self.valve_pv.add_callback(self._update_position)
 
             # self.send_command('M', False) #Homes valve
@@ -840,7 +840,7 @@ if __name__ == '__main__':
     # my_valve = CheminertValve(valve_args['name'], valve_args['args'][1],
     #     valve_args['kwargs']['positions'], baud=9600)
 
-    # my_rv67 = RheodyneValve('/dev/cu.usbserial-AC01UZ8O', '6p7_1', 6)
+    # my_rv = RheodyneValve('injection', 'COM20', 2)
     # my_rv67.get_position()
     # my_rv67.set_position(4)
 
@@ -893,9 +893,9 @@ if __name__ == '__main__':
 
     # # TR-SAXS laminar flow
     setup_devices = [
-        # {'name': 'Injection', 'args': ['Rheodyne', 'COM6'],
+        # {'name': 'Injection', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo14'],
         #     'kwargs': {'positions' : 2}},
-        {'name': 'Injection', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo14'],
+        {'name': 'Injection', 'args': ['Rheodyne', 'COM6'],
             'kwargs': {'positions' : 2}},
         {'name': 'Buffer 1', 'args': ['Rheodyne', 'COM10'],
             'kwargs': {'positions' : 6}},
