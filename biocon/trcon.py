@@ -2887,6 +2887,9 @@ class TRFlowPanel(wx.Panel):
             value=self.settings['autoinject_scan'],
             validator=utils.CharValidator('int'))
         self.autoinject.SetStringSelection(self.settings['autoinject'])
+        self.autoinject_delay = wx.TextCtrl(inj_parent, size=self._FromDIP((60, -1)),
+            value=self.settings['autoinject_delay'],
+            validator=utils.CharValidator('float'))
 
         inj_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(2), hgap=self._FromDIP(2))
         inj_sizer.Add(wx.StaticText(inj_parent, label='Autoinject:'),
@@ -2895,6 +2898,9 @@ class TRFlowPanel(wx.Panel):
         inj_sizer.Add(wx.StaticText(inj_parent, label='Start scan:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
         inj_sizer.Add(self.autoinject_scan, flag=wx.ALIGN_CENTER_VERTICAL)
+        inj_sizer.Add(wx.StaticText(inj_parent, label='Inter-valve delay [s]:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        inj_sizer.Add(self.autoinject_delay, flag=wx.ALIGN_CENTER_VERTICAL)
 
         inj_box_sizer.Add(inj_sizer, flag=wx.ALL, border=self._FromDIP(2))
         inj_box_sizer.AddStretchSpacer(1)
@@ -3885,6 +3891,7 @@ class TRFlowPanel(wx.Panel):
         start_flow = self.start_flow.GetValue()
         autoinject = self.autoinject.GetStringSelection()
         autoinject_scan = self.autoinject_scan.GetValue()
+        autoinject_delay = self.autoinject_delay.GetValue()
 
         total_fr = 0
 
@@ -3950,6 +3957,15 @@ class TRFlowPanel(wx.Panel):
                 if autoinject_scan < 1:
                     errors.append('Autoinject scan number must an integer >0')
 
+        try:
+            autoinject_delay = float(autoinject_delay)
+        except Exception:
+            errors.append('Autoinject inter-valve delay must be a number >= 0')
+
+        if isinstance(autoinject_scan, float):
+            if autoinject_delay < 0:
+                errors.append('Autoinject inter-valve delay must be a number >= 0')
+
         if len(warnings) > 0:
             valid = False
 
@@ -3984,6 +4000,7 @@ class TRFlowPanel(wx.Panel):
                 'start_flow'        : start_flow,
                 'autoinject'        : autoinject.lower().replace(' ', '_'),
                 'autoinject_scan'   : autoinject_scan,
+                'autoinject_delay'  : autoinject_delay,
                 'start_flow_event'  : self.start_flow_event,
                 'stop_flow_event'   : self.stop_flow_event,
                 'autoinject_event'  : self.autoinject_event,
@@ -4075,6 +4092,7 @@ class TRFlowPanel(wx.Panel):
         start_condition = settings['start_condition']
         autoinject = settings['autoinject']
         autoinject_valve_position = self.settings['autoinject_valve_pos']
+        autoinject_delay = settings['autinect_delay']
         start_delay = settings['start_delay']
         start_flow_rate = settings['start_flow']
 
@@ -4102,7 +4120,7 @@ class TRFlowPanel(wx.Panel):
             self.start_exposure_event.set()
 
         if success and autoinject == 'immediately':
-            success = self.inject_sample(autoinject_valve_position)
+            success = self.inject_sample(autoinject_valve_position, autoinject_delay)
 
             if not success:
                 wx.CallAfter(exp_panel.stop_exp)
@@ -4138,7 +4156,7 @@ class TRFlowPanel(wx.Panel):
                     break
 
             if success:
-                success = self.inject_sample(autoinject_valve_position)
+                success = self.inject_sample(autoinject_valve_position, autoinject_delay)
 
                 if not success:
                     wx.CallAfter(exp_panel.stop_exp)
@@ -4146,7 +4164,7 @@ class TRFlowPanel(wx.Panel):
         self.pause_valve_monitor.clear()
         self.pause_pump_monitor.clear()
 
-    def inject_sample(self, valve_position):
+    def inject_sample(self, valve_position, delay):
         injection_valves = []
 
         for valve in self.valves:
@@ -4157,6 +4175,7 @@ class TRFlowPanel(wx.Panel):
             valve_name = injection_valves[i]
             cmd = ('set_position', (valve_name, valve_position), {})
             ret = self._send_valvecmd(cmd, True)
+            start = time.time()
 
             success = True
 
@@ -4171,6 +4190,11 @@ class TRFlowPanel(wx.Panel):
                     msg = ('Failed to inject sample')
                     wx.CallAfter(self.showMessageDialog, self, msg, 'Injection failed',
                         wx.OK|wx.ICON_ERROR)
+
+            if success:
+                if len(self.inj_valve_positions) > 1 and delay > 0:
+                    while time.time() - start < delay:
+                        time.sleep(0.01)
 
         return success
 
@@ -5487,6 +5511,7 @@ default_trsaxs_settings = {
     'autostart_delay'       : '0',
     'autoinject'            : 'After scan',
     'autoinject_scan'       : '5',
+    'autoinject_delay'      : 0
     'autoinject_valve_pos'  : 1,
     # 'mixer_type'            : 'chaotic', # laminar or chaotic
     'mixer_type'            : 'laminar', # laminar or chaotic
