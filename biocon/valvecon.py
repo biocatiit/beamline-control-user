@@ -767,7 +767,7 @@ if __name__ == '__main__':
     # my_valve = CheminertValve(valve_args['name'], valve_args['args'][1],
     #     valve_args['kwargs']['positions'], baud=9600)
 
-    # my_rv67 = RheodyneValve('/dev/cu.usbserial-AC01UZ8O', '6p7_1', 6)
+    # my_rv = RheodyneValve('injection', 'COM20', 2)
     # my_rv67.get_position()
     # my_rv67.set_position(4)
 
