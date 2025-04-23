@@ -3595,7 +3595,7 @@ class ExpPanel(wx.Panel):
         shutter_pad = self.settings['shutter_pad']
         struck_log_vals = self.settings['struck_log_vals']
         joerger_log_vals = self.settings['joerger_log_vals']
-        struck_measurement_time = self.muscle_sampling.GetValue()
+        struck_measurement_time = float(self.muscle_sampling.GetValue())
 
         (num_frames, exp_time, exp_period, data_dir, filename,
             wait_for_trig, num_trig, local_data_dir, struck_num_meas, valid,
