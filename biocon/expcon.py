@@ -203,7 +203,7 @@ class ExpCommThread(threading.Thread):
         if self._settings['use_old_i0_gain']:
             mx_data['ki0'] = mx_database.get_record('ki0')
         else:
-            mx_data['ki0'] = epics.PV(self._settings['i0_gain_pv'])
+            mx_data['ki0'] = epics.get_pv(self._settings['i0_gain_pv'])
             mx_data['ki0'].get()
 
         logger.debug("Generated mx_data")
@@ -1661,7 +1661,7 @@ class ExpCommThread(threading.Thread):
             cd_burst.setup(exp_period, (exp_period-(exp_time+s_open_time))/10.,
                 num_frames, exp_time+s_open_time, 1, 2)
             ef_burst.setup(exp_period, exp_time, num_frames, s_open_time, 1, 2)
-            gh_burst.setup(exp_period, exp_time/1.1, num_frames, s_open_time, 1, 2)
+            gh_burst.setup(exp_period, exp_period/1.1, num_frames, s_open_time, 1, 2)
         else:
             #Shutter will be open continuously
             if exp_type == 'muscle':
@@ -1673,7 +1673,7 @@ class ExpCommThread(threading.Thread):
             cd_burst.setup(exp_period, (exp_period-exp_time)/10.,
                 num_frames, exp_time+(exp_period-exp_time)/10., 1, 2)
             ef_burst.setup(exp_period, exp_time, num_frames, offset, 1, 2)
-            gh_burst.setup(exp_period, exp_time/1.1, num_frames, 0, 1, 2)
+            gh_burst.setup(exp_period, exp_period/1.1, num_frames, 0, 1, 2)
 
         if exp_type == 'muscle':
             ab_burst_2.setup(struck_meas_time, 0, struck_num_meas+1, 0, 1, 2) #Irrelevant
@@ -3044,7 +3044,7 @@ class ExpPanel(wx.Panel):
         self.pipeline_timer = None
 
     def _initialize_pv(self, pv_name):
-        pv = epics.PV(pv_name)
+        pv = epics.get_pv(pv_name)
         connected = pv.wait_for_connection(5)
 
         if not connected:
@@ -3262,6 +3262,10 @@ class ExpPanel(wx.Panel):
         if 'uv' in self.settings['components']:
             uv_panel = wx.FindWindowByName('uv')
             uv_panel.on_exposure_stop(self)
+
+        if 'trsaxs_flow' in self.settings['components']:
+            trsaxs_flow_panel = wx.FindWindowByName('trsaxs_flow')
+            trsaxs_flow_panel.on_exposure_stop(self)
 
     def set_status(self, status):
         wx.CallAfter(self.status.SetLabel, status)
@@ -3766,6 +3770,9 @@ class ExpPanel(wx.Panel):
         if 'trsaxs_scan' in self.settings['components'] and not exp_only:
             trsaxs_panel = wx.FindWindowByName('trsaxs_scan')
             trsaxs_values, trsaxs_scan_valid = trsaxs_panel.get_scan_values()
+            if trsaxs_scan_valid:
+                trsaxs_panel.run_and_wait_for_centering()
+                trsaxs_values, trsaxs_scan_valid = trsaxs_panel.get_scan_values()
             comp_settings['trsaxs_scan'] = trsaxs_values
         else:
             trsaxs_scan_valid = True

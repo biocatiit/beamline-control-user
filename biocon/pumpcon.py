@@ -5665,12 +5665,18 @@ class PumpPanel(utils.DevicePanel):
 
                 if self.pump_mode == 'continuous':
                     if self.mode_ctrl.GetStringSelection() == 'Fixed volume':
-                        pump_dir = self.direction_ctrl.GetStringSelection().lower()
+                        if self._current_flow_dir == 1:
+                            pump_dir = 'Dispense'
+                        else:
+                            pump_dir = 'Aspirate'
                         self._set_status_label(pump_dir.capitalize())
                     else:
                         self._set_status_label('Flowing')
                 else:
-                    pump_dir = self.direction_ctrl.GetStringSelection().lower()
+                    if self._current_flow_dir == 1:
+                        pump_dir ='Dispense'
+                    else:
+                        pump_dir = 'Aspirate'
                     self._set_status_label(pump_dir.capitalize())
 
                 self._current_move_status = val
@@ -5716,6 +5722,24 @@ class PumpPanel(utils.DevicePanel):
 
         elif cmd == 'get_flow_dir':
             if val is not None:
+                if self._current_flow_dir != val:
+                    if self._current_move_status:
+                        if self.pump_mode == 'continuous':
+                            if self.mode_ctrl.GetStringSelection() == 'Fixed volume':
+                                if val == 1:
+                                    pump_dir = 'Dispense'
+                                else:
+                                    pump_dir = 'Aspirate'
+                                self._set_status_label(pump_dir.capitalize())
+                            else:
+                                self._set_status_label('Flowing')
+                        else:
+                            if val == 1:
+                                pump_dir ='Dispense'
+                            else:
+                                pump_dir = 'Aspirate'
+                            self._set_status_label(pump_dir.capitalize())
+
                 self._current_flow_dir = val
 
         elif cmd == 'get_pressure':
@@ -5844,8 +5868,8 @@ if __name__ == '__main__':
     # my_pump.flow_rate = 10
     # my_pump.refill_rate = 10
 
-    my_pump = HamiltonPSD6Pump('Pump1', 'COM7', '1', 1.46, 0.1, 1,
-        '0.1 mL, Hamilton Glass', False, comm_lock=comm_lock)
+    # my_pump = HamiltonPSD6Pump('Pump1', 'COM7', '1', 1.46, 0.1, 1,
+    #     '0.1 mL, Hamilton Glass', False, comm_lock=comm_lock)
     # my_pump.flow_rate = 10
     # my_pump.refill_rate = 10
 
@@ -5978,17 +6002,17 @@ if __name__ == '__main__':
     #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
          # ]
 
-    # Teledyne SSI Reaxus pumps without scaling
+    # # Teledyne SSI Reaxus pumps without scaling
     setup_devices = [
-        {'name': 'Pump 4', 'args': ['SSI Next Gen', 'COM15'],
+        {'name': 'Pump 3', 'args': ['SSI Next Gen', 'COM14'],
             'kwargs': {'flow_rate_scale': 1,
             'flow_rate_offset': 0,'scale_type': 'up'},
             'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-        {'name': 'Pump 3', 'args': ['SSI Next Gen', 'COM12'],
+        {'name': 'Pump 4', 'args': ['SSI Next Gen', 'COM19'],
             'kwargs': {'flow_rate_scale': 1,
             'flow_rate_offset': 0,'scale_type': 'up'},
             'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-        {'name': 'Pump 2', 'args': ['SSI Next Gen', 'COM14'],
+        {'name': 'Pump 2', 'args': ['SSI Next Gen', 'COM18'],
             'kwargs': {'flow_rate_scale': 1,
             'flow_rate_offset': 0,'scale_type': 'up'},
             'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
@@ -6002,7 +6026,7 @@ if __name__ == '__main__':
     #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
     #     ]
 
-    # # TR-SAXS Pico Plus pumps
+    # TR-SAXS Pico Plus pumps
     # setup_devices = [
     #     {'name': 'Buffer', 'args': ['Pico Plus', 'COM11'],
     #         'kwargs': {'syringe_id': '3 mL, Medline P.C.',
@@ -6041,28 +6065,28 @@ if __name__ == '__main__':
     #     {'name': 'outlet', 'args': ['Soft', None], 'kwargs': {}},
     #     ]
 
-    # # Local
-    # com_thread = PumpCommThread('PumpComm')
-    # com_thread.start()
+    # Local
+    com_thread = PumpCommThread('PumpComm')
+    com_thread.start()
 
-    # # # Remote
-    # # com_thread = None
+    # # Remote
+    # com_thread = None
 
-    # settings = {
-    #     'remote'        : False,
-    #     'remote_device' : 'pump',
-    #     'device_init'   : setup_devices,
-    #     'remote_ip'     : '164.54.204.24',
-    #     'remote_port'   : '5556',
-    #     'com_thread'    : com_thread
-    #     }
+    settings = {
+        'remote'        : False,
+        'remote_device' : 'pump',
+        'device_init'   : setup_devices,
+        'remote_ip'     : '164.54.204.24',
+        'remote_port'   : '5556',
+        'com_thread'    : com_thread
+        }
 
-    # app = wx.App()
-    # logger.debug('Setting up wx app')
-    # frame = PumpFrame('PumpFrame', settings, parent=None, title='Pump Control')
-    # frame.Show()
-    # app.MainLoop()
+    app = wx.App()
+    logger.debug('Setting up wx app')
+    frame = PumpFrame('PumpFrame', settings, parent=None, title='Pump Control')
+    frame.Show()
+    app.MainLoop()
 
-    # if com_thread is not None:
-    #     com_thread.stop()
-    #     com_thread.join()
+    if com_thread is not None:
+        com_thread.stop()
+        com_thread.join()
