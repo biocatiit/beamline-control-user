@@ -363,21 +363,21 @@ if __name__ == '__main__':
     # Exposure
     exposure_settings = expcon.default_exposure_settings
 
-    # Fast in-air shutters
-    exposure_settings['shutter_speed_open'] = 0.001
-    exposure_settings['shutter_speed_close'] = 0.001
-    exposure_settings['shutter_speed_pad'] = 0.00
-    exposure_settings['shutter_speed_cycle'] = 0.002
+    # # Fast in-air shutters
+    # exposure_settings['shutter_speed_open'] = 0.001
+    # exposure_settings['shutter_speed_close'] = 0.001
+    # exposure_settings['shutter_speed_pad'] = 0.00
+    # exposure_settings['shutter_speed_cycle'] = 0.002
 
-    # # Normal vacuum shutter (uniblitz)
-    # exposure_settings['shutter_speed_open'] = 0.0045
-    # exposure_settings['shutter_speed_close'] = 0.004
-    # exposure_settings['shutter_speed_pad'] = 0.002
-    # exposure_settings['shutter_speed_cycle'] = 0.1
+    # Normal vacuum shutter (uniblitz)
+    exposure_settings['shutter_speed_open'] = 0.0045
+    exposure_settings['shutter_speed_close'] = 0.004
+    exposure_settings['shutter_speed_pad'] = 0.002
+    exposure_settings['shutter_speed_cycle'] = 0.1
 
     exposure_settings['det_args'] =  {'use_tiff_writer': False,
         'use_file_writer': True, 'photon_energy' : 12.0,
-        'images_per_file': 1000} #1 image/file for TR, 300 for eq SAXS, 1000 for muscle
+        'images_per_file': 1} #1 image/file for TR, 300 for eq SAXS, 1000 for muscle
 
     # Muscle settings
     exposure_settings['struck_measurement_time'] = '0.001'
@@ -526,10 +526,10 @@ if __name__ == '__main__':
     components = OrderedDict([
         ('exposure', expcon.ExpPanel),
         # ('coflow', coflowcon.CoflowPanel),
-        # ('trsaxs_scan', trcon.TRScanPanel),
+        ('trsaxs_scan', trcon.TRScanPanel),
         # ('trsaxs_flow', trcon.TRFlowPanel),
         # ('scan',    scancon.ScanPanel),
-        ('metadata', metadata.ParamPanel),
+        # ('metadata', metadata.ParamPanel),
         # ('pipeline', pipeline_ctrl.PipelineControl),
         # ('uv', spectrometercon.UVPanel),
         # ('hplc', biohplccon.HPLCPanel),
