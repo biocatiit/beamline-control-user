@@ -363,25 +363,25 @@ if __name__ == '__main__':
     # Exposure
     exposure_settings = expcon.default_exposure_settings
 
-    # Fast in-air shutters
-    exposure_settings['shutter_speed_open'] = 0.001
-    exposure_settings['shutter_speed_close'] = 0.001
-    exposure_settings['shutter_speed_pad'] = 0.00
-    exposure_settings['shutter_speed_cycle'] = 0.002
+    # # Fast in-air shutters
+    # exposure_settings['shutter_speed_open'] = 0.001
+    # exposure_settings['shutter_speed_close'] = 0.001
+    # exposure_settings['shutter_speed_pad'] = 0.00
+    # exposure_settings['shutter_speed_cycle'] = 0.002
 
-    # # Normal vacuum shutter (uniblitz)
-    # exposure_settings['shutter_speed_open'] = 0.0045
-    # exposure_settings['shutter_speed_close'] = 0.004
-    # exposure_settings['shutter_speed_pad'] = 0.002
-    # exposure_settings['shutter_speed_cycle'] = 0.1
+    # Normal vacuum shutter (uniblitz)
+    exposure_settings['shutter_speed_open'] = 0.0045
+    exposure_settings['shutter_speed_close'] = 0.004
+    exposure_settings['shutter_speed_pad'] = 0.002
+    exposure_settings['shutter_speed_cycle'] = 0.1
 
     exposure_settings['det_args'] =  {'use_tiff_writer': False,
         'use_file_writer': True, 'photon_energy' : 12.0,
-        'images_per_file': 300} #1 image/file for TR, 300 for eq SAXS, 1000 for muscle
+        'images_per_file': 1} #1 image/file for TR, 300 for eq SAXS, 1000 for muscle
 
     # Muscle settings
     exposure_settings['struck_measurement_time'] = '0.001'
-    exposure_settings['tr_muscle_exp'] = True
+    exposure_settings['tr_muscle_exp'] = False
 
     #Other settings
     exposure_settings['wait_for_trig'] = True
@@ -397,11 +397,11 @@ if __name__ == '__main__':
         # {'mx_record': 'mcs6', 'channel': 5, 'name': 'I3', 'scale': 1,
         # 'offset': 0, 'dark': True, 'norm_time': False},
         # {'mx_record': 'mcs7', 'channel': 6, 'name': 'Detector_Enable',
-        # 'scale': 1e5, 'offset': 0, 'dark': True, 'norm_time': True},
+        # 'scale': 2.5e6, 'offset': 0, 'dark': True, 'norm_time': True},
         # {'mx_record': 'mcs12', 'channel': 11, 'name': 'Length_Out',
         # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
-        # {'mx_record': 'mcs13', 'channel': 13, 'name': 'Length_In',
-        # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
+        # # {'mx_record': 'mcs13', 'channel': 13, 'name': 'Length_In',
+        # # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
         # {'mx_record': 'mcs13', 'channel': 12, 'name': 'Force',
         # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
         ]
@@ -526,10 +526,10 @@ if __name__ == '__main__':
     components = OrderedDict([
         ('exposure', expcon.ExpPanel),
         # ('coflow', coflowcon.CoflowPanel),
-        # ('trsaxs_scan', trcon.TRScanPanel),
-        # ('trsaxs_flow', trcon.TRFlowPanel),
+        ('trsaxs_scan', trcon.TRScanPanel),
+        ('trsaxs_flow', trcon.TRFlowPanel),
         # ('scan',    scancon.ScanPanel),
-        ('metadata', metadata.ParamPanel),
+        # ('metadata', metadata.ParamPanel),
         # ('pipeline', pipeline_ctrl.PipelineControl),
         # ('uv', spectrometercon.UVPanel),
         # ('hplc', biohplccon.HPLCPanel),

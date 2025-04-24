@@ -3189,6 +3189,7 @@ class ExpPanel(wx.Panel):
 
         self.set_status('Preparing exposure')
         wx.CallAfter(self.start_exp_btn.Disable)
+        wx.CallAfter(self.start_scan_btn.Disable)
         wx.CallAfter(self.stop_exp_btn.Enable)
         self.total_time = exp_values['num_frames']*exp_values['exp_period']
 
@@ -3240,6 +3241,7 @@ class ExpPanel(wx.Panel):
         self.tr_timer.Stop()
 
         self.start_exp_btn.Enable()
+        self.start_scan_btn.Enable()
         self.stop_exp_btn.Disable()
         self.set_status('Ready')
         self.set_time_remaining(0)
@@ -3599,7 +3601,7 @@ class ExpPanel(wx.Panel):
         shutter_pad = self.settings['shutter_pad']
         struck_log_vals = self.settings['struck_log_vals']
         joerger_log_vals = self.settings['joerger_log_vals']
-        struck_measurement_time = self.muscle_sampling.GetValue()
+        struck_measurement_time = float(self.muscle_sampling.GetValue())
 
         (num_frames, exp_time, exp_period, data_dir, filename,
             wait_for_trig, num_trig, local_data_dir, struck_num_meas, valid,
@@ -3702,7 +3704,7 @@ class ExpPanel(wx.Panel):
                     self.settings['slow_mode_thres'])))
 
         if (isinstance(exp_period, float) and isinstance(num_frames, int) and
-            isinstance(struck_measurement_time, float)):
+            isinstance(struck_measurement_time, float) and self.settings['tr_muscle_exp']):
             if exp_period*num_frames/struck_measurement_time > self.settings['nparams_max']:
                 errors.append(('Total experiment time (exposure period * number '
                     'of frames) divided by parameter sampling time must be '
