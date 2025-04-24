@@ -2467,9 +2467,9 @@ class TRFlowPanel(wx.Panel):
     def _init_pumps(self):
         logger.info('Initializing pumps on startup')
         pump_list = [
-            ('buffer1_pump', self.settings['buffer1_pump']),
-            ('sample_pump', self.settings['sample_pump']),
             ('buffer2_pump', self.settings['buffer2_pump']),
+            ('sample_pump', self.settings['sample_pump']),
+            ('buffer1_pump', self.settings['buffer1_pump']),
             ]
 
         all_init = True
@@ -2943,7 +2943,7 @@ class TRFlowPanel(wx.Panel):
             validator=utils.CharValidator('int'))
         self.autoinject.SetStringSelection(self.settings['autoinject'])
         self.autoinject_delay = wx.TextCtrl(inj_parent, size=self._FromDIP((60, -1)),
-            value=self.settings['autoinject_delay'],
+            value=str(self.settings['autoinject_delay']),
             validator=utils.CharValidator('float'))
 
         inj_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(2), hgap=self._FromDIP(2))
@@ -5454,19 +5454,19 @@ default_trsaxs_settings = {
     'sample_valve'          : [],
     'buffer1_valve'         : [],
     'buffer2_valve'         : [],
-    'buffer2_pump'          : [{'name': 'Buffer 2', 'args': ['SSI Next Gen', 'COM19'],
-                                'kwargs': {'flow_rate_scale': 1.0179,
-                                'flow_rate_offset': -20.842/10000,'scale_type': 'up'},
+    'buffer2_pump'          : [{'name': 'Buffer 2', 'args': ['SSI Next Gen', 'COM14'],
+                                'kwargs': {'flow_rate_scale': 1.0583,
+                                'flow_rate_offset': -33.462/1000,'scale_type': 'up'},
                                 'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
                                 'max_pressure': 1800, 'continuous': True}}],
-    'sample_pump'           : [{'name': 'Sample', 'args': ['SSI Next Gen', 'COM14'],
-                                'kwargs': {'flow_rate_scale': 1.0204,
-                                'flow_rate_offset': 15.346/1000,'scale_type': 'up'},
+    'sample_pump'           : [{'name': 'Sample', 'args': ['SSI Next Gen', 'COM17'],
+                                'kwargs': {'flow_rate_scale': 1.0135,
+                                'flow_rate_offset': 5.1251/1000,'scale_type': 'up'},
                                 'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
                                 'max_pressure': 1800, 'continuous': True}}],
     'buffer1_pump'           : [{'name': 'Buffer 1', 'args': ['SSI Next Gen', 'COM18'],
-                                'kwargs': {'flow_rate_scale': 1.0478,
-                                'flow_rate_offset': -72.82/1000,'scale_type': 'up'},
+                                'kwargs': {'flow_rate_scale': 1.0497,
+                                'flow_rate_offset': -34.853/1000,'scale_type': 'up'},
                                 'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
                                 'max_pressure': 1800, 'continuous': True}}],
     'outlet_fm'             : {'name': 'outlet', 'args' : ['BFS', 'COM5'], 'kwargs': {}},

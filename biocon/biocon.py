@@ -527,7 +527,7 @@ if __name__ == '__main__':
         ('exposure', expcon.ExpPanel),
         # ('coflow', coflowcon.CoflowPanel),
         ('trsaxs_scan', trcon.TRScanPanel),
-        # ('trsaxs_flow', trcon.TRFlowPanel),
+        ('trsaxs_flow', trcon.TRFlowPanel),
         # ('scan',    scancon.ScanPanel),
         # ('metadata', metadata.ParamPanel),
         # ('pipeline', pipeline_ctrl.PipelineControl),
