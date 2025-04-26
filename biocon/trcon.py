@@ -220,9 +220,9 @@ class TRScanPanel(wx.Panel):
         self.step_filename = wx.TextCtrl(adv_win)
 
         self.pco_direction = wx.Choice(adv_win, choices=['x', 'y'])
-        self.encoder_resolution = wx.TextCtrl(adv_win, size=(60, -1),
+        self.encoder_resolution = wx.TextCtrl(adv_win, size=(80, -1),
             validator=utils.CharValidator('float'))
-        self.encoder_precision = wx.TextCtrl(adv_win, size=(60, -1),
+        self.encoder_precision = wx.TextCtrl(adv_win, size=(80, -1),
             validator=utils.CharValidator('int'))
 
         self.return_speed.Bind(wx.EVT_TEXT, self._on_param_change)
@@ -331,6 +331,13 @@ class TRScanPanel(wx.Panel):
             validator=utils.CharValidator('float_neg'))
         self.run_centering = wx.Button(ctr_win, label='Center Mixer')
         self.run_centering.Bind(wx.EVT_BUTTON, self._on_run_centering)
+
+        self.auto_center.SetValue(True)
+        self.center_start.SetValue(str(self.settings['center_start']))
+        self.center_stop.SetValue(str(self.settings['center_stop']))
+        self.center_step.SetValue(str(self.settings['center_step']))
+        self.center_offset.SetValue(str(self.settings['center_offset']))
+
 
         ctr_sub_sizer1 = wx.BoxSizer(wx.HORIZONTAL)
         ctr_sub_sizer1.Add(wx.StaticText(ctr_win, label='Center in:'),
@@ -885,7 +892,7 @@ class TRScanPanel(wx.Panel):
                 try:
                     return_vals = self._calc_exposure_params()
                 except Exception:
-                    traceback.print_exc()
+                    # traceback.print_exc()
                     return_vals=[['calc_exposure_params_error'],]
 
                 # print(return_vals)
@@ -2090,7 +2097,7 @@ class TRScanPanel(wx.Panel):
 
         print('Found channel center at: {}'.format(center))
 
-        center -= center_offset
+        center += center_offset
         center = round(center, 6)
 
         print('Setting scan center at: {}'.format(center))
@@ -2928,10 +2935,10 @@ class TRFlowPanel(wx.Panel):
 
         self.start_condition = wx.Choice(exp_start_parent, choices=['Immediately',
             'Fixed delay', 'At flow rate', 'None'])
-        self.start_delay = wx.TextCtrl(exp_start_parent, size=self._FromDIP((60, -1)),
+        self.start_delay = wx.TextCtrl(exp_start_parent, size=self._FromDIP((80, -1)),
             value=self.settings['autostart_delay'],
             validator=utils.CharValidator('float'))
-        self.start_flow = wx.TextCtrl(exp_start_parent, size=self._FromDIP((60, -1)),
+        self.start_flow = wx.TextCtrl(exp_start_parent, size=self._FromDIP((80, -1)),
             value=self.settings['autostart_flow'],
             validator=utils.CharValidator('float'))
         self.start_condition.SetStringSelection(self.settings['autostart'])
@@ -3082,15 +3089,15 @@ class TRFlowPanel(wx.Panel):
 
                 for name in self.pump_names['sample_pump']:
                     wx.CallAfter(self.set_pump_panel_flow_rate, name,
-                        sample_flow/len(self.pump_names['sample_pump']))
+                        round(sample_flow/len(self.pump_names['sample_pump']), 5))
 
                 for name in self.pump_names['buffer1_pump']:
                     wx.CallAfter(self.set_pump_panel_flow_rate, name,
-                        buffer_flow/len(self.pump_names['buffer1_pump']))
+                        round(buffer_flow/len(self.pump_names['buffer1_pump']), 5))
 
                 for name in self.pump_names['buffer2_pump']:
                     wx.CallAfter(self.set_pump_panel_flow_rate, name,
-                        buffer_flow/len(self.pump_names['buffer2_pump']))
+                        round(buffer_flow/len(self.pump_names['buffer2_pump']),5))
 
             else:
                 buffer_flow = flow_rate/(1+sample_ratio+sheath_ratio)
@@ -3103,13 +3110,13 @@ class TRFlowPanel(wx.Panel):
 
                 for name in self.pump_names['sample_pump']:
                     wx.CallAfter(self.set_pump_panel_flow_rate, name,
-                        sample_flow/len(self.pump_names['sample_pump']))
+                        round(sample_flow/len(self.pump_names['sample_pump']), 5))
 
                 for name in self.pump_names['buffer1_pump']:
-                    wx.CallAfter(self.set_pump_panel_flow_rate, name, buffer_flow)
+                    wx.CallAfter(self.set_pump_panel_flow_rate, name, round(buffer_flow, 5))
 
                 for name in self.pump_names['buffer2_pump']:
-                    wx.CallAfter(self.set_pump_panel_flow_rate, name, sheath_flow)
+                    wx.CallAfter(self.set_pump_panel_flow_rate, name, round(sheath_flow, 5))
 
             wx.CallAfter(self.update_flow_info)
 
@@ -3475,7 +3482,7 @@ class TRFlowPanel(wx.Panel):
             self.max_flow_time.SetLabel(ft_label)
 
             if self.settings['autostart_flow_ratio'] != 0:
-                start_flow = float(self.total_flow.GetValue())*self.settings['autostart_flow_ratio']
+                start_flow = round(float(self.total_flow.GetValue())*self.settings['autostart_flow_ratio'], 5)
                 self.start_flow.SetValue(str(start_flow))
 
         except Exception:
@@ -4302,11 +4309,27 @@ class TRFlowPanel(wx.Panel):
         return success
 
     def on_exposure_stop(self):
-        if self.stop_after_run.GetValue():
+        if self.stop_after_run.GetValue() and not self.refill_after_run.GetValue():
             self.stop_all()
 
         if self.refill_after_run.GetValue():
             self.stop_all()
+            while True:
+                stopped = True
+                self.get_all_pump_status()
+                for pump_panel in self.pump_panels.values():
+                    pump_status = pump_panel.get_status()
+
+                    if pump_status != 'Done':
+                        stopped = False
+
+                if stopped:
+                    break
+                else:
+                    time.sleep(0.1)
+                    wx.GetApp().Yield()
+
+
             self.refill_all()
 
     def _send_valvecmd(self, cmd, response=False):
@@ -4644,7 +4667,7 @@ class TRPumpPanel(wx.Panel):
             style=wx.ST_NO_AUTORESIZE)
         self.pressure_units = wx.StaticText(parent, label='psi')
         self.flow_readback_label = wx.StaticText(parent, label='Flow Rate:')
-        self.flow_readback = wx.StaticText(parent, label='0', size=self._FromDIP((40,-1)),
+        self.flow_readback = wx.StaticText(parent, label='0', size=self._FromDIP((60,-1)),
             style=wx.ST_NO_AUTORESIZE)
         self.flow_readback_units = wx.StaticText(parent, label='mL/min')
 
@@ -4697,12 +4720,12 @@ class TRPumpPanel(wx.Panel):
         self.direction_ctrl = wx.Choice(parent, choices=['Dispense', 'Aspirate'])
         self.direction_ctrl.SetSelection(0)
         self.direction_lbl = wx.StaticText(parent, label='Direction:')
-        self.flow_rate_ctrl = wx.TextCtrl(parent, value=flow_rate, size=self._FromDIP((60,-1)),
+        self.flow_rate_ctrl = wx.TextCtrl(parent, value=flow_rate, size=self._FromDIP((80,-1)),
             style=wx.TE_PROCESS_ENTER, validator=utils.CharValidator('float_te'))
         self.flow_units_lbl = wx.StaticText(parent,
             label=self.tr_flow_panel.settings['flow_units'])
         self.refill_rate_lbl = wx.StaticText(parent, label='Refill rate:')
-        self.refill_rate_ctrl = wx.TextCtrl(parent, value=refill_rate, size=self._FromDIP((60,-1)),
+        self.refill_rate_ctrl = wx.TextCtrl(parent, value=refill_rate, size=self._FromDIP((80,-1)),
             validator=utils.CharValidator('float'))
         self.refill_rate_units = wx.StaticText(parent,
             label=self.tr_flow_panel.settings['flow_units'][:2])
@@ -5459,6 +5482,10 @@ default_trsaxs_settings = {
     'center_fw_height'      : 0.85,
     'center_shutter_pvs'    : [{'name': '18ID:LJT4:2:Bo6', 'open': 0, 'close': 1},
                                 {'name': '18ID:LJT4:2:Bo9', 'open': 1, 'close': 0}],
+    'center_start'          : -0.05,
+    'center_stop'           : 0.05,
+    'center_step'           : 0.005,
+    'center_offset'         : 0,
     'remote_pump_ip'        : '164.54.204.8',
     'remote_pump_port'      : '5556',
     'remote_fm_ip'          : '164.54.204.8',
@@ -5498,6 +5525,11 @@ default_trsaxs_settings = {
     'buffer2_valve_label'   : 'Buffer 2',
     # 'injection_valve'       : [{'name': 'Injection', 'args': ['Rheodyne', 'COM6'], # Laminar flow
     #                             'kwargs': {'positions' : 2}},],
+    # 'injection_valve'       : [{'name': 'Injection', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo14'],
+    #                                 'kwargs': {'positions' : 2}},
+    #                             # {'name': 'Injection 2', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo14'],
+    #                             #     'kwargs': {'positions' : 2}},
+    #                             ],
     # 'sample_valve'          : [{'name': 'Sample', 'args': ['Rheodyne', 'COM3'],
     #                             'kwargs': {'positions' : 6}},],
     # 'buffer1_valve'         : [{'name': 'Buffer 1', 'args': ['Rheodyne', 'COM10'],

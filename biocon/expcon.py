@@ -395,10 +395,14 @@ class ExpCommThread(threading.Thread):
             # For newports this is fine, because it automatically scales down different axes speeds
             # so that a group move ends simultaneously. For other controls may need to
             # recalculate the vector speeds and accelerations
-            motor.set_velocity(return_speed, x_motor, 0)
-            motor.set_velocity(return_speed, y_motor, 1)
-            motor.set_acceleration(return_accel, x_motor, 0)
-            motor.set_acceleration(return_accel, y_motor, 1)
+            if vect_return_speed[0] != 0:
+                motor.set_velocity(vect_return_speed[0], x_motor, 0)
+            if vect_return_speed[1] != 0:
+                motor.set_velocity(vect_return_speed[1], y_motor, 1)
+            if vect_return_accel[0] != 0:
+                motor.set_acceleration(vect_return_accel[0], x_motor, 0)
+            if vect_return_accel[1] != 0:
+                motor.set_acceleration(vect_return_accel[1], y_motor, 1)
 
         motor_cmd_q.append(('move_absolute', ('TR_motor', (x_start, y_start)), {}))
 
