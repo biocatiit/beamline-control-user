@@ -466,7 +466,7 @@ class Pump(object):
         self.name = name
         self.flow_rate_scale = flow_rate_scale
         self.flow_rate_offset = flow_rate_offset
-        self.is_syring_pump = False
+        self.is_syringe_pump = False
 
         self.scale_type = scale_type
         #up, down, or both, indicating only scale up flowrate, only scale down
@@ -661,7 +661,7 @@ class SyringePump(Pump):
         self._volume = 0
         self._max_volume = 0
         self._refill_rate = 0
-        self.is_syring_pump = True
+        self.is_syringe_pump = True
 
         self.dual_syringe = dual_syringe
 
@@ -2541,6 +2541,7 @@ class SSINextGenPump(Pump):
                 self._send_flow_rate_cmd(next_flow_rate)
 
                 current_flow_rate = next_flow_rate
+                time.sleep(0.01)
 
         self._ramping_flow = False
         self._accel_stop.clear()
@@ -4298,7 +4299,7 @@ class PumpCommThread(utils.CommManager):
         comm_name = kwargs.pop('comm_name', None)
         cmd = kwargs.pop('cmd', None)
 
-        val = self._get_pump_status(name)
+        val = self._get_pump_remote_status(name)
 
         self._return_value((name, cmd, val), comm_name)
 
@@ -4332,38 +4333,16 @@ class PumpCommThread(utils.CommManager):
 
         vals = []
         for name in names:
-            val = self._get_pump_status(name)
+            val = self._get_pump_remote_status(name)
 
             vals.append(val)
 
         self._return_value((names, cmd, [names, vals]), comm_name)
 
-    def _get_pump_status(self, name):
+    def _get_pump_remote_status(self, name):
         device = self._connected_devices[name]
 
-        is_moving = device.is_moving()
-
-        try:
-            volume = device.volume
-        except Exception:
-            volume = None
-
-        flow_rate = device.flow_rate
-
-        try:
-            refill_rate = device.refill_rate
-        except Exception:
-            refill_rate = None
-
-        try:
-            pressure = device.get_pressure()
-        except Exception:
-            pressure = None
-
-        try:
-            is_dispensing = device.is_dispensing()
-        except Exception:
-            is_dispensing = None
+        status = self._get_status_inner(device)
 
         try:
             faults = device.get_faults()
@@ -4376,21 +4355,13 @@ class PumpCommThread(utils.CommManager):
             syringe_id = None
 
         try:
-            flow_dir = device.get_flow_dir()
+            is_dispensing = device.is_dispensing()
         except Exception:
-            flow_dir = None
+            is_dispensing = None
 
-        status = {
-            'is_moving'     : is_moving,
-            'volume'        : volume,
-            'flow_rate'     : flow_rate,
-            'refill_rate'   : refill_rate,
-            'pressure'      : pressure,
-            'is_dispensing' : is_dispensing,
-            'faults'        : faults,
-            'syringe_id'    : syringe_id,
-            'flow_dir'      : flow_dir,
-            }
+        status['is_dispensing'] = is_dispensing
+        status['faults'] = faults
+        status['syringe_id'] = syringe_id
 
         return status
 
@@ -4657,11 +4628,17 @@ class PumpCommThread(utils.CommManager):
 
         device = self._connected_devices[name]
 
+        status = self._get_status_inner(device)
+
+        self._return_value((name, cmd, status), comm_name)
+        logger.debug('Got pump %s full status', name)
+
+    def _get_status_inner(self, device):
         is_moving = device.is_moving()
         flow_rate = device.flow_rate
         flow_dir = device.get_flow_dir()
         pressure = device.get_pressure()
-        if self.is_syring_pump:
+        if device.is_syringe_pump:
             volume = device.volume
             refill_rate = device.refill_rate
         else:
@@ -4679,6 +4656,7 @@ class PumpCommThread(utils.CommManager):
             'valve_pos'     : valve_pos,
             }
 
+        return status
 
     def _send_pump_cmd(self, name, val, get_response=True, **kwargs):
         """
@@ -5266,7 +5244,7 @@ class PumpPanel(utils.DevicePanel):
             # self._update_status_cmd(get_pressure_cmd, 1)
 
             get_full_status_cmd = ['get_full_status', [self.name,], {}]
-            self._update_status_cmd(get_full_status, 1)
+            self._update_status_cmd(get_full_status_cmd, 1)
 
             get_settings_cmd = ['get_settings', [self.name,], {}]
             self._update_status_cmd(get_settings_cmd, 5)
