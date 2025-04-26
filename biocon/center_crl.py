@@ -99,7 +99,7 @@ def do_centering_scan(scan_settings):
 
     return center
 
-def _calc_fw_position(mtr_pos, scaler_vals, fw_height):
+def calc_fw_position(mtr_pos, scaler_vals, fw_height):
     """
     FW height is the value at which to calulcate the FW. So fw_height
     of 0.5 calcultes FW half max, a fw_height of 0.25 would be FW quarter max,
