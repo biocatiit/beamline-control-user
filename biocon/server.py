@@ -504,15 +504,15 @@ if __name__ == '__main__':
 
             # Teledyne SSI Reaxus pumps with scaling
             setup_pumps = [
-                {'name': 'Pump 4', 'args': ['SSI Next Gen', 'COM14'],
+                {'name': 'Buffer 2', 'args': ['SSI Next Gen', 'COM14'],
                     'kwargs': {'flow_rate_scale': 1.0583,
                     'flow_rate_offset': -33.462/1000,'scale_type': 'up'},
                     'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-                {'name': 'Pump 3', 'args': ['SSI Next Gen', 'COM17'],
+                {'name': 'Sample', 'args': ['SSI Next Gen', 'COM17'],
                     'kwargs': {'flow_rate_scale': 1.0135,
                     'flow_rate_offset': 5.1251/1000,'scale_type': 'up'},
                     'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-                {'name': 'Pump 2', 'args': ['SSI Next Gen', 'COM18'],
+                {'name': 'Buffer 1', 'args': ['SSI Next Gen', 'COM18'],
                     'kwargs': {'flow_rate_scale': 1.0497,
                     'flow_rate_offset': -34.853/1000,'scale_type': 'up'},
                     'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
@@ -523,8 +523,8 @@ if __name__ == '__main__':
                 #     'kwargs': {'positions' : 2}},
                 {'name': 'Injection 1', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo14'],
                     'kwargs': {'positions' : 2}},
-                {'name': 'Injection 2', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo14'],
-                    'kwargs': {'positions' : 2}},
+                # {'name': 'Injection 2', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo14'],
+                #     'kwargs': {'positions' : 2}},
                 ]
 
             setup_fms = [
@@ -579,32 +579,34 @@ if __name__ == '__main__':
         elif exp_type == 'trsaxs_laminar':
             # Laminar flow
             setup_pumps = [
-                {'name': 'Buffer', 'args': ['Pico Plus', 'COM11'],
-                    'kwargs': {'syringe_id': '3 mL, Medline P.C.',
-                    'pump_address': '00', 'dual_syringe': 'False'},
-                    'ctrl_args': {'flow_rate' : '0.068', 'refill_rate' : '3'}},
-                {'name': 'Sample', 'args': ['Pico Plus', 'COM9'],
-                    'kwargs': {'syringe_id': '1 mL, Medline P.C.',
-                    'pump_address': '00', 'dual_syringe': 'False'},
-                    'ctrl_args': {'flow_rate' : '0.009', 'refill_rate' : '1.0'}},
                 {'name': 'Sheath', 'args': ['Pico Plus', 'COM7'],
                     'kwargs': {'syringe_id': '1 mL, Medline P.C.',
                     'pump_address': '00', 'dual_syringe': 'False'},
                     'ctrl_args': {'flow_rate' : '0.002', 'refill_rate' : '1.0'}},
+                {'name': 'Sample', 'args': ['Pico Plus', 'COM9'],
+                    'kwargs': {'syringe_id': '1 mL, Medline P.C.',
+                    'pump_address': '00', 'dual_syringe': 'False'},
+                    'ctrl_args': {'flow_rate' : '0.009', 'refill_rate' : '1.0'}},
+                 {'name': 'Buffer', 'args': ['Pico Plus', 'COM11'],
+                    'kwargs': {'syringe_id': '3 mL, Medline P.C.',
+                    'pump_address': '00', 'dual_syringe': 'False'},
+                    'ctrl_args': {'flow_rate' : '0.068', 'refill_rate' : '3'}},
                 ]
 
             setup_valves = [
-                {'name': 'Injection', 'args': ['Rheodyne', 'COM6'],
+                {'name': 'Injection', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo14'],
                     'kwargs': {'positions' : 2}},
-                {'name': 'Buffer 1', 'args': ['Rheodyne', 'COM10'],
-                    'kwargs': {'positions' : 6}},
-                {'name': 'Buffer 2', 'args': ['Rheodyne', 'COM4'],
-                    'kwargs': {'positions' : 6}},
-                 {'name': 'Sample', 'args': ['Rheodyne', 'COM3'],
-                    'kwargs': {'positions' : 6}},
+                # {'name': 'Injection', 'args': ['Rheodyne', 'COM6'],
+                #     'kwargs': {'positions' : 2}},
                 {'name': 'Sheath 1', 'args': ['Rheodyne', 'COM21'],
                     'kwargs': {'positions' : 6}},
                 {'name': 'Sheath 2', 'args': ['Rheodyne', 'COM8'],
+                    'kwargs': {'positions' : 6}},
+                {'name': 'Sample', 'args': ['Rheodyne', 'COM3'],
+                    'kwargs': {'positions' : 6}},
+                {'name': 'Buffer 1', 'args': ['Rheodyne', 'COM10'],
+                    'kwargs': {'positions' : 6}},
+                {'name': 'Buffer 2', 'args': ['Rheodyne', 'COM4'],
                     'kwargs': {'positions' : 6}},
                 ]
 
