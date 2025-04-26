@@ -82,7 +82,7 @@ def do_centering_scan(scan_settings):
         pv = shutter['pv']
         pv.put(close_val)
 
-    center, fwhm = self._calc_fw_position(mtr1_positions, scaler_vals,
+    center, fwhm = calc_fw_position(mtr1_positions, scaler_vals,
         fw_height)
 
     print('Found {} center at: {}'.format(scan_positioner, center))
