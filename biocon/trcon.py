@@ -26,6 +26,7 @@ import logging
 import sys
 import math
 from decimal import Decimal as D
+from decimal import ROUND_CEILING
 import time
 import threading
 import copy
@@ -884,7 +885,7 @@ class TRScanPanel(wx.Panel):
                 try:
                     return_vals = self._calc_exposure_params()
                 except Exception:
-                    # traceback.print_exc()
+                    traceback.print_exc()
                     return_vals=[['calc_exposure_params_error'],]
 
                 # print(return_vals)
@@ -1087,9 +1088,13 @@ class TRScanPanel(wx.Panel):
                         pco_end -= min(encoder_resolution, pco_step)
 
                     if isinstance(pco_step, float):
-                        num_images = int(round(float(abs(pco_end-pco_start))/pco_step))
+                        # num_images = int(round(float(abs(pco_end-pco_start))/pco_step))
+                        num_images = int(round(ceil(float(abs(pco_end-pco_start))/pco_step)))
                     else:
-                        num_images = int(round(abs(pco_end-pco_start)/pco_step))
+                        # num_images = int(round(abs(pco_end-pco_start)/pco_step))
+                        num_images = abs(pco_end-pco_start)/pco_step
+                        num_images = num_images.to_integral_exact(rounding=ROUND_CEILING)
+                        num_images = int(num_images)
 
                     if delta_t < float(self.settings['pco_pulse_width'])*2/1e6:
                         errors.append(('Exposure period (greater than 2*PCO '
@@ -2680,9 +2685,22 @@ class TRFlowPanel(wx.Panel):
                     all_continuous = False
                     break
 
+        self.refill_after_run = wx.CheckBox(basic_flow_parent, label='Refill pumps after experiment')
+        self.refill_after_run.SetValue(False)
+        self.refill_after_run.Hide()
+
+        self.change_buffer = wx.Button(basic_flow_parent, label='Change Buffer')
+        self.change_buffer.Bind(wx.EVT_BUTTON, self._on_change_buffer)
+        self.change_buffer.Hide()
+
+        self.stop_change_buffer = wx.Button(basic_flow_parent, label='Stop Buffer Change')
+        self.stop_change_buffer.Bind(wx.EVT_BUTTON, self._on_stop_change_buffer)
+        self.stop_change_buffer.Disable()
+        self.stop_change_buffer.Hide()
+
         if not all_continuous:
-            self.refill_after_run = wx.CheckBox(basic_flow_parent, label='Refill pumps after experiment')
             self.refill_after_run.SetValue(True)
+            self.refill_after_run.Show()
 
             refill_all = wx.Button(basic_flow_parent, label='Refill pumps')
             refill_all.Bind(wx.EVT_BUTTON, self._on_refill_all)
@@ -2690,12 +2708,8 @@ class TRFlowPanel(wx.Panel):
             purge_all = wx.Button(basic_flow_parent, label='Purge pumps')
             purge_all.Bind(wx.EVT_BUTTON, self._on_purge_all)
 
-            self.change_buffer = wx.Button(basic_flow_parent, label='Change Buffer')
-            self.change_buffer.Bind(wx.EVT_BUTTON, self._on_change_buffer)
-
-            self.stop_change_buffer = wx.Button(basic_flow_parent, label='Stop Buffer Change')
-            self.stop_change_buffer.Bind(wx.EVT_BUTTON, self._on_stop_change_buffer)
-            self.stop_change_buffer.Disable()
+            self.change_buffer.Show()
+            self.stop_change_buffer.Show()
 
         flow_button_sizer = wx.GridBagSizer(vgap=self._FromDIP(2), hgap=self._FromDIP(2))
         flow_button_sizer.Add(start_all, (0,0), flag=wx.ALIGN_CENTER_VERTICAL)
@@ -2709,6 +2723,13 @@ class TRFlowPanel(wx.Panel):
             flow_button_sizer.Add(refill_all, (3,0), span=(1,1),
                 flag=wx.ALIGN_CENTER_VERTICAL)
             flow_button_sizer.Add(purge_all, (3,1), span=(1,1),
+                flag=wx.ALIGN_CENTER_VERTICAL)
+            flow_button_sizer.Add(self.change_buffer, (4,0), span=(1,1),
+                flag=wx.ALIGN_CENTER_VERTICAL)
+            flow_button_sizer.Add(self.stop_change_buffer, (4,1), span=(1,1),
+                flag=wx.ALIGN_CENTER_VERTICAL)
+        else:
+            flow_button_sizer.Add(self.refill_after_run, (2,0), span=(1,2),
                 flag=wx.ALIGN_CENTER_VERTICAL)
             flow_button_sizer.Add(self.change_buffer, (4,0), span=(1,1),
                 flag=wx.ALIGN_CENTER_VERTICAL)
@@ -2845,7 +2866,7 @@ class TRFlowPanel(wx.Panel):
         self.buffer2_pump_panels = []
         self.pump_panels = {}
 
-        for pump in self.settings['buffer1_pump']:
+        for pump in self.settings['buffer2_pump']:
             panel = TRPumpPanel(pump_parent, self, pump)
 
             pump_sizer.Add(panel, flag=wx.LEFT|wx.TOP|wx.BOTTOM,
@@ -2853,7 +2874,7 @@ class TRFlowPanel(wx.Panel):
 
             self.pump_panels[pump['name']] = panel
 
-            self.buffer1_pump_panels.append(panel)
+            self.buffer2_pump_panels.append(panel)
 
         for pump in self.settings['sample_pump']:
             panel = TRPumpPanel(pump_parent, self, pump)
@@ -2865,7 +2886,7 @@ class TRFlowPanel(wx.Panel):
 
             self.sample_pump_panels.append(panel)
 
-        for pump in self.settings['buffer2_pump']:
+        for pump in self.settings['buffer1_pump']:
             panel = TRPumpPanel(pump_parent, self, pump)
 
             pump_sizer.Add(panel, flag=wx.LEFT|wx.TOP|wx.BOTTOM,
@@ -2873,7 +2894,7 @@ class TRFlowPanel(wx.Panel):
 
             self.pump_panels[pump['name']] = panel
 
-            self.buffer2_pump_panels.append(panel)
+            self.buffer1_pump_panels.append(panel)
 
         pump_sizer.AddSpacer(self._FromDIP(2))
 
@@ -4147,7 +4168,7 @@ class TRFlowPanel(wx.Panel):
         start_condition = settings['start_condition']
         autoinject = settings['autoinject']
         autoinject_valve_position = self.settings['autoinject_valve_pos']
-        autoinject_delay = settings['autinect_delay']
+        autoinject_delay = settings['autoinject_delay']
         start_delay = settings['start_delay']
         start_flow_rate = settings['start_flow']
 
@@ -5447,28 +5468,29 @@ default_trsaxs_settings = {
     'device_communication'  : 'remote',
     # 'injection_valve'       : [{'name': 'Injection', 'args': ['Rheodyne', 'COM6'],  #Chaotic flow
     #                             'kwargs': {'positions' : 2}},],
-    'injection_valve'       : [{'name': 'Injection 1', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo14'],
+    'injection_valve'       : [{'name': 'Injection', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo14'],
                                     'kwargs': {'positions' : 2}},
-                                {'name': 'Injection 2', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo14'],
-                                    'kwargs': {'positions' : 2}},],
+                                # {'name': 'Injection 2', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo14'],
+                                #     'kwargs': {'positions' : 2}},
+                                ],
     'sample_valve'          : [],
     'buffer1_valve'         : [],
     'buffer2_valve'         : [],
     'buffer2_pump'          : [{'name': 'Buffer 2', 'args': ['SSI Next Gen', 'COM14'],
                                 'kwargs': {'flow_rate_scale': 1.0583,
                                 'flow_rate_offset': -33.462/1000,'scale_type': 'up'},
-                                'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
-                                'max_pressure': 1800, 'continuous': True}}],
+                                'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 2.0,
+                                'max_pressure': 2000, 'continuous': True}}],
     'sample_pump'           : [{'name': 'Sample', 'args': ['SSI Next Gen', 'COM17'],
                                 'kwargs': {'flow_rate_scale': 1.0135,
                                 'flow_rate_offset': 5.1251/1000,'scale_type': 'up'},
-                                'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
+                                'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 2.0,
                                 'max_pressure': 1800, 'continuous': True}}],
     'buffer1_pump'           : [{'name': 'Buffer 1', 'args': ['SSI Next Gen', 'COM18'],
                                 'kwargs': {'flow_rate_scale': 1.0497,
                                 'flow_rate_offset': -34.853/1000,'scale_type': 'up'},
-                                'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.0,
-                                'max_pressure': 1800, 'continuous': True}}],
+                                'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 2.0,
+                                'max_pressure': 2000, 'continuous': True}}],
     'outlet_fm'             : {'name': 'outlet', 'args' : ['BFS', 'COM5'], 'kwargs': {}},
     'injection_valve_label' : 'Injection',
     'sample_valve_label'    : 'Sample',
