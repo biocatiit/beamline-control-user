@@ -8,7 +8,7 @@ import XPS_C8_drivers as xps_drivers
 
 import motorcon
 
-def do_centering_scan(self, scan_settings):
+def do_centering_scan(scan_settings):
         start = scan_settings['start']
         stop = scan_settings['stop']
         step = scan_settings['step']
@@ -99,7 +99,7 @@ def do_centering_scan(self, scan_settings):
 
         return center
 
-def _calc_fw_position(self, mtr_pos, scaler_vals, fw_height):
+def _calc_fw_position(mtr_pos, scaler_vals, fw_height):
         """
         FW height is the value at which to calulcate the FW. So fw_height
         of 0.5 calcultes FW half max, a fw_height of 0.25 would be FW quarter max,
@@ -198,7 +198,6 @@ if __name__ == 'main':
 
 
     scan_settings = {
-        'axis'          : '',
         'start'         : -1,
         'stop'           : 1,
         'step'          : 0.1,
