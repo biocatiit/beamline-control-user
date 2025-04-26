@@ -406,8 +406,8 @@ if __name__ == '__main__':
     port4 = '5559'
 
     # exp_type = 'coflow' #coflow or trsaxs_laminar or trsaxs_chaotic or hplc
-    exp_type = 'trsaxs_chaotic'
-    # exp_type = 'trsaxs_laminar'
+    # exp_type = 'trsaxs_chaotic'
+    exp_type = 'trsaxs_laminar'
     # exp_type = 'hplc'
 
 
@@ -521,7 +521,7 @@ if __name__ == '__main__':
             setup_valves = [
                 # {'name': 'Injection', 'args': ['Rheodyne', 'COM6'],
                 #     'kwargs': {'positions' : 2}},
-                {'name': 'Injection 1', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo14'],
+                {'name': 'Injection', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo14'],
                     'kwargs': {'positions' : 2}},
                 # {'name': 'Injection 2', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo14'],
                 #     'kwargs': {'positions' : 2}},
