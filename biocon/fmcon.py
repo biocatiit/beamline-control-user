@@ -1109,8 +1109,8 @@ if __name__ == '__main__':
 
     # TR-SAXS flow meter
     setup_devices = [
-        # {'name': 'laminar_outlet', 'args' : ['BFS', 'COM13'], 'kwargs': {}},
-        {'name': 'chaotic_outlet', 'args' : ['BFS', 'COM5'], 'kwargs': {}},
+        {'name': 'laminar_outlet', 'args' : ['BFS', 'COM13'], 'kwargs': {}},
+        # {'name': 'chaotic_outlet', 'args' : ['BFS', 'COM5'], 'kwargs': {}},
         ]
 
     # # Simulated flow meter
