@@ -26,6 +26,7 @@ import logging
 import sys
 import math
 from decimal import Decimal as D
+from decimal import ROUND_CEILING
 import time
 import threading
 import copy
@@ -884,7 +885,7 @@ class TRScanPanel(wx.Panel):
                 try:
                     return_vals = self._calc_exposure_params()
                 except Exception:
-                    # traceback.print_exc()
+                    traceback.print_exc()
                     return_vals=[['calc_exposure_params_error'],]
 
                 # print(return_vals)
@@ -1087,9 +1088,13 @@ class TRScanPanel(wx.Panel):
                         pco_end -= min(encoder_resolution, pco_step)
 
                     if isinstance(pco_step, float):
-                        num_images = int(round(float(abs(pco_end-pco_start))/pco_step))
+                        # num_images = int(round(float(abs(pco_end-pco_start))/pco_step))
+                        num_images = int(round(ceil(float(abs(pco_end-pco_start))/pco_step)))
                     else:
-                        num_images = int(round(abs(pco_end-pco_start)/pco_step))
+                        # num_images = int(round(abs(pco_end-pco_start)/pco_step))
+                        num_images = abs(pco_end-pco_start)/pco_step
+                        num_images = num_images.to_integral_exact(rounding=ROUND_CEILING)
+                        num_images = int(num_images)
 
                     if delta_t < float(self.settings['pco_pulse_width'])*2/1e6:
                         errors.append(('Exposure period (greater than 2*PCO '
