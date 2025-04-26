@@ -2541,7 +2541,7 @@ class SSINextGenPump(Pump):
                 self._send_flow_rate_cmd(next_flow_rate)
 
                 current_flow_rate = next_flow_rate
-                time.sleep(0.01)
+                time.sleep(0.01) #Yield for other threads
 
         self._ramping_flow = False
         self._accel_stop.clear()
