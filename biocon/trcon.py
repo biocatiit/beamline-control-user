@@ -3474,7 +3474,7 @@ class TRFlowPanel(wx.Panel):
                 if pump_panel.continuous_flow:
                     ft = -1
                 else:
-                    # max_vol = pump_panel.get_max_volume()
+                    max_vol = pump_panel.get_max_volume()
                     pump_volume = float(pump_panel.get_status_volume())
                     flow_rate = pump_panel.get_target_flow_rate()
                     ft = pump_volume/flow_rate
@@ -3493,6 +3493,31 @@ class TRFlowPanel(wx.Panel):
             if self.settings['autostart_flow_ratio'] != 0:
                 start_flow = round(float(self.total_flow.GetValue())*self.settings['autostart_flow_ratio'], 5)
                 self.start_flow.SetValue(str(start_flow))
+
+        except Exception:
+            pass
+
+    def update_current_flow_time(self):
+        flow_times = []
+        try:
+            for pump_panel in self.pump_panels.values():
+                if pump_panel.continuous_flow:
+                    ft = -1
+                else:
+                    pump_volume = float(pump_panel.get_status_volume())
+                    flow_rate = pump_panel.get_target_flow_rate()
+                    ft = pump_volume/flow_rate
+
+                flow_times.append(ft)
+
+            flow_times = np.array(flow_times)
+
+            if all(flow_times == -1):
+                ft_label = 'N/A'
+            else:
+                ft_label ='{}'.format(round(min(flow_times[flow_times>-1])*60, 2))
+
+            self.current_flow_time.SetLabel(ft_label)
 
         except Exception:
             pass
@@ -3852,6 +3877,7 @@ class TRFlowPanel(wx.Panel):
         logger.info('Starting continuous monitoring of pump status')
 
         monitor_cmd = ('get_status_multi', ([pump for pump in self.pumps],), {})
+        flow_monitor_time = 0
 
         while not self.stop_pump_monitor.is_set():
             # start_time = time.time()
@@ -3930,6 +3956,10 @@ class TRFlowPanel(wx.Panel):
 
             # while time.time() - start_time < self.pump_monitor_interval:
             #     time.sleep(0.1)
+
+            if update_status and time.time() - flow_monitor_time > 5:
+                wx.CallAfter(self.update_current_flow_time)
+                flow_monitor_time = time.time()
 
             if self.stop_pump_monitor.is_set():
                 break
