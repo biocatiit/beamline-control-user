@@ -2398,6 +2398,7 @@ class TRFlowPanel(wx.Panel):
         self.error_dialog = None
         self._purging_pumps = False
         self._refilling_pumps = False
+        self._purge_refill_start_time = 0
         self._changing_buffer = False
         self._buffer_change_cycle = 0
 
@@ -3341,6 +3342,7 @@ class TRFlowPanel(wx.Panel):
             return False
 
         self._refilling_pumps = True
+        self._purge_refill_start_time = time.time()
 
         self.pause_valve_monitor.clear()
         self.pause_pump_monitor.clear()
@@ -3436,6 +3438,7 @@ class TRFlowPanel(wx.Panel):
             return False
 
         self._purging_pumps = True
+        self._purge_refill_start_time = time.time()
         self.pause_valve_monitor.clear()
         self.pause_pump_monitor.clear()
         return True
@@ -3471,9 +3474,10 @@ class TRFlowPanel(wx.Panel):
                 if pump_panel.continuous_flow:
                     ft = -1
                 else:
-                    max_vol = pump_panel.get_max_volume()
+                    # max_vol = pump_panel.get_max_volume()
+                    pump_volume = float(pump_panel.get_status_volume())
                     flow_rate = pump_panel.get_target_flow_rate()
-                    ft = max_vol/flow_rate
+                    ft = pump_volume/flow_rate
 
                 flow_times.append(ft)
 
@@ -3855,6 +3859,8 @@ class TRFlowPanel(wx.Panel):
             #     not self.pause_pump_monitor.is_set()):
             #     self.get_all_pump_status()
 
+            update_status = False
+
             if len(self.pump_status_q) > 0:
                 new_status = self.pump_status_q.popleft()
 
@@ -3866,58 +3872,61 @@ class TRFlowPanel(wx.Panel):
                 if device is not None:
                     if cmd == 'get_full_status':
                         self._set_pump_status(device, val)
+                        update_status = True
                     elif cmd == 'get_settings':
                         self._set_pump_settings(device, val)
             else:
                 time.sleep(0.1)
 
-            if self._purging_pumps:
-                all_done = True
-                finished_pumps = []
-                for pump_name, rate in self.purge_starting_frs.items():
-                    pump_panel = self.pump_panels[pump_name]
+            if self._purging_pumps and update_status:
+                if time.time() - self._purge_refill_start_time > 10:
+                    all_done = True
+                    finished_pumps = []
+                    for pump_name, rate in self.purge_starting_frs.items():
+                        pump_panel = self.pump_panels[pump_name]
 
-                    moving = pump_panel.moving
-                    if not moving:
-                        wx.CallAfter(pump_panel.change_flowrate, flow_rate=rate)
-                        finished_pumps.append(pump_name)
+                        moving = pump_panel.moving
+                        if not moving:
+                            wx.CallAfter(pump_panel.change_flowrate, flow_rate=rate)
+                            finished_pumps.append(pump_name)
 
-                    all_done = all_done and not moving
+                        all_done = all_done and not moving
 
-                for pump in finished_pumps:
-                    del self.purge_starting_frs[pump]
+                    for pump in finished_pumps:
+                        del self.purge_starting_frs[pump]
 
-                if all_done:
-                    self._purging_pumps = False
+                    if all_done:
+                        self._purging_pumps = False
 
-                    if self._changing_buffer:
-                        if self._buffer_change_cycle < self.settings['buffer_change_cycles']:
-                            wx.CallAfter(self.refill_all)
-                            self._buffer_change_cycle += 1
-                        else:
-                            self._changing_buffer = False
-                            wx.CallAfter(self.change_buffer.Enable)
-                            wx.CallAfter(self.stop_change_buffer.Disable)
-                            logger.info('Finished buffer change')
+                        if self._changing_buffer:
+                            if self._buffer_change_cycle < self.settings['buffer_change_cycles']:
+                                wx.CallAfter(self.refill_all)
+                                self._buffer_change_cycle += 1
+                            else:
+                                self._changing_buffer = False
+                                wx.CallAfter(self.change_buffer.Enable)
+                                wx.CallAfter(self.stop_change_buffer.Disable)
+                                logger.info('Finished buffer change')
 
-            if self._refilling_pumps:
-                all_done = True
-                for pump_panel in self.pump_panels.values():
-                    moving = pump_panel.moving
-                    all_done = all_done and not moving
+            if self._refilling_pumps and update_status:
+                if time.time() - self._purge_refill_start_time > 10:
+                    all_done = True
+                    for pump_panel in self.pump_panels.values():
+                        moving = pump_panel.moving
+                        all_done = all_done and not moving
 
-                if all_done:
-                    self._refilling_pumps = False
+                    if all_done:
+                        self._refilling_pumps = False
 
-                    if self._changing_buffer:
-                        if self._buffer_change_cycle < self.settings['buffer_change_cycles']:
-                            wx.CallAfter(self.purge_all)
-                            logger.info('Starting buffer change cycle %s', self._buffer_change_cycle+1)
-                        else:
-                            self._changing_buffer = False
-                            wx.CallAfter(self.change_buffer.Enable)
-                            wx.CallAfter(self.stop_change_buffer.Disable)
-                            logger.info('Finished buffer change')
+                        if self._changing_buffer:
+                            if self._buffer_change_cycle < self.settings['buffer_change_cycles']:
+                                wx.CallAfter(self.purge_all)
+                                logger.info('Starting buffer change cycle %s', self._buffer_change_cycle+1)
+                            else:
+                                self._changing_buffer = False
+                                wx.CallAfter(self.change_buffer.Enable)
+                                wx.CallAfter(self.stop_change_buffer.Disable)
+                                logger.info('Finished buffer change')
 
             # while time.time() - start_time < self.pump_monitor_interval:
             #     time.sleep(0.1)

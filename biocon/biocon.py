@@ -450,8 +450,8 @@ if __name__ == '__main__':
                                 'preparation'   : 'Intact',
                                 'notes'         : '',
                                 },
-        # 'metadata_type'     : 'auto',
-        'metadata_type'     : 'muscle',
+        'metadata_type'     : 'auto',
+        # 'metadata_type'     : 'muscle',
         }
 
     pipeline_settings = {
@@ -529,7 +529,7 @@ if __name__ == '__main__':
         ('trsaxs_scan', trcon.TRScanPanel),
         ('trsaxs_flow', trcon.TRFlowPanel),
         # ('scan',    scancon.ScanPanel),
-        # ('metadata', metadata.ParamPanel),
+        ('metadata', metadata.ParamPanel),
         # ('pipeline', pipeline_ctrl.PipelineControl),
         # ('uv', spectrometercon.UVPanel),
         # ('hplc', biohplccon.HPLCPanel),
