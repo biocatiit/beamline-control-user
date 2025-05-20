@@ -175,6 +175,8 @@ class Autosampler(object):
 
         self.set_well_plate(self.settings['plate_type'])
 
+        return True
+
     def _init_motors(self):
         logger.info('Initializing autosampler motors')
 

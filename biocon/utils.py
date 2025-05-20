@@ -762,14 +762,16 @@ class CommManager(threading.Thread):
             #     logger.debug("Device already connected on %s", device)
 
             new_device = self.known_devices[device_type](name, device, **kwargs)
-            new_device.connect()
+            success = new_device.connect()
             self._connected_devices[name] = new_device
             self._connected_coms[device] = new_device
             logger.debug("Device %s connected", name)
 
             self._additional_connect_device(name, device_type, device, **kwargs)
+        else:
+            success = True
 
-        self._return_value((name, cmd, True), comm_name)
+        self._return_value((name, cmd, success), comm_name)
 
     def _additional_connect_device(self, name, device_type, device, **kwargs):
         pass # Device specific stuff here if needed

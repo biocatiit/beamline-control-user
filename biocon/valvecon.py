@@ -197,6 +197,8 @@ class Valve(object):
        if not self.connected:
             self.connected = True
 
+        return self.connected
+
     def get_status(self):
         pass
 
@@ -259,6 +261,8 @@ class RheodyneValve(Valve):
             # self.send_command('M', False) #Homes valve
 
             self.connected = True
+
+        return self.connected
 
     def get_status(self):
         status, success = self.send_command('S')
@@ -391,6 +395,8 @@ class RheodyneValveTTL(Valve):
 
             self.connected = connected
 
+        return self.connected
+
     def _update_position(self, value, **kwargs):
         self._position = self._rev_position_trans[value]
 
@@ -440,6 +446,8 @@ class CheminertValve(Valve):
                 self.valve_comm = SerialComm(self.device, self._baud)
 
             self.connected = True
+
+        return self.connected
 
     def get_position(self):
         position = self.send_command('CP')[0]

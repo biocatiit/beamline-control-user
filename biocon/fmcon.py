@@ -227,6 +227,8 @@ class BFS(FlowMeter):
 
             self.connected = True
 
+        return self.connected
+
     @property
     def flow_rate(self):
         if not self.remote:

@@ -328,6 +328,8 @@ class Spectrometer(object):
         if self._live_update and not self._taking_series:
             self._live_update_evt.set()
 
+        return self.connected
+
     def disconnect(self):
         logger.info('Spectrometer %s: Disconnecting', self.name)
         self._stop_autosave_event.set()
@@ -1266,6 +1268,8 @@ class StellarnetUVVis(Spectrometer):
 
         if self._live_update and not self._taking_series:
             self._live_update_evt.set()
+
+        return self.connected
 
     def disconnect(self):
         logger.info('Spectrometer %s: Disconnecting', self.name)

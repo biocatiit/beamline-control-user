@@ -504,6 +504,8 @@ class Pump(object):
         if not self.connected:
             self.connected = True
 
+        return self.connected
+
     @property
     def flow_rate(self):
         """
@@ -1055,6 +1057,8 @@ class M50Pump(Pump):
 
             self.connected = True
 
+        return self.connected
+
     @property
     def flow_rate(self):
         rate = float(self._flow_rate)/self.cal
@@ -1229,6 +1233,8 @@ class PHD4400Pump(SyringePump):
 
             self.connected = True
 
+        return self.connected
+
     def send_cmd(self, cmd, get_response=True):
         """
         Sends a command to the pump.
@@ -1351,6 +1357,8 @@ class PicoPlusPump(SyringePump):
             self.send_cmd('nvram none')
 
             self.connected = True
+
+        return self.connected
 
     def send_cmd(self, cmd, get_response=True):
         """
@@ -1503,6 +1511,8 @@ class NE500Pump(SyringePump):
                 self.pump_comm = SerialComm(self.device, baudrate=19200)
 
             self.connected = True
+
+        return self.connected
 
     def send_cmd(self, cmd, get_response=True):
         """
@@ -1695,6 +1705,8 @@ class HamiltonPSD6Pump(SyringePump):
                 self.pump_comm = SerialComm(self.device, baudrate=9600)
 
             self.connected = True
+
+        return self.connected
 
     def initialize(self):
         # self.send_cmd('Z10')
@@ -2154,6 +2166,8 @@ class SSINextGenPump(Pump):
                 self.pump_comm = SerialComm(self.device)
 
             self.connected = True
+
+        return self.connected
 
     @property
     def pressure_units(self):
@@ -2790,6 +2804,8 @@ class OB1(object):
 
             self.connected = True
 
+        return self.connected
+
     def calibrate(self):
         calib = (ctypes.c_double*1000)()
         error = Elveflow.OB1_Calib(self.instr_ID.value, calib, 1000)
@@ -2916,6 +2932,8 @@ class OB1Pump(Pump):
             self.calib = self._ob1.calib
 
             self.connected = True
+
+        return self.connected
 
     @property
     def pressure_units(self):
