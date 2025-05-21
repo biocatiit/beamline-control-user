@@ -44,8 +44,9 @@ matplotlib.rcParams['backend'] = 'WxAgg'
 
 
 import client
-# import pumpcon
-# import fmcon
+import pumpcon
+import fmcon
+import valvecon
 import utils
 
 class CoflowControl(object):
@@ -133,8 +134,8 @@ class CoflowControl(object):
             self.init_connections()
 
             if not self.timeout_event.is_set():
-                self.init_pumps()
                 self.init_fms()
+                self.init_pumps()
                 self.init_valves()
 
             if self.settings['use_overflow_control']:
@@ -173,17 +174,17 @@ class CoflowControl(object):
         self.timeout_event = threading.Event()
 
         if self.settings['device_communication'] == 'local':
-            self.coflow_pump_con = self.settings['coflow_pump_com_thread']
+            self.coflow_pump_con = pumpcon.PumpCommThread('PumpCon')
             self.coflow_pump_con.add_new_communication('coflow_control',
                 self.coflow_pump_cmd_q, self.coflow_pump_return_q,
                 self.coflow_pump_status_q)
 
-            self.coflow_fm_con = self.settings['coflow_fm_com_thread']
+            self.coflow_fm_con = fmcon.FlowMeterCommThread('FMCon')
             self.coflow_fm_con.add_new_communication('coflow_control',
                 self.coflow_fm_cmd_q, self.coflow_fm_return_q,
                 self.coflow_fm_status_q)
 
-            self.coflow_valve_con = self.settings['coflow_valve_com_thread']
+            self.coflow_valve_con = valvecon.ValveCommThread('ValveCon')
             self.coflow_valve_con.add_new_communication('coflow_control',
                 self.coflow_valve_cmd_q, self.coflow_valve_return_q,
                 self.coflow_valve_status_q)
@@ -234,7 +235,14 @@ class CoflowControl(object):
         outlet_args.insert(0, self.outlet_pump_name)
         outlet_connect_cmd = ['connect', outlet_args, outlet_kwargs]
 
-        logger.info('Initializing coflow pumps meters on startup')
+        if self.local_devices:
+            if outlet_args[1] == 'OB1 Pump':
+                fr_cmd = ['get_bfs_instr_id', [self.settings['outlet_fm']['name'],], {}]
+                bfs_instr_id = self._send_fmcmd(fr_cmd, True)
+                outlet_kwargs['bfs_instr_ID'] = bfs_instr_id
+                outlet_kwargs['fm_comm_lock'] = self.settings['outlet_fm']['kwargs']['fm_comm_lock']
+
+        logger.info('Initializing coflow pumps on startup')
 
         self.pump_sheath_init = self._send_pumpcmd(sheath_connect_cmd, response=True)
 
@@ -1517,6 +1525,9 @@ class CoflowCommThread(utils.CommManager):
             device = self._connected_devices[name]
             device.stop()
 
+    def get_device(self, name):
+        return self._connected_devices[name]
+
 
 class CoflowPanel(utils.DevicePanel):
     """
@@ -1574,7 +1585,6 @@ class CoflowPanel(utils.DevicePanel):
         self.connected = self._send_cmd(connect_cmd, True)
 
         if self.connected:
-
 
             self.warning_dialog = None
             self.error_dialog = None
@@ -1947,6 +1957,26 @@ class CoflowPanel(utils.DevicePanel):
 
         adv_sizer.Add(actions_box_sizer, flag=wx.ALL|wx.EXPAND, border=self._FromDIP(2))
 
+
+        if self.top_settings['device_communication'] == 'local':
+            show_pump_btn = wx.Button(adv_sizer, label='Pump Ctrl.')
+            show_fm_btn = wx.Button(adv_sizer, label='Flow Meter Ctrl.')
+            show_valve_btn = wx.Button(adv_sizer, label='Valve Ctrl.')
+
+            show_pump_btn.Bind(wx.EVT_BUTTON, self._on_show_pumps)
+            show_fm_btn.Bind(wx.EVT_BUTTON, self._on_show_fms)
+            show_valve_btn.Bind(wx.EVT_BUTTON, self._on_show_valve)
+
+            local_ctrl_sizer = wx.BoxSizer(wx.HORIZONTAL)
+            local_ctrl_sizer.Add(show_pump_btn)
+            local_ctrl_sizer.Add(show_fm_btn, flag=wx.LEFT, border=self._FromDIP(5))
+            local_ctrl_sizer.Add(show_valve_btn, flag=wx.LEFT, border=self._FromDIP(5))
+
+
+            adv_sizer.Add(local_ctrl_sizer,
+                flag=wx.LEFT|wx.RIGHT|wx.BOTTOM|wx.EXPAND, border=self._FromDIP(2))
+
+
         adv_win.SetSizer(adv_sizer)
 
         coflow_ctrl_sizer.Add(flow_rate_sizer, border=self._FromDIP(2), flag=wx.TOP|wx.LEFT|wx.RIGHT)
@@ -2089,6 +2119,51 @@ class CoflowPanel(utils.DevicePanel):
             wx.FindWindowByName('biocon').SendSizeEvent()
         except Exception:
             pass
+
+    def _on_show_pumps(self, evt):
+        coflow_ctrl = self.com_thread.get_device(self.settings['device_init']['name'])
+        pump_com_thread = coflow_ctrl.coflow_pump_con
+
+        setup_pumps = [self.settings['sheath_pump'], self.settings['outlet_pump']]
+        pump_settings = {
+            'remote'        : False,
+            'device_init'   : setup_pumps,
+            'com_thread'    : pump_com_thread,
+        }
+
+        pump_frame = pumpcon.PumpFrame('PumpFrame', pump_settings, parent=self,
+            title='Pump Control')
+        pump_frame.Show()
+
+    def _on_show_fms(self, evt):
+        coflow_ctrl = self.com_thread.get_device(self.settings['device_init']['name'])
+        fm_com_thread = coflow_ctrl.coflow_fm_con
+
+        setup_fms = [self.settings['sheath_fm'], self.settings['outlet_fm']]
+        fm_settings = {
+            'remote'        : False,
+            'device_init'   : setup_fms,
+            'com_thread'    : fm_com_thread,
+        }
+
+        fm_frame = fmcon.FlowMeterFrame('FMFrame', fm_settings, parent=self,
+            title='Flow Meter Control')
+        fm_frame.Show()
+
+    def _on_show_valves(self, evt):
+        coflow_ctrl = self.com_thread.get_device(self.settings['device_init']['name'])
+        valve_com_thread = coflow_ctrl.coflow_valve_con
+
+        setup_valves = [self.settings['sheath_valve'], self.settings['outlet_valve']]
+        valve_settings = {
+            'remote'        : False,
+            'device_init'   : setup_valves,
+            'com_thread'    : valve_com_thread,
+        }
+
+        valve_frame = valvecon.ValveFrame('ValveFrame', valve_settings, parent=self,
+            title='Pump Control')
+        valve_frame.Show()
 
     def showMessageDialog(self, parent, msg, title, style):
         dialog = wx.MessageDialog(parent, msg, title, style=style)
@@ -3261,47 +3336,24 @@ class CoflowPlotFrame(wx.Frame):
 
 
 
-class CoflowFrame(wx.Frame):
+class CoflowFrame(utils.DeviceFrame):
     """
-    A lightweight frame allowing one to work with arbitrary number of pumps.
-    Only meant to be used when the pumpcon module is run directly,
+    A lightweight frame allowing one to work with arbitrary number of coflow controls.
+    Only meant to be used when the hplccon module is run directly,
     rather than when it is imported into another program.
     """
-    def __init__(self, settings, connect, *args, **kwargs):
+    def __init__(self, name, settings, *args, **kwargs):
         """
-        Initializes the pump frame. Takes args and kwargs for the wx.Frame class.
+        Initializes the HPLC frame. Takes args and kwargs for the wx.Frame class.
         """
-        super(CoflowFrame, self).__init__(*args, **kwargs)
-        logger.debug('Setting up the CoflowFrame')
+        super(CoflowFrame, self).__init__(name, settings, CoflowPanel,
+            *args, **kwargs)
 
-        self.Bind(wx.EVT_CLOSE, self._on_exit)
+        # Enable these to init devices on startup
+        self.setup_devices = self.settings.pop('device_init', None)
 
-        self._create_layout(settings, connect)
+        self._init_devices()
 
-        self.Layout()
-        self.SendSizeEvent()
-        self.Fit()
-        self.Raise()
-
-    def _create_layout(self, settings, connect):
-        """Creates the layout"""
-        self.coflow_panel = CoflowPanel(settings, parent=self)
-
-        self.coflow_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        self.coflow_sizer.Add(self.coflow_panel, proportion=1, flag=wx.EXPAND)
-
-        top_sizer = wx.BoxSizer(wx.VERTICAL)
-        top_sizer.Add(self.coflow_sizer, proportion=1, flag=wx.EXPAND)
-
-        self.SetSizer(top_sizer)
-
-    def _on_exit(self, evt):
-        """Stops all current pump motions and then closes the frame."""
-        logger.debug('Closing the CoflowFrame')
-
-        self.coflow_panel.on_exit()
-
-        self.Destroy()
 
 default_coflow_settings = {
     'show_advanced_options'     : False,
@@ -3406,6 +3458,11 @@ if __name__ == '__main__':
     coflow_settings = default_coflow_settings
 
     coflow_settings['components'] = ['coflow']
+
+    # Local
+    coflow_comm_thread = CoflowCommThread('CoflowCon')
+    coflow_settings['device_communication'] = 'local'
+    coflow_settings['com_thread'] = coflow_comm_thread
 
     app = wx.App()
 

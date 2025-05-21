@@ -42,6 +42,7 @@ import fmcon
 import valvecon
 import spectrometercon
 import biohplccon
+import coflowcon
 import utils
 
 
@@ -52,7 +53,7 @@ class ControlServer(threading.Thread):
 
     def __init__(self, ip, port, name='ControlServer', pump_comm_locks = None,
         valve_comm_locks=None, start_pump=False, start_fm=False,
-        start_valve=False, start_uv=False, start_hplc=False):
+        start_valve=False, start_uv=False, start_hplc=False, start_coflow=False):
         """
         Initializes the custom thread. Important parameters here are the
         list of known commands ``_commands`` and known pumps ``known_pumps``.
@@ -82,6 +83,7 @@ class ControlServer(threading.Thread):
         self._start_valve = start_valve
         self._start_uv = start_uv
         self._start_hplc = start_hplc
+        self._start_coflow = start_coflow
 
     def run(self):
         """
@@ -192,6 +194,25 @@ class ControlServer(threading.Thread):
                 }
 
             self._device_control['hplc'] = hplc_ctrl
+
+        if self._start_coflow:
+            coflow_cmd_q = deque()
+            coflow_return_q = deque()
+            coflow_status_q = deque()
+            coflow_con = coflowcon.CoflowCommThread('CoflowCon')
+            coflow_con.start()
+
+            coflow_con.add_new_communication('zmq_server', coflow_cmd_q,
+                coflow_return_q, coflow_status_q)
+
+            coflow_ctrl = {
+                'queue'     : coflow_cmd_q,
+                'answer_q'  : coflow_return_q,
+                'status_q'  : coflow_status_q,
+                'thread'    : coflow_con,
+                }
+
+            self._device_control['coflow'] = coflow_ctrl
 
         while True:
             try:
@@ -421,34 +442,6 @@ if __name__ == '__main__':
         ip = '164.54.204.192'
         # ip = '164.54.204.24'
 
-        # setup_pumps = [
-        #     {'name': 'sheath', 'args': ['VICI M50', 'COM3'],
-        #         'kwargs': {'flow_cal': '627.72', 'backlash_cal': '9.814'},
-        #         'ctrl_args': {'flow_rate': 1}},
-        #     {'name': 'outlet', 'args': ['VICI M50', 'COM4'],
-        #         'kwargs': {'flow_cal': '628.68', 'backlash_cal': '9.962'},
-        #         'ctrl_args': {'flow_rate': 1}},
-        #     ]
-
-        ob1_comm_lock = threading.RLock()
-
-        setup_pumps = [
-            {'name': 'sheath', 'args': ['VICI M50', 'COM5'],
-                'kwargs': {'flow_cal': '628.68', 'backlash_cal': '9.95'},
-                'ctrl_args': {'flow_rate': 1}},
-            {'name': 'outlet', 'args': ['OB1 Pump', 'COM8'],
-                'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
-                'min_pressure': -900, 'max_pressure': 1000, 'P': -2, 'I': -0.15,
-                'D': 0, 'bfs_instr_ID': None, 'comm_lock': ob1_comm_lock,
-                'calib_path': './resources/ob1_calib.txt'},
-                'ctrl_args': {}}
-            ]
-
-        setup_valves = [
-            {'name': 'Coflow Sheath', 'args': ['Cheminert', 'COM7'],
-                'kwargs': {'positions' : 10}},
-            ]
-
         spectrometer_settings = spectrometercon.default_spectrometer_settings
         spectrometer_settings['device_init'] = [{'name': 'CoflowUV',
             'args': ['StellarNet', None],
@@ -462,36 +455,82 @@ if __name__ == '__main__':
         spectrometer_settings['inline_panel'] = False
         spectrometer_settings['plot_refresh_t'] = 1
 
-        # setup_uv = [
-        #     {'name': 'CoflowUV', 'args': ['StellarNet', None], 'kwargs':
-        #     {'shutter_pv_name': '18ID:LJT4:2:Bo11',
-        #     'trigger_pv_name' : '18ID:LJT4:2:Bo12'}},
-        #     ]
 
+        #############
+        # New flow
+        #############
+
+        coflow_settings = coflowcon.default_coflow_settings
+
+        ob1_comm_lock = threading.RLock()
         outlet_fm_comm_lock = threading.Lock()
+        coflow_settings['device_communication'] = 'local'
+        coflow_settings['device_init']['outlet_pump']['kwargs']['comm_lock'] = ob1_comm_lock
+        coflow_settings['device_init']['outlet_fm']['kwargs']['comm_lock'] = outlet_fm_comm_lock
 
-        setup_fms = [
-            {'name': 'sheath', 'args' : ['BFS', 'COM6'], 'kwargs': {}},
-            {'name': 'outlet', 'args' : ['BFS', 'COM9'], 'kwargs':
-                {'comm_lock': outlet_fm_comm_lock}}
-            ]
 
-        # # Simulated devices for testing
+
+        # ############
+        # # Old flow
+        # ############
+        # # setup_pumps = [
+        # #     {'name': 'sheath', 'args': ['VICI M50', 'COM3'],
+        # #         'kwargs': {'flow_cal': '627.72', 'backlash_cal': '9.814'},
+        # #         'ctrl_args': {'flow_rate': 1}},
+        # #     {'name': 'outlet', 'args': ['VICI M50', 'COM4'],
+        # #         'kwargs': {'flow_cal': '628.68', 'backlash_cal': '9.962'},
+        # #         'ctrl_args': {'flow_rate': 1}},
+        # #     ]
+
+        # ob1_comm_lock = threading.RLock()
 
         # setup_pumps = [
-        #     {'name': 'sheath', 'args': ['Soft', None], 'kwargs': {}},
-        #     {'name': 'outlet', 'args': ['Soft', None], 'kwargs': {}},
+        #     {'name': 'sheath', 'args': ['VICI M50', 'COM5'],
+        #         'kwargs': {'flow_cal': '628.68', 'backlash_cal': '9.95'},
+        #         'ctrl_args': {'flow_rate': 1}},
+        #     {'name': 'outlet', 'args': ['OB1 Pump', 'COM8'],
+        #         'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
+        #         'min_pressure': -900, 'max_pressure': 1000, 'P': -2, 'I': -0.15,
+        #         'D': 0, 'bfs_instr_ID': None, 'comm_lock': ob1_comm_lock,
+        #         'calib_path': './resources/ob1_calib.txt'},
+        #         'ctrl_args': {}}
         #     ]
 
         # setup_valves = [
-        #     {'name': 'Coflow Sheath', 'args': ['Soft', None], 'kwargs':
-        #         {'positions': 10}},
+        #     {'name': 'Coflow Sheath', 'args': ['Cheminert', 'COM7'],
+        #         'kwargs': {'positions' : 10}},
         #     ]
 
+        # # setup_uv = [
+        # #     {'name': 'CoflowUV', 'args': ['StellarNet', None], 'kwargs':
+        # #     {'shutter_pv_name': '18ID:LJT4:2:Bo11',
+        # #     'trigger_pv_name' : '18ID:LJT4:2:Bo12'}},
+        # #     ]
+
+        # outlet_fm_comm_lock = threading.Lock()
+
         # setup_fms = [
-        #     {'name': 'sheath', 'args': ['Soft', None], 'kwargs': {}},
-        #     {'name': 'outlet', 'args': ['Soft', None], 'kwargs': {}},
+        #     {'name': 'sheath', 'args' : ['BFS', 'COM6'], 'kwargs': {}},
+        #     {'name': 'outlet', 'args' : ['BFS', 'COM9'], 'kwargs':
+        #         {'comm_lock': outlet_fm_comm_lock}}
         #     ]
+
+        # # # Simulated devices for testing
+
+        # # setup_pumps = [
+        # #     {'name': 'sheath', 'args': ['Soft', None], 'kwargs': {}},
+        # #     {'name': 'outlet', 'args': ['Soft', None], 'kwargs': {}},
+        # #     ]
+
+        # # setup_valves = [
+        # #     {'name': 'Coflow Sheath', 'args': ['Soft', None], 'kwargs':
+        # #         {'positions': 10}},
+        # #     ]
+
+        # # setup_fms = [
+        # #     {'name': 'sheath', 'args': ['Soft', None], 'kwargs': {}},
+        # #     {'name': 'outlet', 'args': ['Soft', None], 'kwargs': {}},
+        # #     ]
 
     elif exp_type.startswith('trsaxs'):
         # TR SAXS
@@ -660,8 +699,37 @@ if __name__ == '__main__':
 
     # Both
 
+    if exp_type == 'coflow':
 
-    if exp_type != 'hplc':
+        control_server_coflow = ControlServer(ip, port1, name='CoflowControlServer',
+            start_coflow=True)
+        control_server_coflow.start()
+
+        coflow_comm_thread = control_server_coflow.get_comm_thread('coflow')
+
+        coflow_settings['com_thread'] = coflow_comm_thread
+
+        coflow_frame = coflowcon.CoflowFrame('CoflowFrame', coflow_settings, parent=None,
+            title='Coflow Control')
+        coflow_frame.Show()
+
+        if has_uv:
+            # Coflow only
+            control_server_uv = ControlServer(ip, port4, name='UVControlServer',
+                start_uv=True)
+            control_server_uv.start()
+
+            time.sleep(1)
+            uv_comm_thread = control_server_uv.get_comm_thread('uv')
+
+            spectrometer_settings['com_thread'] = uv_comm_thread
+
+            uv_frame = spectrometercon.UVFrame('UVFrame', spectrometer_settings,
+                parent=None, title='UV Spectrometer Control')
+            uv_frame.Show()
+
+
+    elif exp_type != 'hplc':
         control_server_pump = ControlServer(ip, port1, name='PumpControlServer',
             start_pump=True)
         control_server_pump.start()
@@ -689,29 +757,29 @@ if __name__ == '__main__':
         fm_frame.Show()
 
 
-        if exp_type == 'coflow':
-            # For OB1 with feedback
-            fm_local_cmd_q = deque()
-            fm_local_ret_q = deque()
-            fm_local_status_q = deque()
+        # if exp_type == 'coflow':
+        #     # For OB1 with feedback
+        #     fm_local_cmd_q = deque()
+        #     fm_local_ret_q = deque()
+        #     fm_local_status_q = deque()
 
-            fm_comm_thread.add_new_communication('local', fm_local_cmd_q,
-                fm_local_ret_q, fm_local_status_q)
+        #     fm_comm_thread.add_new_communication('local', fm_local_cmd_q,
+        #         fm_local_ret_q, fm_local_status_q)
 
-            cmd = ['get_bfs_instr_id', [setup_fms[1]['name'],], {}]
+        #     cmd = ['get_bfs_instr_id', [setup_fms[1]['name'],], {}]
 
-            bfs_instr_id = utils.send_cmd(cmd, fm_local_cmd_q, fm_local_ret_q,
-                threading.Event(), threading.Lock(), False, 'fm', True)
+        #     bfs_instr_id = utils.send_cmd(cmd, fm_local_cmd_q, fm_local_ret_q,
+        #         threading.Event(), threading.Lock(), False, 'fm', True)
 
-            # cmd = ['start_remote', [setup_fms[1]['name'],], {}]
+        #     # cmd = ['start_remote', [setup_fms[1]['name'],], {}]
 
-            # utils.send_cmd(cmd, fm_local_cmd_q, fm_local_ret_q, threading.Event(),
-            #     threading.Lock(), False, 'fm', False)
+        #     # utils.send_cmd(cmd, fm_local_cmd_q, fm_local_ret_q, threading.Event(),
+        #     #     threading.Lock(), False, 'fm', False)
 
-            fm_comm_thread.remove_communication('local')
+        #     fm_comm_thread.remove_communication('local')
 
-            setup_pumps[1]['kwargs']['bfs_instr_ID'] = bfs_instr_id
-            setup_pumps[1]['kwargs']['fm_comm_lock'] = outlet_fm_comm_lock
+        #     setup_pumps[1]['kwargs']['bfs_instr_ID'] = bfs_instr_id
+        #     setup_pumps[1]['kwargs']['fm_comm_lock'] = outlet_fm_comm_lock
 
         pump_comm_thread = control_server_pump.get_comm_thread('pump')
 
@@ -738,20 +806,20 @@ if __name__ == '__main__':
             title='Valve Control')
         valve_frame.Show()
 
-        if exp_type == 'coflow' and has_uv:
-            # Coflow only
-            control_server_uv = ControlServer(ip, port4, name='UVControlServer',
-                start_uv=True)
-            control_server_uv.start()
+        # if exp_type == 'coflow' and has_uv:
+        #     # Coflow only
+        #     control_server_uv = ControlServer(ip, port4, name='UVControlServer',
+        #         start_uv=True)
+        #     control_server_uv.start()
 
-            time.sleep(1)
-            uv_comm_thread = control_server_uv.get_comm_thread('uv')
+        #     time.sleep(1)
+        #     uv_comm_thread = control_server_uv.get_comm_thread('uv')
 
-            spectrometer_settings['com_thread'] = uv_comm_thread
+        #     spectrometer_settings['com_thread'] = uv_comm_thread
 
-            uv_frame = spectrometercon.UVFrame('UVFrame', spectrometer_settings,
-                parent=None, title='UV Spectrometer Control')
-            uv_frame.Show()
+        #     uv_frame = spectrometercon.UVFrame('UVFrame', spectrometer_settings,
+        #         parent=None, title='UV Spectrometer Control')
+        #     uv_frame.Show()
 
     elif exp_type == 'hplc':
         control_server_hplc = ControlServer(ip, port1, name='HPLCControlServer',
@@ -775,7 +843,11 @@ if __name__ == '__main__':
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        if exp_type != 'hplc':
+        if exp_type == 'coflow':
+            control_server_coflow.stop()
+            control_server_coflow.join()
+
+        elif exp_type != 'hplc':
             control_server_pump.stop()
             control_server_pump.join()
 
