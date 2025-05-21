@@ -59,7 +59,7 @@ class AgilentHPLCStandard(AgilentHPLC):
     """
 
     def __init__(self, name, device, hplc_args={}, purge1_valve_args={},
-        buffer1_valve_args={}, pump1_id='', connect_valves=True):
+        buffer1_valve_args={}, pump1_id='', connect_valves=True, dual_pump=False):
         """
         Initializes the HPLC plus valves
 
@@ -88,7 +88,7 @@ class AgilentHPLCStandard(AgilentHPLC):
         pump2_id: str
             The Agilent hashkey for pump 2
         """
-        self._dual_pump = False
+        self._dual_pump = dual_pump
 
         self._equil_flow1 = False
 
@@ -125,6 +125,8 @@ class AgilentHPLCStandard(AgilentHPLC):
 
         while not self.get_connected():
             time.sleep(0.1)
+
+        self._get_initial_status()
 
         # Other definitions
         self._default_purge_rate = 5.0 #mL/min
@@ -205,6 +207,22 @@ class AgilentHPLCStandard(AgilentHPLC):
                     wav = wav.split(' ')[0]
                     wav = float(wav)
                     self._uv_abs_traces[wav] = trace
+
+
+    def _get_initial_status(self):
+        self._pump_power_status1 = self.get_pump_power_status(self._pump1_id, False)
+        self._pump_high_pressure_limit1 = self.get_high_pressure_limit(self._pump1_id,
+                False)
+        self._pump_target_flow_rate1 = self.get_target_flow_rate(self._pump1_id,
+            False)
+        self._pump_flow_accel1 = self.get_flow_accel(self._pump1_id, False)
+
+        self._autosampler_therm_power_status = self.get_autosampler_thermostat_power_status()
+        self._autosampler_temp_set_point = self.get_autosampler_temperature_set_point()
+
+        if not self._dual_pump:
+            self._uv_lamp_power_status = self.get_uv_lamp_power_status()
+            self._vis_lamp_power_status = self.get_vis_lamp_power_status(update=False)
 
     def  connect(self):
         """
@@ -397,7 +415,7 @@ class AgilentHPLCStandard(AgilentHPLC):
 
         return float(flow_rate)
 
-    def get_hplc_target_flow_rate(self, flow_path, update_method=True):
+    def get_hplc_target_flow_rate(self, flow_path):
         """
         Gets the target flow rate of the specified flow path
 
@@ -405,10 +423,6 @@ class AgilentHPLCStandard(AgilentHPLC):
         ----------
         flow_path: int
             The flow path to get the rate for. Either 1 or 2.
-        update_method: bool
-            If true, get the current method from instrument. If doing multiple
-            things that use the current method status in a row, it can be useful
-            to set this to false for some cases, may be faster.
 
         Returns
         -------
@@ -418,15 +432,13 @@ class AgilentHPLCStandard(AgilentHPLC):
         flow_path = int(flow_path)
 
         if flow_path == 1:
-            target_flow_rate = self.get_target_flow_rate(self._pump1_id,
-                update_method)
+            target_flow_rate = copy.copy(self._pump_target_flow_rate1)
         elif flow_path == 2:
-            target_flow_rate = self.get_target_flow_rate(self._pump2_id,
-                update_method)
+            target_flow_rate = copy.copy(self._pump_target_flow_rate2)
 
         return target_flow_rate
 
-    def get_hplc_flow_accel(self, flow_path, update_method=True):
+    def get_hplc_flow_accel(self, flow_path):
         """
         Gets the flow acceleration of the specified flow path
 
@@ -447,9 +459,9 @@ class AgilentHPLCStandard(AgilentHPLC):
         flow_path = int(flow_path)
 
         if flow_path == 1:
-            flow_accel = self.get_flow_accel(self._pump1_id, update_method)
+            flow_accel = copy.copy(self._pump_flow_accel1)
         elif flow_path == 2:
-            flow_accel = self.get_flow_accel(self._pump2_id, update_method)
+            flow_accel = copy.copy(self._pump_flow_accel2)
 
         return flow_accel
 
@@ -473,7 +485,7 @@ class AgilentHPLCStandard(AgilentHPLC):
 
         return pressure
 
-    def get_hplc_high_pressure_limit(self, flow_path, update_method=True):
+    def get_hplc_high_pressure_limit(self, flow_path):
         """
         Gets the pump high pressure limit of the specified flow path
 
@@ -481,10 +493,6 @@ class AgilentHPLCStandard(AgilentHPLC):
         ----------
         flow_path: int
             The flow path to get the high pressure limit for. Either 1 or 2.
-         update_method: bool
-            If true, get the current method from instrument. If doing multiple
-            things that use the current method status in a row, it can be useful
-            to set this to false for some cases, may be faster.
 
         Returns
         -------
@@ -494,15 +502,13 @@ class AgilentHPLCStandard(AgilentHPLC):
         flow_path = int(flow_path)
 
         if flow_path == 1:
-            pressure = self.get_high_pressure_limit(self._pump1_id,
-                update_method)
+            pressure = copy.copy(self._pump_high_pressure_limit1)
         elif flow_path == 2:
-            pressure = self.get_high_pressure_limit(self._pump2_id,
-                update_method)
+            pressure = copy.copy(self._pump_high_pressure_limit2)
 
         return pressure
 
-    def get_hplc_pump_power_status(self, flow_path, update=True):
+    def get_hplc_pump_power_status(self, flow_path):
         """
         Gets the pump power status of the specified flow path
 
@@ -521,11 +527,9 @@ class AgilentHPLCStandard(AgilentHPLC):
         flow_path = int(flow_path)
 
         if flow_path == 1:
-            pump_power_status = self.get_pump_power_status(self._pump1_id,
-                update)
+            pump_power_status = copy.copy(self._pump_power_status1)
         elif flow_path == 2:
-            pump_power_status = self.get_pump_power_status(self._pump2_id,
-                update)
+            pump_power_status = copy.copy(self._pump_power_status2)
 
         return pump_power_status
 
@@ -566,6 +570,34 @@ class AgilentHPLCStandard(AgilentHPLC):
         temperature = self.get_data_trace('Multisampler: Temperature (°C)')[1][-1]
         return float(temperature)
 
+    def get_hplc_autosampler_thermostat_power_status(self):
+        """
+        Gets the autosampler thermostat power status
+
+        Returns
+        -------
+        power: str
+            The thermostat power status of the autosampler, either 'On' or
+            'Off'. Returns an empty string if status cannot be acquired.
+
+        """
+
+        return copy.copy(self._autosampler_therm_power_status)
+
+    def get_hplc_autosampler_temperature_set_point(self):
+        """
+        Returns the autosampler temperature set point Note that this requires the
+        autosampler be in constant temperature mode.
+
+        Returns
+        -------
+        temp: float
+            The autosampler temperature set point. Returns -1 if the set
+            point cannot be acquired.
+        """
+
+        return copy.copy(self._autosampler_temp_set_point)
+
     def get_hplc_uv_abs(self, wav):
         """
         Gets the uv absorbance at the specified wavelength, if available)
@@ -589,6 +621,32 @@ class AgilentHPLCStandard(AgilentHPLC):
 
         return uv_abs
 
+    def get_hplc_uv_lamp_power_status(self):
+        """
+        Returns the uv lamp power status.
+
+        Returns
+        -------
+        power: str
+            The power status of the uv lamp, either 'On' or 'Off'.
+            Returns an empty string if status cannot be acquired.
+        """
+
+        return copy.copy(self._uv_lamp_power_status)
+
+    def get_hplc_vis_lamp_power_status(self):
+        """
+        Returns the vis lamp power status.
+
+        Returns
+        -------
+        power: str
+            The power status of the vis lamp, either 'On' or 'Off'.
+            Returns an empty string if status cannot be acquired.
+        """
+
+        return copy.copy(self._vis_lamp_power_status)
+
     def get_hplc_elapsed_runtime(self, update=True):
         """
         Gets the elasped runtime of the specified flow path
@@ -604,12 +662,14 @@ class AgilentHPLCStandard(AgilentHPLC):
             if time cannot be acquired.
         """
 
-        if self._active_flow_path == 1:
-            run_time = self.get_elapsed_runtime(self._pump1_id,
-                update)
-        elif self._active_flow_path == 2:
-            run_time = self.get_elapsed_runtime(self._pump2_id,
-                update)
+        # if self._active_flow_path == 1:
+        #     run_time = self.get_elapsed_runtime(self._pump1_id,
+        #         update)
+        # elif self._active_flow_path == 2:
+        #     run_time = self.get_elapsed_runtime(self._pump2_id,
+        #         update)
+
+        run_time = self.get_elapsed_runtime()
 
         return run_time
 
@@ -628,12 +688,14 @@ class AgilentHPLCStandard(AgilentHPLC):
             if time cannot be acquired.
         """
 
-        if self._active_flow_path == 1:
-            run_time = self.get_total_runtime(self._pump1_id,
-                update)
-        elif self._active_flow_path == 2:
-            run_time = self.get_total_runtime(self._pump2_id,
-                update)
+        # if self._active_flow_path == 1:
+        #     run_time = self.get_total_runtime(self._pump1_id,
+        #         update)
+        # elif self._active_flow_path == 2:
+        #     run_time = self.get_total_runtime(self._pump2_id,
+        #         update)
+
+        run_time = self.get_total_runtime()
 
         return run_time
 
@@ -795,7 +857,7 @@ class AgilentHPLCStandard(AgilentHPLC):
         do_equil = True
 
         if self._active_flow_path == flow_path:
-            samples_being_run = self._check_samples_being_run()
+            samples_being_run = self.check_samples_being_run()
 
             if samples_being_run and not equil_with_sample:
                 logger.error(('HPLC %s cannot equilibrate flow path %s because '
@@ -1122,8 +1184,7 @@ class AgilentHPLCStandard(AgilentHPLC):
                 self._pre_purge_flow1 = None
 
             self._pre_purge_flow_accel1 = self.get_hplc_flow_accel(1)
-            self._pre_purge_max_pressure1 = self.get_hplc_high_pressure_limit(1,
-                update_method=False)
+            self._pre_purge_max_pressure1 = self.get_hplc_high_pressure_limit(1)
             self._remaining_purge1_vol = float(purge_volume)
             self._target_purge_flow1 = float(purge_rate)
             self._target_purge_accel1 = float(purge_accel)
@@ -1140,8 +1201,7 @@ class AgilentHPLCStandard(AgilentHPLC):
                 self._pre_purge_flow2 = None
 
             self._pre_purge_flow_accel2 = self.get_hplc_flow_accel(2)
-            self._pre_purge_max_pressure2 = self.get_hplc_high_pressure_limit(2,
-                update_method=False)
+            self._pre_purge_max_pressure2 = self.get_hplc_high_pressure_limit(2)
             self._remaining_purge2_vol = float(purge_volume)
             self._target_purge_flow2 = float(purge_rate)
             self._target_purge_accel2 = float(purge_accel)
@@ -1161,7 +1221,7 @@ class AgilentHPLCStandard(AgilentHPLC):
         do_purge = True
 
         if self._active_flow_path == flow_path:
-            samples_being_run = self._check_samples_being_run()
+            samples_being_run = self.check_samples_being_run()
 
             if samples_being_run and not purge_with_sample:
                 logger.error(('HPLC %s cannot purge flow path %s because '
@@ -1170,7 +1230,7 @@ class AgilentHPLCStandard(AgilentHPLC):
 
         return do_purge
 
-    def _check_samples_being_run(self):
+    def check_samples_being_run(self):
         run_queue_status = self.get_run_queue_status()
         run_queue = self.get_run_queue()
         acquiring = False
@@ -1525,7 +1585,7 @@ class AgilentHPLCStandard(AgilentHPLC):
 
         if success:
             if self._active_flow_path == flow_path:
-                samples_being_run = self._check_samples_being_run()
+                samples_being_run = self.check_samples_being_run()
 
                 if samples_being_run and not switch_with_sample:
                     logger.info(('HPLC %s cannot switch  buffer bottles on '
@@ -1796,9 +1856,13 @@ class AgilentHPLCStandard(AgilentHPLC):
         elif flow_path == 2:
             pump_id = self._pump2_id
 
-        success = self.set_flow_rate(flow_rate, pump_id)
+        success = self.set_flow_rate(flow_rate, pump_id, False)
 
-        # run_queue = self.get_run_queue()
+        if success:
+            if flow_path == 1:
+                self._pump_target_flow_rate1 = flow_rate
+            elif flow_path == 2:
+                self._pump_target_flow_rate2 = flow_rate
 
         return success
 
@@ -1827,7 +1891,13 @@ class AgilentHPLCStandard(AgilentHPLC):
         elif flow_path == 2:
             pump_id = self._pump2_id
 
-        success = self.set_flow_accel(flow_accel, pump_id)
+        success = self.set_flow_accel(flow_accel, pump_id, False)
+
+        if success:
+            if flow_path == 1:
+                self._pump_flow_accel1 = flow_accel
+            elif flow_path == 2:
+                self._pump_flow_accel1 = flow_accel
 
         return success
 
@@ -1855,7 +1925,13 @@ class AgilentHPLCStandard(AgilentHPLC):
         elif flow_path == 2:
             pump_id = self._pump2_id
 
-        success = self.set_high_pressure_limit(pressure, pump_id)
+        success = self.set_high_pressure_limit(pressure, pump_id, False)
+
+        if success:
+            if flow_path == 1:
+                self._pump_high_pressure_limit1 = pressure
+            elif flow_path == 2:
+                self._pump_high_pressure_limit2 = pressure
 
         return success
 
@@ -1931,6 +2007,12 @@ class AgilentHPLCStandard(AgilentHPLC):
 
         success = self.set_pump_on(pump_id)
 
+        if success:
+            if flow_path == 1:
+                self._pump_power_status1 = 'On'
+            elif flow_path == 2:
+                self._pump_power_status2 = 'On'
+
         return success
 
     def set_hplc_pump_standby(self, flow_path):
@@ -1956,6 +2038,12 @@ class AgilentHPLCStandard(AgilentHPLC):
 
         success = self.set_pump_standby(pump_id)
 
+        if success:
+            if flow_path == 1:
+                self._pump_power_status1 = 'Standby'
+            elif flow_path == 2:
+                self._pump_power_status2 = 'Standby'
+
         return success
 
     def set_hplc_pump_off(self, flow_path):
@@ -1980,6 +2068,145 @@ class AgilentHPLCStandard(AgilentHPLC):
             pump_id = self._pump2_id
 
         success = self.set_pump_off(pump_id)
+
+        if success:
+            if flow_path == 1:
+                self._pump_power_status1 = 'Off'
+            elif flow_path == 2:
+                self._pump_power_status2 = 'Off'
+
+        return success
+
+    def set_hplc_autosampler_thermostat_on(self):
+        """
+        Sets the autosampler thermostat on
+
+        Returns
+        -------
+        success: bool
+            True if successful
+        """
+
+        success = self.set_autosampler_thermostat_on()
+
+        if success:
+            self._autosampler_therm_power_status = 'On'
+
+        return success
+
+    def set_hplc_autosampler_thermostat_off(self):
+        """
+        Sets the autosampler thermostat on
+
+        Returns
+        -------
+        success: bool
+            True if successful
+        """
+
+        success = self.set_autosampler_thermostat_off()
+
+        if success:
+            self._autosampler_therm_power_status = 'Off'
+
+        return success
+
+    def set_hplc_autosampler_temperature_set_point(self, temp):
+        """
+        Sets the autosampler temperature set point Note that this requires the
+        autosampler be in constant temperature mode.
+
+        Parameters
+        ----------
+        temp: float
+            The temperature set point in C.
+
+        Returns
+        -------
+        success: bool
+            True if successful.
+        """
+
+        try:
+            temp = float(temp)
+        except Exception:
+            temp = None
+
+        if temp is not None:
+            success = self.set_autosampler_temperature_set_point(temp)
+        else:
+            success = False
+
+        if success:
+            self._autosampler_temp_set_point = temp
+
+        return success
+
+    def set_hplc_uv_lamp_on(self):
+        """
+        Sets the UV lamp on
+
+        Returns
+        -------
+        success: bool
+            True if successful
+        """
+
+        success = self.set_uv_lamp_on()
+
+        if success:
+            self._uv_lamp_power_status = 'On'
+
+        return success
+
+    def set_hplc_uv_lamp_off(self):
+        """
+        Sets the UV lamp off
+
+        Returns
+        -------
+        success: bool
+            True if successful
+        """
+
+        success = self.set_uv_lamp_off()
+
+        if success:
+            self._uv_lamp_power_status = 'Off'
+
+        return success
+
+    def set_hplc_vis_lamp_on(self):
+        """
+        Sets the vis lamp on
+
+        Returns
+        -------
+        success: bool
+            True if successful
+        """
+
+        success = self.set_vis_lamp_on()
+
+        if success:
+            self._vis_lamp_power_status = 'On'
+
+        return success
+
+    def set_hplc_vis_lamp_off(self):
+        """
+        Sets the vis lamp off
+
+        Returns
+        -------
+        success: bool
+            True if successful
+        """
+
+        success = self.set_vis_lamp_off()
+
+        if success:
+            self._vis_lamp_power_status = 'Off'
 
         return success
 
@@ -2212,6 +2439,7 @@ class AgilentHPLCStandard(AgilentHPLC):
                         else:
                             break
 
+                time.sleep(2) # Try to avoid issues with getting status while loading a sample
                 self._submitting_sample = False
                 self._monitor_submit_evt.clear()
 
@@ -2457,10 +2685,12 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
         AgilentHPLCStandard.__init__(self, name, device, hplc_args=hplc_args,
             purge1_valve_args=purge1_valve_args,
             buffer1_valve_args=buffer1_valve_args, pump1_id=pump1_id,
-            connect_valves=False)
+            connect_valves=False, dual_pump=self._dual_pump)
 
         # Connect HPLC
         self._pump2_id = pump2_id
+
+        self._get_initial_status_dual_pump()
 
 
         self._switching_flow_path = False
@@ -2475,6 +2705,35 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
 
 
         self.set_active_buffer_position(self.get_valve_position('buffer2'), 2)
+
+    def _on_run_start(self, source, args):
+        """
+        Overrides the method in the base hplc class to make it useful for
+        the two pump system
+        """
+        self._method_start_time = time.time()
+        start_time = args.MarkerPosition
+
+        with self._trace_lock:
+            self._run_starts.append(start_time)
+
+        self.get_current_method_from_instrument()
+
+        if self._active_flow_path == 1:
+            pump_id = self._pump1_id
+        elif self._active_flow_path == 2:
+            pump_id = self._pump1_id
+
+        self._method_total_time = self.get_pump_stop_time(pump_id=pump_id,
+            update_method=False)
+
+    def _get_initial_status_dual_pump(self):
+        self._pump_power_status2 = self.get_pump_power_status(self._pump2_id, False)
+        self._pump_high_pressure_limit2 = self.get_high_pressure_limit(self._pump2_id,
+                False)
+        self._pump_target_flow_rate2 = self.get_target_flow_rate(self._pump2_id,
+            False)
+        self._pump_flow_accel2 = self.get_flow_accel(self._pump2_id, False)
 
     def _connect_valves(self, sv_args, ov_args, p1_args, p2_args, b1_args,
         b2_args):
@@ -2681,7 +2940,7 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
                 'is already underway.', self.name)
             success = False
         else:
-            samples_being_run = self._check_samples_being_run()
+            samples_being_run = self.check_samples_being_run()
 
             if samples_being_run and not switch_with_sample:
                 logger.error(('HPLC %s cannot switch active flow path because '
@@ -3079,7 +3338,6 @@ class HPLCCommThread(utils.CommManager):
             'get_run_status'            : self._get_run_status,
             'get_fast_hplc_status'      : self._get_fast_hplc_status,
             'get_slow_hplc_status'      : self._get_slow_hplc_status,
-            'get_very_slow_hplc_status' : self._get_very_slow_hplc_status,
             'get_valve_status'          : self._get_valve_status,
             'set_valve_position'        : self._set_valve_position,
             'purge_flow_path'           : self._purge_flow_path,
@@ -3194,6 +3452,11 @@ class HPLCCommThread(utils.CommManager):
 
         device = self._connected_devices[name]
 
+        connected = device.get_connected()
+
+        if not connected:
+            return
+
         status = device.get_instrument_status()
 
         # if status == 'PreRun' or status == 'Injecting' or status == 'PostRun':
@@ -3208,7 +3471,14 @@ class HPLCCommThread(utils.CommManager):
             'errors'            : device.get_instrument_errors(),
             'run_queue_status'  : device.get_run_queue_status(),
             'run_queue'         : device.get_run_queue(),
+            'samples_being_run' : device.check_samples_being_run(),
+            'elapsed_runtime'   : 0,
+            'total_runtime'     : 0,
             }
+
+        if status == 'Run':
+            instrument_status['elapsed_runtime'] = device.get_hplc_elapsed_runtime()
+            instrument_status['total_runtime'] = device.get_hplc_total_runtime()
 
         pump_status = {
             'purging_pump1'     : device.get_purge_status(1),
@@ -3217,6 +3487,10 @@ class HPLCCommThread(utils.CommManager):
             'pressure1'         : device.get_hplc_pressure(1),
             'all_buffer_info1'  : device.get_all_buffer_info(1),
             'switch_buffer1_bot': device.get_switch_buffer_bottle_status(1),
+            'power_status1'     : device.get_hplc_pump_power_status(1),
+            'high_pressure_lim1': device.get_hplc_high_pressure_limit(1),
+            'target_flow1'      : device.get_hplc_target_flow_rate(1),
+            'flow_accel1'       : device.get_hplc_flow_accel(1),
             }
 
         if isinstance(device, AgilentHPLC2Pumps):
@@ -3228,10 +3502,16 @@ class HPLCCommThread(utils.CommManager):
             pump_status['switching_flow_path'] = device.get_flow_path_switch_status()
             pump_status['all_buffer_info2'] = device.get_all_buffer_info(2)
             pump_status['switch_buffer2_bot'] = device.get_switch_buffer_bottle_status(2)
+            pump_status['power_status2'] = device.get_hplc_pump_power_status(2)
+            pump_status['high_pressure_lim2'] =device.get_hplc_high_pressure_limit(2)
+            pump_status['target_flow2'] = device.get_hplc_target_flow_rate(2)
+            pump_status['flow_accel2'] = device.get_hplc_flow_accel(2)
 
         autosampler_status = {
             'submitting_sample'         : device.get_submitting_sample_status(),
             'temperature'               : device.get_hplc_autosampler_temperature(),
+            'thermostat_power_status'   : device.get_hplc_autosampler_thermostat_power_status(),
+            'temperature_setpoint'      : device.get_hplc_autosampler_temperature_set_point(),
             }
 
         if (isinstance(device, AgilentHPLCStandard)
@@ -3239,6 +3519,8 @@ class HPLCCommThread(utils.CommManager):
             uv_status = {
                 'uv_280_abs'    : device.get_hplc_uv_abs(280.0),
                 'uv_260_abs'    : device.get_hplc_uv_abs(260.0),
+                'uv_lamp_status'    : device.get_hplc_uv_lamp_power_status(),
+                'vis_lamp_status'   : device.get_hplc_vis_lamp_power_status(),
                 }
 
         else:
@@ -3256,118 +3538,6 @@ class HPLCCommThread(utils.CommManager):
         # print(time.time()-a)
 
         logger.debug("%s fast status: %s", name, val)
-
-    def _get_slow_hplc_status(self, name, **kwargs):
-        logger.debug("Getting %s slow status", name)
-
-        comm_name = kwargs.pop('comm_name', None)
-        cmd = kwargs.pop('cmd', None)
-
-        device = self._connected_devices[name]
-
-        status = device.get_instrument_status()
-        sample_submission = device.get_submitting_sample_status()
-
-        if (status == 'PreRun' or status == 'Injecting' or status == 'PostRun'
-            or sample_submission):
-            # This seems to get hung up when the instrument is busy, so just
-            # don't bother it when it's running
-            return
-
-        instrument_status = {
-            'elapsed_runtime'   : 0,
-            'total_runtime'     : 0,
-            'status'            : status,
-            }
-
-        if status == 'Run':
-            instrument_status['elapsed_runtime'] = device.get_hplc_elapsed_runtime()
-            instrument_status['total_runtime'] = device.get_hplc_total_runtime( update=False)
-
-        pump_status = {
-            'target_flow1'      : device.get_hplc_target_flow_rate(1),
-            'flow_accel1'       : device.get_hplc_flow_accel(1, False),
-            }
-
-        if isinstance(device, AgilentHPLC2Pumps):
-            pump_status['target_flow2'] = device.get_hplc_target_flow_rate(2)
-            pump_status['flow_accel2'] = device.get_hplc_flow_accel(2, False)
-
-        autosampler_status = {
-            }
-
-        if (isinstance(device, AgilentHPLCStandard)
-            and not isinstance(device, AgilentHPLC2Pumps)):
-            uv_status = {
-                }
-
-        else:
-            uv_status = {}
-
-        val = {
-            'instrument_status' : instrument_status,
-            'pump_status'       : pump_status,
-            'autosampler_status': autosampler_status,
-            'uv_status'         : uv_status,
-        }
-
-        self._return_value((name, cmd, val), comm_name)
-
-        logger.debug("%s slow status: %s", name, val)
-
-    def _get_very_slow_hplc_status(self, name, **kwargs):
-        logger.debug("Getting %s very slow status", name)
-
-        comm_name = kwargs.pop('comm_name', None)
-        cmd = kwargs.pop('cmd', None)
-
-        device = self._connected_devices[name]
-
-        status = device.get_instrument_status()
-        sample_submission = device.get_submitting_sample_status()
-
-        if (status == 'PreRun' or status == 'Injecting' or status == 'PostRun'
-            or sample_submission):
-            # This seems to get hung up when the instrument is busy, so just
-            # don't bother it when it's running
-            return
-
-        pump_status = {
-            'power_status1'     : device.get_hplc_pump_power_status(1),
-            'high_pressure_lim1': device.get_hplc_high_pressure_limit(1, False),
-            }
-
-        if isinstance(device, AgilentHPLC2Pumps):
-            pump_status['power_status2'] = device.get_hplc_pump_power_status(2)
-            pump_status['high_pressure_lim2'] =device.get_hplc_high_pressure_limit(2,
-                False)
-            # pump_status['seal_wash1'] = device.get_hplc_seal_wash_settings(1)
-            # pump_status['seal_wash2'] = device.get_hplc_seal_wash_settings(2)
-
-        autosampler_status = {
-            'thermostat_power_status'   : device.get_autosampler_thermostat_power_status(),
-            'temperature_setpoint'      : device.get_autosampler_temperature_set_point(),
-            }
-
-        if (isinstance(device, AgilentHPLCStandard)
-            and not isinstance(device, AgilentHPLC2Pumps)):
-            uv_status = {
-                'uv_lamp_status'    : device.get_uv_lamp_power_status(),
-                'vis_lamp_status'   : device.get_vis_lamp_power_status(update=False),
-                }
-
-        else:
-            uv_status = {}
-
-        val = {
-            'pump_status'       : pump_status,
-            'autosampler_status': autosampler_status,
-            'uv_status'         : uv_status,
-        }
-
-        self._return_value((name, cmd, val), comm_name)
-
-        logger.debug("%s very slow status: %s", name, val)
 
     def _get_valve_status(self, name, **kwargs):
         logger.debug("Getting %s valve status", name)
@@ -3625,7 +3795,7 @@ class HPLCCommThread(utils.CommManager):
         cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
-        success = device.set_autosampler_thermostat_on(**kwargs)
+        success = device.set_hplc_autosampler_thermostat_on(**kwargs)
 
         self._return_value((name, cmd, success), comm_name)
 
@@ -3638,7 +3808,7 @@ class HPLCCommThread(utils.CommManager):
         cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
-        success = device.set_autosampler_thermostat_off(**kwargs)
+        success = device.set_hplc_autosampler_thermostat_off(**kwargs)
 
         self._return_value((name, cmd, success), comm_name)
 
@@ -3652,7 +3822,7 @@ class HPLCCommThread(utils.CommManager):
         cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
-        success = device.set_autosampler_temperature_set_point(val, **kwargs)
+        success = device.set_hplc_autosampler_temperature_set_point(val, **kwargs)
 
         self._return_value((name, cmd, success), comm_name)
 
@@ -3679,7 +3849,7 @@ class HPLCCommThread(utils.CommManager):
         cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
-        success = device.set_uv_lamp_on(**kwargs)
+        success = device.set_hplc_uv_lamp_on(**kwargs)
 
         self._return_value((name, cmd, success), comm_name)
 
@@ -3692,7 +3862,7 @@ class HPLCCommThread(utils.CommManager):
         cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
-        success = device.set_uv_lamp_off(**kwargs)
+        success = device.set_hplc_uv_lamp_off(**kwargs)
 
         self._return_value((name, cmd, success), comm_name)
 
@@ -3705,7 +3875,7 @@ class HPLCCommThread(utils.CommManager):
         cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
-        success = device.set_vis_lamp_on(**kwargs)
+        success = device.set_hplc_vis_lamp_on(**kwargs)
 
         self._return_value((name, cmd, success), comm_name)
 
@@ -3718,7 +3888,7 @@ class HPLCCommThread(utils.CommManager):
         cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
-        success = device.set_vis_lamp_off(**kwargs)
+        success = device.set_hplc_vis_lamp_off(**kwargs)
 
         self._return_value((name, cmd, success), comm_name)
 
@@ -3972,6 +4142,7 @@ class HPLCPanel(utils.DevicePanel):
         self._inst_elapsed_runtime = ''
         self._inst_total_runtime = ''
         self._inst_run_queue_status = ''
+        self._inst_samples_being_run = False
         self._inst_err_status = ''
         self._inst_errs = ''
         self._inst_run_queue = []
@@ -4883,11 +5054,6 @@ class HPLCPanel(utils.DevicePanel):
             get_fast_hplc_status_cmd = ['get_fast_hplc_status', [self.name,], {}]
             self._update_status_cmd(get_fast_hplc_status_cmd, 2)
 
-            get_slow_hplc_status_cmd = ['get_slow_hplc_status', [self.name,], {}]
-            self._update_status_cmd(get_slow_hplc_status_cmd, 35)
-
-            get_very_slow_hplc_status_cmd = ['get_very_slow_hplc_status', [self.name,], {}]
-            self._update_status_cmd(get_very_slow_hplc_status_cmd, 180)
 
             get_valve_status_cmd = ['get_valve_status', [self.name,], {}]
             self._update_status_cmd(get_valve_status_cmd, 15)
@@ -6008,6 +6174,9 @@ class HPLCPanel(utils.DevicePanel):
             status = str(inst_status['status'])
             run_queue_status = str(inst_status['run_queue_status'])
             run_queue = inst_status['run_queue']
+            self._inst_samples_being_run = inst_status['samples_being_run']
+            elapsed_runtime = inst_status['elapsed_runtime']
+            total_runtime = inst_status['total_runtime']
 
             if connected != self._inst_connected:
                 wx.CallAfter(self._inst_connected_ctrl.SetLabel,
@@ -6043,8 +6212,28 @@ class HPLCPanel(utils.DevicePanel):
                 self._inst_errs = err_string
 
             if run_queue != self._inst_run_queue:
-                self._update_run_queue(run_queue)
+                display_run_queue = []
+                for item in run_queue:
+                    if item[1] != 'Aborted' and item[1] != 'Completed':
+                        display_run_queue.append(item)
+
+                self._update_run_queue(display_run_queue)
                 self._inst_run_queue = run_queue
+
+            if (status != 'Run' and status != 'Injecting'
+                and status != 'PostRun' and status != 'PreRun'):
+                total_runtime = '0.0'
+                elapsed_runtime = '0.0'
+            else:
+                total_runtime = str(round(total_runtime,1))
+                elapsed_runtime = str(round(elapsed_runtime, 1))
+
+            if((elapsed_runtime != self._inst_elapsed_runtime) or
+                (total_runtime != self._inst_total_runtime)):
+                wx.CallAfter(self._inst_runtime_ctrl.SetLabel,
+                    '{}/{}'.format(elapsed_runtime, total_runtime))
+                self._inst_elapsed_runtime =  elapsed_runtime
+                self._inst_total_runtime =  total_runtime
 
 
             pump_status = val['pump_status']
@@ -6056,6 +6245,10 @@ class HPLCPanel(utils.DevicePanel):
             pump1_pressure = str(round(float(pump_status['pressure1']),3))
             buffers1 = pump_status['all_buffer_info1']
             switch_buffer1_bot = str(pump_status['switch_buffer1_bot'])
+            pump1_power = str(pump_status['power_status1'])
+            pump1_pressure_lim = str(round(float(pump_status['high_pressure_lim1']),3))
+            pump1_flow_target = str(round(float(pump_status['target_flow1']),3))
+            pump1_flow_accel = str(round(float(pump_status['flow_accel1']),3))
 
             if pump1_purge != self._pump1_purge:
                 wx.CallAfter(self._pump1_purge_ctrl.SetLabel, pump1_purge)
@@ -6133,6 +6326,24 @@ class HPLCPanel(utils.DevicePanel):
                         wx.CallAfter(self._pump1_eq_btn.Enable)
                         wx.CallAfter(self._pump1_purge_btn.Enable)
 
+            if pump1_power != self._pump1_power:
+                wx.CallAfter(self._pump1_power_ctrl.SetLabel, pump1_power)
+                self._pump1_power = pump1_power
+
+            if pump1_pressure_lim != self._pump1_pressure_lim:
+                wx.CallAfter(self._pump1_pressure_lim_ctrl.SetLabel, pump1_pressure_lim)
+                self._pump1_pressure_lim = pump1_pressure_lim
+
+            if pump1_flow_target != self._pump1_flow_target:
+                wx.CallAfter(self._pump1_flow_target_ctrl.SetLabel,
+                    pump1_flow_target)
+                self._pump1_flow_target = pump1_flow_target
+
+            if pump1_flow_accel != self._pump1_flow_accel:
+                wx.CallAfter(self._pump1_flow_accel_ctrl.SetLabel,
+                    pump1_flow_accel)
+                self._pump1_flow_accel = pump1_flow_accel
+
             if self._device_type == 'AgilentHPLC2Pumps':
                 flow_path = str(pump_status['active_flow_path'])
                 flow_path_status = str(pump_status['switching_flow_path'])
@@ -6154,6 +6365,10 @@ class HPLCPanel(utils.DevicePanel):
                 pump2_pressure = str(round(float(pump_status['pressure2']),3))
                 buffers2 = pump_status['all_buffer_info2']
                 switch_buffer2_bot = str(pump_status['switch_buffer2_bot'])
+                pump2_power = str(pump_status['power_status2'])
+                pump2_pressure_lim = str(round(float(pump_status['high_pressure_lim2']),3))
+                pump2_flow_target = str(round(float(pump_status['target_flow2']),3))
+                pump2_flow_accel = str(round(float(pump_status['flow_accel2']),3))
 
                 if pump2_purge != self._pump2_purge:
                     wx.CallAfter(self._pump2_purge_ctrl.SetLabel, pump2_purge)
@@ -6231,10 +6446,31 @@ class HPLCPanel(utils.DevicePanel):
                             wx.CallAfter(self._pump2_eq_btn.Enable)
                             wx.CallAfter(self._pump2_purge_btn.Enable)
 
+                if pump2_power != self._pump2_power:
+                    wx.CallAfter(self._pump2_power_ctrl.SetLabel, pump2_power)
+                    self._pump2_power = pump2_power
+
+                if pump2_pressure_lim != self._pump2_pressure_lim:
+                    wx.CallAfter(self._pump2_pressure_lim_ctrl.SetLabel,
+                        pump2_pressure_lim)
+                    self._pump2_pressure_lim = pump2_pressure_lim
+
+                if pump2_flow_target != self._pump2_flow_target:
+                    wx.CallAfter(self._pump2_flow_target_ctrl.SetLabel,
+                        pump2_flow_target)
+                    self._pump2_flow_target = pump2_flow_target
+
+                if pump2_flow_accel != self._pump2_flow_accel:
+                    wx.CallAfter(self._pump2_flow_accel_ctrl.SetLabel,
+                        pump2_flow_accel)
+                    self._pump2_flow_accel = pump2_flow_accel
+
 
             sampler_status = val['autosampler_status']
             submitting_sample = str(sampler_status['submitting_sample'])
             temperature = str(round(float(sampler_status['temperature']),3))
+            thermostat_power = str(sampler_status['thermostat_power_status'])
+            temperature_setpoint = str(round(float(sampler_status['temperature_setpoint']),3))
 
             if submitting_sample != self._sampler_submitting:
                 wx.CallAfter(self._sampler_submitting_ctrl.SetLabel,
@@ -6246,10 +6482,22 @@ class HPLCPanel(utils.DevicePanel):
                     temperature)
                 self._sampler_temp = temperature
 
+            if thermostat_power != self._sampler_thermostat_power:
+                wx.CallAfter(self._sampler_thermostat_power_ctrl.SetLabel,
+                    thermostat_power)
+                self._sampler_thermostat_power = thermostat_power
+
+            if temperature_setpoint != self._sampler_setpoint:
+                wx.CallAfter(self._sampler_setpoint_ctrl.SetLabel,
+                    temperature_setpoint)
+                self._sampler_setpoint = temperature_setpoint
+
             if self._device_type == 'AgilentHPLCStandard':
                 uv_status = val['uv_status']
                 uv_280_abs = uv_status['uv_280_abs']
                 uv_260_abs = uv_status['uv_260_abs']
+                uv_lamp_status = uv_status['uv_lamp_status']
+                vis_lamp_status = uv_status['vis_lamp_status']
 
                 if uv_280_abs is not None:
                     uv_280_abs = str(round(uv_280_abs, 2))
@@ -6267,115 +6515,6 @@ class HPLCPanel(utils.DevicePanel):
                         uv_260_abs)
                     self._uv_260_abs = uv_260_abs
 
-
-        elif cmd == 'get_slow_hplc_status':
-            inst_status = val['instrument_status']
-            elapsed_runtime = inst_status['elapsed_runtime']
-            total_runtime = inst_status['total_runtime']
-            status = str(inst_status['status'])
-
-            if (status != 'Run' and status != 'Injecting'
-                and status != 'PostRun' and status != 'PreRun'):
-                total_runtime = '0.0'
-                elapsed_runtime = '0.0'
-            else:
-                total_runtime = str(round(total_runtime,1))
-                elapsed_runtime = str(round(elapsed_runtime, 1))
-
-            if((elapsed_runtime != self._inst_elapsed_runtime) or
-                (total_runtime != self._inst_total_runtime)):
-                wx.CallAfter(self._inst_runtime_ctrl.SetLabel,
-                    '{}/{}'.format(elapsed_runtime, total_runtime))
-                self._inst_elapsed_runtime =  elapsed_runtime
-                self._inst_total_runtime =  total_runtime
-
-            pump_status = val['pump_status']
-            pump1_flow_target = str(round(float(pump_status['target_flow1']),3))
-            pump1_flow_accel = str(round(float(pump_status['flow_accel1']),3))
-
-            if pump1_flow_target != self._pump1_flow_target:
-                wx.CallAfter(self._pump1_flow_target_ctrl.SetLabel,
-                    pump1_flow_target)
-                self._pump1_flow_target = pump1_flow_target
-
-            if pump1_flow_accel != self._pump1_flow_accel:
-                wx.CallAfter(self._pump1_flow_accel_ctrl.SetLabel,
-                    pump1_flow_accel)
-                self._pump1_flow_accel = pump1_flow_accel
-
-            if self._device_type == 'AgilentHPLC2Pumps':
-                pump2_flow_target = str(round(float(pump_status['target_flow2']),3))
-                pump2_flow_accel = str(round(float(pump_status['flow_accel2']),3))
-
-                if pump2_flow_target != self._pump2_flow_target:
-                    wx.CallAfter(self._pump2_flow_target_ctrl.SetLabel,
-                        pump2_flow_target)
-                    self._pump2_flow_target = pump2_flow_target
-
-                if pump2_flow_accel != self._pump2_flow_accel:
-                    wx.CallAfter(self._pump2_flow_accel_ctrl.SetLabel,
-                        pump2_flow_accel)
-                    self._pump2_flow_accel = pump2_flow_accel
-
-
-        elif cmd == 'get_very_slow_hplc_status':
-            pump_status = val['pump_status']
-            pump1_power = str(pump_status['power_status1'])
-            pump1_pressure_lim = str(round(float(pump_status['high_pressure_lim1']),3))
-
-            if pump1_power != self._pump1_power:
-                wx.CallAfter(self._pump1_power_ctrl.SetLabel, pump1_power)
-                self._pump1_power = pump1_power
-
-            if pump1_pressure_lim != self._pump1_pressure_lim:
-                wx.CallAfter(self._pump1_pressure_lim_ctrl.SetLabel, pump1_pressure_lim)
-                self._pump1_pressure_lim = pump1_pressure_lim
-
-            if self._device_type == 'AgilentHPLC2Pumps':
-                pump2_power = str(pump_status['power_status2'])
-                pump2_pressure_lim = str(round(float(pump_status['high_pressure_lim2']),3))
-                # pump1_seal_wash = pump_status['seal_wash1']
-                # pump2_seal_wash = pump_status['seal_wash2']
-
-                if pump2_power != self._pump2_power:
-                    wx.CallAfter(self._pump2_power_ctrl.SetLabel, pump2_power)
-                    self._pump2_power = pump2_power
-
-                if pump2_pressure_lim != self._pump2_pressure_lim:
-                    wx.CallAfter(self._pump2_pressure_lim_ctrl.SetLabel,
-                        pump2_pressure_lim)
-                    self._pump2_pressure_lim = pump2_pressure_lim
-
-                # self._pump1_seal_wash_mode = str(pump1_seal_wash['mode'])
-                # self._pump1_seal_wash_single_duration = str(pump1_seal_wash['single_duration'])
-                # self._pump1_seal_wash_period = str(pump1_seal_wash['period'])
-                # self._pump1_seal_wash_period_duration = str(pump1_seal_wash['period_duration'])
-
-                # self._pump2_seal_wash_mode = str(pump2_seal_wash['mode'])
-                # self._pump2_seal_wash_single_duration = str(pump2_seal_wash['single_duration'])
-                # self._pump2_seal_wash_period = str(pump2_seal_wash['period'])
-                # self._pump2_seal_wash_period_duration = str(pump2_seal_wash['period_duration'])
-
-
-            sampler_status = val['autosampler_status']
-            thermostat_power = str(sampler_status['thermostat_power_status'])
-            temperature_setpoint = str(round(float(sampler_status['temperature_setpoint']),3))
-
-            if thermostat_power != self._sampler_thermostat_power:
-                wx.CallAfter(self._sampler_thermostat_power_ctrl.SetLabel,
-                    thermostat_power)
-                self._sampler_thermostat_power = thermostat_power
-
-            if temperature_setpoint != self._sampler_setpoint:
-                wx.CallAfter(self._sampler_setpoint_ctrl.SetLabel,
-                    temperature_setpoint)
-                self._sampler_setpoint = temperature_setpoint
-
-            if self._device_type == 'AgilentHPLCStandard':
-                uv_status = val['uv_status']
-                uv_lamp_status = uv_status['uv_lamp_status']
-                vis_lamp_status = uv_status['vis_lamp_status']
-
                 if uv_lamp_status != self._uv_lamp_status:
                     wx.CallAfter(self._uv_lamp_status_ctrl.SetLabel,
                         uv_lamp_status)
@@ -6385,7 +6524,6 @@ class HPLCPanel(utils.DevicePanel):
                     wx.CallAfter(self._uv_vis_lamp_status_ctrl.SetLabel,
                         vis_lamp_status)
                     self._uv_vis_lamp_status = vis_lamp_status
-
 
         elif cmd == 'get_valve_status':
             buffer1 = int(val['buffer1'])
@@ -6543,7 +6681,20 @@ class HPLCPanel(utils.DevicePanel):
         success = True
 
         if cmd_name == 'status':
-            if (self._inst_status == 'Offline' or self._inst_status == 'Unknown'
+            if (self._inst_status == 'Run' or self._inst_status == 'Injecting'
+                or self._inst_status == 'PostRun' or self._inst_status == 'PreRun'
+                or self._inst_samples_being_run):
+                inst_name = cmd_kwargs['inst_name']
+                flow_path = int(inst_name.split('_')[-1].lstrip('pump'))
+                if self._device_type == 'AgilentHPLC2Pumps':
+                    if flow_path == int(self._flow_path):
+                        state = 'run'
+                    else:
+                        state = self._get_automator_state(flow_path)
+                else:
+                    state = 'run'
+
+            elif (self._inst_status == 'Offline' or self._inst_status == 'Unknown'
                 or self._inst_status == 'Error' or self._inst_status == 'Idle' or
                 self._inst_status == 'NotReady' or self._inst_status == 'Standby'):
 
@@ -6559,17 +6710,7 @@ class HPLCPanel(utils.DevicePanel):
 
                 state = self._get_automator_state(flow_path)
 
-            elif (self._inst_status == 'Run' or self._inst_status == 'Injecting'
-                or self._inst_status == 'PostRun' or self._inst_status == 'PreRun'):
-                inst_name = cmd_kwargs['inst_name']
-                flow_path = int(inst_name.split('_')[-1].lstrip('pump'))
-                if self._device_type == 'AgilentHPLC2Pumps':
-                    if flow_path == int(self._flow_path):
-                        state = 'run'
-                    else:
-                        state = self._get_automator_state(flow_path)
-                else:
-                    state = 'run'
+
 
             else:
                 state = 'idle'

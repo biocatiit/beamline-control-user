@@ -466,6 +466,7 @@ class Pump(object):
         self.name = name
         self.flow_rate_scale = flow_rate_scale
         self.flow_rate_offset = flow_rate_offset
+        self.is_syringe_pump = False
 
         self.scale_type = scale_type
         #up, down, or both, indicating only scale up flowrate, only scale down
@@ -502,6 +503,8 @@ class Pump(object):
     def connect(self):
         if not self.connected:
             self.connected = True
+
+        return self.connected
 
     @property
     def flow_rate(self):
@@ -630,6 +633,9 @@ class Pump(object):
     def is_dispensing(self):
         return self._is_dispensing
 
+    def get_valve_position(self):
+        return None
+
     def stop(self):
         """Stops all pump flow."""
         pass #Should be implimented in each subclass
@@ -657,6 +663,7 @@ class SyringePump(Pump):
         self._volume = 0
         self._max_volume = 0
         self._refill_rate = 0
+        self.is_syringe_pump = True
 
         self.dual_syringe = dual_syringe
 
@@ -1050,6 +1057,8 @@ class M50Pump(Pump):
 
             self.connected = True
 
+        return self.connected
+
     @property
     def flow_rate(self):
         rate = float(self._flow_rate)/self.cal
@@ -1224,6 +1233,8 @@ class PHD4400Pump(SyringePump):
 
             self.connected = True
 
+        return self.connected
+
     def send_cmd(self, cmd, get_response=True):
         """
         Sends a command to the pump.
@@ -1346,6 +1357,8 @@ class PicoPlusPump(SyringePump):
             self.send_cmd('nvram none')
 
             self.connected = True
+
+        return self.connected
 
     def send_cmd(self, cmd, get_response=True):
         """
@@ -1498,6 +1511,8 @@ class NE500Pump(SyringePump):
                 self.pump_comm = SerialComm(self.device, baudrate=19200)
 
             self.connected = True
+
+        return self.connected
 
     def send_cmd(self, cmd, get_response=True):
         """
@@ -1690,6 +1705,8 @@ class HamiltonPSD6Pump(SyringePump):
                 self.pump_comm = SerialComm(self.device, baudrate=9600)
 
             self.connected = True
+
+        return self.connected
 
     def initialize(self):
         # self.send_cmd('Z10')
@@ -2150,6 +2167,8 @@ class SSINextGenPump(Pump):
 
             self.connected = True
 
+        return self.connected
+
     @property
     def pressure_units(self):
         """
@@ -2536,6 +2555,7 @@ class SSINextGenPump(Pump):
                 self._send_flow_rate_cmd(next_flow_rate)
 
                 current_flow_rate = next_flow_rate
+                time.sleep(0.01) #Yield for other threads
 
         self._ramping_flow = False
         self._accel_stop.clear()
@@ -2784,6 +2804,8 @@ class OB1(object):
 
             self.connected = True
 
+        return self.connected
+
     def calibrate(self):
         calib = (ctypes.c_double*1000)()
         error = Elveflow.OB1_Calib(self.instr_ID.value, calib, 1000)
@@ -2910,6 +2932,8 @@ class OB1Pump(Pump):
             self.calib = self._ob1.calib
 
             self.connected = True
+
+        return self.connected
 
     @property
     def pressure_units(self):
@@ -3943,6 +3967,7 @@ class PumpCommThread(utils.CommManager):
             'set_pid'           : self._set_pid,
             'get_valve_pos'     : self._get_valve_pos,
             'set_valve_pos'     : self._set_valve_pos,
+            'get_full_status'   : self._get_full_status,
             }
 
         self.known_devices = known_pumps
@@ -4292,7 +4317,7 @@ class PumpCommThread(utils.CommManager):
         comm_name = kwargs.pop('comm_name', None)
         cmd = kwargs.pop('cmd', None)
 
-        val = self._get_pump_status(name)
+        val = self._get_pump_remote_status(name)
 
         self._return_value((name, cmd, val), comm_name)
 
@@ -4326,38 +4351,16 @@ class PumpCommThread(utils.CommManager):
 
         vals = []
         for name in names:
-            val = self._get_pump_status(name)
+            val = self._get_pump_remote_status(name)
 
             vals.append(val)
 
         self._return_value((names, cmd, [names, vals]), comm_name)
 
-    def _get_pump_status(self, name):
+    def _get_pump_remote_status(self, name):
         device = self._connected_devices[name]
 
-        is_moving = device.is_moving()
-
-        try:
-            volume = device.volume
-        except Exception:
-            volume = None
-
-        flow_rate = device.flow_rate
-
-        try:
-            refill_rate = device.refill_rate
-        except Exception:
-            refill_rate = None
-
-        try:
-            pressure = device.get_pressure()
-        except Exception:
-            pressure = None
-
-        try:
-            is_dispensing = device.is_dispensing()
-        except Exception:
-            is_dispensing = None
+        status = self._get_status_inner(device)
 
         try:
             faults = device.get_faults()
@@ -4370,21 +4373,13 @@ class PumpCommThread(utils.CommManager):
             syringe_id = None
 
         try:
-            flow_dir = device.get_flow_dir()
+            is_dispensing = device.is_dispensing()
         except Exception:
-            flow_dir = None
+            is_dispensing = None
 
-        status = {
-            'is_moving'     : is_moving,
-            'volume'        : volume,
-            'flow_rate'     : flow_rate,
-            'refill_rate'   : refill_rate,
-            'pressure'      : pressure,
-            'is_dispensing' : is_dispensing,
-            'faults'        : faults,
-            'syringe_id'    : syringe_id,
-            'flow_dir'      : flow_dir,
-            }
+        status['is_dispensing'] = is_dispensing
+        status['faults'] = faults
+        status['syringe_id'] = syringe_id
 
         return status
 
@@ -4642,6 +4637,44 @@ class PumpCommThread(utils.CommManager):
         self._return_value((name, cmd, True), comm_name)
 
         logger.debug("Pump %s valve position set", name)
+
+    def _get_full_status(self, name, **kwargs):
+        logger.debug('Getting pump %s full status', name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+
+        status = self._get_status_inner(device)
+
+        self._return_value((name, cmd, status), comm_name)
+        logger.debug('Got pump %s full status', name)
+
+    def _get_status_inner(self, device):
+        is_moving = device.is_moving()
+        flow_rate = device.flow_rate
+        flow_dir = device.get_flow_dir()
+        pressure = device.get_pressure()
+        if device.is_syringe_pump:
+            volume = device.volume
+            refill_rate = device.refill_rate
+        else:
+            volume = None
+            refill_rate = None
+        valve_pos = device.get_valve_position()
+
+        status = {
+            'is_moving'     : is_moving,
+            'flow_rate'     : flow_rate,
+            'flow_dir'      : flow_dir,
+            'pressure'      : pressure,
+            'volume'        : volume,
+            'refill_rate'   : refill_rate,
+            'valve_pos'     : valve_pos,
+            }
+
+        return status
 
     def _send_pump_cmd(self, name, val, get_response=True, **kwargs):
         """
@@ -5216,31 +5249,34 @@ class PumpPanel(utils.DevicePanel):
             #     force = self.pump.force
             #     self.force.ChangeValue(str(force))
 
-            is_moving_cmd = ['is_moving', [self.name,], {}]
-            self._update_status_cmd(is_moving_cmd, 1)
+            # is_moving_cmd = ['is_moving', [self.name,], {}]
+            # self._update_status_cmd(is_moving_cmd, 1)
 
-            get_flow_rate_cmd = ['get_flow_rate', [self.name,], {}]
-            self._update_status_cmd(get_flow_rate_cmd, 1)
+            # get_flow_rate_cmd = ['get_flow_rate', [self.name,], {}]
+            # self._update_status_cmd(get_flow_rate_cmd, 1)
 
-            get_flow_dir_cmd = ['get_flow_dir', [self.name,], {}]
-            self._update_status_cmd(get_flow_dir_cmd, 1)
+            # get_flow_dir_cmd = ['get_flow_dir', [self.name,], {}]
+            # self._update_status_cmd(get_flow_dir_cmd, 1)
 
-            get_pressure_cmd = ['get_pressure', [self.name,], {}]
-            self._update_status_cmd(get_pressure_cmd, 1)
+            # get_pressure_cmd = ['get_pressure', [self.name,], {}]
+            # self._update_status_cmd(get_pressure_cmd, 1)
+
+            get_full_status_cmd = ['get_full_status', [self.name,], {}]
+            self._update_status_cmd(get_full_status_cmd, 1)
 
             get_settings_cmd = ['get_settings', [self.name,], {}]
             self._update_status_cmd(get_settings_cmd, 5)
 
-            if self.pump_mode == 'syringe':
-                get_volume_cmd = ['get_volume', [self.name,], {}]
-                self._update_status_cmd(get_volume_cmd, 1)
+            # if self.pump_mode == 'syringe':
+            #     get_volume_cmd = ['get_volume', [self.name,], {}]
+            #     self._update_status_cmd(get_volume_cmd, 1)
 
-                get_refill_rate_cmd = ['get_refill_rate', [self.name,], {}]
-                self._update_status_cmd(get_refill_rate_cmd, 1)
+            #     get_refill_rate_cmd = ['get_refill_rate', [self.name,], {}]
+            #     self._update_status_cmd(get_refill_rate_cmd, 1)
 
-            if self.pump_type == 'Hamilton PSD6':
-                get_valve_pos_cmd = ['get_valve_pos', [self.name,], {}]
-                self._update_status_cmd(get_valve_pos_cmd, 5)
+            # if self.pump_type == 'Hamilton PSD6':
+            #     get_valve_pos_cmd = ['get_valve_pos', [self.name,], {}]
+            #     self._update_status_cmd(get_valve_pos_cmd, 5)
 
         logger.info('Initialized pump %s on startup', self.name)
 
@@ -5657,76 +5693,102 @@ class PumpPanel(utils.DevicePanel):
                 logger.debug('Failed to set pump %s flow rate acceleration', self.name)
 
     def _set_status(self, cmd, val):
-        if cmd == 'is_moving':
-            if val is not None and val and not self._current_move_status:
+        if cmd == 'get_full_status':
+            is_moving = val['is_moving']
+            flow_rate = val['flow_rate']
+            flow_dir = val['flow_dir']
+            pressure = val['pressure']
+            volume = val['volume']
+            refill_rate = val['refill_rate']
+            valve_pos = val['valve_pos']
+
+            if not self._current_move_status:
+                flow_rate = 0
+                refill_rate = 0
+
+            if is_moving is not None and is_moving and not self._current_move_status:
                 self.run_button.SetLabel('Stop')
                 if self.pump_type != 'Hamilton PSD6':
                     self.fr_button.Show()
 
                 if self.pump_mode == 'continuous':
                     if self.mode_ctrl.GetStringSelection() == 'Fixed volume':
-                        pump_dir = self.direction_ctrl.GetStringSelection().lower()
+                        if self._current_flow_dir == 1:
+                            pump_dir = 'Dispense'
+                        else:
+                            pump_dir = 'Aspirate'
                         self._set_status_label(pump_dir.capitalize())
                     else:
                         self._set_status_label('Flowing')
                 else:
-                    pump_dir = self.direction_ctrl.GetStringSelection().lower()
+                    if self._current_flow_dir == 1:
+                        pump_dir ='Dispense'
+                    else:
+                        pump_dir = 'Aspirate'
                     self._set_status_label(pump_dir.capitalize())
 
                 self._current_move_status = val
 
-            elif val is not None and not val and self._current_move_status:
+            elif is_moving is not None and not is_moving and self._current_move_status:
                 self.run_button.SetLabel('Start')
                 if self.pump_type != 'Hamilton PSD6':
                     self.fr_button.Hide()
 
                 self._set_status_label('Done')
 
-                self._current_move_status = val
+                self._current_move_status = is_moving
 
                 if self.pump_mode == 'syringe':
                     stop_cmd = ['stop', [self.name,], {}]
                     self._send_cmd(stop_cmd)
 
-        elif cmd == 'get_volume':
-            if val is not None and val != self._current_volume:
-                self._set_status_volume(val)
-                self.syringe_vol_gauge.SetValue(int(round(float(val)*1000)))
-                self._current_volume = val
+            if volume is not None and volume != self._current_volume:
+                self._set_status_volume(volume)
+                self.syringe_vol_gauge.SetValue(int(round(float(volume)*1000)))
+                self._current_volume = volume
 
-        elif cmd == 'get_flow_rate':
-            if not self._current_move_status:
-                val = 0
 
-            if val is not None and round(val, 4) != float(self.flow_readback.GetLabel()):
-                self._current_flow_rate = val
+
+            if flow_rate is not None and round(flow_rate, 4) != float(self.flow_readback.GetLabel()):
+                self._current_flow_rate = flow_rate
 
                 if self.pump_mode =='continuous' or self._current_flow_dir >= 0:
-                    wx.CallAfter(self.flow_readback.SetLabel, str(round(val, 4)))
+                    wx.CallAfter(self.flow_readback.SetLabel, str(round(flow_rate, 4)))
 
-        elif cmd == 'get_refill_rate':
-            if not self._current_move_status:
-                val = 0
-
-            if val is not None and round(val, 4) != float(self.flow_readback.GetLabel()):
-                self._current_refill_rate = val
+            if refill_rate is not None and round(refill_rate, 4) != float(self.flow_readback.GetLabel()):
+                self._current_refill_rate = refill_rate
 
                 if self.pump_mode == 'syringe' and self._current_flow_dir < 0:
-                    wx.CallAfter(self.flow_readback.SetLabel, str(round(val, 4)))
+                    wx.CallAfter(self.flow_readback.SetLabel, str(round(refill_rate, 4)))
 
-        elif cmd == 'get_flow_dir':
-            if val is not None:
-                self._current_flow_dir = val
+            if flow_dir is not None:
+                if self._current_flow_dir != flow_dir:
+                    if self._current_move_status:
+                        if self.pump_mode == 'continuous':
+                            if self.mode_ctrl.GetStringSelection() == 'Fixed volume':
+                                if flow_dir == 1:
+                                    pump_dir = 'Dispense'
+                                else:
+                                    pump_dir = 'Aspirate'
+                                self._set_status_label(pump_dir.capitalize())
+                            else:
+                                self._set_status_label('Flowing')
+                        else:
+                            if flow_dir == 1:
+                                pump_dir ='Dispense'
+                            else:
+                                pump_dir = 'Aspirate'
+                            self._set_status_label(pump_dir.capitalize())
 
-        elif cmd == 'get_pressure':
-            if val is not None and val != self._current_pressure:
-                self.pressure.SetLabel(str(val))
-                self._current_pressure = val
+                self._current_flow_dir = flow_dir
 
-        elif cmd == 'get_valve_pos':
-            if val is not None and val != self._current_valve_position:
-                self.valve_ctrl.SetStringSelection(str(val))
-                self._current_valve_position = val
+            if pressure is not None and pressure != self._current_pressure:
+                self.pressure.SetLabel(str(pressure))
+                self._current_pressure = pressure
+
+            if valve_pos is not None and valve_pos != self._current_valve_position:
+                self.valve_ctrl.SetStringSelection(str(valve_pos))
+                self._current_valve_position = valve_pos
 
         elif cmd == 'get_settings':
             if val is not None:
@@ -5844,8 +5906,8 @@ if __name__ == '__main__':
     # my_pump.flow_rate = 10
     # my_pump.refill_rate = 10
 
-    my_pump = HamiltonPSD6Pump('Pump1', 'COM7', '1', 1.46, 0.1, 1,
-        '0.1 mL, Hamilton Glass', False, comm_lock=comm_lock)
+    # my_pump = HamiltonPSD6Pump('Pump1', 'COM7', '1', 1.46, 0.1, 1,
+    #     '0.1 mL, Hamilton Glass', False, comm_lock=comm_lock)
     # my_pump.flow_rate = 10
     # my_pump.refill_rate = 10
 
@@ -5962,37 +6024,37 @@ if __name__ == '__main__':
     #         'ctrl_args': {'flow_rate' : '0.1', 'refill_rate' : '10'}},
     #     ]
 
-    # # Teledyne SSI Reaxus pumps with scaling
+    # Teledyne SSI Reaxus pumps with scaling
     # setup_devices = [
-    #     {'name': 'Pump 4', 'args': ['SSI Next Gen', 'COM9'],
-    #         'kwargs': {'flow_rate_scale': 1.0179,
-    #         'flow_rate_offset': -20.842/10000,'scale_type': 'up'},
+    #     {'name': 'Pump 4', 'args': ['SSI Next Gen', 'COM14'],
+    #         'kwargs': {'flow_rate_scale': 1.0583,
+    #         'flow_rate_offset': -33.462/1000,'scale_type': 'up'},
     #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-    #     {'name': 'Pump 3', 'args': ['SSI Next Gen', 'COM7'],
-    #         'kwargs': {'flow_rate_scale': 1.0204,
-    #         'flow_rate_offset': 15.346/1000,'scale_type': 'up'},
+    #     {'name': 'Pump 3', 'args': ['SSI Next Gen', 'COM17'],
+    #         'kwargs': {'flow_rate_scale': 1.0135,
+    #         'flow_rate_offset': 5.1251/1000,'scale_type': 'up'},
     #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-    #     {'name': 'Pump 2', 'args': ['SSI Next Gen', 'COM15'],
-    #         'kwargs': {'flow_rate_scale': 1.0478,
-    #         'flow_rate_offset': -72.82/1000,'scale_type': 'up'},
+    #     {'name': 'Pump 2', 'args': ['SSI Next Gen', 'COM18'],
+    #         'kwargs': {'flow_rate_scale': 1.0497,
+    #         'flow_rate_offset': -34.853/1000,'scale_type': 'up'},
     #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-         # ]
+    #      ]
 
-    # Teledyne SSI Reaxus pumps without scaling
-    setup_devices = [
-        {'name': 'Pump 4', 'args': ['SSI Next Gen', 'COM15'],
-            'kwargs': {'flow_rate_scale': 1,
-            'flow_rate_offset': 0,'scale_type': 'up'},
-            'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-        {'name': 'Pump 3', 'args': ['SSI Next Gen', 'COM12'],
-            'kwargs': {'flow_rate_scale': 1,
-            'flow_rate_offset': 0,'scale_type': 'up'},
-            'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-        {'name': 'Pump 2', 'args': ['SSI Next Gen', 'COM14'],
-            'kwargs': {'flow_rate_scale': 1,
-            'flow_rate_offset': 0,'scale_type': 'up'},
-            'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-        ]
+    # # Teledyne SSI Reaxus pumps without scaling
+    # setup_devices = [
+    #     {'name': 'Pump 4', 'args': ['SSI Next Gen', 'COM19'],
+    #         'kwargs': {'flow_rate_scale': 1,
+    #         'flow_rate_offset': 0,'scale_type': 'up'},
+    #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
+    #     {'name': 'Pump 3', 'args': ['SSI Next Gen', 'COM14'],
+    #         'kwargs': {'flow_rate_scale': 1,
+    #         'flow_rate_offset': 0,'scale_type': 'up'},
+    #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
+    #     {'name': 'Pump 2', 'args': ['SSI Next Gen', 'COM18'],
+    #         'kwargs': {'flow_rate_scale': 1,
+    #         'flow_rate_offset': 0,'scale_type': 'up'},
+    #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
+    #     ]
 
     # # SEC-SAXS pump, Teledyne SSI Reaxus pumps without scaling
     # setup_devices = [
@@ -6002,21 +6064,21 @@ if __name__ == '__main__':
     #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
     #     ]
 
-    # # TR-SAXS Pico Plus pumps
-    # setup_devices = [
-    #     {'name': 'Buffer', 'args': ['Pico Plus', 'COM11'],
-    #         'kwargs': {'syringe_id': '3 mL, Medline P.C.',
-    #         'pump_address': '00', 'dual_syringe': 'False'},
-    #         'ctrl_args': {'flow_rate' : '1', 'refill_rate' : '1'}},
-    #     {'name': 'Sample', 'args': ['Pico Plus', 'COM9'],
-    #         'kwargs': {'syringe_id': '1 mL, Medline P.C.',
-    #          'pump_address': '00', 'dual_syringe': 'False'},
-    #         'ctrl_args': {'flow_rate' : '1', 'refill_rate' : '1'}},
-    #     {'name': 'Sheath', 'args': ['Pico Plus', 'COM7'],
-    #         'kwargs': {'syringe_id': '1 mL, Medline P.C.',
-    #          'pump_address': '00', 'dual_syringe': 'False'},
-    #         'ctrl_args': {'flow_rate' : '1', 'refill_rate' : '1'}},
-    #     ]
+    # TR-SAXS Pico Plus pumps
+    setup_devices = [
+        {'name': 'Buffer', 'args': ['Pico Plus', 'COM11'],
+            'kwargs': {'syringe_id': '3 mL, Medline P.C.',
+            'pump_address': '00', 'dual_syringe': 'False'},
+            'ctrl_args': {'flow_rate' : '1', 'refill_rate' : '1'}},
+        {'name': 'Sample', 'args': ['Pico Plus', 'COM9'],
+            'kwargs': {'syringe_id': '1 mL, Medline P.C.',
+             'pump_address': '00', 'dual_syringe': 'False'},
+            'ctrl_args': {'flow_rate' : '1', 'refill_rate' : '1'}},
+        {'name': 'Sheath', 'args': ['Pico Plus', 'COM7'],
+            'kwargs': {'syringe_id': '1 mL, Medline P.C.',
+             'pump_address': '00', 'dual_syringe': 'False'},
+            'ctrl_args': {'flow_rate' : '1', 'refill_rate' : '1'}},
+        ]
 
     # # Batch mode Hamilton PSD6 pump
     # setup_devices = [
@@ -6041,28 +6103,28 @@ if __name__ == '__main__':
     #     {'name': 'outlet', 'args': ['Soft', None], 'kwargs': {}},
     #     ]
 
-    # # Local
-    # com_thread = PumpCommThread('PumpComm')
-    # com_thread.start()
+    # Local
+    com_thread = PumpCommThread('PumpComm')
+    com_thread.start()
 
-    # # # Remote
-    # # com_thread = None
+    # # Remote
+    # com_thread = None
 
-    # settings = {
-    #     'remote'        : False,
-    #     'remote_device' : 'pump',
-    #     'device_init'   : setup_devices,
-    #     'remote_ip'     : '164.54.204.24',
-    #     'remote_port'   : '5556',
-    #     'com_thread'    : com_thread
-    #     }
+    settings = {
+        'remote'        : False,
+        'remote_device' : 'pump',
+        'device_init'   : setup_devices,
+        'remote_ip'     : '164.54.204.24',
+        'remote_port'   : '5556',
+        'com_thread'    : com_thread
+        }
 
-    # app = wx.App()
-    # logger.debug('Setting up wx app')
-    # frame = PumpFrame('PumpFrame', settings, parent=None, title='Pump Control')
-    # frame.Show()
-    # app.MainLoop()
+    app = wx.App()
+    logger.debug('Setting up wx app')
+    frame = PumpFrame('PumpFrame', settings, parent=None, title='Pump Control')
+    frame.Show()
+    app.MainLoop()
 
-    # if com_thread is not None:
-    #     com_thread.stop()
-    #     com_thread.join()
+    if com_thread is not None:
+        com_thread.stop()
+        com_thread.join()

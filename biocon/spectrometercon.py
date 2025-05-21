@@ -55,6 +55,7 @@ try:
     sys.path.append('C:\\Users\\biocat\\Stellarnet\\stellarnet_driverLibs')#add the path of the stellarnet_demo.py
     import stellarnet_driver3 as sn
 except ImportError:
+    traceback.print_exc()
     pass
 
 import client
@@ -297,6 +298,17 @@ class Spectrometer(object):
         self._analog_out_au_max = 10000.
         self._analog_out_wavelengths = {}
 
+        self._live_update = True
+        self._live_update_period = 1
+        self._live_update_evt = threading.Event()
+        self._live_update_stop = threading.Event()
+        self._live_update_evt.clear()
+        self._live_update_stop.clear()
+        self._live_udpate_thread = threading.Thread(target=self._live_update_spectra)
+        self._live_update_thread.daemon = True
+        self._live_update_thread.start()
+
+
         self._autosave_dir = None
         self._autosave_prefix = None
         self._autosave_raw = False
@@ -313,10 +325,16 @@ class Spectrometer(object):
 
     def connect(self):
         logger.info('Spectrometer %s: Connecting', self.name)
+        if self._live_update and not self._taking_series:
+            self._live_update_evt.set()
+
+        return self.connected
 
     def disconnect(self):
         logger.info('Spectrometer %s: Disconnecting', self.name)
         self._stop_autosave_event.set()
+        self._live_update_stop.set()
+        self._live_update_thread.join(5)
 
     def set_integration_time(self, int_time, update_dark=True):
         logger.info('Spectrometer %s: Setting integration time to %s s',
@@ -630,11 +648,49 @@ class Spectrometer(object):
 
         return spectrum
 
+    def _live_update_spectra(self):
+        start_time = 0
+
+        while not self._live_update_stop.is_set():
+            self._live_update_evt.wait()
+
+            if time.time() - start_time > self._live_update_period:
+                self.collect_spectrum()
+                start_time = time.time()
+
+            else:
+                time.sleep(0.1)
+
+    def set_live_update(self, do_live_update, period=1):
+        if do_live_update:
+            self._live_update = True
+            self._live_update_evt.set()
+
+        else:
+            old_live_update = copy.copy(self._live_update)
+
+            self._live_update = False
+            self._live_update_evt.clear()
+
+            if old_live_update and not self._taking_series:
+                while self.is_busy():
+                    time.sleep(0.1)
+
+        self._live_update_period = period
+
+    def get_live_update(self):
+        return copy.copy(self._live_update), copy.copy(self._live_update_period)
+
     def collect_spectra_series(self, num_spectra, spec_type='abs', return_q=None,
         delta_t_min=0, dark_correct=True, int_trigger=True, auto_dark=True,
         dark_time=60*60, take_ref=True, ref_avgs=1, drift_correct=True,
         wait_for_trig=False):
-        if self.is_busy():
+        if self._live_update and not self._taking_series:
+            self._live_update_evt.clear()
+            while self.is_busy():
+                time.sleep(0.1)
+
+        elif self.is_busy():
             raise RuntimeError('A spectrum or series of spectrum is already being '
                 'collected, cannot collect a new spectrum.')
 
@@ -780,6 +836,9 @@ class Spectrometer(object):
 
             self._taking_series = False
             self.series_ready_event.clear()
+
+            if self._live_update:
+                self._live_update_evt.set()
 
             logger.info('Spectrometer %s: Finished Collecting a series of '
                 '%s spectra', self.name, num_spectra)
@@ -1207,6 +1266,11 @@ class StellarnetUVVis(Spectrometer):
 
             self.connected = True
 
+        if self._live_update and not self._taking_series:
+            self._live_update_evt.set()
+
+        return self.connected
+
     def disconnect(self):
         logger.info('Spectrometer %s: Disconnecting', self.name)
 
@@ -1214,6 +1278,8 @@ class StellarnetUVVis(Spectrometer):
             self.abort_collection()
         self.spectrometer['device'].__del__()
         self._stop_autosave_event.set()
+        self._live_update_stop.set()
+        self._live_update_thread.join(5)
 
     def set_integration_time(self, int_time, update_dark=True):
         logger.info('Spectrometer %s: Setting integration time to %s s',
@@ -1474,6 +1540,8 @@ class UVCommThread(utils.CommManager):
             'get_drift_window'  : self._get_drift_window,
             'set_ao_params'     : self._set_ao_params,
             'get_ao_params'     : self._get_ao_params,
+            'set_live_params'   : self._set_live_params,
+            'get_live_params'   : self._get_live_params,
         }
 
         self._connected_devices = OrderedDict()
@@ -1633,7 +1701,16 @@ class UVCommThread(utils.CommManager):
         cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
+
+        live_update, _ = self.get_live_update()
+
+        if live_update:
+            self.set_live_update(False)
+
         val = device.collect_dark(**kwargs)
+
+        if live_update:
+            self.set_live_update(True)
 
         self._return_value((name, cmd, val), comm_name)
         self._return_value((name, cmd, val), 'status')
@@ -1676,7 +1753,16 @@ class UVCommThread(utils.CommManager):
         cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
+
+        live_update, _ = self.get_live_update()
+
+        if live_update:
+            self.set_live_update(False)
+
         val = device.collect_reference_spectrum(**kwargs)
+
+        if live_update:
+            self.set_live_update(True)
 
         self._return_value((name, cmd, val), comm_name)
         self._return_value((name, cmd, val), 'status')
@@ -1690,7 +1776,16 @@ class UVCommThread(utils.CommManager):
         cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
+
+        live_update, _ = self.get_live_update()
+
+        if live_update:
+            self.set_live_update(False)
+
         val = device.collect_spectrum(**kwargs)
+
+        if live_update:
+            self.set_live_update(True)
 
         self._return_value((name, cmd, val), comm_name)
         self._return_value((name, cmd, val), 'status')
@@ -2134,7 +2229,7 @@ class UVCommThread(utils.CommManager):
         logger.debug("Device %s analog output params set", name)
 
     def _get_ao_params(self, name, **kwargs):
-        logger.debug("Getting device %s drift window", name)
+        logger.debug("Getting device %s analog output params", name)
 
         comm_name = kwargs.pop('comm_name', None)
         cmd = kwargs.pop('cmd', None)
@@ -2145,6 +2240,32 @@ class UVCommThread(utils.CommManager):
         self._return_value((name, cmd, val), comm_name)
 
         logger.debug("Device %s analog output params: %s", name, val)
+
+    def _set_live_update(self, name, do_live_update, **kwargs):
+        logger.debug("Device %s setting live_update params %s", name, kwargs)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        device.set_live_update(do_live_update, **kwargs)
+
+        self._return_value((name, cmd, True), comm_name)
+
+        logger.debug("Device %s live_update params set", name)
+
+    def _get_live_update(self, name, **kwargs):
+        logger.debug("Getting device %s live update params", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        val = device.get_live_update(**kwargs)
+
+        self._return_value((name, cmd, val), comm_name)
+
+        logger.debug("Device %s live_update params: %s", name, val)
 
     def _monitor_series(self, name):
         device = self._connected_devices[name]
@@ -2197,7 +2318,7 @@ class UVPanel(utils.DevicePanel):
         self._reference_spectrum = None
         self._current_spectrum = None
 
-        self._history_length = 60*60*24
+        self._history_length = 2*60*60
 
         self._history = {'spectra' : [], 'timestamps' : []}
         self._transmission_history = {'spectra' : [], 'timestamps' : []}
@@ -2230,16 +2351,6 @@ class UVPanel(utils.DevicePanel):
         self.uv_plot = None
 
         super(UVPanel, self).__init__(parent, panel_id, settings, *args, **kwargs)
-
-        if not self.inline:
-            self._live_update_evt = threading.Event()
-            self._live_update_evt.clear()
-            self._live_update_stop = threading.Event()
-            self._live_update_stop.clear()
-            self._live_update_thread = threading.Thread(target=self._live_update_plot)
-            self._live_update_thread.daemon = True
-            self._live_update_thread.start()
-            self._restart_live_update = False
 
     def _create_layout(self):
         """Creates the layout for the panel."""
@@ -2866,32 +2977,10 @@ class UVPanel(utils.DevicePanel):
             self._send_cmd(cmd)
 
     def _on_autoupdate(self, evt):
-        if self.auto_update.GetValue():
-            if not self._series_running:
-                self._live_update_evt.set()
-            self._restart_live_update = True
-        else:
-            self._live_update_evt.clear()
-            self._restart_live_update = False
+        pass
 
     def _on_plot_update_change(self, obj, val):
         self._plot_update_period = float(val)
-
-    def _live_update_plot(self):
-        update_time = time.time()
-
-        while True:
-            if self._live_update_stop.is_set():
-                break
-
-            if self._live_update_evt.is_set():
-                if time.time() - update_time > self._plot_update_period:
-                    update_time = time.time()
-                    self._collect_spectrum()
-                else:
-                    time.sleep(self._plot_update_period/10)
-            else:
-                time.sleep(0.5)
 
     def _set_wavelength_range(self):
         if self.inline:
@@ -3064,7 +3153,7 @@ class UVPanel(utils.DevicePanel):
 
                 uv_time = max(int_time*self.settings['int_t_scale'], 0.05)*scan_avgs
 
-                delta_t_min = (exp_time-uv_time)*1.05
+                delta_t_min = (exp_period-uv_time)*1.05
 
                 if delta_t_min < 0.01:
                     delta_t_min = 0
@@ -3623,17 +3712,17 @@ class UVPanel(utils.DevicePanel):
             num_frames = exp_params['num_frames']
             num_trig = int(exp_params['num_trig'])
 
-            if exp_time < 0.125 or exp_period - exp_time < 0.01:
+            if exp_period < 0.125 or exp_period - exp_time < 0.01:
                 uv_valid = False
 
             else:
                 max_int_t = float(self.int_time.GetValue())
 
-                int_time = min(exp_time/2, max_int_t)
+                int_time = min(exp_period/2, max_int_t)
 
                 spec_t = max(int_time*self.settings['int_t_scale'], 0.05)
 
-                scan_avgs = exp_time // spec_t
+                scan_avgs = exp_period // spec_t
 
                 abort_cmd = ['abort_collection', [self.name,], {}]
                 self._send_cmd(abort_cmd)

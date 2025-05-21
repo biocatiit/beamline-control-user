@@ -38,6 +38,7 @@ import wx
 import serial
 import serial.tools.list_ports as list_ports
 from six import string_types
+import epics
 
 import utils
 
@@ -196,6 +197,8 @@ class Valve(object):
        if not self.connected:
             self.connected = True
 
+        return self.connected
+
     def get_status(self):
         pass
 
@@ -258,6 +261,8 @@ class RheodyneValve(Valve):
             # self.send_command('M', False) #Homes valve
 
             self.connected = True
+
+        return self.connected
 
     def get_status(self):
         status, success = self.send_command('S')
@@ -338,6 +343,79 @@ class RheodyneValve(Valve):
 
         return ret, success
 
+class RheodyneValveTTL(Valve):
+    """
+    """
+
+    def __init__(self, name, device, positions, comm_lock=None):
+        """
+        This makes the initial serial connection, and then sets the MForce
+        controller parameters to the correct values.
+
+        :param str device: The device comport as sent to pyserial
+
+        :param str name: A unique identifier for the pump
+        """
+        self._position_trans = {
+            1   : 1,
+            2   : 0
+        }
+
+        self._rev_position_trans = {
+            1   : 1,
+            0   : 2,
+        }
+
+        Valve.__init__(self, name, device, comm_lock=comm_lock)
+
+        logstr = ("Initializing valve {} on port {}".format(self.name,
+            self.device))
+        logger.info(logstr)
+
+        self._positions = int(positions)
+
+        # logger.exception('Initialization error: {}'.format(error))
+
+    def connect(self):
+        if not self.connected:
+            self.valve_pv = epics.get_pv(self.device)
+
+            connected = self.valve_pv.wait_for_connection(5)
+
+            if not connected:
+                logger.error('Failed to connect to valve %s EPICS PV %s on startup',
+                    self.name, self.device)
+
+            else:
+                val = self.valve_pv.get()
+                self._position = self._rev_position_trans[val]
+                self.valve_pv.add_callback(self._update_position)
+
+            # self.send_command('M', False) #Homes valve
+
+            self.connected = connected
+
+        return self.connected
+
+    def _update_position(self, value, **kwargs):
+        self._position = self._rev_position_trans[value]
+
+    def get_status(self):
+        return None
+
+    def get_error(self):
+        return None
+
+    def get_position(self):
+        return copy.copy(self._position)
+
+    def set_position(self, position):
+        position = int(position)
+
+        pv_val = self._position_trans[position]
+        self.valve_pv.put(pv_val, wait=True)
+
+        return True
 
 class CheminertValve(Valve):
     """
@@ -368,6 +446,8 @@ class CheminertValve(Valve):
                 self.valve_comm = SerialComm(self.device, self._baud)
 
             self.connected = True
+
+        return self.connected
 
     def get_position(self):
         position = self.send_command('CP')[0]
@@ -485,9 +565,10 @@ class SoftValve(Valve):
         return success
 
 known_valves = {
-    'Rheodyne'  : RheodyneValve,
-    'Soft'      : SoftValve,
-    'Cheminert' : CheminertValve,
+    'Rheodyne'      : RheodyneValve,
+    'RheodyneTTL'   : RheodyneValveTTL,
+    'Soft'          : SoftValve,
+    'Cheminert'     : CheminertValve,
     }
 
 class ValveCommThread(utils.CommManager):
@@ -576,9 +657,9 @@ class ValveCommThread(utils.CommManager):
         device = self._connected_devices[name]
         success = device.set_position(val)
         if success:
-            logger.info("Valve %s position set to %i", name, val)
+            logger.info("Valve %s position set to %s", name, val)
         else:
-            logger.info("Failed setting valve %s position to %i", name, val)
+            logger.info("Failed setting valve %s position to %s", name, val)
 
         self._return_value((name, cmd, success), comm_name)
 
@@ -594,9 +675,9 @@ class ValveCommThread(utils.CommManager):
             valve = self._connected_devices[name]
             t_success = valve.set_position(positions[i], **kwargs)
             if t_success:
-                logger.info("Valve %s position set to %i", name, positions[i])
+                logger.info("Valve %s position set to %s", name, positions[i])
             else:
-                logger.info("Failed setting valve %s position to %i", name,
+                logger.info("Failed setting valve %s position to %s", name,
                     positions[i])
             success.append(t_success)
 
@@ -767,7 +848,7 @@ if __name__ == '__main__':
     # my_valve = CheminertValve(valve_args['name'], valve_args['args'][1],
     #     valve_args['kwargs']['positions'], baud=9600)
 
-    # my_rv67 = RheodyneValve('/dev/cu.usbserial-AC01UZ8O', '6p7_1', 6)
+    # my_rv = RheodyneValve('injection', 'COM20', 2)
     # my_rv67.get_position()
     # my_rv67.set_position(4)
 
@@ -806,9 +887,13 @@ if __name__ == '__main__':
     #         'kwargs': {'positions' : 6}},
     #     ]
 
-    # # TR-SAXS continuous pump chaotic flow
+    # TR-SAXS continuous pump chaotic flow
     # setup_devices = [
-    #     {'name': 'Injection', 'args': ['Rheodyne', 'COM6'],
+    #     # {'name': 'Injection', 'args': ['Rheodyne', 'COM6'],
+    #     #     'kwargs': {'positions' : 2}},
+    #     {'name': 'Injection 1', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo14'],
+    #         'kwargs': {'positions' : 2}},
+    #     {'name': 'Injection 2', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo14'],
     #         'kwargs': {'positions' : 2}},
     #     ]
 
@@ -818,9 +903,11 @@ if __name__ == '__main__':
     #         'kwargs': {'positions': 10}},
     #     ]
 
-    # # TR-SAXS laminar flow
+    # # # TR-SAXS laminar flow
     setup_devices = [
-    # {'name': 'Injection', 'args': ['Rheodyne', 'COM6'],
+        {'name': 'Injection', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo14'],
+            'kwargs': {'positions' : 2}},
+        # {'name': 'Injection', 'args': ['Rheodyne', 'COM6'],
         #     'kwargs': {'positions' : 2}},
         {'name': 'Buffer 1', 'args': ['Rheodyne', 'COM10'],
             'kwargs': {'positions' : 6}},
@@ -869,6 +956,12 @@ if __name__ == '__main__':
     # setup_devices = [
     #     {'name': 'Needle', 'args': ['Cheminert', 'COM11'],
     #         'kwargs': {'positions': 10}},
+    #     ]
+
+    # # MALS switching
+    # setup_devices = [
+    #     {'name': 'MALS', 'args': ['Cheminert', 'COM8'],
+    #         'kwargs': {'positions': 2}},
     #     ]
 
     # Local
