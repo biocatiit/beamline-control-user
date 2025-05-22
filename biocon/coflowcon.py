@@ -1317,6 +1317,8 @@ class CoflowCommThread(utils.CommManager):
         device.start_overflow()
 
         self._return_value((name, cmd, True), comm_name)
+        status = device.check_overflow_status()
+        self._return_value((name, cmd, status), 'status')
 
         logger.debug("%s overflow pump started", name)
 
@@ -1331,6 +1333,8 @@ class CoflowCommThread(utils.CommManager):
         device.stop_overflow()
 
         self._return_value((name, cmd, True), comm_name)
+        status = device.check_overflow_status()
+        self._return_value((name, cmd, status), 'status')
 
         logger.debug("%s overflow pump started", name)
 
@@ -1633,6 +1637,8 @@ class CoflowPanel(utils.DevicePanel):
         self._outlet_setpoint = 0.
         self._lc_flow_rate = 0.
         self._overflow_status = ''
+        self._changing_valve = False
+        self._expected_valve_pos = 0
 
         super(CoflowPanel, self).__init__(parent, panel_id, settings,
             *args, **kwargs)
@@ -1758,8 +1764,16 @@ class CoflowPanel(utils.DevicePanel):
                 self._coflow_on = coflow_on
 
             if self._sheath_valve_pos != int(sheath_valve_pos):
-                wx.CallAfter(self.sheath_valve_pos.SafeChangeValue, int(sheath_valve_pos))
-                self._sheath_valve_pos = int(sheath_valve_pos)
+                if self._changing_valve:
+                    if self._expected_valve_pos == int(sheath_valve_pos):
+                        wx.CallAfter(self.sheath_valve_pos.SafeChangeValue,
+                            int(sheath_valve_pos))
+
+                        self._sheath_valve_pos = int(sheath_valve_pos)
+                else:
+                    wx.CallAfter(self.sheath_valve_pos.SafeChangeValue,
+                        int(sheath_valve_pos))
+                    self._sheath_valve_pos = int(sheath_valve_pos)
 
             if bc_status != self._bc_status:
                 if not bc_status:
@@ -1825,6 +1839,17 @@ class CoflowPanel(utils.DevicePanel):
                 wx.CallAfter(self.overflow_status.SetLabel, status)
                 self._overflow_status = status
 
+        elif cmd == 'start_overflow' or cmd == 'stop_overflow':
+            status, err = val
+            if err:
+                msg = ('Could not get overflow pump status. Contact your beamline scientist.')
+                wx.CallAfter(self.showMessageDialog, self, msg, "Connection error",
+                    wx.OK|wx.ICON_ERROR)
+
+            elif status != self._overflow_status:
+                wx.CallAfter(self.overflow_status.SetLabel, status)
+                self._overflow_status = status
+
     def _stop_flow_timer(self):
         change_buf = copy.copy(self.doing_buffer_change)
         self.stop_flow()
@@ -1872,23 +1897,25 @@ class CoflowPanel(utils.DevicePanel):
         control_box = wx.StaticBox(self, label='Coflow Controls')
         coflow_ctrl_sizer = wx.StaticBoxSizer(control_box, wx.VERTICAL)
 
-        self.flow_rate = wx.TextCtrl(control_box, size=self._FromDIP((60,-1)),
+        flow_box = wx.StaticBox(control_box, label='Flow')
+
+        self.flow_rate = wx.TextCtrl(flow_box, size=self._FromDIP((60,-1)),
             value=self.settings['lc_flow_rate'], validator=utils.CharValidator('float'))
         fr_label = 'LC flow rate [{}]:'.format(units)
-        self.change_flow_button = wx.Button(control_box, label='Change Flow Rate')
+        self.change_flow_button = wx.Button(flow_box, label='Change Flow Rate')
 
         flow_rate_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        flow_rate_sizer.Add(wx.StaticText(control_box, label=fr_label), border=self._FromDIP(2),
+        flow_rate_sizer.Add(wx.StaticText(flow_box, label=fr_label), border=self._FromDIP(2),
             flag=wx.ALIGN_CENTER_VERTICAL|wx.RIGHT)
         flow_rate_sizer.Add(self.flow_rate, flag=wx.ALIGN_CENTER_VERTICAL|wx.RIGHT,
             border=self._FromDIP(2))
         flow_rate_sizer.Add(self.change_flow_button, flag=wx.ALIGN_CENTER_VERTICAL)
 
-        self.start_flow_button = wx.Button(control_box, label='Start Coflow')
-        self.stop_flow_button = wx.Button(control_box, label='Stop Coflow')
-        self.change_buffer_button = wx.Button(control_box, label='Change Buffer')
+        self.start_flow_button = wx.Button(flow_box, label='Start Coflow')
+        self.stop_flow_button = wx.Button(flow_box, label='Stop Coflow')
+        self.change_buffer_button = wx.Button(flow_box, label='Change Buffer')
 
-        self.auto_flow = wx.CheckBox(control_box, label='Start/stop coflow automatically with exposure')
+        self.auto_flow = wx.CheckBox(flow_box, label='Start/stop coflow automatically with exposure')
         self.auto_flow.SetValue(False)
 
         self.start_flow_button.Bind(wx.EVT_BUTTON, self._on_startbutton)
@@ -1917,8 +1944,35 @@ class CoflowPanel(utils.DevicePanel):
             flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT)
         button_sizer.AddStretchSpacer(1)
 
-        adv_pane = wx.CollapsiblePane(control_box, label="Advanced",
-            style=wx.CP_NO_TLW_RESIZE)
+        basic_flow_ctrl_sizer = wx.StaticBoxSizer(flow_box, wx.VERTICAL)
+        basic_flow_ctrl_sizer.Add(flow_rate_sizer)
+        basic_flow_ctrl_sizer.Add(self.auto_flow, border=self._FromDIP(2), flag=wx.TOP)
+        basic_flow_ctrl_sizer.Add(button_sizer, border=self._FromDIP(2),
+            flag=wx.TOP)
+
+        valve_box = wx.StaticBox(control_box, label='Valves')
+        valve_box_sizer = wx.StaticBoxSizer(valve_box, wx.HORIZONTAL)
+
+        self.sheath_valve_pos = utils.IntSpinCtrl(valve_box, my_min=1,
+            my_max=self.settings['sheath_valve']['kwargs']['positions'])
+        self.sheath_valve_pos.Bind(utils.EVT_MY_SPIN, self._on_sheath_valve_position_change)
+
+        valve_sizer = wx.FlexGridSizer(cols=2, hgap=self._FromDIP(5),
+            vgap=self._FromDIP(5))
+        valve_sizer.Add(wx.StaticText(valve_box, label='Sheath Valve:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        valve_sizer.Add(self.sheath_valve_pos, flag=wx.ALIGN_CENTER_VERTICAL)
+
+        valve_box_sizer.Add(valve_sizer, flag=wx.ALL|wx.EXPAND, border=self._FromDIP(2))
+        valve_box_sizer.AddStretchSpacer(1)
+
+        basic_ctrl_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        basic_ctrl_sizer.Add(basic_flow_ctrl_sizer)
+        basic_ctrl_sizer.Add(valve_box_sizer, border=self._FromDIP(2),
+            flag=wx.LEFT)
+
+
+        adv_pane = wx.CollapsiblePane(control_box, label="Advanced")
         adv_pane.Bind(wx.EVT_COLLAPSIBLEPANE_CHANGED, self.on_collapse)
         adv_win = adv_pane.GetPane()
 
@@ -1954,25 +2008,6 @@ class CoflowPanel(utils.DevicePanel):
 
             adv_sizer.Add(overflow_box_sizer, flag=wx.ALL|wx.EXPAND,
                 border=self._FromDIP(2))
-
-
-        valve_box = wx.StaticBox(adv_win, label='Valves')
-        valve_box_sizer = wx.StaticBoxSizer(valve_box, wx.HORIZONTAL)
-
-        self.sheath_valve_pos = utils.IntSpinCtrl(valve_box, my_min=1,
-            my_max=self.settings['sheath_valve']['kwargs']['positions'])
-        self.sheath_valve_pos.Bind(utils.EVT_MY_SPIN, self._on_sheath_valve_position_change)
-
-        valve_sizer = wx.FlexGridSizer(cols=2, hgap=self._FromDIP(5),
-            vgap=self._FromDIP(5))
-        valve_sizer.Add(wx.StaticText(valve_box, label='Sheath Valve:'),
-            flag=wx.ALIGN_CENTER_VERTICAL)
-        valve_sizer.Add(self.sheath_valve_pos, flag=wx.ALIGN_CENTER_VERTICAL)
-
-        valve_box_sizer.Add(valve_sizer, flag=wx.ALL, border=self._FromDIP(2))
-        valve_box_sizer.AddStretchSpacer(1)
-
-        adv_sizer.Add(valve_box_sizer, flag=wx.ALL|wx.EXPAND, border=self._FromDIP(2))
 
 
         timer_box = wx.StaticBox(adv_win, label='Run Timer')
@@ -2070,9 +2105,8 @@ class CoflowPanel(utils.DevicePanel):
 
         adv_win.SetSizer(adv_sizer)
 
-        coflow_ctrl_sizer.Add(flow_rate_sizer, border=self._FromDIP(2), flag=wx.TOP|wx.LEFT|wx.RIGHT)
-        coflow_ctrl_sizer.Add(self.auto_flow, border=self._FromDIP(2), flag=wx.TOP|wx.LEFT|wx.RIGHT)
-        coflow_ctrl_sizer.Add(button_sizer, border=self._FromDIP(2),
+
+        coflow_ctrl_sizer.Add(basic_ctrl_sizer, border=self._FromDIP(2),
             flag=wx.TOP|wx.LEFT|wx.RIGHT|wx.EXPAND)
         coflow_ctrl_sizer.Add(adv_pane, flag=wx.ALL|wx.EXPAND, border=self._FromDIP(2))
 
@@ -2697,6 +2731,8 @@ class CoflowPanel(utils.DevicePanel):
         pos = self.sheath_valve_pos.GetValue()
 
         if int(pos) != self._sheath_valve_pos:
+            self._changing_valve = True
+            self._expected_valve_pos = pos
             self.set_sheath_valve_position(pos)
 
     def get_sheath_valve_position(self):
