@@ -685,7 +685,9 @@ class CommManager(threading.Thread):
             ', '.join(['{}:{}'.format(kw, item) for kw, item in kwargs.items()]))
 
         try:
+            logger.debug('222222222222222222222222222222222222')
             self._commands[command](*args, **kwargs)
+            logger.debug('3333333333333333333333333333333333333')
         except Exception:
             msg = ("Communication thread %s failed to run command '%s' "
                 "with args: %s and kwargs: %s " %(self.name, command,
@@ -693,6 +695,7 @@ class CommManager(threading.Thread):
                 ', '.join(['{}:{}'.format(kw, item) for kw, item in kwargs.items()])))
             logger.exception(msg)
 
+            logger.debug('4444444444444444444444444444')
             self._return_value((command, False), kwargs['comm_name'])
 
     def add_new_communication(self, name, command_queue, return_queue, status_queue):
@@ -750,6 +753,8 @@ class CommManager(threading.Thread):
         comm_name = kwargs.pop('comm_name', None)
         cmd = kwargs.pop('cmd', None)
 
+        kwargs = self._additional_pre_connect_device(name, device_type, device, kwargs)
+
         if name not in self._connected_devices:
             # if device is None or device not in self._connected_coms:
             #     new_device = self.known_devices[device_type](name, device, **kwargs)
@@ -775,6 +780,9 @@ class CommManager(threading.Thread):
 
     def _additional_connect_device(self, name, device_type, device, **kwargs):
         pass # Device specific stuff here if needed
+
+    def _additional_pre_connect_device(self, name, device_type, device, kwargs):
+        return kwargs
 
     def _disconnect_device(self, name, **kwargs):
         logger.info("Disconnecting device %s", name)
@@ -1015,7 +1023,6 @@ class DevicePanel(wx.Panel):
 def send_cmd(cmd, cmd_q, return_q, timeout_event, return_lock, remote,
     remote_dev, get_response=False, is_status=False, status_period=1,
     add_status=True):
-
     if remote:
         if is_status:
             device = '{}_status'.format(remote_dev)
@@ -1029,19 +1036,25 @@ def send_cmd(cmd, cmd_q, return_q, timeout_event, return_lock, remote,
         full_cmd = cmd
 
     if not remote:
-        with return_lock:
+        if get_response:
+            with return_lock:
+                start_count = len(return_q)
+                cmd_q.append(full_cmd)
+                result = wait_for_response(return_q, timeout_event, remote,
+                    start_count, cmd)
+        else:
             cmd_q.append(full_cmd)
-            result = wait_for_response(return_q, timeout_event, remote)
 
     else:
         if get_response:
             with return_lock:
+                start_count = len(return_q)
                 cmd_q.append(full_cmd)
-                result = wait_for_response(return_q, timeout_event, remote)
+                result = wait_for_response(return_q, timeout_event, remote,
+                    start_count, cmd)
 
         else:
             cmd_q.append(full_cmd)
-
 
     if get_response:
         if result is not None and result[0] == cmd[1][0] and result[1] == cmd[0]:
@@ -1053,21 +1066,22 @@ def send_cmd(cmd, cmd_q, return_q, timeout_event, return_lock, remote,
 
     return ret_val
 
-def wait_for_response(return_q, timeout_event, remote):
-    start_count = len(return_q)
-    while len(return_q) == start_count:
-        time.sleep(0.01)
+def wait_for_response(return_q, timeout_event, remote, start_count, cmd):
+    while True:
+        if len(return_q) == start_count:
+            time.sleep(0.01)
+
+        else:
+            result = return_q[-1]
+            if result is not None and result[0] == cmd[1][0] and result[1] == cmd[0]:
+                answer = return_q.pop()
+                break
+            else:
+                start_count = len(return_q)
 
         if remote and timeout_event.is_set():
-            break
-
-    if remote:
-        if not timeout_event.is_set():
-            answer = return_q.pop()
-        else:
             answer = None
-    else:
-        answer = return_q.pop()
+            break
 
     return answer
 

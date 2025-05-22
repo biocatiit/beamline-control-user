@@ -5022,7 +5022,7 @@ class HPLCPanel(utils.DevicePanel):
         Initializes the valve.
         """
         device_data = settings['device_data']
-        args = device_data['args']
+        args = copy.copy(device_data['args'])
         kwargs = device_data['kwargs']
 
         valve_max = kwargs['purge1_valve_args']['kwargs']['positions']

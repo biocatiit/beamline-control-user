@@ -2832,7 +2832,7 @@ class UVPanel(utils.DevicePanel):
         self._init_controls()
 
         device_data = settings['device_data']
-        args = device_data['args']
+        args = copy.copy(device_data['args'])
         kwargs = device_data['kwargs']
 
         args.insert(0, self.name)
@@ -2845,7 +2845,7 @@ class UVPanel(utils.DevicePanel):
 
         if self.inline:
             cmd = ['set_hist_time', [self.name, float(self._history_length)], {}]
-            self._send_cmd(cmd)
+            self._send_cmd(cmd, get_response=False)
 
         is_busy = self._get_busy()
 
@@ -2974,7 +2974,7 @@ class UVPanel(utils.DevicePanel):
             cmd = None
 
         if cmd is not None:
-            self._send_cmd(cmd)
+            self._send_cmd(cmd, get_response=False)
 
     def _on_autoupdate(self, evt):
         pass
@@ -3014,7 +3014,7 @@ class UVPanel(utils.DevicePanel):
 
         if update:
             cmd = ['set_wl_range', [self.name, wav_start, wav_end], {}]
-            self._send_cmd(cmd)
+            self._send_cmd(cmd, get_response=False)
             self._current_wav_range = [wav_start, wav_end]
 
     def _on_collect_single(self, evt):
@@ -3043,7 +3043,7 @@ class UVPanel(utils.DevicePanel):
 
     def _open_ls_shutter(self, shutter_open):
         ls_cmd = ['set_ls_shutter', [self.name, shutter_open], {}]
-        self._send_cmd(ls_cmd)
+        self._send_cmd(ls_cmd, get_response=False)
         time.sleep(0.1)
         ls_status_cmd = ['get_ls_shutter', [self.name,], {}]
         resp = self._send_cmd(ls_status_cmd, True)
@@ -3122,7 +3122,7 @@ class UVPanel(utils.DevicePanel):
                 cmd = None
 
             if cmd is not None:
-                self._send_cmd(cmd)
+                self._send_cmd(cmd, get_response=False)
 
         else:
             wx.CallAfter(self._show_busy_msg)
@@ -3204,7 +3204,7 @@ class UVPanel(utils.DevicePanel):
 
             cmd = ['collect_series', [self.name, num_spectra], kwargs]
 
-            self._send_cmd(cmd)
+            self._send_cmd(cmd, get_response=False)
 
         else:
             wx.CallAfter(self._show_busy_msg)
@@ -3216,7 +3216,7 @@ class UVPanel(utils.DevicePanel):
 
     def _abort_series(self):
         cmd = ['abort_collection', [self.name,], {}]
-        self._send_cmd(cmd)
+        self._send_cmd(cmd, get_response=False)
 
     def _get_busy(self):
         busy_cmd = ['get_busy', [self.name,], {}]
@@ -3233,28 +3233,28 @@ class UVPanel(utils.DevicePanel):
         if exp_time != self._current_int_time:
             int_t_cmd = ['set_int_time', [self.name, exp_time],
                 {'update_dark': False}]
-            self._send_cmd(int_t_cmd)
+            self._send_cmd(int_t_cmd, get_response=False)
 
             update_dark = True
 
         if scan_avgs != self._current_scan_avg:
             scan_avg_cmd = ['set_scan_avg', [self.name, scan_avgs],
                 {'update_dark': False}]
-            self._send_cmd(scan_avg_cmd)
+            self._send_cmd(scan_avg_cmd, get_response=False)
 
             update_dark = True
 
         if self._current_smooth != self.settings['smoothing']:
             smoothing_cmd = ['set_smoothing', [self.name,
                 self.settings['smoothing']], {'update_dark': False}]
-            self._send_cmd(smoothing_cmd)
+            self._send_cmd(smoothing_cmd, get_response=False)
 
             update_dark = True
 
         if self._current_xtiming != self.settings['xtiming']:
             xtiming_cmd = ['set_xtiming', [self.name,
                 self.settings['xtiming']], {'update_dark': False}]
-            self._send_cmd(xtiming_cmd)
+            self._send_cmd(xtiming_cmd, get_response=False)
 
             update_dark = True
 
@@ -3290,14 +3290,14 @@ class UVPanel(utils.DevicePanel):
         for wav in abs_wav_list:
             if self._current_abs_wav is None or wav not in self._current_abs_wav:
                 cmd = ['add_abs_wav', [self.name, wav], {}]
-                self._send_cmd(cmd)
+                self._send_cmd(cmd, get_response=False)
                 update = True
 
         if self._current_abs_wav is not None:
             for wav in self._current_abs_wav:
                 if wav not in abs_wav_list:
                     cmd = ['remove_abs_wav', [self.name, wav], {}]
-                    self._send_cmd(cmd)
+                    self._send_cmd(cmd, get_response=False)
                     update = True
 
         if update:
@@ -3305,7 +3305,7 @@ class UVPanel(utils.DevicePanel):
 
         if self._current_abs_win != abs_window:
             cmd = ['set_abs_window', [self.name, abs_window], {}]
-            self._send_cmd(cmd)
+            self._send_cmd(cmd, get_response=False)
             self._current_abs_win = abs_window
 
     def _set_drift_params(self):
@@ -3319,7 +3319,7 @@ class UVPanel(utils.DevicePanel):
 
         if self._current_drift_win != drift_window:
             cmd = ['set_drift_window', [self.name, drift_window],{}]
-            self._send_cmd(cmd)
+            self._send_cmd(cmd, get_response=False)
 
     def _set_ao_params(self):
         if self.inline:
@@ -3365,7 +3365,7 @@ class UVPanel(utils.DevicePanel):
             or ao_au_max != self._current_ao_au_max
             or ao_wav != self._current_ao_wav):
                 cmd = ['set_ao_params', [self.name,], params]
-                self._send_cmd(cmd)
+                self._send_cmd(cmd, get_response=False)
 
         if do_ao != self._current_ao_on:
             self._current_ao_on = do_ao
@@ -3390,7 +3390,7 @@ class UVPanel(utils.DevicePanel):
 
         cmd = ['set_autosave_on', [self.name, autosave_on], {}]
 
-        self._send_cmd(cmd)
+        self._send_cmd(cmd, get_response=False)
 
         if autosave_on:
             if autosave_choice == 'Absorbance':
@@ -3454,7 +3454,7 @@ class UVPanel(utils.DevicePanel):
 
             cmd = ['set_autosave_param', [self.name, data_dir, prefix], kwargs]
 
-            self._send_cmd(cmd)
+            self._send_cmd(cmd, get_response=False)
 
     def _on_change_dir(self, evt):
         with wx.DirDialog(self, "Select Directory", self.autosave_dir.GetValue()) as fd:
@@ -3725,13 +3725,13 @@ class UVPanel(utils.DevicePanel):
                 scan_avgs = exp_period // spec_t
 
                 abort_cmd = ['abort_collection', [self.name,], {}]
-                self._send_cmd(abort_cmd)
+                self._send_cmd(abort_cmd, get_response=False)
 
                 ext_trig_cmd = ['set_external_trig', [self.name, True], {}]
-                self._send_cmd(ext_trig_cmd)
+                self._send_cmd(ext_trig_cmd, get_response=False)
 
                 int_trig_cmd = ['set_int_trig', [self.name, False], {}]
-                self._send_cmd(int_trig_cmd)
+                self._send_cmd(int_trig_cmd, get_response=False)
 
                 # if 'pipeline' in self.settings['components']:
                 #     data_dir = os.path.split(data_dir)[0]
@@ -3781,7 +3781,7 @@ class UVPanel(utils.DevicePanel):
 
     def on_exposure_stop(self, exp_panel):
         abort_cmd = ['abort_collection', [self.name,], {}]
-        self._send_cmd(abort_cmd)
+        self._send_cmd(abort_cmd, get_response=False)
 
         # self._open_ls_shutter(False)
 

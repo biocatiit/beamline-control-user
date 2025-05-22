@@ -3972,6 +3972,28 @@ class PumpCommThread(utils.CommManager):
 
         self.known_devices = known_pumps
 
+    def _additional_pre_connect_device(self, name, device_type, device, kwargs):
+        if device_type == 'OB1 Pump':
+            ob1_device_name = kwargs.pop('ob1_device_name')
+            calib_path = kwargs.pop('calib_path')
+
+            if ob1_device_name in self._connected_devices:
+                ob1_device = self._connected_devices[ob1_device_name]
+            else:
+                ob1_device = None
+
+            if ob1_device is None:
+                ob1_kwargs = {'comm_lock': kwargs['comm_lock'],
+                    'calib_path': calib_path}
+
+                self._connect_device(ob1_device_name, 'OB1', device, **ob1_kwargs)
+
+                ob1_device = self._connected_devices[ob1_device_name]
+
+            kwargs['ob1_device'] = ob1_device
+
+        return kwargs
+
     def _get_flow_rate(self, name, **kwargs):
 
         logger.debug("Getting pump %s flow rate", name)
@@ -5112,6 +5134,9 @@ class PumpPanel(utils.DevicePanel):
 
         self.status_sizer.Hide(self.ssi_status_sizer, recursive=True)
 
+        print(self.pump_type)
+        print(self.settings)
+
         if (self.pump_type == 'VICI M50' or self.pump_type == 'KPHM100'
             or self.pump_type == 'Soft'):
             self.pump_mode = 'continuous'
@@ -5180,7 +5205,7 @@ class PumpPanel(utils.DevicePanel):
 
     def _init_device(self, settings):
         device_data = settings['device_data']
-        args = device_data['args']
+        args = copy.copy(device_data['args'])
         kwargs = device_data['kwargs']
         ctrl_args = device_data['ctrl_args']
 
@@ -5202,24 +5227,24 @@ class PumpPanel(utils.DevicePanel):
                 self.dual_syringe.SetStringSelection(kwargs['dual_syringe'])
 
         if self.pump_type == 'OB1 Pump':
-            ob1_device_name = kwargs.pop('ob1_device_name')
-            calib_path = kwargs.pop('calib_path')
-            get_ob1_cmd = ['get_pump', [ob1_device_name], {}]
+            # ob1_device_name = kwargs.pop('ob1_device_name')
+            # calib_path = kwargs.pop('calib_path')
+            # get_ob1_cmd = ['get_pump', [ob1_device_name], {}]
 
-            ob1_device = self._send_cmd(get_ob1_cmd, True)
+            # ob1_device = self._send_cmd(get_ob1_cmd, get_response=True)
 
-            if ob1_device is None:
-                ob1_args = [ob1_device_name, 'OB1', args[2]]
-                ob1_kwargs = {'comm_lock': kwargs['comm_lock'],
-                    'calib_path': calib_path}
+            # if ob1_device is None:
+            #     ob1_args = [ob1_device_name, 'OB1', args[2]]
+            #     ob1_kwargs = {'comm_lock': kwargs['comm_lock'],
+            #         'calib_path': calib_path}
 
-                cmd = ['connect', ob1_args, ob1_kwargs]
+            #     cmd = ['connect', ob1_args, ob1_kwargs]
 
-                self._send_cmd(cmd, True)
+            #     self._send_cmd(cmd, get_response=False)
 
-                ob1_device = self._send_cmd(get_ob1_cmd, True)
+            #     ob1_device = self._send_cmd(get_ob1_cmd, get_response=True)
 
-            kwargs['ob1_device'] = ob1_device
+            # kwargs['ob1_device'] = ob1_device
 
             if 'P' in kwargs:
                 self.feedback_p.SafeChangeValue(str(kwargs['P']))
@@ -5232,7 +5257,7 @@ class PumpPanel(utils.DevicePanel):
 
         connect_cmd = ['connect', args, kwargs]
 
-        self.connected = self._send_cmd(connect_cmd, True)
+        self.connected = self._send_cmd(connect_cmd, get_response=True)
 
         if self.connected is None:
             self.connected = False
@@ -5243,7 +5268,7 @@ class PumpPanel(utils.DevicePanel):
             if 'units' in self.settings['device_data']['ctrl_args']:
                 units = self.settings['device_data']['ctrl_args']['units']
                 units_cmd = ['set_units', [self.name, units], {}]
-                self._send_cmd(units_cmd)
+                self._send_cmd(units_cmd, get_response=False)
 
             # if self.pump_type == 'Pico_Plus':
             #     force = self.pump.force
@@ -5290,7 +5315,7 @@ class PumpPanel(utils.DevicePanel):
             self._current_units = new_units
 
             units_cmd = ['set_units', [self.name, new_units], {}]
-            self._send_cmd(units_cmd)
+            self._send_cmd(units_cmd, get_response=False)
 
             self._update_gui_units()
 
@@ -5436,26 +5461,26 @@ class PumpPanel(utils.DevicePanel):
                     if mode == 'Fixed volume':
                         pump_dir = self.direction_ctrl.GetStringSelection().lower()
                         cmd = [pump_dir, [self.name, vol], {'units': units}]
-                        self._send_cmd(cmd)
+                        self._send_cmd(cmd, get_response=False)
                     else:
                         cmd = ['start_flow', [self.name,], {}]
-                        self._send_cmd(cmd)
+                        self._send_cmd(cmd, get_response=False)
                 else:
                     if mode == 'Fixed volume':
                         pump_dir = self.direction_ctrl.GetStringSelection().lower()
                         cmd = [pump_dir, [self.name, vol], {'units': units}]
-                        self._send_cmd(cmd)
+                        self._send_cmd(cmd, get_response=False)
                     else:
                         pump_dir = self.direction_ctrl.GetStringSelection().lower()
                         cmd = ['{}_all'.format(pump_dir), [self.name,], {}]
-                        self._send_cmd(cmd)
+                        self._send_cmd(cmd, get_response=False)
 
             else:
                 logger.info('Stopping pump %s flow', self.name)
                 self._set_flowaccel()
 
                 cmd = ['stop', [self.name,], {}]
-                self._send_cmd(cmd)
+                self._send_cmd(cmd, get_response=False)
 
         else:
             msg = "Cannot start pump flow before the pump is connected."
@@ -5478,7 +5503,7 @@ class PumpPanel(utils.DevicePanel):
                 vol = float(vol)
                 if vol != -1:
                     cmd = ['set_volume', [self.name, vol], {}]
-                    self._send_cmd(cmd)
+                    self._send_cmd(cmd, get_response=False)
 
             except ValueError:
                 msg = "Volume must be a number."
@@ -5493,7 +5518,7 @@ class PumpPanel(utils.DevicePanel):
 
         if self.connected:
             cmd = ['set_pump_cal', [self.name,], kwargs]
-            self._send_cmd(cmd)
+            self._send_cmd(cmd, get_response=False)
 
         self._update_syringe_gui_values(new_syringe)
 
@@ -5509,35 +5534,35 @@ class PumpPanel(utils.DevicePanel):
     # def _on_force_change(self, obj, value):
     #     value = int(value)
     #     cmd = ['set_force', [self.name, value], {}]
-    #     self._send_cmd(cmd)
+    #     self._send_cmd(cmd, get_response=True)
 
     def _on_valve_change(self, evt):
         value = self.valve_ctrl.GetStringSelection()
         cmd = ['set_valve_pos', [self.name, value], {}]
-        self._send_cmd(cmd)
+        self._send_cmd(cmd, get_response=False)
 
     def _on_max_pressure_change(self, obj, value):
         value = float(value)
         cmd = ['set_max_pressure', [self.name, value], {}]
-        self._send_cmd(cmd)
+        self._send_cmd(cmd, get_response=False)
 
     def _on_min_pressure_change(self, obj, value):
         value = float(value)
         cmd = ['set_min_pressure', [self.name, value], {}]
-        self._send_cmd(cmd)
+        self._send_cmd(cmd, get_response=False)
 
     def _on_pressure_units(self, evt):
         units = self.pressure_units.GetStringSelection()
         self._current_pressure_units = units
         cmd = ['set_pressure_units', [self.name, units], {}]
-        self._send_cmd(cmd, True)
+        self._send_cmd(cmd, get_response=False)
 
         self._set_pressure_units_gui(units)
 
     def _on_set_pressure(self, obj, value):
         value = float(value)
         cmd = ['set_pressure', [self.name, value], {}]
-        self._send_cmd(cmd)
+        self._send_cmd(cmd, get_response=False)
 
     def _on_pid_change(self, obj, value):
         P = self.feedback_p.GetValue()
@@ -5549,7 +5574,7 @@ class PumpPanel(utils.DevicePanel):
         D = float(D)
 
         cmd = ['set_pid', [self.name, P, I, D], {}]
-        self._send_cmd(cmd)
+        self._send_cmd(cmd, get_response=False)
 
     def _set_pressure_units_gui(self, units):
         self.pressure_units_lbl.SetLabel(units)
@@ -5578,7 +5603,7 @@ class PumpPanel(utils.DevicePanel):
         """
         units = self.flow_units_lbl.GetLabel()
         units_cmd = ['set_units', [self.name, units], {}]
-        self._send_cmd(units_cmd)
+        self._send_cmd(units_cmd, get_response=False)
 
         self._set_flowaccel()
 
@@ -5597,7 +5622,7 @@ class PumpPanel(utils.DevicePanel):
                     fr = float(self.flow_rate_ctrl.GetValue())
 
                     set_fr_cmd = ['set_flow_rate', [self.name, fr*mult], {}]
-                    ret = self._send_cmd(set_fr_cmd, True)
+                    ret = self._send_cmd(set_fr_cmd, get_response=False)
 
                     if ret is not None and ret:
                         success = True
@@ -5614,7 +5639,7 @@ class PumpPanel(utils.DevicePanel):
                     rr = float(self.refill_rate_ctrl.GetValue())
 
                     set_rr_cmd = ['set_refill_rate', [self.name, rr*mult], {}]
-                    ret = self._send_cmd(set_rr_cmd, True)
+                    ret = self._send_cmd(set_rr_cmd, get_response=False)
 
                     if ret is not None and ret:
                         success = True
@@ -5630,7 +5655,7 @@ class PumpPanel(utils.DevicePanel):
                 fr = float(self.flow_rate_ctrl.GetValue())
 
                 set_fr_cmd = ['set_flow_rate', [self.name, fr*mult], {}]
-                ret = self._send_cmd(set_fr_cmd, True)
+                ret = self._send_cmd(set_fr_cmd, get_response=False)
 
                 if ret is not None and ret:
                     success = True
@@ -5649,7 +5674,7 @@ class PumpPanel(utils.DevicePanel):
                     rr = float(self.refill_rate_ctrl.GetValue())
 
                     set_rr_cmd = ['set_refill_rate', [self.name, rr*mult], {}]
-                    ret = self._send_cmd(set_rr_cmd, True)
+                    ret = self._send_cmd(set_rr_cmd, get_response=False)
 
                     if ret is not None and ret:
                         success = True
@@ -5674,7 +5699,7 @@ class PumpPanel(utils.DevicePanel):
                 fr = float(self.flow_accel_ctrl.GetValue())
 
                 cmd = ['set_flow_accel', [self.name, fr], {}]
-                ret = self._send_cmd(cmd, True)
+                ret = self._send_cmd(cmd, get_response=False)
 
                 if ret is not None and ret:
                     success = True
@@ -5740,7 +5765,7 @@ class PumpPanel(utils.DevicePanel):
 
                 if self.pump_mode == 'syringe':
                     stop_cmd = ['stop', [self.name,], {}]
-                    self._send_cmd(stop_cmd)
+                    self._send_cmd(stop_cmd, get_response=False)
 
             if volume is not None and volume != self._current_volume:
                 self._set_status_volume(volume)
@@ -5854,7 +5879,7 @@ class PumpPanel(utils.DevicePanel):
 
             if ret == wx.ID_OK:
                 cmd = ['clear_faults', [self.name,], {}]
-                self._send_cmd(cmd)
+                self._send_cmd(cmd, get_response=False)
 
 class PumpFrame(utils.DeviceFrame):
     """
@@ -5966,23 +5991,23 @@ if __name__ == '__main__':
 
 
 
-    # # Coflow with OB1
-    # bfs = fmcon.BFS('outlet_fm', 'COM6')
-    # bfs.start_remote()
+    # Coflow with OB1
+    bfs = fmcon.BFS('outlet_fm', 'COM3')
+    bfs.start_remote()
 
-    # ob1_comm_lock = threading.RLock()
+    ob1_comm_lock = threading.RLock()
 
-    # setup_devices = [
-    #     {'name': 'sheath', 'args': ['VICI M50', 'COM3'],
-    #         'kwargs': {'flow_cal': '627.72', 'backlash_cal': '9.814'},
-    #         'ctrl_args': {'flow_rate': 1}},
-    #     {'name': 'outlet', 'args': ['OB1 Pump', 'COM8'],
-    #         'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
-    #         'min_pressure': -1000, 'max_pressure': 1000, 'P': 5, 'I': 0.00015,
-    #         'D': 0, 'bfs_instr_ID': bfs.instr_ID, 'comm_lock': ob1_comm_lock,
-    #         'calib_path': './resources/ob1_calib.txt'},
-    #         'ctrl_args': {}}
-    #     ]
+    setup_devices = [
+        {'name': 'sheath', 'args': ['VICI M50', 'COM6'],
+            'kwargs': {'flow_cal': '627.72', 'backlash_cal': '9.814'},
+            'ctrl_args': {'flow_rate': 1}},
+        {'name': 'outlet', 'args': ['OB1 Pump', 'COM15'],
+            'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
+            'min_pressure': -1000, 'max_pressure': 1000, 'P': -2, 'I': -0.15,
+            'D': 0, 'bfs_instr_ID': bfs.instr_ID, 'comm_lock': ob1_comm_lock,
+            'calib_path': './resources/ob1_calib.txt'},
+            'ctrl_args': {}}
+        ]
 
     # OB1 by itself
     # bfs = fmcon.BFS('outlet_fm', 'COM5')
@@ -6064,21 +6089,21 @@ if __name__ == '__main__':
     #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
     #     ]
 
-    # TR-SAXS Pico Plus pumps
-    setup_devices = [
-        {'name': 'Buffer', 'args': ['Pico Plus', 'COM11'],
-            'kwargs': {'syringe_id': '3 mL, Medline P.C.',
-            'pump_address': '00', 'dual_syringe': 'False'},
-            'ctrl_args': {'flow_rate' : '1', 'refill_rate' : '1'}},
-        {'name': 'Sample', 'args': ['Pico Plus', 'COM9'],
-            'kwargs': {'syringe_id': '1 mL, Medline P.C.',
-             'pump_address': '00', 'dual_syringe': 'False'},
-            'ctrl_args': {'flow_rate' : '1', 'refill_rate' : '1'}},
-        {'name': 'Sheath', 'args': ['Pico Plus', 'COM7'],
-            'kwargs': {'syringe_id': '1 mL, Medline P.C.',
-             'pump_address': '00', 'dual_syringe': 'False'},
-            'ctrl_args': {'flow_rate' : '1', 'refill_rate' : '1'}},
-        ]
+    # # TR-SAXS Pico Plus pumps
+    # setup_devices = [
+    #     {'name': 'Buffer', 'args': ['Pico Plus', 'COM11'],
+    #         'kwargs': {'syringe_id': '3 mL, Medline P.C.',
+    #         'pump_address': '00', 'dual_syringe': 'False'},
+    #         'ctrl_args': {'flow_rate' : '1', 'refill_rate' : '1'}},
+    #     {'name': 'Sample', 'args': ['Pico Plus', 'COM9'],
+    #         'kwargs': {'syringe_id': '1 mL, Medline P.C.',
+    #          'pump_address': '00', 'dual_syringe': 'False'},
+    #         'ctrl_args': {'flow_rate' : '1', 'refill_rate' : '1'}},
+    #     {'name': 'Sheath', 'args': ['Pico Plus', 'COM7'],
+    #         'kwargs': {'syringe_id': '1 mL, Medline P.C.',
+    #          'pump_address': '00', 'dual_syringe': 'False'},
+    #         'ctrl_args': {'flow_rate' : '1', 'refill_rate' : '1'}},
+    #     ]
 
     # # Batch mode Hamilton PSD6 pump
     # setup_devices = [

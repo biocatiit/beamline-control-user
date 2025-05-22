@@ -194,7 +194,7 @@ class Valve(object):
         return '{} {}, connected to {}'.format(self.__class__.__name__, self.name, self.device)
 
     def connect(self):
-       if not self.connected:
+        if not self.connected:
             self.connected = True
 
         return self.connected
@@ -755,7 +755,7 @@ class ValvePanel(utils.DevicePanel):
         Initializes the valve.
         """
         device_data = settings['device_data']
-        args = device_data['args']
+        args = copy.copy(device_data['args'])
         kwargs = device_data['kwargs']
 
         args.insert(0, self.name)
@@ -897,29 +897,29 @@ if __name__ == '__main__':
     #         'kwargs': {'positions' : 2}},
     #     ]
 
-    # # Coflow buffer valve
-    # setup_devices = [
-    #     {'name': 'Buffer', 'args': ['Cheminert', 'COM7'],
-    #         'kwargs': {'positions': 10}},
-    #     ]
-
-    # # # TR-SAXS laminar flow
+    # Coflow buffer valve
     setup_devices = [
-        {'name': 'Injection', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo14'],
-            'kwargs': {'positions' : 2}},
-        # {'name': 'Injection', 'args': ['Rheodyne', 'COM6'],
-        #     'kwargs': {'positions' : 2}},
-        {'name': 'Buffer 1', 'args': ['Rheodyne', 'COM10'],
-            'kwargs': {'positions' : 6}},
-        {'name': 'Buffer 2', 'args': ['Rheodyne', 'COM4'],
-            'kwargs': {'positions' : 6}},
-        {'name': 'Sample', 'args': ['Rheodyne', 'COM3'],
-            'kwargs': {'positions' : 6}},
-        {'name': 'Sheath 1', 'args': ['Rheodyne', 'COM21'],
-            'kwargs': {'positions' : 6}},
-        {'name': 'Sheath 2', 'args': ['Rheodyne', 'COM8'],
-            'kwargs': {'positions' : 6}},
+        {'name': 'Buffer', 'args': ['Cheminert', 'COM4'],
+            'kwargs': {'positions': 10}},
         ]
+
+    # # TR-SAXS laminar flow
+    # setup_devices = [
+    #     {'name': 'Injection', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo14'],
+    #         'kwargs': {'positions' : 2}},
+    #     # {'name': 'Injection', 'args': ['Rheodyne', 'COM6'],
+    #     #     'kwargs': {'positions' : 2}},
+    #     {'name': 'Buffer 1', 'args': ['Rheodyne', 'COM10'],
+    #         'kwargs': {'positions' : 6}},
+    #     {'name': 'Buffer 2', 'args': ['Rheodyne', 'COM4'],
+    #         'kwargs': {'positions' : 6}},
+    #     {'name': 'Sample', 'args': ['Rheodyne', 'COM3'],
+    #         'kwargs': {'positions' : 6}},
+    #     {'name': 'Sheath 1', 'args': ['Rheodyne', 'COM21'],
+    #         'kwargs': {'positions' : 6}},
+    #     {'name': 'Sheath 2', 'args': ['Rheodyne', 'COM8'],
+    #         'kwargs': {'positions' : 6}},
+    #     ]
 
     # # New HPLC
     # setup_devices = [
