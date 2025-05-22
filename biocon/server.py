@@ -74,6 +74,7 @@ class ControlServer(threading.Thread):
             }
 
         self._stop_event = threading.Event()
+        self.ready_event = threading.Event()
 
         self.pump_comm_locks = pump_comm_locks
         self.valve_comm_locks = valve_comm_locks
@@ -213,6 +214,8 @@ class ControlServer(threading.Thread):
                 }
 
             self._device_control['coflow'] = coflow_ctrl
+
+        self.ready_event.set()
 
         while True:
             try:
@@ -426,9 +429,9 @@ if __name__ == '__main__':
     port3 = '5558'
     port4 = '5559'
 
-    # exp_type = 'coflow' #coflow or trsaxs_laminar or trsaxs_chaotic or hplc
+    exp_type = 'coflow' #coflow or trsaxs_laminar or trsaxs_chaotic or hplc
     # exp_type = 'trsaxs_chaotic'
-    exp_type = 'trsaxs_laminar'
+    # exp_type = 'trsaxs_laminar'
     # exp_type = 'hplc'
 
 
@@ -438,8 +441,8 @@ if __name__ == '__main__':
         # has_uv = True
         has_uv = False
 
-        # ip = '164.54.204.53'
-        ip = '164.54.204.192'
+        ip = '164.54.204.53'
+        # ip = '164.54.204.192'
         # ip = '164.54.204.24'
 
         spectrometer_settings = spectrometercon.default_spectrometer_settings
@@ -465,9 +468,9 @@ if __name__ == '__main__':
         ob1_comm_lock = threading.RLock()
         outlet_fm_comm_lock = threading.Lock()
         coflow_settings['device_communication'] = 'local'
-        coflow_settings['device_init']['outlet_pump']['kwargs']['comm_lock'] = ob1_comm_lock
-        coflow_settings['device_init']['outlet_fm']['kwargs']['comm_lock'] = outlet_fm_comm_lock
-
+        coflow_settings['device_init'][0]['kwargs']['outlet_pump']['kwargs']['comm_lock'] = ob1_comm_lock
+        coflow_settings['device_init'][0]['kwargs']['outlet_fm']['kwargs']['comm_lock'] = outlet_fm_comm_lock
+        coflow_settings['components'] = ['coflow',]
 
 
         # ############
@@ -704,6 +707,7 @@ if __name__ == '__main__':
         control_server_coflow = ControlServer(ip, port1, name='CoflowControlServer',
             start_coflow=True)
         control_server_coflow.start()
+        control_server_coflow.ready_event.wait()
 
         coflow_comm_thread = control_server_coflow.get_comm_thread('coflow')
 
@@ -718,8 +722,8 @@ if __name__ == '__main__':
             control_server_uv = ControlServer(ip, port4, name='UVControlServer',
                 start_uv=True)
             control_server_uv.start()
+            control_server_uv.ready_event.wait()
 
-            time.sleep(1)
             uv_comm_thread = control_server_uv.get_comm_thread('uv')
 
             spectrometer_settings['com_thread'] = uv_comm_thread
@@ -742,7 +746,9 @@ if __name__ == '__main__':
             start_valve=True)
         control_server_valve.start()
 
-        time.sleep(1)
+        control_server_pump.ready_event.wait()
+        control_server_fm.ready_event.wait()
+        control_server_valve.ready_event.wait()
 
         fm_comm_thread = control_server_fm.get_comm_thread('fm')
 
@@ -825,8 +831,8 @@ if __name__ == '__main__':
         control_server_hplc = ControlServer(ip, port1, name='HPLCControlServer',
             start_hplc=True)
         control_server_hplc.start()
+        control_server_hplc.ready_event.wait()
 
-        time.sleep(1)
         hplc_comm_thread = control_server_hplc.get_comm_thread('hplc')
 
         hplc_settings['remote'] = False
@@ -847,6 +853,10 @@ if __name__ == '__main__':
             control_server_coflow.stop()
             control_server_coflow.join()
 
+            if has_uv:
+                control_server_uv.stop()
+                control_server_uv.join()
+
         elif exp_type != 'hplc':
             control_server_pump.stop()
             control_server_pump.join()
@@ -856,10 +866,6 @@ if __name__ == '__main__':
 
             control_server_valve.stop()
             control_server_valve.join()
-
-            if exp_type == 'coflow' and has_uv:
-                control_server_uv.stop()
-                control_server_uv.join()
 
         elif exp_type == 'hplc':
             control_server_hplc.stop()

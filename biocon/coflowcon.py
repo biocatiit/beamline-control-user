@@ -65,6 +65,7 @@ class CoflowControl(object):
         self.sheath_setpoint = None
         self.outlet_setpoint = None
         self.lc_flow_rate = float(self.settings['lc_flow_rate'])
+        self._starting_flow_rate = self.lc_flow_rate
 
         self.sheath_is_moving = False
         self.outlet_is_moving = False
@@ -649,8 +650,9 @@ class CoflowControl(object):
         sheath_flow = buffer_change_seq[0][0]*excess
         vol = buffer_change_seq[0][1]
 
-        self._buffer_change_remain = vol/sheath_flow
+        self._buffer_change_remain = 60*vol/sheath_flow
         self._changing_buffer = True
+        self._starting_flow_rate = copy.copy(self.lc_flow_rate)
 
         if self._flow_timer:
             self._abort_flow_timer.set()
@@ -703,6 +705,7 @@ class CoflowControl(object):
                     self.stop_flow()
 
             else:
+                self.change_flow_rate(self._starting_flow_rate)
                 self._abort_change_buffer.clear()
                 self._monitor_change_buffer_evt.clear()
                 self._changing_buffer = False
@@ -3479,7 +3482,8 @@ default_coflow_settings = {
         'show_outlet_warning'       : True,
         'use_overflow_control'      : True,
         'buffer_change_fr'          : 1.19, #in ml/min
-        'buffer_change_vol'         : 11.1, #in ml
+        # 'buffer_change_vol'         : 11.1, #in ml
+        'buffer_change_vol'         : 0.5, #in ml
         'air_density_thresh'        : 700, #g/L
         'sheath_valve_water_pos'    : 10,
         'sheath_valve_hellmanex_pos': 8,
@@ -3528,7 +3532,9 @@ if __name__ == '__main__':
     coflow_settings['device_communication'] = 'local'
     coflow_settings['com_thread'] = com_thread
     ob1_comm_lock = threading.RLock()
+    outlet_fm_comm_lock = threading.Lock()
     coflow_settings['device_init'][0]['kwargs']['outlet_pump']['kwargs']['comm_lock'] = ob1_comm_lock
+    coflow_settings['device_init'][0]['kwargs']['outlet_fm']['kwargs']['comm_lock'] = outlet_fm_comm_lock
 
     app = wx.App()
 
