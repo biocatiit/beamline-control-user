@@ -3531,8 +3531,7 @@ default_coflow_settings = {
         'show_outlet_warning'       : True,
         'use_overflow_control'      : True,
         'buffer_change_fr'          : 1.19, #in ml/min
-        # 'buffer_change_vol'         : 11.1, #in ml
-        'buffer_change_vol'         : 0.5, #in ml
+        'buffer_change_vol'         : 11.1, #in ml
         'air_density_thresh'        : 700, #g/L
         'sheath_valve_water_pos'    : 10,
         'sheath_valve_hellmanex_pos': 8,
@@ -3542,7 +3541,7 @@ default_coflow_settings = {
         'coflow_inc_esensor_H_pv'   : '18ID:EnvMon:CoflowInc:Humid',
         'hplc_inc_esensor_T_pv'     : '18ID:EnvMon:HPLCInc:TempC',
         'hplc_inc_esensor_H_pv'     : '18ID:EnvMon:HPLCInc:Humid',
-        'use_incubator_pvs'         : False,
+        'use_incubator_pvs'         : True,
         }}],
     }
 
