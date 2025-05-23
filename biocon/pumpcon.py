@@ -5622,7 +5622,7 @@ class PumpPanel(utils.DevicePanel):
                     fr = float(self.flow_rate_ctrl.GetValue())
 
                     set_fr_cmd = ['set_flow_rate', [self.name, fr*mult], {}]
-                    ret = self._send_cmd(set_fr_cmd, get_response=False)
+                    ret = self._send_cmd(set_fr_cmd, get_response=True)
 
                     if ret is not None and ret:
                         success = True
@@ -5639,7 +5639,7 @@ class PumpPanel(utils.DevicePanel):
                     rr = float(self.refill_rate_ctrl.GetValue())
 
                     set_rr_cmd = ['set_refill_rate', [self.name, rr*mult], {}]
-                    ret = self._send_cmd(set_rr_cmd, get_response=False)
+                    ret = self._send_cmd(set_rr_cmd, get_response=True)
 
                     if ret is not None and ret:
                         success = True
@@ -5655,7 +5655,7 @@ class PumpPanel(utils.DevicePanel):
                 fr = float(self.flow_rate_ctrl.GetValue())
 
                 set_fr_cmd = ['set_flow_rate', [self.name, fr*mult], {}]
-                ret = self._send_cmd(set_fr_cmd, get_response=False)
+                ret = self._send_cmd(set_fr_cmd, get_response=True)
 
                 if ret is not None and ret:
                     success = True
@@ -5674,7 +5674,7 @@ class PumpPanel(utils.DevicePanel):
                     rr = float(self.refill_rate_ctrl.GetValue())
 
                     set_rr_cmd = ['set_refill_rate', [self.name, rr*mult], {}]
-                    ret = self._send_cmd(set_rr_cmd, get_response=False)
+                    ret = self._send_cmd(set_rr_cmd, get_response=True)
 
                     if ret is not None and ret:
                         success = True
@@ -5699,7 +5699,7 @@ class PumpPanel(utils.DevicePanel):
                 fr = float(self.flow_accel_ctrl.GetValue())
 
                 cmd = ['set_flow_accel', [self.name, fr], {}]
-                ret = self._send_cmd(cmd, get_response=False)
+                ret = self._send_cmd(cmd, get_response=True)
 
                 if ret is not None and ret:
                     success = True

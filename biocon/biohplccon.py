@@ -6135,7 +6135,7 @@ class HPLCPanel(utils.DevicePanel):
 
             for pos in remove_pos:
                 cmd = ['remove_buffer', [self.name, pos, flow_path], {}]
-                self._send_cmd(cmd, True)
+                self._send_cmd(cmd, False)
 
                 self._remove_buffer_from_list(flow_path, pos)
 
