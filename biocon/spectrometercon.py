@@ -3885,6 +3885,7 @@ class UVPlot(wx.Panel):
         self._refresh_time = refresh_time
         self._last_refresh = 0
         self._needs_refresh = True
+        self._updating_plot = False
 
         self._create_layout()
 
@@ -3989,6 +3990,7 @@ class UVPlot(wx.Panel):
             self.t_window.Enable()
             self.zero_time.Enable()
 
+        self._updating_plot = True
         wx.CallAfter(self.plot_data)
 
     def _on_spectrum_type(self, evt):
@@ -4004,12 +4006,14 @@ class UVPlot(wx.Panel):
             self.spectrum_type = 'raw'
             self.subplot.set_ylabel('Raw')
 
+        self._updating_plot = True
         wx.CallAfter(self.plot_data)
 
     def _on_twindow_change(self, obj, val):
         self._time_window = float(val)
 
         self.canvas.mpl_disconnect(self.cid)
+        self._updating_plot = True
         wx.CallAfter(self.updatePlot)
         self.cid = self.canvas.mpl_connect('draw_event', self.ax_redraw)
 
@@ -4023,7 +4027,9 @@ class UVPlot(wx.Panel):
     def _on_refresh_timer(self, evt):
         # a = time.time()
         if self._needs_refresh:
-            if time.time() - self._last_refresh > self._refresh_time:
+            if (time.time() - self._last_refresh > self._refresh_time
+                and not self._updating_plot):
+                self._updating_plot = True
                 wx.CallAfter(self.plot_data)
                 self._last_refresh = time.time()
                 self._needs_refresh = False
@@ -4058,6 +4064,7 @@ class UVPlot(wx.Panel):
         if not force_refresh:
             self._needs_refresh = True
         else:
+            self._updating_plot = True
             wx.CallAfter(self.plot_data)
 
     def ax_redraw(self, widget=None):
@@ -4328,6 +4335,8 @@ class UVPlot(wx.Panel):
                 self.subplot.draw_artist(line)
 
         self.canvas.blit(self.subplot.bbox)
+
+        self._updating_plot = False
 
     def _onMouseMotionEvent(self, event):
         if event.inaxes:
