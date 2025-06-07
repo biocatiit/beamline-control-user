@@ -301,7 +301,7 @@ class BioFrame(wx.Frame):
                 box = wx.StaticBox(box_panel, label=label)
                 # box.SetOwnForegroundColour(wx.Colour('firebrick'))
 
-                if key != 'uv' and key != 'hplc':
+                if key != 'uv' and key != 'hplc' and key != 'coflow':
                     component_panel = self.settings['components'][key](self.settings[key],
                         box, name=key)
                 else:
@@ -529,8 +529,8 @@ if __name__ == '__main__':
         # ('trsaxs_scan', trcon.TRScanPanel),
         # ('trsaxs_flow', trcon.TRFlowPanel),
         # ('scan',    scancon.ScanPanel),
-        # ('metadata', metadata.ParamPanel),
-        # ('pipeline', pipeline_ctrl.PipelineControl),
+        ('metadata', metadata.ParamPanel),
+        ('pipeline', pipeline_ctrl.PipelineControl),
         # ('uv', spectrometercon.UVPanel),
         # ('hplc', biohplccon.HPLCPanel),
         # ('automator', autocon.AutoPanel),

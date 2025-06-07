@@ -1861,6 +1861,8 @@ class ExpCommThread(threading.Thread):
 
         timeouts = 0
 
+        header_readout_time = time.time()
+
         while True:
             #Struck is_busy doesn't work in thread! So have to go elsewhere
 
@@ -1879,7 +1881,7 @@ class ExpCommThread(threading.Thread):
                 aborted = True
                 break
 
-            if exp_type != 'muscle':
+            if exp_type != 'muscle' and time.time()-header_readout_time > exp_time:
                 current_meas = struck.get_last_measurement_number()
 
                 if current_meas != last_meas and current_meas != -1:
@@ -1897,7 +1899,9 @@ class ExpCommThread(threading.Thread):
 
                     last_meas = current_meas
 
-            time.sleep(0.01)
+                    header_readout_time = time.time()
+
+            time.sleep(0.1)
 
 
         if continuous_exp:

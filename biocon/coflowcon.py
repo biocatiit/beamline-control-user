@@ -1945,10 +1945,12 @@ class CoflowPanel(utils.DevicePanel):
         button_sizer.AddStretchSpacer(1)
 
         basic_flow_ctrl_sizer = wx.StaticBoxSizer(flow_box, wx.VERTICAL)
-        basic_flow_ctrl_sizer.Add(flow_rate_sizer)
-        basic_flow_ctrl_sizer.Add(self.auto_flow, border=self._FromDIP(2), flag=wx.TOP)
+        basic_flow_ctrl_sizer.Add(flow_rate_sizer, border=self._FromDIP(2),
+            flag=wx.TOP|wx.LEFT|wx.RIGHT)
+        basic_flow_ctrl_sizer.Add(self.auto_flow, border=self._FromDIP(2),
+            flag=wx.TOP|wx.LEFT|wx.RIGHT)
         basic_flow_ctrl_sizer.Add(button_sizer, border=self._FromDIP(2),
-            flag=wx.TOP)
+            flag=wx.ALL)
 
         valve_box = wx.StaticBox(control_box, label='Valves')
         valve_box_sizer = wx.StaticBoxSizer(valve_box, wx.HORIZONTAL)
@@ -3100,6 +3102,9 @@ class CoflowPanel(utils.DevicePanel):
                 plot_window._on_exit(None)
             except Exception:
                 pass
+
+    def on_exit(self):
+        self.close()
 
 class CoflowPlotFrame(wx.Frame):
     def __init__(self, sheath_flow_rate, outlet_flow_rate, t_flow_rate, sheath_density,
