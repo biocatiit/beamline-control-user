@@ -1897,7 +1897,7 @@ class AgilentHPLCStandard(AgilentHPLC):
             if flow_path == 1:
                 self._pump_flow_accel1 = flow_accel
             elif flow_path == 2:
-                self._pump_flow_accel1 = flow_accel
+                self._pump_flow_accel2 = flow_accel
 
         return success
 
