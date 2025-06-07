@@ -226,9 +226,9 @@ class AgilentHPLCStandard(AgilentHPLC):
 
     def  connect(self):
         """
-        Expected by the thread, but connection is don on init, so this does nothing
+        Expected by the thread, but connection is done on init, so this does nothing
         """
-        pass
+        return True
 
     def _connect_valves(self, p1_args, b1_args):
 
@@ -3337,7 +3337,6 @@ class HPLCCommThread(utils.CommManager):
             'get_sample_prep_methods'   : self._get_sample_prep_methods,
             'get_run_status'            : self._get_run_status,
             'get_fast_hplc_status'      : self._get_fast_hplc_status,
-            'get_slow_hplc_status'      : self._get_slow_hplc_status,
             'get_valve_status'          : self._get_valve_status,
             'set_valve_position'        : self._set_valve_position,
             'purge_flow_path'           : self._purge_flow_path,
