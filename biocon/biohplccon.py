@@ -226,9 +226,9 @@ class AgilentHPLCStandard(AgilentHPLC):
 
     def  connect(self):
         """
-        Expected by the thread, but connection is don on init, so this does nothing
+        Expected by the thread, but connection is done on init, so this does nothing
         """
-        pass
+        return True
 
     def _connect_valves(self, p1_args, b1_args):
 
@@ -1897,7 +1897,7 @@ class AgilentHPLCStandard(AgilentHPLC):
             if flow_path == 1:
                 self._pump_flow_accel1 = flow_accel
             elif flow_path == 2:
-                self._pump_flow_accel1 = flow_accel
+                self._pump_flow_accel2 = flow_accel
 
         return success
 
@@ -3337,7 +3337,6 @@ class HPLCCommThread(utils.CommManager):
             'get_sample_prep_methods'   : self._get_sample_prep_methods,
             'get_run_status'            : self._get_run_status,
             'get_fast_hplc_status'      : self._get_fast_hplc_status,
-            'get_slow_hplc_status'      : self._get_slow_hplc_status,
             'get_valve_status'          : self._get_valve_status,
             'set_valve_position'        : self._set_valve_position,
             'purge_flow_path'           : self._purge_flow_path,
@@ -5022,7 +5021,7 @@ class HPLCPanel(utils.DevicePanel):
         Initializes the valve.
         """
         device_data = settings['device_data']
-        args = device_data['args']
+        args = copy.copy(device_data['args'])
         kwargs = device_data['kwargs']
 
         valve_max = kwargs['purge1_valve_args']['kwargs']['positions']
@@ -6135,7 +6134,7 @@ class HPLCPanel(utils.DevicePanel):
 
             for pos in remove_pos:
                 cmd = ['remove_buffer', [self.name, pos, flow_path], {}]
-                self._send_cmd(cmd, True)
+                self._send_cmd(cmd, False)
 
                 self._remove_buffer_from_list(flow_path, pos)
 

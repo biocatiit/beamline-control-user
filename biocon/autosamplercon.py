@@ -175,6 +175,8 @@ class Autosampler(object):
 
         self.set_well_plate(self.settings['plate_type'])
 
+        return True
+
     def _init_motors(self):
         logger.info('Initializing autosampler motors')
 
@@ -963,8 +965,9 @@ class Autosampler(object):
         self.set_pump_dispense_rates(rate, rate_units, 'sample')
 
         load_vol = pumpcon.convert_volume(volume, vol_units, 'uL')
+
         self.dispense(load_vol - self.settings['reserve_vol'], 'sample',
-            units='uL', blocking=False)
+            trigger=trigger, delay=delay, units='uL', blocking=False)
 
 
         self._active_count += 1
@@ -996,6 +999,21 @@ class Autosampler(object):
                 remaining_vol = initial_vol - self.settings['inject_connect_vol']
                 success = self.inject_sample(remaining_vol, rate, trigger, delay,
                 'uL', rate_units)
+
+        self._active_count -= 1
+
+        return success
+
+    def load_and_move_to_inject(self, volume, rate, row, column, vol_units='uL',
+        rate_units='uL/min'):
+        initial_vol = pumpcon.convert_volume(volume, vol_units, 'uL')
+
+        self._active_count += 1
+
+        success = self.load_sample(initial_vol, row, column, 'uL')
+
+        if success:
+            success = self.move_to_inject()
 
         self._active_count -= 1
 
@@ -1102,6 +1120,7 @@ class ASCommThread(utils.CommManager):
             'move_to_inject'        : self._move_to_inject,
             'inject_sample'         : self._inject_sample,
             'load_and_inject'       : self._load_and_inject,
+            'load_and_move_to_inject': self._load_and_move_to_inject,
             'clean'                 : self._clean,
             'get_status'            : self._get_status,
         }
@@ -1397,6 +1416,15 @@ class ASCommThread(utils.CommManager):
 
         self._return_value((name, cmd, success), comm_name)
 
+        load_settings = {
+            'volume'    : val,
+            'row'       : row,
+            'column'    : column,
+            'vol_units' : vol_units,
+            }
+
+        self._return_value((name, cmd, load_settings), 'status')
+
         logger.debug("%s loaded sample", name)
 
     def _move_to_inject(self, name, **kwargs):
@@ -1461,6 +1489,30 @@ class ASCommThread(utils.CommManager):
             'rate_units': rate_units,
             }
         self._return_value((name, cmd, inj_settings), 'status')
+
+        logger.debug("%s loaded and injected sample", name)
+
+    def _load_and_move_to_inject(self, name, val, row, column, vol_units,
+        rate_units, **kwargs):
+        logger.debug("%s loading and injecting sample", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        success = device.load_and_move_to_inject(val, row, column,
+            vol_units, rate_units, **kwargs)
+
+        self._return_value((name, cmd, success), comm_name)
+
+        load_settings = {
+            'volume'    : val,
+            'row'       : row,
+            'column'    : column,
+            'vol_units' : vol_units,
+            }
+
+        self._return_value((name, cmd, load_settings), 'status')
 
         logger.debug("%s loaded and injected sample", name)
 
@@ -1881,10 +1933,31 @@ class AutosamplerPanel(utils.DevicePanel):
         return (row, col, volume, rate, delay, trigger, vol_units, rate_units,
             draw_rate, dwell_time, errors)
 
+    def _load_and_move_to_inject(self, row, col, volume, vol_units, rate_units,
+        draw_rate, dwell_time):
+        rate_cmd = ['set_sample_draw_rate', [self.name, draw_rate, rate_units], {}]
+        dwell_cmd = ['set_sample_dwell_time', [self.name, dwell_time,], {}]
+
+        load_cmd = ['load_and_move_to_inject', [self.name, volume, row, col,
+            rate_units], {}]
+
+        self._send_cmd(rate_cmd, False)
+        self._send_cmd(dwell_cmd, False)
+        self._send_cmd(load_cmd, False)
+
+        if clean_needle:
+            self._send_cmd(['clean', [self.name,], {}], False)
+
     def _on_clean(self, evt):
+        self._clean_needle()
+
+    def _clean_needle(self):
         self._send_cmd(['clean', [self.name,], {}], False)
 
     def _on_change_plate(self, evt):
+        self._change_plate()
+
+    def _change_plate(self):
         self._send_cmd(['move_plate_change', [self.name,], {}], False)
 
         msg = ("Plate holder is in the plate change position. "
@@ -1897,6 +1970,9 @@ class AutosamplerPanel(utils.DevicePanel):
         self._send_cmd(['move_plate_out', [self.name,], {}], False)
 
     def _on_stop(self, evt):
+        self._abort()
+
+    def _abort(self):
         self.com_thread.abort()
 
     def _on_change_plate_type(self, evt):
@@ -1952,6 +2028,9 @@ class AutosamplerPanel(utils.DevicePanel):
                 style=wx.OK|wx.ICON_ERROR)
 
     def _on_move_needle_clean(self, evt):
+        self._move_to_clean()
+
+    def _move_to_clean(self):
         self._send_cmd(['move_to_clean', [self.name,], {}], False)
 
     def _on_move_to_inject(self, evt):
@@ -2157,6 +2236,23 @@ class AutosamplerPanel(utils.DevicePanel):
             if well != self._selected_well:
                 self._set_selected_well(well)
 
+        elif cmd == 'load_sample' or cmd == 'load_and_move_to_inject':
+            vol = val['volume']
+            vol_units = val['vol_units']
+            row = val['row']
+            column = val['column']
+
+            well = '{}{}'.format(row, column)
+
+            vol = pumpcon.convert_volume(vol, vol_units, 'uL')
+
+            if vol != self._current_load_volume:
+                self.load_volume.ChangeValue(str(vol))
+                self._current_load_volume = vol
+
+            if well != self._selected_well:
+                self._set_selected_well(well)
+
         elif cmd == 'get_status':
 
             if val != self._current_status:
@@ -2171,6 +2267,94 @@ class AutosamplerPanel(utils.DevicePanel):
         metadata = OrderedDict()
 
         return metadata
+
+    def _get_automator_state(self):
+        if self._current_status.lower() == 'idle':
+            status = 'idle'
+        elif self._current_status == 'Loading sample':
+            status = 'load'
+        elif self._current_status == 'Injecting sample':
+            status = 'inject'
+        elif self._current_status == 'Cleaning needle':
+            status = 'clean'
+        elif self._current_status == 'Changing well plate':
+            status = 'change_well_plate'
+        elif self._current_status == 'Moving to clean':
+            status = 'move_to_clean'
+        else:
+            status = 'busy'
+
+        return status
+
+    def automator_callback(self, cmd_name, cmd_args, cmd_kwargs):
+        success = True
+
+        if cmd_name == 'status':
+            state = self._get_automator_state()
+
+        elif cmd_name == 'abort':
+            self._abort()
+            state = 'idle'
+
+        elif cmd_name == 'load_and_inject':
+            volume = cmd_args['volume']
+            rate = cmd_args['rate']
+            delay = cmd_args['delay']
+            trigger = cmd_args['trigger']
+            row = cmd_args['row']
+            column = cmd_args['column']
+            vol_units = 'uL'
+            rate_units = 'uL/min'
+            draw_rate = cmd_args['draw_rate']
+            dwell_time = cmd_args['dwell_time']
+            clean_needle = cmd_args['clean_needle']
+
+            self._load_and_inject(row, col, volume, rate, delay, trigger,
+                vol_units, rate_units, draw_rate, dwell_time, clean_needle)
+
+            state = 'load'
+
+        elif cmd_name == 'change_plate':
+            wx.CallAfter(self._change_plate)
+            state = 'change_well_plate'
+
+        elif cmd_name == 'clean_needle':
+            self._clean_needle()
+            state = 'clean'
+
+        elif cmd_name == 'move_to_clean':
+            self._move_to_clean()
+            state = 'move_to_clean'
+
+        elif cmd_name == 'load_and_move_to_inject':
+            volume = cmd_args['volume']
+            row = cmd_args['row']
+            column = cmd_args['column']
+            vol_units = 'uL'
+            rate_units = 'uL/min'
+            draw_rate = cmd_args['draw_rate']
+            dwell_time = cmd_args['dwell_time']
+
+            self._load_and_move_to_inject(row, col, volume, vol_units,
+                rate_units, draw_rate, dwell_time)
+
+            state = 'load'
+
+        elif cmd_name == 'inject':
+            volume = cmd_args['volume']
+            rate = cmd_args['rate']
+            delay = cmd_args['delay']
+            trigger = cmd_args['trigger']
+            vol_units = 'uL'
+            rate_units = 'uL/min'
+            clean_needle = cmd_args['clean_needle']
+
+            self._inject(volume, rate, delay, trigger, vol_units, rate_units,
+                clean_needle)
+
+            state = 'inject'
+
+        return state, success
 
     def _on_close(self):
         """Device specific stuff goes here"""

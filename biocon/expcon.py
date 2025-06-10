@@ -203,7 +203,7 @@ class ExpCommThread(threading.Thread):
         if self._settings['use_old_i0_gain']:
             mx_data['ki0'] = mx_database.get_record('ki0')
         else:
-            mx_data['ki0'] = epics.PV(self._settings['i0_gain_pv'])
+            mx_data['ki0'] = epics.get_pv(self._settings['i0_gain_pv'])
             mx_data['ki0'].get()
 
         logger.debug("Generated mx_data")
@@ -395,10 +395,14 @@ class ExpCommThread(threading.Thread):
             # For newports this is fine, because it automatically scales down different axes speeds
             # so that a group move ends simultaneously. For other controls may need to
             # recalculate the vector speeds and accelerations
-            motor.set_velocity(return_speed, x_motor, 0)
-            motor.set_velocity(return_speed, y_motor, 1)
-            motor.set_acceleration(return_accel, x_motor, 0)
-            motor.set_acceleration(return_accel, y_motor, 1)
+            if vect_return_speed[0] != 0:
+                motor.set_velocity(vect_return_speed[0], x_motor, 0)
+            if vect_return_speed[1] != 0:
+                motor.set_velocity(vect_return_speed[1], y_motor, 1)
+            if vect_return_accel[0] != 0:
+                motor.set_acceleration(vect_return_accel[0], x_motor, 0)
+            if vect_return_accel[1] != 0:
+                motor.set_acceleration(vect_return_accel[1], y_motor, 1)
 
         motor_cmd_q.append(('move_absolute', ('TR_motor', (x_start, y_start)), {}))
 
@@ -3044,7 +3048,7 @@ class ExpPanel(wx.Panel):
         self.pipeline_timer = None
 
     def _initialize_pv(self, pv_name):
-        pv = epics.PV(pv_name)
+        pv = epics.get_pv(pv_name)
         connected = pv.wait_for_connection(5)
 
         if not connected:
@@ -3189,6 +3193,7 @@ class ExpPanel(wx.Panel):
 
         self.set_status('Preparing exposure')
         wx.CallAfter(self.start_exp_btn.Disable)
+        wx.CallAfter(self.start_scan_btn.Disable)
         wx.CallAfter(self.stop_exp_btn.Enable)
         self.total_time = exp_values['num_frames']*exp_values['exp_period']
 
@@ -3240,6 +3245,7 @@ class ExpPanel(wx.Panel):
         self.tr_timer.Stop()
 
         self.start_exp_btn.Enable()
+        self.start_scan_btn.Enable()
         self.stop_exp_btn.Disable()
         self.set_status('Ready')
         self.set_time_remaining(0)
@@ -3262,6 +3268,10 @@ class ExpPanel(wx.Panel):
         if 'uv' in self.settings['components']:
             uv_panel = wx.FindWindowByName('uv')
             uv_panel.on_exposure_stop(self)
+
+        if 'trsaxs_flow' in self.settings['components']:
+            trsaxs_flow_panel = wx.FindWindowByName('trsaxs_flow')
+            trsaxs_flow_panel.on_exposure_stop()
 
     def set_status(self, status):
         wx.CallAfter(self.status.SetLabel, status)
@@ -3595,7 +3605,7 @@ class ExpPanel(wx.Panel):
         shutter_pad = self.settings['shutter_pad']
         struck_log_vals = self.settings['struck_log_vals']
         joerger_log_vals = self.settings['joerger_log_vals']
-        struck_measurement_time = self.muscle_sampling.GetValue()
+        struck_measurement_time = float(self.muscle_sampling.GetValue())
 
         (num_frames, exp_time, exp_period, data_dir, filename,
             wait_for_trig, num_trig, local_data_dir, struck_num_meas, valid,
@@ -3698,7 +3708,7 @@ class ExpPanel(wx.Panel):
                     self.settings['slow_mode_thres'])))
 
         if (isinstance(exp_period, float) and isinstance(num_frames, int) and
-            isinstance(struck_measurement_time, float)):
+            isinstance(struck_measurement_time, float) and self.settings['tr_muscle_exp']):
             if exp_period*num_frames/struck_measurement_time > self.settings['nparams_max']:
                 errors.append(('Total experiment time (exposure period * number '
                     'of frames) divided by parameter sampling time must be '
@@ -3766,6 +3776,9 @@ class ExpPanel(wx.Panel):
         if 'trsaxs_scan' in self.settings['components'] and not exp_only:
             trsaxs_panel = wx.FindWindowByName('trsaxs_scan')
             trsaxs_values, trsaxs_scan_valid = trsaxs_panel.get_scan_values()
+            if trsaxs_scan_valid:
+                trsaxs_panel.run_and_wait_for_centering()
+                trsaxs_values, trsaxs_scan_valid = trsaxs_panel.get_scan_values()
             comp_settings['trsaxs_scan'] = trsaxs_values
         else:
             trsaxs_scan_valid = True

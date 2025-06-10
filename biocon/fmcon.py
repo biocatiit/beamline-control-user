@@ -45,15 +45,15 @@ except ModuleNotFoundError:
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_03_00\\DLL32\\Elveflow32DLL') #add the path of the library here
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_03_00\\python_32')#add the path of the LoadElveflow.py
 
-sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\DLL64\\DLL64') #add the path of the library here
-sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\Python_64')#add the path of the LoadElveflow.py
-sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\DLL32\\DLL32') #add the path of the library here
-sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\Python_32')#add the path of the LoadElveflow.py
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\DLL64\\DLL64') #add the path of the library here
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\Python_64')#add the path of the LoadElveflow.py
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\DLL32\\DLL32') #add the path of the library here
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\Python_32')#add the path of the LoadElveflow.py
 
-# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_08_06\\DLL\\DLL64') #add the path of the library here
-# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_08_06\\DLL\\Python\\Python_64')#add the path of the LoadElveflow.py
-# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_08_06\\DLL\\DLL32') #add the path of the library here
-# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_08_06\\DLL\\Python\\Python_32')#add the path of the LoadElveflow.py
+sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_08_06\\DLL\\DLL64') #add the path of the library here
+sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_08_06\\DLL\\Python\\Python_64')#add the path of the LoadElveflow.py
+sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_08_06\\DLL\\DLL32') #add the path of the library here
+sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_08_06\\DLL\\Python\\Python_32')#add the path of the LoadElveflow.py
 
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_09_04\\DLL\\DLL64') #add the path of the library here
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_09_04\\DLL\\Python\\Python_64')#add the path of the LoadElveflow.py
@@ -226,6 +226,8 @@ class BFS(FlowMeter):
             self._check_error(error)
 
             self.connected = True
+
+        return self.connected
 
     @property
     def flow_rate(self):
@@ -891,7 +893,7 @@ class FlowMeterPanel(utils.DevicePanel):
         Initializes the flow meter.
         """
         device_data = settings['device_data']
-        args = device_data['args']
+        args = copy.copy(device_data['args'])
         kwargs = device_data['kwargs']
 
         args.insert(0, self.name)
@@ -962,7 +964,7 @@ class FlowMeterPanel(utils.DevicePanel):
         self.flow_units_lbl.SetLabel(units)
 
         units_cmd = ['set_units', [self.name, units], {}]
-        self._send_cmd(units_cmd)
+        self._send_cmd(units_cmd, get_response=False)
 
         logger.debug('Changed the flow meter units to %s and %s for flow meter %s', vol_unit, t_unit, self.name)
 
@@ -981,7 +983,7 @@ class FlowMeterPanel(utils.DevicePanel):
             return
 
         filter_cmd = ['set_filter', [self.name, val], {}]
-        self._send_cmd(filter_cmd, True)
+        self._send_cmd(filter_cmd, False)
 
     def _set_status_label(self, status):
         """
@@ -1101,17 +1103,18 @@ if __name__ == '__main__':
     # time.sleep(5)
     # my_fmcon.stop()
 
-    # # Coflow flow meters
-    # setup_devices = [
-    #     {'name': 'sheath', 'args' : ['BFS', 'COM5'], 'kwargs': {}},
-    #     {'name': 'outlet', 'args' : ['BFS', 'COM6'], 'kwargs': {}},
-    #     ]
-
-    # TR-SAXS flow meter
+    # Coflow flow meters
     setup_devices = [
-        {'name': 'laminar_outlet', 'args' : ['BFS', 'COM13'], 'kwargs': {}},
-        {'name': 'chaotic_outlet', 'args' : ['BFS', 'COM5'], 'kwargs': {}},
+        {'name': 'sheath', 'args' : ['BFS', 'COM5'], 'kwargs': {}},
+        {'name': 'outlet', 'args' : ['BFS', 'COM3'], 'kwargs': {}},
         ]
+
+    # # TR-SAXS flow meter
+    # setup_devices = [
+    #     {'name': 'laminar_outlet', 'args' : ['BFS', 'COM18'], 'kwargs': {}},
+    #     {'name': 'laminar_outlet', 'args' : ['BFS', 'COM13'], 'kwargs': {}},
+    #     # {'name': 'chaotic_outlet', 'args' : ['BFS', 'COM5'], 'kwargs': {}},
+    #     ]
 
     # # Simulated flow meter
     # setup_devices = [
