@@ -747,7 +747,7 @@ class SecSampleCommand(AutoCommand):
         hplc_inst = cmd_info['inst']
 
         sample_wait_id = self.automator.get_wait_id()
-        sample_wait_cmd = '_{}'.format(sample_wait_id)
+        sample_wait_cmd = 'wait_sync_{}'.format(sample_wait_id)
         sample_conds = [[hplc_inst, [sample_wait_cmd,]], ['exp', [sample_wait_cmd,]],
             ['coflow', [sample_wait_cmd,]],]
 

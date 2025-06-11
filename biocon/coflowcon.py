@@ -1666,6 +1666,7 @@ class CoflowPanel(utils.DevicePanel):
             self.warning_dialog = None
             self.error_dialog = None
             self.air_warning_dialog = None
+            self.overflow_dialog = None
             self.monitor_timer = wx.Timer(self)
             self.Bind(wx.EVT_TIMER, self._on_monitor_timer, self.monitor_timer)
             self.doing_buffer_change = False
@@ -1834,9 +1835,7 @@ class CoflowPanel(utils.DevicePanel):
         elif cmd == 'get_overflow_status':
             status, err = val
             if err:
-                msg = ('Could not get overflow pump status. Contact your beamline scientist.')
-                wx.CallAfter(self.showMessageDialog, self, msg, "Connection error",
-                    wx.OK|wx.ICON_ERROR)
+                self._show_overflow_dialog()
 
             elif status != self._overflow_status:
                 wx.CallAfter(self.overflow_status.SetLabel, status)
@@ -1845,9 +1844,7 @@ class CoflowPanel(utils.DevicePanel):
         elif cmd == 'start_overflow' or cmd == 'stop_overflow':
             status, err = val
             if err:
-                msg = ('Could not get overflow pump status. Contact your beamline scientist.')
-                wx.CallAfter(self.showMessageDialog, self, msg, "Connection error",
-                    wx.OK|wx.ICON_ERROR)
+                self._show_overflow_dialog()
 
             elif status != self._overflow_status:
                 wx.CallAfter(self.overflow_status.SetLabel, status)
@@ -2647,7 +2644,7 @@ class CoflowPanel(utils.DevicePanel):
         self._send_cmd(change_flow_rate_cmd, get_response=False)
 
         if start_monitor:
-            self.monitor_timer.Start(self.settings['settling_time'])
+            wx.CallAfter(self.monitor_timer.Start, self.settings['settling_time'])
 
     def _validate_flow_rate(self):
         logger.debug('Validating flow rate')
@@ -2846,14 +2843,30 @@ class CoflowPanel(utils.DevicePanel):
                 'Air detected', self._on_close_air_warn)
             self.air_warning_dialog.Show()
 
+    def _show_overflow_dialog(self):
+        if self.overflow_dialog is None:
+            msg = ('Could not get overflow pump status. Contact your '
+                'beamline scientist.')
+
+            self.overflow_dialog = utils.WarningMessage(self, msg,
+                'Connection error', self._on_close_overflow)
+            self.overflow_dialog.Show()
+
     def _on_close_flow_warn(self):
+        self.warning_dialog.Destroy()
         self.warning_dialog = None
 
     def _on_close_error_warn(self):
+        self.error_dialog.Destroy()
         self.error_dialog = None
 
     def _on_close_air_warn(self):
+        self.air_warning_dialog.Destroy()
         self.air_warning_dialog = None
+
+    def _on_close_overflow(self):
+        self.overflow_dialog.Destroy()
+        self.overflow_dialog = None
 
     def metadata(self):
 
