@@ -447,6 +447,11 @@ class Spectrometer(object):
 
     def collect_dark(self, averages=1, set_dark_conditions=True):
         logger.info('Spectrometer %s: Collecting dark spectrum', self.name)
+        if self._live_update:
+            self._live_update_evt.clear()
+            while self.is_busy():
+                time.sleep(0.1)
+
         if not self.is_busy():
             is_dark = self._check_dark_conditions(
                 set_dark_conditions=set_dark_conditions)
@@ -484,6 +489,9 @@ class Spectrometer(object):
             raise RuntimeError('A spectrum or series of spectrum is already being '
                 'collected, cannot collect a new spectrum.')
 
+        if self._live_update:
+            self._live_update_evt.set()
+
         return self.get_dark()
 
     def set_reference_spectrum(self, spectrum):
@@ -501,6 +509,11 @@ class Spectrometer(object):
 
     def collect_reference_spectrum(self, averages=1, dark_correct=True,
         int_trigger=True, auto_dark=True, dark_time=60*60):
+        if self._live_update:
+            self._live_update_evt.clear()
+            while self.is_busy():
+                time.sleep(0.1)
+
         if not self.is_busy():
             if auto_dark:
                 self._auto_dark(dark_time)
@@ -512,6 +525,9 @@ class Spectrometer(object):
         else:
             raise RuntimeError('A spectrum or series of spectrum is already being '
                 'collected, cannot collect a new spectrum.')
+
+        if self._live_update:
+            self._live_update_evt.set()
 
         return self.get_reference_spectrum()
 
@@ -689,6 +705,7 @@ class Spectrometer(object):
         dark_time=60*60, take_ref=True, ref_avgs=1, drift_correct=True,
         wait_for_trig=False):
         if self._live_update and not self._taking_series:
+            print('here')
             self._live_update_evt.clear()
             while self.is_busy():
                 time.sleep(0.1)
@@ -4517,7 +4534,7 @@ default_spectrometer_settings = {
         'remote'                : False,
         'remote_device'         : 'uv',
         'com_thread'            : None,
-        'remote_dir_prefix'     : {'local' : '/nas_data', 'remote' : 'Y:\\'},
+        'remote_dir_prefix'     : {'local' : '/nas_data', 'remote' : 'Z:\\'},
         'inline_panel'          : False,
         'plot_refresh_t'        : 0.1, #in s
     }
