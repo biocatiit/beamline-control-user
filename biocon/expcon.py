@@ -3989,9 +3989,9 @@ class ExpPanel(wx.Panel):
 
                             errors.append(msg)
 
-                if int(metadata['Sheath valve position:']) != 1:
+                if int(metadata['Sheath valve position:']) >= 7:
                     msg = ('Sheath valve is in position {}, not the usual '
-                        'position 1.'.format(metadata['Sheath valve position:']))
+                        'positions 1-7.'.format(metadata['Sheath valve position:']))
 
                     errors.append(msg)
 
