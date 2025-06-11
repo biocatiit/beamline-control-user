@@ -304,9 +304,11 @@ class Spectrometer(object):
         self._live_update_stop = threading.Event()
         self._live_update_evt.clear()
         self._live_update_stop.clear()
-        self._live_udpate_thread = threading.Thread(target=self._live_update_spectra)
+        self._live_update_stop.set()
+        self._live_update_thread = threading.Thread(target=self._live_update_spectra)
         self._live_update_thread.daemon = True
         self._live_update_thread.start()
+
 
 
         self._autosave_dir = None
@@ -1540,8 +1542,8 @@ class UVCommThread(utils.CommManager):
             'get_drift_window'  : self._get_drift_window,
             'set_ao_params'     : self._set_ao_params,
             'get_ao_params'     : self._get_ao_params,
-            'set_live_params'   : self._set_live_params,
-            'get_live_params'   : self._get_live_params,
+            # 'set_live_params'   : self._set_live_params,
+            # 'get_live_params'   : self._get_live_params,
         }
 
         self._connected_devices = OrderedDict()
@@ -1702,7 +1704,8 @@ class UVCommThread(utils.CommManager):
 
         device = self._connected_devices[name]
 
-        live_update, _ = self.get_live_update()
+        # live_update, _ = self.get_live_update()
+        live_update = False
 
         if live_update:
             self.set_live_update(False)
@@ -1754,7 +1757,8 @@ class UVCommThread(utils.CommManager):
 
         device = self._connected_devices[name]
 
-        live_update, _ = self.get_live_update()
+        # live_update, _ = self.get_live_update()
+        live_update = False
 
         if live_update:
             self.set_live_update(False)
@@ -1777,7 +1781,8 @@ class UVCommThread(utils.CommManager):
 
         device = self._connected_devices[name]
 
-        live_update, _ = self.get_live_update()
+        # live_update, _ = self.get_live_update()
+        live_update = False
 
         if live_update:
             self.set_live_update(False)
@@ -3854,9 +3859,9 @@ class UVPanel(utils.DevicePanel):
     def _on_close(self):
         """Device specific stuff goes here"""
 
-        if not self.inline:
-            self._live_update_stop.set()
-            self._live_update_thread.join()
+        # if not self.inline:
+            # self._live_update_stop.set()
+            # self._live_update_thread.join()
 
     def on_exit(self):
         self.close()
