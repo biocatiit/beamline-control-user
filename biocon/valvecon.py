@@ -38,7 +38,10 @@ import wx
 import serial
 import serial.tools.list_ports as list_ports
 from six import string_types
-import epics
+try:
+    import epics
+except Exception:
+    pass
 
 import utils
 

@@ -429,17 +429,17 @@ if __name__ == '__main__':
     port3 = '5558'
     port4 = '5559'
 
-    exp_type = 'coflow' #coflow or trsaxs_laminar or trsaxs_chaotic or hplc
+    # exp_type = 'coflow' #coflow or trsaxs_laminar or trsaxs_chaotic or hplc
     # exp_type = 'trsaxs_chaotic'
     # exp_type = 'trsaxs_laminar'
-    # exp_type = 'hplc'
+    exp_type = 'hplc'
 
 
     if exp_type == 'coflow':
         # Coflow
 
-        # has_uv = True
-        has_uv = False
+        has_uv = True
+        # has_uv = False
 
         ip = '164.54.204.53'
         # ip = '164.54.204.192'

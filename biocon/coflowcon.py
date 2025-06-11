@@ -38,7 +38,10 @@ import wx
 import matplotlib
 from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg
 from matplotlib.figure import Figure
-import epics.wx
+try:
+    import epics.wx
+except Exception:
+    pass
 
 matplotlib.rcParams['backend'] = 'WxAgg'
 
