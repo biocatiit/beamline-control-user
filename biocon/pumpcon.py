@@ -2041,6 +2041,7 @@ class HamiltonPSD6Pump(SyringePump):
             step_rate = self._calc_flow_rate(self._flow_rate)
 
             delay *= 1000 #convert to ms
+            delay = int(delay)
 
             if delay > 5:
                 delay_cmd = ''
