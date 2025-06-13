@@ -1818,7 +1818,7 @@ class AutosamplerPanel(utils.DevicePanel):
             size=self._FromDIP((80,-1)))
         self.aspirate_sample = wx.Button(pump_box, label='Aspirate Sample')
 
-        self.aspriate_sample.Bind(self._on_aspirate_sample)
+        self.aspirate_sample.Bind(wx.EVT_BUTTON, self._on_aspirate_sample)
 
         pump_sub_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(5),
             hgap=self._FromDIP(5))
@@ -2001,9 +2001,8 @@ class AutosamplerPanel(utils.DevicePanel):
         draw_rate = self.draw_rate.GetValue()
         dwell_time = self.dwell_time.GetValue()
 
-        (vol_units, rate_units, draw_rate, dwell_time, errors) =
-            self._validate_aspirate_params(vol_units, rate_units, draw_rate,
-                dwell_time, verbose)
+        (vol_units, rate_units, draw_rate, dwell_time, errors) = self._validate_aspirate_params(
+            vol_units, rate_units, draw_rate, dwell_time, verbose)
 
         if len(errors) == 0:
             self._aspirate(vol_units, rate_units, draw_rate, dwell_time)
