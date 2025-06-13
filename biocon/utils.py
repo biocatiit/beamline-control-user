@@ -693,7 +693,6 @@ class CommManager(threading.Thread):
                 ', '.join(['{}:{}'.format(kw, item) for kw, item in kwargs.items()])))
             logger.exception(msg)
 
-            logger.debug('4444444444444444444444444444')
             self._return_value((command, False), kwargs['comm_name'])
 
     def add_new_communication(self, name, command_queue, return_queue, status_queue):
