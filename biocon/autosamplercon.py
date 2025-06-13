@@ -2685,7 +2685,7 @@ default_autosampler_settings = {
     'home_settings'         : {'plate_x': {'dir': -1, 'step': 0.1, 'pos': 0},
                                 'plate_z': {'dir': 1, 'step': 0.1, 'pos': 0},
                                 'needle_y': {'dir': -1, 'step': 0.01, 'pos': -2.20}}, #Direction 1/-1 for positive/negative. step is step size off limit, pos is what to set the home position as.
-    'base_position'         : {'plate_x': 272.5, 'plate_z': -75.9, 'needle_y': 113.75}, # A1 well position, needle height at chiller plate top
+    'base_position'         : {'plate_x': 272.0, 'plate_z': -76.4, 'needle_y': 113.95}, # A1 well position, needle height at chiller plate top
     'clean_offsets'         : {'plate_x': 100, 'plate_z': -21.5, 'needle_y': -3}, # Relative to base position
     'needle_out_offset'     : 5, # mm
     'needle_in_position'    : 0,
