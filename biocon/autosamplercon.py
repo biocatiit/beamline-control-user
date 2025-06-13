@@ -951,8 +951,8 @@ class Autosampler(object):
 
         return success
 
-    def inject_sample(self, volume, rate, trigger, delay, vol_units='uL',
-        rate_units='uL/min'):
+    def inject_sample(self, volume, rate, trigger, start_delay, end_delay,
+        vol_units='uL', rate_units='uL/min'):
         #Flow rates ideally 100-200 uL/min?
         logger.info('Injecting sample')
 
@@ -965,10 +965,7 @@ class Autosampler(object):
         self.set_pump_dispense_rates(rate, rate_units, 'sample')
 
         load_vol = pumpcon.convert_volume(volume, vol_units, 'uL')
-        print(load_vol)
-        print(type(load_vol))
-        print(self.settings['reserve_vol'])
-        print(type(self.settings['reserve_vol']))
+
         self.dispense(load_vol - self.settings['reserve_vol'], 'sample',
             trigger=trigger, delay=delay, units='uL', blocking=False)
 
@@ -983,6 +980,13 @@ class Autosampler(object):
             if abort:
                 break
 
+        start_time = time.time()
+
+        while time.time() - start_time < end_delay:
+            abort = self._sleep(0.02)
+            if abort:
+                break
+
         self._active_count -= 1
 
         self._active_count -= 1
@@ -991,8 +995,8 @@ class Autosampler(object):
 
         return not abort
 
-    def load_and_inject(self, volume, rate, row, column, trigger, delay,
-        vol_units='uL', rate_units='uL/min'):
+    def load_and_inject(self, volume, rate, row, column, trigger, start_delay,
+        end_delay, vol_units='uL', rate_units='uL/min'):
         initial_vol = pumpcon.convert_volume(volume, vol_units, 'uL')
 
         self._active_count += 1
@@ -1004,8 +1008,8 @@ class Autosampler(object):
 
             if success:
                 remaining_vol = initial_vol - self.settings['inject_connect_vol']
-                success = self.inject_sample(remaining_vol, rate, trigger, delay,
-                'uL', rate_units)
+                success = self.inject_sample(remaining_vol, rate, trigger,
+                    start_delay, end_delay, 'uL', rate_units)
 
         self._active_count -= 1
 
@@ -1462,53 +1466,56 @@ class ASCommThread(utils.CommManager):
 
         logger.debug("%s moved to inject position", name)
 
-    def _inject_sample(self, name, val, rate, trigger, delay, vol_units,
-        rate_units, **kwargs):
+    def _inject_sample(self, name, val, rate, trigger, start_delay, end_delay,
+        vol_units, rate_units, **kwargs):
         logger.debug("%s injecting sample", name)
 
         comm_name = kwargs.pop('comm_name', None)
         cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
-        success = device.inject_sample(val, rate, trigger, delay, vol_units,
-            rate_units, **kwargs)
+        success = device.inject_sample(val, rate, trigger, start_delay,
+            end_delay, vol_units, rate_units, **kwargs)
 
         self._return_value((name, cmd, success), comm_name)
 
         inj_settings = {
-            'volume'    : val,
-            'rate'      : rate,
-            'trigger'   : trigger,
-            'delay'     : delay,
-            'vol_units' : vol_units,
-            'rate_units': rate_units,
+            'volume'        : val,
+            'rate'          : rate,
+            'trigger'       : trigger,
+            'start_delay'   : start_delay,
+            'end_delay'     : end_delay,
+            'vol_units'     : vol_units,
+            'rate_units'    : rate_units,
             }
+
         self._return_value((name, cmd, inj_settings), 'status')
 
         logger.debug("%s injected sample", name)
 
-    def _load_and_inject(self, name, val, rate, row, column, trigger, delay,
-        vol_units, rate_units, **kwargs):
+    def _load_and_inject(self, name, val, rate, row, column, trigger,
+        start_delay, end_delay, vol_units, rate_units, **kwargs):
         logger.debug("%s loading and injecting sample", name)
 
         comm_name = kwargs.pop('comm_name', None)
         cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
-        success = device.load_and_inject(val, rate, row, column, trigger, delay,
-            vol_units, rate_units, **kwargs)
+        success = device.load_and_inject(val, rate, row, column, trigger,
+            start_delay, end_delay, vol_units, rate_units, **kwargs)
 
         self._return_value((name, cmd, success), comm_name)
 
         inj_settings = {
-            'volume'    : val,
-            'rate'      : rate,
-            'row'       : row,
-            'column'    : column,
-            'trigger'   : trigger,
-            'delay'     : delay,
-            'vol_units' : vol_units,
-            'rate_units': rate_units,
+            'volume'        : val,
+            'rate'          : rate,
+            'row'           : row,
+            'column'        : column,
+            'trigger'       : trigger,
+            'start_delay'   : start_delay,
+            'end_delay'     : end_delay,
+            'vol_units'     : vol_units,
+            'rate_units'    : rate_units,
             }
         self._return_value((name, cmd, inj_settings), 'status')
 
@@ -1592,7 +1599,8 @@ class AutosamplerPanel(utils.DevicePanel):
         self._current_dwell_time = 0.
         self._current_well_plate_type = ''
         self._current_load_volume = 0.
-        self._current_buffer_delay = 0.
+        self._current_buffer_start_delay = 0.
+        self._current_buffer_end_delay = 0.
         self._current_status = ''
         self._current_trigger_on_inject = True
 
@@ -1628,7 +1636,8 @@ class AutosamplerPanel(utils.DevicePanel):
         self.sample_well = wx.StaticText(as_box, size=self._FromDIP((40,-1)),
                 style=wx.ST_NO_AUTORESIZE)
         self.load_volume = wx.TextCtrl(as_box, validator=utils.CharValidator('float'))
-        self.buffer_delay = wx.TextCtrl(as_box, validator=utils.CharValidator('float'))
+        self.buffer_start_delay = wx.TextCtrl(as_box, validator=utils.CharValidator('float'))
+        self.buffer_end_delay = wx.TextCtrl(as_box, validator=utils.CharValidator('float'))
 
         self.load_and_inject_btn = wx.Button(as_box, label='Load and inject')
         self.load_and_inject_btn.Bind(wx.EVT_BUTTON, self._on_load_and_inject)
@@ -1653,7 +1662,10 @@ class AutosamplerPanel(utils.DevicePanel):
         ctrl_sub_sizer1.Add(self.load_volume, flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
         ctrl_sub_sizer1.Add(wx.StaticText(as_box, label='Buffer start delay [s]:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
-        ctrl_sub_sizer1.Add(self.buffer_delay, flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
+        ctrl_sub_sizer1.Add(self.buffer_start_delay, flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
+        ctrl_sub_sizer1.Add(wx.StaticText(as_box, label='Buffer end delay [s]:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        ctrl_sub_sizer1.Add(self.buffer_end_delay, flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
         ctrl_sub_sizer1.Add(self.load_and_inject_btn, flag=wx.ALIGN_CENTER_VERTICAL)
         ctrl_sub_sizer1.Add(self.stop_btn, flag=wx.ALIGN_CENTER_VERTICAL)
         ctrl_sub_sizer1.Add(self.change_plate_btn, flag=wx.ALIGN_CENTER_VERTICAL)
@@ -1804,6 +1816,9 @@ class AutosamplerPanel(utils.DevicePanel):
             size=self._FromDIP((80,-1)))
         self.dwell_time = wx.TextCtrl(pump_box, validator=utils.CharValidator('float'),
             size=self._FromDIP((80,-1)))
+        self.aspirate_sample = wx.Button(pump_box, label='Aspirate Sample')
+
+        self.aspriate_sample.Bind(self._on_aspirate_sample)
 
         pump_sub_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(5),
             hgap=self._FromDIP(5))
@@ -1816,6 +1831,7 @@ class AutosamplerPanel(utils.DevicePanel):
 
         pump_sizer = wx.StaticBoxSizer(pump_box, wx.VERTICAL)
         pump_sizer.Add(pump_sub_sizer)
+        pump_sizer.Add(self.aspirate_sample, flag=wx.TOP, border=self._FromDIP(5))
 
 
         self._staff_ctrl_btn = wx.Button(adv_win, label='Staff Controls')
@@ -1874,7 +1890,8 @@ class AutosamplerPanel(utils.DevicePanel):
         well = self._selected_well
         volume = self.load_volume.GetValue()
         rate = self.inj_rate.GetValue()
-        delay = self.buffer_delay.GetValue()
+        start_delay = self.buffer_start_delay.GetValue()
+        end_delay = self.buffer_end_delay.GetValue()
         trigger = self.trigger_on_inject.GetValue()
         vol_units = 'uL'
         rate_units = 'uL/min'
@@ -1882,22 +1899,23 @@ class AutosamplerPanel(utils.DevicePanel):
         dwell_time = self.dwell_time.GetValue()
         clean_needle = self.clean_after_inject.GetValue()
 
-        (row, col, volume, rate, delay, trigger, vol_units, rate_units,
-            draw_rate, dwell_time, errors) = self._validate_load_and_inject_params(
-            well, volume, rate, delay, trigger, vol_units, rate_units,
-            draw_rate, dwell_time, verbose)
+        (row, col, volume, rate, start_delay, end_delay, trigger, vol_units,
+            rate_units, draw_rate, dwell_time, errors) = self._validate_load_and_inject_params(
+            well, volume, rate, start_delay, end_delay, trigger, vol_units,
+            rate_units, draw_rate, dwell_time, verbose)
 
         if len(errors) == 0:
-            self._load_and_inject(row, col, volume, rate, delay, trigger,
-                vol_units, rate_units, draw_rate, dwell_time, clean_needle)
+            self._load_and_inject(row, col, volume, rate, start_delay,
+                end_delay, trigger, vol_units, rate_units, draw_rate,
+                dwell_time, clean_needle)
 
-    def _load_and_inject(self, row, col, volume, rate, delay, trigger, vol_units,
-        rate_units, draw_rate, dwell_time, clean_needle):
+    def _load_and_inject(self, row, col, volume, rate, start_delay, end_delay,
+        trigger, vol_units, rate_units, draw_rate, dwell_time, clean_needle):
         rate_cmd = ['set_sample_draw_rate', [self.name, draw_rate, rate_units], {}]
         dwell_cmd = ['set_sample_dwell_time', [self.name, dwell_time,], {}]
 
         inj_cmd = ['load_and_inject', [self.name, volume, rate, row, col,
-            trigger, delay, vol_units, rate_units], {}]
+            trigger, start_delay, end_delay, vol_units, rate_units], {}]
 
         self._send_cmd(rate_cmd, False)
         self._send_cmd(dwell_cmd, False)
@@ -1906,12 +1924,12 @@ class AutosamplerPanel(utils.DevicePanel):
         if clean_needle:
             self._send_cmd(['clean', [self.name,], {}], False)
 
-    def _validate_load_and_inject_params(self, well, volume, rate, delay,
-        trigger, vol_units, rate_units, draw_rate, dwell_time, verbose):
+    def _validate_load_and_inject_params(self, well, volume, rate, start_delay,
+        end_delay, trigger, vol_units, rate_units, draw_rate, dwell_time, verbose):
 
-        (volume, rate, delay, trigger, vol_units, rate_units,
-            errors) = self._validate_inject_params(volume, rate, delay,
-            trigger, vol_units, rate_units, False)
+        (volume, rate, start_delay, end_delay, trigger, vol_units, rate_units,
+            errors) = self._validate_inject_params(volume, rate, start_delay,
+            end_delay, trigger, vol_units, rate_units, False)
 
         try:
             row = well[0]
@@ -1956,8 +1974,8 @@ class AutosamplerPanel(utils.DevicePanel):
             wx.CallAfter(wx.MessageBox, msg, 'Error in load and inject parameters',
                 style=wx.OK|wx.ICON_ERROR)
 
-        return (row, col, volume, rate, delay, trigger, vol_units, rate_units,
-            draw_rate, dwell_time, errors)
+        return (row, col, volume, rate, start_delay, end_delay, trigger,
+            vol_units, rate_units, draw_rate, dwell_time, errors)
 
     def _load_and_move_to_inject(self, row, col, volume, vol_units, rate_units,
         draw_rate, dwell_time):
@@ -1973,6 +1991,88 @@ class AutosamplerPanel(utils.DevicePanel):
 
         if clean_needle:
             self._send_cmd(['clean', [self.name,], {}], False)
+
+    def _on_aspirate_sample(self, evt):
+        self._prepare_aspriate(True)
+
+    def _prepare_aspirate(self, verbose):
+        vol_units = 'uL'
+        rate_units = 'uL/min'
+        draw_rate = self.draw_rate.GetValue()
+        dwell_time = self.dwell_time.GetValue()
+
+        (vol_units, rate_units, draw_rate, dwell_time, errors) =
+            self._validate_aspirate_params(vol_units, rate_units, draw_rate,
+                dwell_time, verbose)
+
+        if len(errors) == 0:
+            self._aspirate(vol_units, rate_units, draw_rate, dwell_time)
+
+    def _aspirate(self, vol_units, rate_units, draw_rate, dwell_time):
+        rate_cmd = ['set_sample_draw_rate', [self.name, draw_rate, rate_units], {}]
+        dwell_cmd = ['set_sample_dwell_time', [self.name, dwell_time,], {}]
+
+        inj_cmd = ['pump_aspirate', [self.name, volume, vol_units], {}]
+
+        self._send_cmd(rate_cmd, False)
+        self._send_cmd(dwell_cmd, False)
+        self._send_cmd(inj_cmd, False)
+
+    def _validate_aspirate_params(self, vol_units, rate_units,
+        draw_rate, dwell_time, verbose):
+        errors = []
+
+        try:
+            volume = float(volume)
+        except Exception:
+            errors.append('Volume must be a number.')
+
+        if isinstance(volume, float):
+            ul_vol = pumpcon.convert_volume(volume, vol_units, 'uL')
+            if ul_vol < self.settings['min_load_volume']:
+                errors.append('Volume must be >= {} uL'.format(
+                    self.settings['min_load_volume']))
+            elif ul_vol > self.settings['loop_volume']:
+                errors.append('Volume must be <= {} uL'.format(
+                    self.settings['loop_volume']))
+
+        try:
+            draw_rate = float(draw_rate)
+        except Exception:
+            errors.append('Sample draw rate must be a number.')
+            draw_rate = None
+
+        if isinstance(draw_rate, float):
+            ul_min_draw_rate = pumpcon.convert_flow_rate(draw_rate, rate_units,
+                'uL/min')
+            ul_min_max_draw_rate = pumpcon.convert_flow_rate(self.settings['max_draw_rate'],
+                'mL/min', 'uL/min')
+            if ul_min_draw_rate <= 0:
+                errors.append('Sample draw rate must be > 0 uL/min')
+            elif ul_min_draw_rate > ul_min_max_draw_rate:
+                errors.append('Sample draw rate must <= {} uL/min'.format(
+                    ul_min_max_draw_rate))
+        try:
+            dwell_time = float(dwell_time)
+        except Exception:
+            errors.append('Wait time after draw must be a number.')
+            dwell_time = None
+
+        if isinstance(dwell_time, float):
+            if dwell_time < 0:
+                errors.append('Wait time after draw must be >= 0 s')
+
+        if len(errors) >0 and verbose:
+            msg = 'The following field(s) have invalid values:'
+            for err in errors:
+                msg = msg + '\n- ' + err
+            msg = msg + ('\n\nPlease correct these errors, then load and inject.')
+
+            wx.CallAfter(wx.MessageBox, msg, 'Error in load and inject parameters',
+                style=wx.OK|wx.ICON_ERROR)
+
+        return (row, col, volume, rate, delay, trigger, vol_units, rate_units,
+            draw_rate, dwell_time, errors)
 
     def _on_clean(self, evt):
         self._clean_needle()
@@ -2068,22 +2168,23 @@ class AutosamplerPanel(utils.DevicePanel):
     def _prepare_inject(self, verbose):
         volume = self.load_volume.GetValue()
         rate = self.inj_rate.GetValue()
-        delay = self.buffer_delay.GetValue()
+        start_delay = self.buffer_start_delay.GetValue()
+        end_delay = self.buffer_end_delay.GetValue()
         trigger = self.trigger_on_inject.GetValue()
         vol_units = 'uL'
         rate_units = 'uL/min'
         clean_needle = self.clean_after_inject.GetValue()
 
-        (volume, rate, delay, trigger, vol_units, rate_units,
-            errors) = self._validate_inject_params(volume, rate, delay,
-                trigger, vol_units, rate_units, verbose)
+        (volume, rate, start_delay, end_delay, trigger, vol_units, rate_units,
+            errors) = self._validate_inject_params(volume, rate, start_delay,
+                end_delay, trigger, vol_units, rate_units, verbose)
 
         if len(errors) == 0:
-            self._inject(volume, rate, delay, trigger, vol_units, rate_units,
-                clean_needle)
+            self._inject(volume, rate, start_delay, end_delay, trigger,
+                vol_units, rate_units, clean_needle)
 
-    def _validate_inject_params(self, volume, rate, delay, trigger,
-        vol_units, rate_units, verbose):
+    def _validate_inject_params(self, volume, rate, start_delay, end_delay,
+        trigger, vol_units, rate_units, verbose):
         errors = []
 
         try:
@@ -2117,13 +2218,22 @@ class AutosamplerPanel(utils.DevicePanel):
 
         if trigger:
             try:
-                delay = float(delay)
+                start_delay = float(start_delay)
             except Exception:
                 errors.append('Buffer start delay time must be a number.')
 
-            if isinstance(delay, float):
-                if delay < 0:
-                    errors.append('Buffer start delay time must be > 0')
+            if isinstance(start_delay, float):
+                if start_delay < 0:
+                    errors.append('Buffer start delay time must be >= 0')
+
+        try:
+            end_delay = float(end_delay)
+        except Exception:
+            errors.append('Buffer end delay time must be a number.')
+
+        if isinstance(end_delay, float):
+            if end_delay < 0:
+                errors.append('Buffer end delay time must be >= 0')
 
         if len(errors) >0 and verbose:
             msg = 'The following field(s) have invalid values:'
@@ -2134,12 +2244,13 @@ class AutosamplerPanel(utils.DevicePanel):
             wx.CallAfter(wx.MessageBox, msg, 'Error in inject parameters',
                 style=wx.OK|wx.ICON_ERROR)
 
-        return volume, rate, delay, trigger, vol_units, rate_units, errors
+        return (volume, rate, start_delay, end_delay, trigger, vol_units,
+            rate_units, errors)
 
-    def _inject(self, volume, rate, delay, trigger, vol_units, rate_units,
-        clean_needle):
-        inj_cmd = ['inject_sample', [self.name, volume, rate,
-            trigger, delay, vol_units, rate_units], {}]
+    def _inject(self, volume, rate, start_delay, end_delay, trigger, vol_units,
+        rate_units, clean_needle):
+        inj_cmd = ['inject_sample', [self.name, volume, rate, trigger,
+            start_delay, end_delay, vol_units, rate_units], {}]
 
         self._send_cmd(inj_cmd, False)
 
@@ -2177,7 +2288,8 @@ class AutosamplerPanel(utils.DevicePanel):
             'mL/min', 'uL/min')
 
         self.load_volume.SetValue(str(self.settings['default_load_vol']))
-        self.buffer_delay.SetValue(str(self.settings['default_delay_time']))
+        self.buffer_start_delay.SetValue(str(self.settings['default_start_delay_time']))
+        self.buffer_end_delay.SetValue(str(self.settings['default_end_delay_time']))
         self.inj_rate.SetValue(str(inj_rate))
         self.draw_rate.SetValue(str(draw_rate))
         self.dwell_time.SetValue(str(self.settings['load_dwell_time']))
@@ -2188,7 +2300,8 @@ class AutosamplerPanel(utils.DevicePanel):
         self._current_dwell_time = self.settings['load_dwell_time']
         self._current_well_plate_type = self.settings['plate_type']
         self._current_load_volume = self.settings['default_load_vol']
-        self._current_buffer_delay = self.settings['default_delay_time']
+        self._current_buffer_start_delay = self.settings['default_start_delay_time']
+        self._current_buffer_end_delay = self.settings['default_end_delay_time']
 
     def _set_status(self, cmd, val):
         if cmd == 'set_well_plate':
@@ -2205,7 +2318,8 @@ class AutosamplerPanel(utils.DevicePanel):
             vol = val['volume']
             rate = val['rate']
             trigger = val['trigger']
-            delay = val['delay']
+            start_delay = val['start_delay']
+            end_delay = val['end_delay']
             vol_units = val['vol_units']
             rate_units = val['rate_units']
 
@@ -2224,15 +2338,20 @@ class AutosamplerPanel(utils.DevicePanel):
                 self.trigger_on_inject.ChangeValue(trigger)
                 self._current_trigger_on_inject = trigger
 
-            if delay != self._current_buffer_delay:
-                self.buffer_delay.ChangeValue(str(delay))
-                self._current_buffer_delay = delay
+            if start_delay != self._current_buffer_start_delay:
+                self.buffer_start_delay.ChangeValue(str(start_delay))
+                self._current_buffer_start_delay = start_delay
+
+            if end_delay != self._current_buffer_end_delay:
+                self.buffer_end_delay.ChangeValue(str(end_delay))
+                self._current_buffer_end_delay = end_delay
 
         elif cmd == 'load_and_inject':
             vol = val['volume']
             rate = val['rate']
             trigger = val['trigger']
-            delay = val['delay']
+            start_delay = val['start_delay']
+            end_delay = val['end_delay']
             vol_units = val['vol_units']
             rate_units = val['rate_units']
             row = val['row']
@@ -2255,9 +2374,13 @@ class AutosamplerPanel(utils.DevicePanel):
                 self.trigger_on_inject.ChangeValue(trigger)
                 self._current_trigger_on_inject = trigger
 
-            if delay != self._current_buffer_delay:
-                self.buffer_delay.ChangeValue(str(delay))
-                self._current_buffer_delay = delay
+            if delay != self._current_buffer_start_delay:
+                self.buffer_start_delay.ChangeValue(str(delay))
+                self._current_buffer_start_delay = delay
+
+            if end_delay != self._current_buffer_end_delay:
+                self.buffer_end_delay.ChangeValue(str(end_delay))
+                self._current_buffer_end_delay = end_delay
 
             if well != self._selected_well:
                 self._set_selected_well(well)
@@ -2281,8 +2404,8 @@ class AutosamplerPanel(utils.DevicePanel):
 
         elif cmd == 'set_sample_dwell_time':
             if val != self._current_dwell_time:
-                self.dwell_time.ChangeValue(str(delay))
-                self._current_dwell_time = delay
+                self.dwell_time.ChangeValue(str(val))
+                self._current_dwell_time = val
 
         elif cmd == 'get_status':
 
@@ -2706,7 +2829,8 @@ default_autosampler_settings = {
     'loop_volume'           : 100, #Loop volume in uL
     'min_load_volume'       : 2.0,
     'default_load_vol'      : 10.0,
-    'default_delay_time'    : 10.0,
+    'default_start_delay_time': 10.0,
+    'default_end_delay_time': 10.0,
     'load_dwell_time'       : 3, #Time to wait in well after aspirating
     'inject_connect_vol'    : 0, #Volume to eject from the needle after loading before re-entering the cell, to ensure a wet-to-wet entry for the needle and prevent bubbles, uL
     'inject_connect_rate'   : 100, #Rate to eject the inject connect volume at, in uL/min
