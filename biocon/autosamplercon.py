@@ -168,6 +168,32 @@ class Autosampler(object):
             self.settings['clean_offsets']['plate_z'],
             self.settings['clean_offsets']['needle_y'])
 
+        self._cmd_stop_event = threading.Event()
+        self._cmd_queue = deque()
+        self._cmd_thread = threading.Thread(target=self._run_cmds)
+        self._cmd_thread.daemon = True
+        self._cmd_thread.start()
+
+    def _run_cmds(self):
+        while not self._cmd_stop_event.is_set():
+            if len(self._cmd_queue) > 0:
+                cmd_func, args, kwargs = self._cmd_queue.popleft()
+
+            else:
+                cmd_func = None
+
+            if self._stop_event.is_set():
+                break
+
+            cmds_run = False
+
+            if cmd_func is not None:
+                cmd_func(*args, **kwargs)
+                cmds_run = True
+
+            if not cmds_run:
+                time.sleep(0.02)
+
     def connect(self):
         self._init_motors()
         self._init_valves()
@@ -258,7 +284,16 @@ class Autosampler(object):
         self.set_sample_draw_rate(self.settings['pump_rates']['sample'][0], 'mL/min')
         self.set_sample_dwell_time(self.settings['load_dwell_time'])
 
-    def home_motor(self, motor_name):
+    def home_motor(self, motor_name, thread=True):
+        if not thread:
+            success = self._inner_home_motor(motor_name)
+        else:
+            self._cmd_queue.append([self._inner_home_motor, [motor_name], {}])
+            success = True
+
+        return success
+
+    def _inner_home_motor(self, motor_name):
         self._active_count += 1
         abort = False
 
@@ -597,11 +632,20 @@ class Autosampler(object):
 
         return well_position
 
-    def move_to_load(self, row, column):
+    def move_to_load(self, row, column, thread=True):
+        if not thread:
+            success = self._inner_move_to_load(row, column)
+        else:
+            self._cmd_queue.append([self._inner_move_to_load, [row, column], {}])
+            success = True
+
+        return success
+
+    def _inner_move_to_load(self, row, column):
         self._active_count += 1
         logger.info('Moving to load position %s%s', row, column)
 
-        success = self.move_plate_load(row, column)
+        success = self.move_plate_load(row, column, False)
 
         if self._active_count == 1:
             self._status = 'Moving needle to load'
@@ -618,7 +662,16 @@ class Autosampler(object):
 
         return success
 
-    def move_to_clean(self):
+    def move_to_clean(self, thread=True):
+         if not thread:
+            success = self._inner_move_to_clean()
+        else:
+            self._cmd_queue.append([self._inner_move_to_clean, [], {}])
+            success = True
+
+        return success
+
+    def _inner_move_to_clean(self):
         self._active_count += 1
 
         logger.info('Moving to clean position')
@@ -647,7 +700,16 @@ class Autosampler(object):
 
         return success
 
-    def move_needle_out(self):
+    def move_needle_out(self, thread=True):
+         if not thread:
+            success = self._inner_move_needle_out()
+        else:
+            self._cmd_queue.append([self._inner_move_needle_out, [], {}])
+            success = True
+
+        return success
+
+    def _inner_move_needle_out(self):
         self._active_count += 1
 
         logger.info('Moving needle to out position')
@@ -661,7 +723,16 @@ class Autosampler(object):
 
         return success
 
-    def move_needle_in(self):
+    def move_needle_in(self, thread=True):
+         if not thread:
+            success = self._inner_move_needle_in()
+        else:
+            self._cmd_queue.append([self._inner_move_needle_in, [], {}])
+            success = True
+
+        return success
+
+    def _inner_move_needle_in(self):
         self._active_count += 1
 
         logger.info('Moving needle to in position')
@@ -669,7 +740,7 @@ class Autosampler(object):
         if self._active_count == 1:
             self._status = 'Moving needle out'
 
-        self.move_plate_out()
+        self.move_plate_out(False)
 
         success = self.move_motors_absolute(self.needle_in_position, 'needle_y',
             y_offset=False)
@@ -678,7 +749,16 @@ class Autosampler(object):
 
         return success
 
-    def move_plate_out(self):
+    def move_plate_out(self, thread=True):
+         if not thread:
+            success = self._inner_move_plate_out()
+        else:
+            self._cmd_queue.append([self._inner_move_plate_out, [], {}])
+            success = True
+
+        return success
+
+    def _inner_move_plate_out(self):
         self._active_count += 1
 
         logger.info('Moving plate to out position')
@@ -689,7 +769,7 @@ class Autosampler(object):
         cur_plate_x = self.plate_x_motor.position
 
         if cur_plate_x != self.plate_x_load:
-            success = self.move_needle_out()
+            success = self.move_needle_out(False)
         else:
             success =  True
 
@@ -704,7 +784,16 @@ class Autosampler(object):
 
         return success
 
-    def move_plate_change(self):
+    def move_plate_change(self, thread=True):
+         if not thread:
+            success = self._inner_move_plate_change()
+        else:
+            self._cmd_queue.append([self._inner_move_plate_change, [], {}])
+            success = True
+
+        return success
+
+    def _inner_move_plate_change(self):
         self._active_count += 1
 
         logger.info('Moving plate to change plate position')
@@ -730,7 +819,16 @@ class Autosampler(object):
 
         return success
 
-    def move_plate_load(self, row, column):
+    def move_plate_load(self, row, column, thread=True):
+         if not thread:
+            success = self._inner_move_plate_load(row, column)
+        else:
+            self._cmd_queue.append([self._inner_move_plate_load, [row, column], {}])
+            success = True
+
+        return success
+
+    def _inner_move_plate_load(self, row, column):
         self._active_count += 1
         logger.info('Moving plate to loading position at {}{}'.format(row, column))
 
@@ -896,7 +994,17 @@ class Autosampler(object):
 
         return not abort
 
-    def load_sample(self, volume, row, column, units='uL'):
+    def load_sample(self, volume, row, column, units='uL', thread=True):
+        if not thread:
+            success = self._inner_load_sample(volume, row, column, units)
+        else:
+            self._cmd_queue.append([self._inner_load_sample, [volume, row, column],
+                {'units': units}])
+            success = True
+
+        return success
+
+    def _inner_load_sample(self, volume, row, column, units='uL'):
         self._active_count += 1
 
         logger.info("Starting sample load of %s %s from %s%s", volume, units, row, column)
@@ -906,7 +1014,7 @@ class Autosampler(object):
         self.set_valve_position(self.settings['valve_positions']['sample'])
         self.sample_pump.set_valve_position('Input')
 
-        success = self.move_to_load(row, column)
+        success = self.move_to_load(row, columnm, False)
 
         if success:
             self.set_pump_aspirate_rates(self._sample_draw_rate, 'uL/min', 'sample')
@@ -915,7 +1023,7 @@ class Autosampler(object):
         if success:
             abort = self._sleep(self._sample_dwell_time)
             if not abort:
-                success = self.move_needle_out()
+                success = self.move_needle_out(False)
             else:
                 success = False
 
@@ -925,7 +1033,16 @@ class Autosampler(object):
 
         return success
 
-    def move_to_inject(self):
+    def move_to_inject(self, thread=True):
+        if not thread:
+            success = self._inner_move_to_inject()
+        else:
+            self._cmd_queue.append([self._inner_move_to_inject, [], {}])
+            success = True
+
+        return success
+
+    def _inner_move_to_inject(self):
         self._active_count += 1
 
         logger.info("Moving needle to inject position")
@@ -943,7 +1060,7 @@ class Autosampler(object):
             success = True
 
         if success:
-            success = self.move_needle_in()
+            success = self.move_needle_in(False)
 
         self._active_count -= 1
 
@@ -952,6 +1069,19 @@ class Autosampler(object):
         return success
 
     def inject_sample(self, volume, rate, trigger, start_delay, end_delay,
+        vol_units='uL', rate_units='uL/min', thread=True):
+        if not thread:
+            success = self._inner_inject_sample(volume, rate, trigger,
+                start_delay, end_delay, vol_units, rate_units)
+        else:
+            self._cmd_queue.append([self._inner_inject_sample, [volume, rate,
+                trigger, start_delay, end_delay], {'vol_units': vol_units,
+                'rate_units': rate_units}])
+            success = True
+
+        return success
+
+    def _inner_inject_sample(self, volume, rate, trigger, start_delay, end_delay,
         vol_units='uL', rate_units='uL/min'):
         #Flow rates ideally 100-200 uL/min?
         logger.info('Injecting sample')
@@ -996,47 +1126,82 @@ class Autosampler(object):
         return not abort
 
     def load_and_inject(self, volume, rate, row, column, trigger, start_delay,
+        end_delay, vol_units='uL', rate_units='uL/min', thread=True):
+        if not thread:
+            success = self._inner_load_and_inject(volume, rate, row, column,
+                trigger, start_delay, end_delay, vol_units, rate_units)
+        else:
+            self._cmd_queue.append([self._inner_load_and_inject, [volume, rate,
+                row, column, trigger, start_delay, end_delay], {'vol_units': vol_units,
+                'rate_units': rate_units}])
+            success = True
+
+        return success
+
+    def _inner_load_and_inject(self, volume, rate, row, column, trigger, start_delay,
         end_delay, vol_units='uL', rate_units='uL/min'):
         initial_vol = pumpcon.convert_volume(volume, vol_units, 'uL')
 
         self._active_count += 1
 
-        success = self.load_sample(initial_vol, row, column, 'uL')
+        success = self.load_sample(initial_vol, row, column, 'uL', False)
 
         if success:
-            success = self.move_to_inject()
+            success = self.move_to_inject(False)
 
             if success:
                 remaining_vol = initial_vol - self.settings['inject_connect_vol']
                 success = self.inject_sample(remaining_vol, rate, trigger,
-                    start_delay, end_delay, 'uL', rate_units)
+                    start_delay, end_delay, 'uL', rate_units, False)
 
         self._active_count -= 1
 
         return success
 
     def load_and_move_to_inject(self, volume, rate, row, column, vol_units='uL',
+        rate_units='uL/min', thread=True):
+        if not thread:
+            success = self._inner_load_and_move_to_inject(volume, rate, row,
+                column, vol_units, rate_units)
+        else:
+            self._cmd_queue.append([self._inner_load_and_move_to_inject, [volume,
+                rate, row, column], {'vol_units': vol_units,
+                'rate_units': rate_units}])
+            success = True
+
+        return success
+
+    def _inner_load_and_move_to_inject(self, volume, rate, row, column, vol_units='uL',
         rate_units='uL/min'):
         initial_vol = pumpcon.convert_volume(volume, vol_units, 'uL')
 
         self._active_count += 1
 
-        success = self.load_sample(initial_vol, row, column, 'uL')
+        success = self.load_sample(initial_vol, row, column, 'uL', False)
 
         if success:
-            success = self.move_to_inject()
+            success = self.move_to_inject(False)
 
         self._active_count -= 1
 
         return success
 
-    def clean(self):
+    def clean(self, thread=True):
+        if not thread:
+            success = self._inner_clean()
+        else:
+            self._cmd_queue.append([self._inner_clean, [], {}])
+            success = True
+
+        return success
+
+    def _inner_clean(self):
         self._active_count += 1
         logger.info('Starting cleaning sequence')
 
         self._status = 'Cleaning needle'
 
-        success = self.move_to_clean()
+        success = self.move_to_clean(False)
 
         self.sample_pump.set_valve_position('Output')
         rate = self.settings['pump_rates']['purge'][1]
@@ -1073,7 +1238,7 @@ class Autosampler(object):
 
         self.sample_pump.set_valve_position('Input')
 
-        self.move_needle_out()
+        self.move_needle_out(False)
 
         self._active_count -= 1
 
@@ -1097,6 +1262,10 @@ class Autosampler(object):
                 break
 
         return abort
+
+    def on_disconnect(self):
+        self._cmd_stop_event.set()
+        self._cmd_thread.join(5)
 
 
 class ASCommThread(utils.CommManager):
@@ -1149,6 +1318,10 @@ class ASCommThread(utils.CommManager):
 
     def _additional_connect_device(self, name, device_type, device, **kwargs):
         pass
+
+    def _cleanup_devices(self):
+        for device in self._connected_devices.values():
+            device.on_disconnect()
 
     def _get_well_volume(self, name, row, column, **kwargs):
 
@@ -1575,6 +1748,8 @@ class ASCommThread(utils.CommManager):
         for name in self._connected_devices:
             device = self._connected_devices[name]
             device.stop()
+
+
 
 
 class AutosamplerPanel(utils.DevicePanel):
