@@ -843,6 +843,7 @@ class SyringePump(Pump):
         :param units: Volume units, defaults to mL, also accepts uL or nL
         :type units: str
         """
+        orig_vol = copy.copy(vol)
         vol = self._convert_volume(vol, units, self._pump_base_units.split('/')[0])
 
         if self._is_flowing:
@@ -864,7 +865,7 @@ class SyringePump(Pump):
 
         if cont:
 
-            logger.info("Pump %s infusing %f %s at %f %s", self.name, vol, units,
+            logger.info("Pump %s infusing %f %s at %f %s", self.name, orig_vol, units,
                 self.flow_rate, self.units)
 
             self._send_dispense_cmd(vol)
@@ -880,7 +881,7 @@ class SyringePump(Pump):
 
         if self.round(self.max_volume - vol) > 0:
             self.aspirate(self.max_volume - vol,
-                self._pump_base_units.split('/')[0])
+                self.units.split('/')[0])
         else:
             logger.error(("Already at maximum volume, can't aspirate more."))
 
@@ -1737,8 +1738,9 @@ class HamiltonPSD6Pump(SyringePump):
 
         #Get current flow and refill rate
         ret, _ = self.send_cmd('?2')
+
         rate = self._convert_steps_to_volume(int(ret))
-        #Weird factor of 2 here
+        #Weird factor of 2 here, rates seem to be set in half steps
         rate = rate/2.
         self._flow_rate = self.round(rate)
         self._refill_rate = self.round(rate)
@@ -1746,6 +1748,14 @@ class HamiltonPSD6Pump(SyringePump):
         #Get current start velocity in steps
         ret, _ = self.send_cmd('?1')
         self._default_start_velocity = int(ret)
+
+        #Get current stop velocity in steps
+        ret, _ = self.send_cmd('?3')
+        self._default_stop_velocity = int(ret)
+
+        #Get current acceleration in steps
+        ret, _ = self.send_cmd('?10002')
+        self._default_acceleration = int(ret)
 
         #Get current volume
         self.volume
@@ -1913,6 +1923,8 @@ class HamiltonPSD6Pump(SyringePump):
             moving = False
         elif status == '@':
             moving = True
+        else:
+            moving = False
 
         return moving
 
@@ -5992,23 +6004,23 @@ if __name__ == '__main__':
 
 
 
-    # Coflow with OB1
-    bfs = fmcon.BFS('outlet_fm', 'COM3')
-    bfs.start_remote()
+    # # Coflow with OB1
+    # bfs = fmcon.BFS('outlet_fm', 'COM3')
+    # bfs.start_remote()
 
-    ob1_comm_lock = threading.RLock()
+    # ob1_comm_lock = threading.RLock()
 
-    setup_devices = [
-        {'name': 'sheath', 'args': ['VICI M50', 'COM6'],
-            'kwargs': {'flow_cal': '627.72', 'backlash_cal': '9.814'},
-            'ctrl_args': {'flow_rate': 1}},
-        {'name': 'outlet', 'args': ['OB1 Pump', 'COM15'],
-            'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
-            'min_pressure': -1000, 'max_pressure': 1000, 'P': -2, 'I': -0.15,
-            'D': 0, 'bfs_instr_ID': bfs.instr_ID, 'comm_lock': ob1_comm_lock,
-            'calib_path': './resources/ob1_calib.txt'},
-            'ctrl_args': {}}
-        ]
+    # setup_devices = [
+    #     {'name': 'sheath', 'args': ['VICI M50', 'COM6'],
+    #         'kwargs': {'flow_cal': '627.72', 'backlash_cal': '9.814'},
+    #         'ctrl_args': {'flow_rate': 1}},
+    #     {'name': 'outlet', 'args': ['OB1 Pump', 'COM15'],
+    #         'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
+    #         'min_pressure': -1000, 'max_pressure': 1000, 'P': -2, 'I': -0.15,
+    #         'D': 0, 'bfs_instr_ID': bfs.instr_ID, 'comm_lock': ob1_comm_lock,
+    #         'calib_path': './resources/ob1_calib.txt'},
+    #         'ctrl_args': {}}
+    #     ]
 
     # OB1 by itself
     # bfs = fmcon.BFS('outlet_fm', 'COM5')
@@ -6106,13 +6118,16 @@ if __name__ == '__main__':
     #         'ctrl_args': {'flow_rate' : '1', 'refill_rate' : '1'}},
     #     ]
 
-    # # Batch mode Hamilton PSD6 pump
-    # setup_devices = [
-    #     {'name': 'Sample', 'args': ['Hamilton PSD6', 'COM4'],
-    #         'kwargs': {'syringe_id': '1 mL, Medline P.C.',
-    #          'pump_address': '1', 'dual_syringe': 'False'},
-    #         'ctrl_args': {'flow_rate' : '1', 'refill_rate' : '1'}},
-    #     ]
+    # Batch mode Hamilton PSD6 pump
+    setup_devices = [
+        {'name': 'sample', 'args': ['Hamilton PSD6', 'COM3'],
+            'kwargs': {'syringe_id': '0.1 mL, Hamilton Glass',
+            'pump_address': '1', 'dual_syringe': 'False',
+            'diameter': 1.46, 'max_volume': 0.1,
+            'max_rate': 1, 'comm_lock': threading.RLock(),},
+            'ctrl_args': {'flow_rate' : 100,
+            'refill_rate' : 100, 'units': 'uL/min'}},
+        ]
 
     # # Simulated pumps
     # setup_devices = [
