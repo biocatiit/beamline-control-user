@@ -505,16 +505,16 @@ if __name__ == '__main__':
     biocon_settings = {}
 
     components = OrderedDict([
-        ('exposure', expcon.ExpPanel),
+        # ('exposure', expcon.ExpPanel),
         ('coflow', coflowcon.CoflowPanel),
         # ('trsaxs_scan', trcon.TRScanPanel),
         # ('trsaxs_flow', trcon.TRFlowPanel),
         # ('scan',    scancon.ScanPanel),
-        ('metadata', metadata.ParamPanel),
-        ('pipeline', pipeline_ctrl.PipelineControl),
-        ('uv', spectrometercon.UVPanel),
-        ('hplc', biohplccon.HPLCPanel),
-        ('automator', autocon.AutoPanel),
+        # ('metadata', metadata.ParamPanel),
+        # ('pipeline', pipeline_ctrl.PipelineControl),
+        # ('uv', spectrometercon.UVPanel),
+        # ('hplc', biohplccon.HPLCPanel),
+        # ('automator', autocon.AutoPanel),
         ])
 
     settings = {

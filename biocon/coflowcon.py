@@ -1784,17 +1784,14 @@ class CoflowPanel(utils.DevicePanel):
 
                 self._coflow_on = coflow_on
 
-            if self._sheath_valve_pos != int(sheath_valve_pos):
-                if self._changing_valve:
-                    if self._expected_valve_pos == int(sheath_valve_pos):
-                        wx.CallAfter(self.sheath_valve_pos.SafeChangeValue,
-                            int(sheath_valve_pos))
 
-                        self._sheath_valve_pos = int(sheath_valve_pos)
-                else:
+            if self._sheath_valve_pos != int(sheath_valve_pos):
+                if not self._changing_valve:
                     wx.CallAfter(self.sheath_valve_pos.SafeChangeValue,
                         int(sheath_valve_pos))
                     self._sheath_valve_pos = int(sheath_valve_pos)
+            elif self._changing_valve:
+                self._changing_valve = False
 
             if bc_status != self._bc_status:
                 if not bc_status:
@@ -2759,7 +2756,7 @@ class CoflowPanel(utils.DevicePanel):
 
         if int(pos) != self._sheath_valve_pos:
             self._changing_valve = True
-            self._expected_valve_pos = pos
+            self._expected_valve_pos = int(pos)
             self.set_sheath_valve_position(pos)
 
     def get_sheath_valve_position(self):
