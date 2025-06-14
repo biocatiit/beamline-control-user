@@ -382,6 +382,7 @@ if __name__ == '__main__':
     # Muscle settings
     exposure_settings['struck_measurement_time'] = '0.001'
     exposure_settings['tr_muscle_exp'] = False
+    exposure_settings['open_shutter_before_trig_cont_exp'] = True
 
     #Other settings
     exposure_settings['wait_for_trig'] = True
@@ -482,6 +483,7 @@ if __name__ == '__main__':
     spectrometer_settings = spectrometercon.default_spectrometer_settings
     spectrometer_settings['inline_panel'] = True
     spectrometer_settings['device_communication'] = 'remote'
+    spectrometer_settings['remote_dir_prefix'] = {'local' : '/nas_data', 'remote' : 'Z:\\'}
 
 
     ###################################################################
