@@ -802,9 +802,10 @@ class Spectrometer(object):
                     self.series_ready_event.set()
 
                 if spec_type == 'abs':
+                    # a = time.time()
                     spectrum = self._collect_absorbance_spectrum_inner(dark_correct,
                         int_trigger, drift_correct)
-
+                    # logger.info('%s', time.time()-a)
                 elif spec_type == 'trans':
                     spectrum = self._collect_transmission_spectrum_inner(dark_correct,
                         int_trigger, drift_correct)
@@ -1237,6 +1238,7 @@ class Spectrometer(object):
     def abort_collection(self):
         logger.info('Spectrometer %s: Aborting collection', self.name)
         self._series_abort_event.set()
+        self.abort_collection()
 
 class StellarnetUVVis(Spectrometer):
     """
@@ -1382,6 +1384,12 @@ class StellarnetUVVis(Spectrometer):
             else:
                 self.trigger_pv.put(0, wait=True)
 
+    def set_int_trigger_abort(self, trigger):
+        if trigger:
+            self.trigger_pv.put(1, wait=True)
+        else:
+            self.trigger_pv.put(0, wait=True)
+
     def get_int_trigger(self):
         return  self.trigger_pv.get()
 
@@ -1517,9 +1525,9 @@ class StellarnetUVVis(Spectrometer):
         int_trig = self.get_int_trigger()
 
         if not int_trig:
-            self.set_int_trigger(True)
+            self.set_int_trigger_abort(True)
             time.sleep(1)
-            self.set_int_trigger(False)
+            self.set_int_trigger_abort(False)
 
 
 class UVCommThread(utils.CommManager):
