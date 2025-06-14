@@ -1659,13 +1659,18 @@ class ExpCommThread(threading.Thread):
         while (ab_burst.get_status() & 0x1) != 0:
             time.sleep(0.01)
 
+        if exp_period - 0.5 > 0:
+            uv_time = exp_period - 0.5
+        else:
+            uv_time = exp_time
+
         if not continuous_exp:
             #Shutter opens and closes
             ab_burst.setup(exp_period, exp_time+s_open_time, num_frames, 0, 1, 2)
             cd_burst.setup(exp_period, (exp_period-(exp_time+s_open_time))/10.,
                 num_frames, exp_time+s_open_time, 1, 2)
             ef_burst.setup(exp_period, exp_time, num_frames, s_open_time, 1, 2)
-            gh_burst.setup(exp_period, exp_time/1.1, num_frames, s_open_time, 1, 2)
+            gh_burst.setup(exp_period, uv_time/1.1, num_frames, s_open_time, 1, 2)
         else:
             #Shutter will be open continuously
             if exp_type == 'muscle':
@@ -1677,7 +1682,7 @@ class ExpCommThread(threading.Thread):
             cd_burst.setup(exp_period, (exp_period-exp_time)/10.,
                 num_frames, exp_time+(exp_period-exp_time)/10., 1, 2)
             ef_burst.setup(exp_period, exp_time, num_frames, offset, 1, 2)
-            gh_burst.setup(exp_period, exp_time/1.1, num_frames, 0, 1, 2)
+            gh_burst.setup(exp_period, uv_time/1.1, num_frames, 0, 1, 2)
 
         if exp_type == 'muscle':
             ab_burst_2.setup(struck_meas_time, 0, struck_num_meas+1, 0, 1, 2) #Irrelevant
