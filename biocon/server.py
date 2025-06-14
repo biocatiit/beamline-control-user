@@ -308,10 +308,12 @@ class ControlServer(threading.Thread):
                         if answer == '':
                             logger.exception('No response received from device '
                                 '%s to cmd %s', device, device_cmd[0])
+                            answer = ['response', [device_cmd[1][0], device_cmd[0], None]]
                         else:
                             answer = ['response', answer]
                             logger.debug('Sending command response: %s', answer)
-                            self.socket.send_pyobj(answer, protocol=2, flags=zmq.NOBLOCK)
+
+                        self.socket.send_pyobj(answer, protocol=2, flags=zmq.NOBLOCK)
 
                     except zmq.ZMQError:
                         err = traceback.format_exc()
@@ -439,8 +441,8 @@ if __name__ == '__main__':
     if exp_type == 'coflow':
         # Coflow
 
-        # has_uv = True
-        has_uv = False
+        has_uv = True
+        # has_uv = False
 
         ip = '164.54.204.53'
         # ip = '164.54.204.192'

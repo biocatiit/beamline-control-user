@@ -298,12 +298,13 @@ class Spectrometer(object):
         self._analog_out_au_max = 10000.
         self._analog_out_wavelengths = {}
 
+        self._spectrometer_lock = threading.RLock()
+
         self._live_update = False
         self._live_update_period = 1
         self._live_update_evt = threading.Event()
         self._live_update_stop = threading.Event()
-        self._live_update_evt.clear()
-        self._live_update_stop.clear()
+        self._live_update_paused = threading.Event()
         self._live_update_thread = threading.Thread(target=self._live_update_spectra)
         self._live_update_thread.daemon = True
         self._live_update_thread.start()
@@ -358,6 +359,8 @@ class Spectrometer(object):
 
     def _collect_spectrum(self, int_trigger):
         logger.debug('Spectrometer %s: Collecting spectrum', self.name)
+        with self._spectrometer_lock:
+            pass
 
     def _check_dark_conditions(self, set_dark_conditions=True):
         """
@@ -449,6 +452,7 @@ class Spectrometer(object):
         logger.info('Spectrometer %s: Collecting dark spectrum', self.name)
         if self._live_update:
             self._live_update_evt.clear()
+            self._live_update_paused.wait()
             while self.is_busy():
                 time.sleep(0.1)
 
@@ -511,6 +515,7 @@ class Spectrometer(object):
         int_trigger=True, auto_dark=True, dark_time=60*60):
         if self._live_update:
             self._live_update_evt.clear()
+            self._live_update_paused.wait()
             while self.is_busy():
                 time.sleep(0.1)
 
@@ -582,7 +587,7 @@ class Spectrometer(object):
 
             self._check_light_conditions()
 
-            logger.info('Spectrometer %s: Collecting spectrum', self.name)
+            logger.debug('Spectrometer %s: Collecting spectrum', self.name)
 
             if spec_type == 'abs':
                 spectrum = self._collect_absorbance_spectrum_inner(dark_correct,
@@ -668,9 +673,10 @@ class Spectrometer(object):
         start_time = 0
 
         while not self._live_update_stop.is_set():
+            self._live_update_paused.set()
             self._live_update_evt.wait()
-
             if time.time() - start_time > self._live_update_period:
+                self._live_update_paused.clear()
                 try:
                     self.collect_spectrum(drift_correct=False)
                 except Exception:
@@ -699,7 +705,8 @@ class Spectrometer(object):
         self._live_update_period = period
 
     def get_live_update(self):
-        return copy.copy(self._live_update), copy.copy(self._live_update_period)
+        live_update_active = self._live_update and self._live_update_evt.is_set()
+        return live_update_active, self._live_update_period
 
     def collect_spectra_series(self, num_spectra, spec_type='abs', return_q=None,
         delta_t_min=0, dark_correct=True, int_trigger=True, auto_dark=True,
@@ -707,6 +714,7 @@ class Spectrometer(object):
         wait_for_trig=False):
         if self._live_update and not self._taking_series:
             self._live_update_evt.clear()
+            self._live_update_paused.wait()
             while self.is_busy():
                 time.sleep(0.1)
 
@@ -1308,7 +1316,8 @@ class StellarnetUVVis(Spectrometer):
             self._set_config(int_time, self._scan_avg, self._smoothing,
                 self._x_timing)
 
-            self.collect_dark()
+            if update_dark:
+                self.collect_dark()
 
     def set_scan_avg(self, num_avgs, update_dark=True):
         logger.info('Spectrometer %s: Setting number of scans to average for '
@@ -1318,7 +1327,8 @@ class StellarnetUVVis(Spectrometer):
             self._set_config(self._integration_time, num_avgs,
                 self._smoothing, self._x_timing)
 
-            self.collect_dark()
+            if update_dark:
+                self.collect_dark()
 
     def set_smoothing(self, smooth, update_dark=True):
         logger.info('Spectrometer %s: Setting smoothing to %s', self.name,
@@ -1328,7 +1338,8 @@ class StellarnetUVVis(Spectrometer):
             self._set_config(self._integration_time, self._scan_avg, smooth,
                 self._x_timing)
 
-            self.collect_dark()
+            if update_dark:
+                self.collect_dark()
 
     def set_xtiming(self, x_timing, update_dark=True):
         logger.info('Spectrometer %s: Setting x timing to %s', self.name,
@@ -1338,7 +1349,8 @@ class StellarnetUVVis(Spectrometer):
             self._set_config(self._integration_time, self._scan_avg,
                 self._smoothing, x_timing)
 
-            self.collect_dark()
+            if update_dark:
+                self.collect_dark()
 
     def get_xtiming(self):
         logger.debug('Spectrometer %s: X timing: %s', self.name, self._x_timing)
@@ -1365,38 +1377,40 @@ class StellarnetUVVis(Spectrometer):
         return status
 
     def set_int_trigger(self, trigger):
-        if trigger:
-            self.trigger_pv.put(1, wait=True)
-        else:
-            self.trigger_pv.put(0, wait=True)
+        with self._spectrometer_lock:
+            if trigger:
+                self.trigger_pv.put(1, wait=True)
+            else:
+                self.trigger_pv.put(0, wait=True)
 
     def get_int_trigger(self):
         return  self.trigger_pv.get()
 
     def _collect_spectrum(self, int_trigger):
         logger.debug('Spectrometer %s: Collecting spectrum', self.name)
-        self._taking_data = True
+        with self._spectrometer_lock:
+            self._taking_data = True
 
-        if self._ext_trig and int_trigger:
-            trigger_ext = True
-            self.set_external_trigger(False)
-        else:
-            trigger_ext = False
+            if self._ext_trig and int_trigger:
+                trigger_ext = True
+                self.set_external_trigger(False)
+            else:
+                trigger_ext = False
 
-        if int_trigger:
-            trigger_status = self.get_int_trigger()
-            if not trigger_status:
-                self.set_int_trigger(True)
+            if int_trigger:
+                trigger_status = self.get_int_trigger()
+                if not trigger_status:
+                    self.set_int_trigger(True)
 
-        spectrum = sn.array_spectrum(self.spectrometer, self.wav)
+            spectrum = sn.array_spectrum(self.spectrometer, self.wav)
 
-        if int_trigger and not trigger_status:
-                self.set_int_trigger(False)
+            if int_trigger and not trigger_status:
+                    self.set_int_trigger(False)
 
-        if trigger_ext:
-            self.set_external_trigger(True)
+            if trigger_ext:
+                self.set_external_trigger(True)
 
-        self._taking_data = False
+            self._taking_data = False
 
         return spectrum
 
@@ -1456,14 +1470,16 @@ class StellarnetUVVis(Spectrometer):
         self._smoothing = int(smooth)
         self._x_timing = int(xtiming)
 
-        self.spectrometer['device'].set_config(int_time=int_time,
-            scans_to_avg=self._scan_avg, x_smooth=self._smoothing,
-            x_timing=self._x_timing)
+        with self._spectrometer_lock:
+            self.spectrometer['device'].set_config(int_time=int_time,
+                scans_to_avg=self._scan_avg, x_smooth=self._smoothing,
+                x_timing=self._x_timing)
 
-        self._collect_spectrum(True)
+            self._collect_spectrum(True)
 
     def _get_config(self):
-        params = self.spectrometer['device'].get_config()
+        with self._spectrometer_lock:
+            params = self.spectrometer['device'].get_config()
 
         self._integration_time = params['int_time']/1000
         self._scan_avg = params['scans_to_avg']
@@ -1476,8 +1492,9 @@ class StellarnetUVVis(Spectrometer):
         self._device_id = params['device_id']
 
     def set_external_trigger(self, trigger):
-        self._ext_trig = trigger
-        sn.ext_trig(self.spectrometer, trigger)
+        with self._spectrometer_lock:
+            self._ext_trig = trigger
+            sn.ext_trig(self.spectrometer, trigger)
 
     def get_external_trigger(self):
         return self._ext_trig
