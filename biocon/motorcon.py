@@ -1474,7 +1474,7 @@ class EpicsMotor(Motor):
         return on_llm
 
     def stop(self):
-        self.epics_motor.put('stop', 1)
+        self.epics_motor.stop()
 
     def disconnect(self):
         """Close any communication connections"""
