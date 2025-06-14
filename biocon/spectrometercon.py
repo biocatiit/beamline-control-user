@@ -3885,8 +3885,9 @@ class UVPanel(utils.DevicePanel):
         return uv_values, uv_valid
 
     def on_exposure_stop(self, exp_panel):
-        abort_cmd = ['abort_collection', [self.name,], {}]
-        self._send_cmd(abort_cmd, get_response=False)
+        if self._get_busy():
+            abort_cmd = ['abort_collection', [self.name,], {}]
+            self._send_cmd(abort_cmd, get_response=False)
 
         # self._open_ls_shutter(False)
 
