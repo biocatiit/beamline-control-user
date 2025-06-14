@@ -674,7 +674,8 @@ class Spectrometer(object):
                 try:
                     self.collect_spectrum(drift_correct=False)
                 except Exception:
-                    traceback.print_exc()
+                    # traceback.print_exc()
+                    pass
                 start_time = time.time()
 
             else:
@@ -705,7 +706,6 @@ class Spectrometer(object):
         dark_time=60*60, take_ref=True, ref_avgs=1, drift_correct=True,
         wait_for_trig=False):
         if self._live_update and not self._taking_series:
-            print('here')
             self._live_update_evt.clear()
             while self.is_busy():
                 time.sleep(0.1)
@@ -3239,7 +3239,7 @@ class UVPanel(utils.DevicePanel):
 
                 uv_time = max(int_time*self.settings['int_t_scale'], 0.05)*scan_avgs
 
-                delta_t_min = (exp_period-uv_time)*1.05
+                delta_t_min = (exp_time-uv_time)*1.05
 
                 if delta_t_min < 0.01:
                     delta_t_min = 0
@@ -3308,7 +3308,7 @@ class UVPanel(utils.DevicePanel):
         live_update_cmd = ['get_live_update', [self.name,], {}]
         live_update = self._send_cmd(live_update_cmd, True)
 
-        if live_update:
+        if live_update is not None and live_update[0]:
             is_busy = False
         else:
             busy_cmd = ['get_busy', [self.name,], {}]
@@ -3814,17 +3814,20 @@ class UVPanel(utils.DevicePanel):
             num_frames = exp_params['num_frames']
             num_trig = int(exp_params['num_trig'])
 
-            if exp_period < 0.125 or exp_period - exp_time < 0.01:
+            # if exp_time < 0.125 or exp_period - exp_time < 0.01:
+            #     uv_valid = False
+
+            if exp_period < 0.125:
                 uv_valid = False
 
             else:
                 max_int_t = float(self.int_time.GetValue())
 
-                int_time = min(exp_period/2, max_int_t)
+                int_time = min(exp_time/2, max_int_t)
 
                 spec_t = max(int_time*self.settings['int_t_scale'], 0.05)
 
-                scan_avgs = exp_period // spec_t
+                scan_avgs = exp_time // spec_t
 
                 abort_cmd = ['abort_collection', [self.name,], {}]
                 self._send_cmd(abort_cmd, get_response=False)

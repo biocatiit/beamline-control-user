@@ -880,8 +880,6 @@ class DevicePanel(wx.Panel):
         self.return_q = deque()
         self.status_q = deque()
 
-        print(self.remote)
-
         if not self.remote:
             self.com_thread = settings['com_thread']
 
