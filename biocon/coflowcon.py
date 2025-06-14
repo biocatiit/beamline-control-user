@@ -50,6 +50,7 @@ import client
 import pumpcon
 import fmcon
 import valvecon
+import motorcon
 import utils
 
 class CoflowControl(object):
@@ -682,7 +683,7 @@ class CoflowControl(object):
                 target_valve_pos = buffer_change[2]
 
                 logger.info('Changing buffer on port %s with %s mL at %s '
-                    'mL/min setpoint', target_valve_pos, volume, flow_rate)
+                    'mL/min setpoint', target_valve_pos, volume, sheath_flow)
 
                 self.stop_flow()
                 self.set_sheath_valve_position(target_valve_pos)
@@ -2314,6 +2315,7 @@ class CoflowPanel(utils.DevicePanel):
     def _on_show_motors(self, evt):
         motor_frame = CoflowMotorFrame(self, self.settings, parent=self,
             title='Motor Control')
+        motor_frame.Show()
 
     def showMessageDialog(self, parent, msg, title, style):
         dialog = wx.MessageDialog(parent, msg, title, style=style)
@@ -3499,11 +3501,6 @@ class CoflowMotorFrame(wx.Frame):
         self.coflow_panel = coflow_panel
         self.settings = settings
 
-        self.Bind(wx.EVT_CLOSE, self.OnClose)
-
-        self._create_pump_comm()
-        self._create_valve_comm()
-
         self._create_layout()
 
         self.Fit()
@@ -3517,17 +3514,18 @@ class CoflowMotorFrame(wx.Frame):
             return size
 
     def _create_layout(self):
-        parent = self
+        top_panel = wx.Panel(self)
+        parent = top_panel
         motor_box = wx.StaticBox(parent, label='Coflow Motors')
 
         needle_ctrl = motorcon.EpicsMXMotorPanel(
-            self.settings['device_data']['kwargs']['needle_motor']['args'][0],
+            self.settings['needle_motor']['args'][0],
             None, motor_box)
         coflow_x_ctrl = motorcon.EpicsMXMotorPanel(
-            self.settings['device_data']['kwargs']['coflow_x_motor']['args'][0],
+            self.settings['coflow_x_motor']['args'][0],
             None, motor_box)
         coflow_y_ctrl = motorcon.EpicsMXMotorPanel(
-            self.settings['device_data']['kwargs']['coflow_y_motor']['args'][0],
+            self.settings['coflow_y_motor']['args'][0],
             None, motor_box)
 
         motor_sizer = wx.FlexGridSizer(cols=3, vgap=self._FromDIP(5),
@@ -3543,7 +3541,11 @@ class CoflowMotorFrame(wx.Frame):
         motor_top_sizer = wx.StaticBoxSizer(motor_box, wx.VERTICAL)
         motor_top_sizer.Add(motor_sizer, flag=wx.ALL|wx.EXPAND, border=self._FromDIP(5))
 
-        self.SetSizer(motor_top_sizer)
+        top_panel.SetSizer(motor_top_sizer)
+
+        top_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        top_sizer.Add(top_panel, flag=wx.EXPAND, proportion=1)
+        self.SetSizer(top_sizer)
 
         self.Layout()
 
@@ -3638,7 +3640,7 @@ default_coflow_settings = {
         'show_outlet_warning'       : True,
         'use_overflow_control'      : True,
         'buffer_change_fr'          : [3, 2], #sheath and outlet in ml/min
-        'buffer_change_vol'         : 11.1, #in ml
+        'buffer_change_vol'         : 12, #in ml, for sheath
         'air_density_thresh'        : 700, #g/L
         'sheath_valve_water_pos'    : 10,
         'sheath_valve_hellmanex_pos': 8,

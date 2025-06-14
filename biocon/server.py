@@ -439,8 +439,8 @@ if __name__ == '__main__':
     if exp_type == 'coflow':
         # Coflow
 
-        has_uv = True
-        # has_uv = False
+        # has_uv = True
+        has_uv = False
 
         ip = '164.54.204.53'
         # ip = '164.54.204.192'
