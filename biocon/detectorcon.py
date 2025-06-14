@@ -298,6 +298,7 @@ class EPICSEigerDetector(object):
 
         if trig_mode == 'Internal Series' or trig_mode == 'External Series':
             self.det.put('cam1:NumImages', num_frames, wait=True, timeout=1)
+            self.det.put('cam1:NumTriggers', 1, wait=True, timeout=1)
 
         elif trig_mode == 'Internal Enable' or trig_mode == 'External Enable':
             self.det.put('cam1:NumTriggers', num_frames, wait=True, timeout=1)

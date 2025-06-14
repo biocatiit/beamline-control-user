@@ -650,7 +650,7 @@ class CoflowControl(object):
         logger.info('Changing buffer')
         self._buffer_change_seq = buffer_change_seq
         excess = self.settings['sheath_excess']
-        sheath_flow = buffer_change_seq[0][0]*excess
+        sheath_flow = buffer_change_seq[0][0][0]
         vol = buffer_change_seq[0][1]
 
         self._buffer_change_remain = 60*vol/sheath_flow
@@ -676,7 +676,8 @@ class CoflowControl(object):
 
             if len(self._buffer_change_seq) > 0 and not self._abort_change_buffer.is_set():
                 buffer_change = self._buffer_change_seq.pop(0)
-                flow_rate = buffer_change[0]
+                sheath_flow = buffer_change[0][0]
+                outlet_flow = buffer_change[0][1]
                 volume = buffer_change[1]
                 target_valve_pos = buffer_change[2]
 
@@ -685,7 +686,22 @@ class CoflowControl(object):
 
                 self.stop_flow()
                 self.set_sheath_valve_position(target_valve_pos)
-                self.change_flow_rate(flow_rate)
+
+                logger.info('Setting sheath flow to %f %s', sheath_flow, self.settings['flow_units'])
+                logger.info('Setting outlet flow to %f %s', outlet_flow, self.settings['flow_units'])
+
+                self.sheath_setpoint = sheath_flow
+                self.outlet_setpoint = outlet_flow
+
+                sheath_flow = sheath_flow*self.sheath_fr_mult
+                outlet_flow = outlet_flow*self.outlet_fr_mult
+
+                sheath_fr_cmd = ('set_flow_rate', (self.sheath_pump_name, sheath_flow), {})
+                outlet_fr_cmd = ('set_flow_rate', (self.outlet_pump_name, outlet_flow), {})
+
+                self._send_pumpcmd(sheath_fr_cmd)
+                self._send_pumpcmd(outlet_fr_cmd)
+
                 self.start_flow()
 
                 start_time = time.time()
@@ -1666,6 +1682,7 @@ class CoflowPanel(utils.DevicePanel):
             self.warning_dialog = None
             self.error_dialog = None
             self.air_warning_dialog = None
+            self.overflow_dialog = None
             self.monitor_timer = wx.Timer(self)
             self.Bind(wx.EVT_TIMER, self._on_monitor_timer, self.monitor_timer)
             self.doing_buffer_change = False
@@ -1834,9 +1851,7 @@ class CoflowPanel(utils.DevicePanel):
         elif cmd == 'get_overflow_status':
             status, err = val
             if err:
-                msg = ('Could not get overflow pump status. Contact your beamline scientist.')
-                wx.CallAfter(self.showMessageDialog, self, msg, "Connection error",
-                    wx.OK|wx.ICON_ERROR)
+                self._show_overflow_dialog()
 
             elif status != self._overflow_status:
                 wx.CallAfter(self.overflow_status.SetLabel, status)
@@ -1845,9 +1860,7 @@ class CoflowPanel(utils.DevicePanel):
         elif cmd == 'start_overflow' or cmd == 'stop_overflow':
             status, err = val
             if err:
-                msg = ('Could not get overflow pump status. Contact your beamline scientist.')
-                wx.CallAfter(self.showMessageDialog, self, msg, "Connection error",
-                    wx.OK|wx.ICON_ERROR)
+                self._show_overflow_dialog()
 
             elif status != self._overflow_status:
                 wx.CallAfter(self.overflow_status.SetLabel, status)
@@ -1948,10 +1961,12 @@ class CoflowPanel(utils.DevicePanel):
         button_sizer.AddStretchSpacer(1)
 
         basic_flow_ctrl_sizer = wx.StaticBoxSizer(flow_box, wx.VERTICAL)
-        basic_flow_ctrl_sizer.Add(flow_rate_sizer)
-        basic_flow_ctrl_sizer.Add(self.auto_flow, border=self._FromDIP(2), flag=wx.TOP)
+        basic_flow_ctrl_sizer.Add(flow_rate_sizer, border=self._FromDIP(2),
+            flag=wx.TOP|wx.LEFT|wx.RIGHT)
+        basic_flow_ctrl_sizer.Add(self.auto_flow, border=self._FromDIP(2),
+            flag=wx.TOP|wx.LEFT|wx.RIGHT)
         basic_flow_ctrl_sizer.Add(button_sizer, border=self._FromDIP(2),
-            flag=wx.TOP)
+            flag=wx.ALL)
 
         valve_box = wx.StaticBox(control_box, label='Valves')
         valve_box_sizer = wx.StaticBoxSizer(valve_box, wx.HORIZONTAL)
@@ -2091,15 +2106,18 @@ class CoflowPanel(utils.DevicePanel):
             show_pump_btn = wx.Button(adv_win, label='Pump Ctrl.')
             show_fm_btn = wx.Button(adv_win, label='Flow Meter Ctrl.')
             show_valve_btn = wx.Button(adv_win, label='Valve Ctrl.')
+            show_motor_btn = wx.Button(adv_win, label='Motor Ctrl.')
 
             show_pump_btn.Bind(wx.EVT_BUTTON, self._on_show_pumps)
             show_fm_btn.Bind(wx.EVT_BUTTON, self._on_show_fms)
             show_valve_btn.Bind(wx.EVT_BUTTON, self._on_show_valves)
+            show_motor_btn.Bind(wx.EVT_BUTTON, self._on_show_motors)
 
             local_ctrl_sizer = wx.BoxSizer(wx.HORIZONTAL)
             local_ctrl_sizer.Add(show_pump_btn)
             local_ctrl_sizer.Add(show_fm_btn, flag=wx.LEFT, border=self._FromDIP(5))
             local_ctrl_sizer.Add(show_valve_btn, flag=wx.LEFT, border=self._FromDIP(5))
+            local_ctrl_sizer.Add(show_motor_btn, flag=wx.LEFT, border=self._FromDIP(5))
 
 
             adv_sizer.Add(local_ctrl_sizer,
@@ -2293,6 +2311,10 @@ class CoflowPanel(utils.DevicePanel):
             title='Pump Control')
         valve_frame.Show()
 
+    def _on_show_motors(self, evt):
+        motor_frame = CoflowMotorFrame(self, self.settings, parent=self,
+            title='Motor Control')
+
     def showMessageDialog(self, parent, msg, title, style):
         dialog = wx.MessageDialog(parent, msg, title, style=style)
         ret = dialog.ShowModal()
@@ -2347,7 +2369,7 @@ class CoflowPanel(utils.DevicePanel):
                 if ret == wx.ID_CANCEL:
                     return
 
-            sheath_flow = self.settings['buffer_change_fr']*self.settings['sheath_excess']
+            sheath_flow = self.settings['buffer_change_fr'][0]
 
             #Change buffer bottle
             msg = ('Change the buffer bottle in the coflow setup. Click okay to continue. '
@@ -2645,7 +2667,7 @@ class CoflowPanel(utils.DevicePanel):
         self._send_cmd(change_flow_rate_cmd, get_response=False)
 
         if start_monitor:
-            self.monitor_timer.Start(self.settings['settling_time'])
+            wx.CallAfter(self.monitor_timer.Start, self.settings['settling_time'])
 
     def _validate_flow_rate(self):
         logger.debug('Validating flow rate')
@@ -2844,14 +2866,30 @@ class CoflowPanel(utils.DevicePanel):
                 'Air detected', self._on_close_air_warn)
             self.air_warning_dialog.Show()
 
+    def _show_overflow_dialog(self):
+        if self.overflow_dialog is None:
+            msg = ('Could not get overflow pump status. Contact your '
+                'beamline scientist.')
+
+            self.overflow_dialog = utils.WarningMessage(self, msg,
+                'Connection error', self._on_close_overflow)
+            self.overflow_dialog.Show()
+
     def _on_close_flow_warn(self):
+        self.warning_dialog.Destroy()
         self.warning_dialog = None
 
     def _on_close_error_warn(self):
+        self.error_dialog.Destroy()
         self.error_dialog = None
 
     def _on_close_air_warn(self):
+        self.air_warning_dialog.Destroy()
         self.air_warning_dialog = None
+
+    def _on_close_overflow(self):
+        self.overflow_dialog.Destroy()
+        self.overflow_dialog = None
 
     def metadata(self):
 
@@ -3103,6 +3141,9 @@ class CoflowPanel(utils.DevicePanel):
                 plot_window._on_exit(None)
             except Exception:
                 pass
+
+    def on_exit(self):
+        self.close()
 
 class CoflowPlotFrame(wx.Frame):
     def __init__(self, sheath_flow_rate, outlet_flow_rate, t_flow_rate, sheath_density,
@@ -3449,6 +3490,63 @@ class CoflowPlotFrame(wx.Frame):
         self.Destroy()
 
 
+class CoflowMotorFrame(wx.Frame):
+
+    def __init__(self, coflow_panel, settings, *args, **kwargs):
+
+        wx.Frame.__init__(self, *args, **kwargs)
+
+        self.coflow_panel = coflow_panel
+        self.settings = settings
+
+        self.Bind(wx.EVT_CLOSE, self.OnClose)
+
+        self._create_pump_comm()
+        self._create_valve_comm()
+
+        self._create_layout()
+
+        self.Fit()
+        self.Raise()
+
+    def _FromDIP(self, size):
+        # This is a hack to provide easy back compatibility with wxpython < 4.1
+        try:
+            return self.FromDIP(size)
+        except Exception:
+            return size
+
+    def _create_layout(self):
+        parent = self
+        motor_box = wx.StaticBox(parent, label='Coflow Motors')
+
+        needle_ctrl = motorcon.EpicsMXMotorPanel(
+            self.settings['device_data']['kwargs']['needle_motor']['args'][0],
+            None, motor_box)
+        coflow_x_ctrl = motorcon.EpicsMXMotorPanel(
+            self.settings['device_data']['kwargs']['coflow_x_motor']['args'][0],
+            None, motor_box)
+        coflow_y_ctrl = motorcon.EpicsMXMotorPanel(
+            self.settings['device_data']['kwargs']['coflow_y_motor']['args'][0],
+            None, motor_box)
+
+        motor_sizer = wx.FlexGridSizer(cols=3, vgap=self._FromDIP(5),
+            hgap=self._FromDIP(5))
+        motor_sizer.Add(coflow_x_ctrl, flag=wx.EXPAND)
+        motor_sizer.Add(coflow_y_ctrl, flag=wx.EXPAND)
+        motor_sizer.Add(needle_ctrl, flag=wx.EXPAND)
+
+        motor_sizer.AddGrowableCol(0)
+        motor_sizer.AddGrowableCol(1)
+        motor_sizer.AddGrowableCol(2)
+
+        motor_top_sizer = wx.StaticBoxSizer(motor_box, wx.VERTICAL)
+        motor_top_sizer.Add(motor_sizer, flag=wx.ALL|wx.EXPAND, border=self._FromDIP(5))
+
+        self.SetSizer(motor_top_sizer)
+
+        self.Layout()
+
 
 class CoflowFrame(utils.DeviceFrame):
     """
@@ -3516,6 +3614,12 @@ default_coflow_settings = {
         # 'sheath_valve'              : {'name': 'Coflow Sheath',
         #                                 'args': ['Soft', None],
         #                                 'kwargs': {'positions' : 10}},
+        'coflow_x_motor'            : {'name': 'coflow_x', 'args': ['18ID_DMC_E01:5'],
+                                        'kwargs': {}},
+        'coflow_y_motor'            : {'name': 'coflow_y', 'args': ['18ID_DMC_E01:6'],
+                                        'kwargs': {}},
+        'needle_motor'              : {'name': 'needle', 'args': ['18ID_DMC_E05:35'],
+                                        'kwargs': {}},
         'sheath_ratio'              : 0.3,
         'sheath_excess'             : 1.5,
         'sheath_warning_threshold_low'  : 0.8,
@@ -3533,7 +3637,7 @@ default_coflow_settings = {
         'show_sheath_warning'       : True,
         'show_outlet_warning'       : True,
         'use_overflow_control'      : True,
-        'buffer_change_fr'          : 1.19, #in ml/min
+        'buffer_change_fr'          : [3, 2], #sheath and outlet in ml/min
         'buffer_change_vol'         : 11.1, #in ml
         'air_density_thresh'        : 700, #g/L
         'sheath_valve_water_pos'    : 10,

@@ -4324,21 +4324,21 @@ class HPLCPanel(utils.DevicePanel):
 
         pump1_box = wx.StaticBox(flow_box, label='Pump 1')
         self._pump1_power_ctrl = wx.StaticText(pump1_box,
-            size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
+            size=self._FromDIP((45,-1)), style=wx.ST_NO_AUTORESIZE)
         self._pump1_flow_ctrl = wx.StaticText(pump1_box,
-            size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
+            size=self._FromDIP((45,-1)), style=wx.ST_NO_AUTORESIZE)
         self._pump1_flow_accel_ctrl = wx.StaticText(pump1_box,
-            size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
+            size=self._FromDIP((45,-1)), style=wx.ST_NO_AUTORESIZE)
         self._pump1_pressure_ctrl = wx.StaticText(pump1_box,
-            size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
+            size=self._FromDIP((45,-1)), style=wx.ST_NO_AUTORESIZE)
         self._pump1_pressure_lim_ctrl = wx.StaticText(pump1_box,
             size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
         self._pump1_purge_ctrl = wx.StaticText(pump1_box,
-            size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
+            size=self._FromDIP((45,-1)), style=wx.ST_NO_AUTORESIZE)
         self._pump1_purge_vol_ctrl = wx.StaticText(pump1_box,
             size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
         self._pump1_eq_ctrl = wx.StaticText(pump1_box,
-            size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
+            size=self._FromDIP((45,-1)), style=wx.ST_NO_AUTORESIZE)
         self._pump1_eq_vol_ctrl = wx.StaticText(pump1_box,
             size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
         self._pump1_flow_target_ctrl = wx.StaticText(pump1_box,
@@ -4534,21 +4534,21 @@ class HPLCPanel(utils.DevicePanel):
 
             pump2_box = wx.StaticBox(flow_box, label='Pump 2')
             self._pump2_power_ctrl = wx.StaticText(pump2_box,
-                size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
+                size=self._FromDIP((45,-1)), style=wx.ST_NO_AUTORESIZE)
             self._pump2_flow_ctrl = wx.StaticText(pump2_box,
-                size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
+                size=self._FromDIP((45,-1)), style=wx.ST_NO_AUTORESIZE)
             self._pump2_flow_accel_ctrl = wx.StaticText(pump2_box,
-                size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
+                size=self._FromDIP((45,-1)), style=wx.ST_NO_AUTORESIZE)
             self._pump2_pressure_ctrl = wx.StaticText(pump2_box,
-                size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
+                size=self._FromDIP((45,-1)), style=wx.ST_NO_AUTORESIZE)
             self._pump2_pressure_lim_ctrl = wx.StaticText(pump2_box,
                 size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
             self._pump2_purge_ctrl = wx.StaticText(pump2_box,
-                size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
+                size=self._FromDIP((45,-1)), style=wx.ST_NO_AUTORESIZE)
             self._pump2_purge_vol_ctrl = wx.StaticText(pump2_box,
                 size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
             self._pump2_eq_ctrl = wx.StaticText(pump2_box,
-                size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
+                size=self._FromDIP((45,-1)), style=wx.ST_NO_AUTORESIZE)
             self._pump2_eq_vol_ctrl = wx.StaticText(pump2_box,
                 size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
             self._pump2_flow_target_ctrl = wx.StaticText(pump2_box,
@@ -4818,13 +4818,13 @@ class HPLCPanel(utils.DevicePanel):
         sampler_box = wx.StaticBox(self, label='Autosampler')
 
         self._sampler_thermostat_power_ctrl = wx.StaticText(sampler_box,
-            size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
+            size=self._FromDIP((45,-1)), style=wx.ST_NO_AUTORESIZE)
         self._sampler_submitting_ctrl = wx.StaticText(sampler_box,
-            size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
+            size=self._FromDIP((45,-1)), style=wx.ST_NO_AUTORESIZE)
         self._sampler_temp_ctrl = wx.StaticText(sampler_box,
-            size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
+            size=self._FromDIP((45,-1)), style=wx.ST_NO_AUTORESIZE)
         self._sampler_setpoint_ctrl = wx.StaticText(sampler_box,
-            size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
+            size=self._FromDIP((45,-1)), style=wx.ST_NO_AUTORESIZE)
 
         sampler_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(5),
             hgap=self._FromDIP(5))
@@ -6757,6 +6757,7 @@ class HPLCPanel(utils.DevicePanel):
                 cur_buffer_pos = self._buffer1_valve
             elif int(flow_path) == 2:
                 cur_buffer_pos = self._buffer2_valve
+
             if str(buffer_position) == str(cur_buffer_pos):
                 state = 'idle'
             else:
@@ -7692,7 +7693,7 @@ default_hplc_2pump_settings = {
     'buffer_switch_restore_flow': False,
     'buffer_switch_with_sample' : False,
     'buffer_switch_with_active' : False,
-    'acq_method'                : 'SECSAXS_test',
+    'acq_method'                : 'SECSAXS_default',
     # 'acq_method'                : 'SEC-MALS',
     'sample_loc'                : 'D2F-A1',
     'inj_vol'                   : 240.0,

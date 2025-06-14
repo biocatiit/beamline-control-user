@@ -1665,7 +1665,7 @@ class ExpCommThread(threading.Thread):
             cd_burst.setup(exp_period, (exp_period-(exp_time+s_open_time))/10.,
                 num_frames, exp_time+s_open_time, 1, 2)
             ef_burst.setup(exp_period, exp_time, num_frames, s_open_time, 1, 2)
-            gh_burst.setup(exp_period, exp_period/1.1, num_frames, s_open_time, 1, 2)
+            gh_burst.setup(exp_period, exp_time/1.1, num_frames, s_open_time, 1, 2)
         else:
             #Shutter will be open continuously
             if exp_type == 'muscle':
@@ -1677,7 +1677,7 @@ class ExpCommThread(threading.Thread):
             cd_burst.setup(exp_period, (exp_period-exp_time)/10.,
                 num_frames, exp_time+(exp_period-exp_time)/10., 1, 2)
             ef_burst.setup(exp_period, exp_time, num_frames, offset, 1, 2)
-            gh_burst.setup(exp_period, exp_period/1.1, num_frames, 0, 1, 2)
+            gh_burst.setup(exp_period, exp_time/1.1, num_frames, 0, 1, 2)
 
         if exp_type == 'muscle':
             ab_burst_2.setup(struck_meas_time, 0, struck_num_meas+1, 0, 1, 2) #Irrelevant
@@ -1793,6 +1793,7 @@ class ExpCommThread(threading.Thread):
         struck_meas_time, kwargs):
 
         metadata = kwargs['metadata']
+        open_shutter_before_trig_cont_exp = kwargs['open_shutter_before_trig_cont_exp']
 
         if det.get_status() !=0:
             try:
@@ -1834,7 +1835,8 @@ class ExpCommThread(threading.Thread):
             ab_burst_2.arm()
 
         if continuous_exp:
-            if not exp_type == 'muscle' and not wait_for_trig:
+            if not exp_type == 'muscle' and (not wait_for_trig or
+                open_shutter_before_trig_cont_exp):
                 dio_out9.write(1)
 
         time.sleep(1)
@@ -1861,6 +1863,8 @@ class ExpCommThread(threading.Thread):
 
         timeouts = 0
 
+        header_readout_time = time.time()
+
         while True:
             #Struck is_busy doesn't work in thread! So have to go elsewhere
 
@@ -1879,7 +1883,7 @@ class ExpCommThread(threading.Thread):
                 aborted = True
                 break
 
-            if exp_type != 'muscle':
+            if exp_type != 'muscle' and time.time()-header_readout_time > exp_time:
                 current_meas = struck.get_last_measurement_number()
 
                 if current_meas != last_meas and current_meas != -1:
@@ -1897,7 +1901,9 @@ class ExpCommThread(threading.Thread):
 
                     last_meas = current_meas
 
-            time.sleep(0.01)
+                    header_readout_time = time.time()
+
+            time.sleep(0.1)
 
 
         if continuous_exp:
@@ -3606,6 +3612,7 @@ class ExpPanel(wx.Panel):
         struck_log_vals = self.settings['struck_log_vals']
         joerger_log_vals = self.settings['joerger_log_vals']
         struck_measurement_time = float(self.muscle_sampling.GetValue())
+        open_shutter_before_trig_cont_exp = self.settings['open_shutter_before_trig_cont_exp']
 
         (num_frames, exp_time, exp_period, data_dir, filename,
             wait_for_trig, num_trig, local_data_dir, struck_num_meas, valid,
@@ -3630,6 +3637,7 @@ class ExpPanel(wx.Panel):
             'struck_log_vals'           : struck_log_vals,
             'struck_measurement_time'   : struck_measurement_time,
             'struck_num_meas'           : struck_num_meas,
+            'open_shutter_before_trig_cont_exp' : open_shutter_before_trig_cont_exp,
             }
 
         return exp_values, valid
@@ -3985,9 +3993,9 @@ class ExpPanel(wx.Panel):
 
                             errors.append(msg)
 
-                if int(metadata['Sheath valve position:']) != 1:
+                if int(metadata['Sheath valve position:']) >= 7:
                     msg = ('Sheath valve is in position {}, not the usual '
-                        'position 1.'.format(metadata['Sheath valve position:']))
+                        'positions 1-7.'.format(metadata['Sheath valve position:']))
 
                     errors.append(msg)
 
@@ -4255,6 +4263,7 @@ class ExpPanel(wx.Panel):
             struck_log_vals = self.settings['struck_log_vals']
             joerger_log_vals = self.settings['joerger_log_vals']
             struck_measurement_time = float(cmd_kwargs['struck_measurement_time'])
+            open_shutter_before_trig_cont_exp = self.settings['open_shutter_before_trig_cont_exp']
 
             if self.settings['tr_muscle_exp']:
                 struck_num_meas = exp_period*num_frames/struck_measurement_time
@@ -4284,6 +4293,7 @@ class ExpPanel(wx.Panel):
                 'struck_measurement_time'   : struck_measurement_time,
                 'struck_num_meas'           : struck_num_meas,
                 'filename'                  : filename,
+                'open_shutter_before_trig_cont_exp' : open_shutter_before_trig_cont_exp,
                 }
 
             if cmd_kwargs['item_type'] == 'sec_sample':
@@ -4483,6 +4493,7 @@ default_exposure_settings = {
     'wait_for_trig'         : True,
     'num_trig'              : '1',
     'show_advanced_options' : True,
+    'open_shutter_before_trig_cont_exp' : True,
     'beam_current_pv'       : 'XFD:srCurrent',
     'fe_shutter_pv'         : 'PA:18ID:STA_A_FES_OPEN_PL',
     'd_shutter_pv'          : 'PA:18ID:STA_D_SDS_OPEN_PL.VAL',

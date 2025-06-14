@@ -301,7 +301,7 @@ class BioFrame(wx.Frame):
                 box = wx.StaticBox(box_panel, label=label)
                 # box.SetOwnForegroundColour(wx.Colour('firebrick'))
 
-                if key != 'uv' and key != 'hplc':
+                if key != 'uv' and key != 'hplc' and key != 'coflow':
                     component_panel = self.settings['components'][key](self.settings[key],
                         box, name=key)
                 else:
@@ -360,7 +360,7 @@ if __name__ == '__main__':
 
 
     ###################################################################
-    # Exposure
+    # Exposure settings
     exposure_settings = expcon.default_exposure_settings
 
     # # Fast in-air shutters
@@ -377,11 +377,12 @@ if __name__ == '__main__':
 
     exposure_settings['det_args'] =  {'use_tiff_writer': False,
         'use_file_writer': True, 'photon_energy' : 12.0,
-        'images_per_file': 1} #1 image/file for TR, 300 for eq SAXS, 1000 for muscle
+        'images_per_file': 300} #1 image/file for TR, 300 for eq SAXS, 1000 for muscle
 
     # Muscle settings
     exposure_settings['struck_measurement_time'] = '0.001'
     exposure_settings['tr_muscle_exp'] = False
+    exposure_settings['open_shutter_before_trig_cont_exp'] = True
 
     #Other settings
     exposure_settings['wait_for_trig'] = True
@@ -409,19 +410,22 @@ if __name__ == '__main__':
         'thresh': 0.04}, 'guard_vac' : {'check': True, 'thresh': 0.04},
         'sample_vac': {'check': False, 'thresh': 0.04}, 'sc_vac':
         {'check': True, 'thresh':0.04}}
-    exposure_settings['base_data_dir'] = '/nas_data/Eiger2x/2025_Run1/' #CHANGE ME and pipeline local_basedir
+    exposure_settings['base_data_dir'] = '/nas_data/Eiger2x/2025_Run2/' #CHANGE ME and pipeline local_basedir
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']
 
 
     ###################################################################
-    # Coflow
-
+    # Coflow settings
     coflow_settings = coflowcon.default_coflow_settings
 
+
     ###################################################################
-    # TR-SAXS
+    # TR-SAXS settings
     trsaxs_settings = trcon.default_trsaxs_settings
 
+
+    ###################################################################
+    # Scan Settings
     scan_settings = {
         'components'            : ['scan'],
         'newport_ip'            : '164.54.204.76',
@@ -430,6 +434,9 @@ if __name__ == '__main__':
         'motor_group_name'      : 'XY',
         }
 
+
+    ###################################################################
+    # Metadata Settings
     metadata_settings = {
         'components'        : ['metadata'],
         'saxs_defaults'     : {'exp_type'   : 'SEC-SAXS',
@@ -454,6 +461,9 @@ if __name__ == '__main__':
         # 'metadata_type'     : 'muscle',
         }
 
+
+    ###################################################################
+    # Pipeline Settings
     pipeline_settings = {
         'components'    : ['pipeline'],
         'server_port'   : '5556',
@@ -467,49 +477,17 @@ if __name__ == '__main__':
         'detector'      : 'Eiger',
         }
 
-    spectrometer_settings = {
-        'device_init'           : [{'name': 'CoflowUV', 'args': ['StellarNet', None],
-                                    'kwargs': {'shutter_pv_name': '18ID:LJT4:2:Bo11',
-                                    'trigger_pv_name' : '18ID:LJT4:2:Bo12',
-                                    'out1_pv_name' : '18ID:E1608:Ao1',
-                                    'out2_pv_name' : '18ID:E1608:Ao2',
-                                    'trigger_in_pv_name' : '18ID:E1608:Bi8'}},],
-        'max_int_t'             : 0.025, # in s
-        'scan_avg'              : 1,
-        'smoothing'             : 0,
-        'xtiming'               : 3,
-        'spectrum_type'         : 'Absorbance', #Absorbance, Transmission, Raw
-        'dark_correct'          : True,
-        'auto_dark'             : True,
-        'auto_dark_t'           : 60*60, #in s
-        'dark_avgs'             : 3,
-        'ref_avgs'              : 2,
-        'history_t'             : 60*60, #in s
-        'save_subdir'           : 'UV',
-        'save_type'             : 'Absorbance',
-        'series_ref_at_start'   : True,
-        'drift_correct'         : False,
-        'drift_window'          : [750, 800],
-        'abs_wav'               : [280, 260],
-        'abs_window'            : 3,
-        'int_t_scale'           : 2,
-        'wavelength_range'      : [225, 838.39],
-        'analog_out_v_max'      : 10.,
-        'analog_out_au_max'     : 10000, #mAu
-        'analog_out_wav'        : {'out1': 280, 'out2': 260},
-        'do_ao'                 : True,
-        'remote_ip'             : '164.54.204.192',
-        'remote_port'           : '5559',
-        'remote'                : False,
-        'remote_device'         : 'uv',
-        'com_thread'            : None,
-        'remote_dir_prefix'     : {'local' : '/nas_data/SAXS', 'remote' : 'Z:\\'},
-        'inline_panel'          : True,
-        'plot_refresh_t'        : 0.1, #in s
-        'device_communication'  : 'remote',
-    }
+
+    ###################################################################
+    # UV Settings
+    spectrometer_settings = spectrometercon.default_spectrometer_settings
+    spectrometer_settings['inline_panel'] = True
+    spectrometer_settings['device_communication'] = 'remote'
+    spectrometer_settings['remote_dir_prefix'] = {'local' : '/nas_data', 'remote' : 'Z:\\'}
 
 
+    ###################################################################
+    # HPLC Settings
     hplc_settings = biohplccon.default_hplc_2pump_settings
     hplc_settings['com_thread'] = None
     hplc_settings['remote'] = True
@@ -519,21 +497,24 @@ if __name__ == '__main__':
     hplc_settings['device_data'] = hplc_settings['device_init'][0]
 
 
+    ###################################################################
+    # Automator Settings
     automator_settings = autocon.default_automator_settings
+
 
     biocon_settings = {}
 
     components = OrderedDict([
         ('exposure', expcon.ExpPanel),
-        # ('coflow', coflowcon.CoflowPanel),
-        ('trsaxs_scan', trcon.TRScanPanel),
-        ('trsaxs_flow', trcon.TRFlowPanel),
+        ('coflow', coflowcon.CoflowPanel),
+        # ('trsaxs_scan', trcon.TRScanPanel),
+        # ('trsaxs_flow', trcon.TRFlowPanel),
         # ('scan',    scancon.ScanPanel),
         ('metadata', metadata.ParamPanel),
-        # ('pipeline', pipeline_ctrl.PipelineControl),
-        # ('uv', spectrometercon.UVPanel),
-        # ('hplc', biohplccon.HPLCPanel),
-        # ('automator', autocon.AutoPanel),
+        ('pipeline', pipeline_ctrl.PipelineControl),
+        ('uv', spectrometercon.UVPanel),
+        ('hplc', biohplccon.HPLCPanel),
+        ('automator', autocon.AutoPanel),
         ])
 
     settings = {

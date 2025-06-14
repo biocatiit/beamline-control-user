@@ -685,9 +685,7 @@ class CommManager(threading.Thread):
             ', '.join(['{}:{}'.format(kw, item) for kw, item in kwargs.items()]))
 
         try:
-            logger.debug('222222222222222222222222222222222222')
             self._commands[command](*args, **kwargs)
-            logger.debug('3333333333333333333333333333333333333')
         except Exception:
             msg = ("Communication thread %s failed to run command '%s' "
                 "with args: %s and kwargs: %s " %(self.name, command,
@@ -695,7 +693,6 @@ class CommManager(threading.Thread):
                 ', '.join(['{}:{}'.format(kw, item) for kw, item in kwargs.items()])))
             logger.exception(msg)
 
-            logger.debug('4444444444444444444444444444')
             self._return_value((command, False), kwargs['comm_name'])
 
     def add_new_communication(self, name, command_queue, return_queue, status_queue):
