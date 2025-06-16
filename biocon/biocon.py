@@ -382,7 +382,7 @@ if __name__ == '__main__':
     # Muscle settings
     exposure_settings['struck_measurement_time'] = '0.001'
     exposure_settings['tr_muscle_exp'] = False
-    exposure_settings['open_shutter_before_trig_cont_exp'] = True
+    exposure_settings['open_shutter_before_trig_cont_exp'] = False
 
     #Other settings
     exposure_settings['wait_for_trig'] = True
@@ -512,7 +512,7 @@ if __name__ == '__main__':
         # ('scan',    scancon.ScanPanel),
         # ('metadata', metadata.ParamPanel),
         # ('pipeline', pipeline_ctrl.PipelineControl),
-        ('uv', spectrometercon.UVPanel),
+        # ('uv', spectrometercon.UVPanel),
         # ('hplc', biohplccon.HPLCPanel),
         # ('automator', autocon.AutoPanel),
         ])

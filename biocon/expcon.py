@@ -1556,14 +1556,19 @@ class ExpCommThread(threading.Thread):
         gh_burst = self._mx_data['gh_burst']   #UV trigger
         # dg645_trigger_source = self._mx_data['dg645_trigger_source']
 
-        if exp_type == 'muscle':
-            ab_burst_2 = self._mx_data['ab_burst_2']
-            cd_burst_2 = self._mx_data['cd_burst_2'] #Struck channel advance
-            ef_burst_2 = self._mx_data['ef_burst_2']
-            gh_burst_2 = self._mx_data['gh_burst_2']
-            # dg645_trigger_source2 = self._mx_data['dg645_trigger_source2']
-        else:
-            ab_burst_2 = None
+        # if exp_type == 'muscle':
+        #     ab_burst_2 = self._mx_data['ab_burst_2']
+        #     cd_burst_2 = self._mx_data['cd_burst_2'] #Struck channel advance
+        #     ef_burst_2 = self._mx_data['ef_burst_2']
+        #     gh_burst_2 = self._mx_data['gh_burst_2']
+        #     # dg645_trigger_source2 = self._mx_data['dg645_trigger_source2']
+        # else:
+        #     ab_burst_2 = None
+
+        ab_burst_2 = self._mx_data['ab_burst_2'] #Shutter
+        cd_burst_2 = self._mx_data['cd_burst_2']
+        ef_burst_2 = self._mx_data['ef_burst_2']
+        gh_burst_2 = self._mx_data['gh_burst_2']
 
         dio_out6 = self._mx_data['dio'][6]      #Xia/wharberton shutter N.C.
         dio_out9 = self._mx_data['dio'][9]      #Shutter control signal (alt.)
@@ -1644,19 +1649,29 @@ class ExpCommThread(threading.Thread):
 
         ab_burst.arm()
 
-        if exp_type == 'muscle':
-            ab_burst_2.setup(0.000001, 0.000000, 1, 0, 1, 2)
-            cd_burst_2.setup(0.000001, 0.000000, 1, 0, 1, 2)
-            ef_burst_2.setup(0.000001, 0.000000, 1, 0, 1, 2)
-            gh_burst_2.setup(0.000001, 0.000000, 1, 0, 1, 2)
+        # if exp_type == 'muscle':
+        #     ab_burst_2.setup(0.000001, 0.000000, 1, 0, 1, 2)
+        #     cd_burst_2.setup(0.000001, 0.000000, 1, 0, 1, 2)
+        #     ef_burst_2.setup(0.000001, 0.000000, 1, 0, 1, 2)
+        #     gh_burst_2.setup(0.000001, 0.000000, 1, 0, 1, 2)
 
-            ab_burst_2.arm()
+        #     ab_burst_2.arm()
+
+        ab_burst_2.setup(0.000001, 0.000000, 1, 0, 1, 2)
+        cd_burst_2.setup(0.000001, 0.000000, 1, 0, 1, 2)
+        ef_burst_2.setup(0.000001, 0.000000, 1, 0, 1, 2)
+        gh_burst_2.setup(0.000001, 0.000000, 1, 0, 1, 2)
+
+        ab_burst_2.arm()
 
         dio_out10.write( 1 )
         time.sleep(0.01)
         dio_out10.write( 0 )
 
         while (ab_burst.get_status() & 0x1) != 0:
+            time.sleep(0.01)
+
+        while (ab_burst_2.get_status() & 0x1) != 0:
             time.sleep(0.01)
 
         if exp_period - 0.5 > 0:
@@ -1671,6 +1686,11 @@ class ExpCommThread(threading.Thread):
                 num_frames, exp_time+s_open_time, 1, 2)
             ef_burst.setup(exp_period, exp_time, num_frames, s_open_time, 1, 2)
             gh_burst.setup(exp_period, uv_time/1.1, num_frames, s_open_time, 1, 2)
+
+            ab_burst_2.setup(exp_period, exp_time+s_open_time, num_frames, 0, 1, 2)
+            cd_burst_2.setup(exp_period, exp_time+s_open_time, num_frames, 0, 1, 2) #Irrelevant
+            ef_burst_2.setup(exp_period, exp_time+s_open_time, num_frames, 0, 1, 2) #Irrelevant
+            gh_burst_2.setup(exp_period, exp_time+s_open_time, num_frames, 0, 1, 2) #Irrelevant
         else:
             #Shutter will be open continuously
             if exp_type == 'muscle':
@@ -1684,11 +1704,22 @@ class ExpCommThread(threading.Thread):
             ef_burst.setup(exp_period, exp_time, num_frames, offset, 1, 2)
             gh_burst.setup(exp_period, uv_time/1.1, num_frames, 0, 1, 2)
 
-        if exp_type == 'muscle':
-            ab_burst_2.setup(struck_meas_time, 0, struck_num_meas+1, 0, 1, 2) #Irrelevant
-            cd_burst_2.setup(struck_meas_time, struck_meas_time/2., struck_num_meas+1, 0, 1, 2)
-            ef_burst_2.setup(struck_meas_time, 0, struck_num_meas+1, 0, 1, 2) #Irrelevant
-            gh_burst_2.setup(struck_meas_time, 0, struck_num_meas+1, 0, 1, 2) #Irrelevant
+            if exp_period*num_frames <= 1999:
+                ab_burst_2.setup(1, exp_period*num_frames, 1, 0, 1, 2)
+                cd_burst_2.setup(1, 0, 1, 0, 1, 2) #Irrelevant
+                ef_burst_2.setup(1, 0, 1, 0, 1, 2) #Irrelevant
+                gh_burst_2.setup(1, 0, 1, 0, 1, 2) #Irrelevant
+            else:
+                ab_burst_2.setup(1, 1999, 1, 0, 1, 2)
+                cd_burst_2.setup(1, 0, 1, 0, 1, 2) #Irrelevant
+                ef_burst_2.setup(1, 0, 1, 0, 1, 2) #Irrelevant
+                gh_burst_2.setup(1, 0, 1, 0, 1, 2) #Irrelevant
+
+        # if exp_type == 'muscle':
+        #     ab_burst_2.setup(struck_meas_time, 0, struck_num_meas+1, 0, 1, 2) #Irrelevant
+        #     cd_burst_2.setup(struck_meas_time, struck_meas_time/2., struck_num_meas+1, 0, 1, 2)
+        #     ef_burst_2.setup(struck_meas_time, 0, struck_num_meas+1, 0, 1, 2) #Irrelevant
+        #     gh_burst_2.setup(struck_meas_time, 0, struck_num_meas+1, 0, 1, 2) #Irrelevant
 
         for cur_trig in range(1,num_trig+1):
             #Runs a loop for each expected trigger signal (internal or external)
@@ -1815,8 +1846,10 @@ class ExpCommThread(threading.Thread):
         struck.stop()
         ab_burst.stop()
 
-        if exp_type == 'muscle':
-            ab_burst_2.stop()
+        # if exp_type == 'muscle':
+        #     ab_burst_2.stop()
+
+        ab_burst_2.stop()
 
         dio_out9.write(0) # Make sure the NM shutter is closed
         dio_out10.write(0) # Make sure the trigger is off
@@ -1836,8 +1869,10 @@ class ExpCommThread(threading.Thread):
         struck.start()
         ab_burst.arm()
 
-        if exp_type == 'muscle':
-            ab_burst_2.arm()
+        # if exp_type == 'muscle':
+        #     ab_burst_2.arm()
+
+        ab_burst_2.arm()
 
         if continuous_exp:
             if not exp_type == 'muscle' and (not wait_for_trig or
@@ -1854,6 +1889,11 @@ class ExpCommThread(threading.Thread):
                 dio_out9, dio_out6, exp_time)
             aborted = True
             return False
+
+        if continuous_exp:
+            if not exp_type == 'muscle' and (wait_for_trig and
+                not open_shutter_before_trig_cont_exp):
+                dio_out9.write(1)
 
         metadata['Date:'] = real_start_time
 
@@ -1940,6 +1980,9 @@ class ExpCommThread(threading.Thread):
                 kwargs['metadata'])
 
         ab_burst.get_status() #Maybe need to clear this status?
+
+        if ab_burst_2 is not None:
+            ab_burst_2.get_status() #Maybe need to clear this status?
 
         while det.get_status() !=0:
             time.sleep(0.001)
