@@ -1765,6 +1765,53 @@ class ASCommThread(utils.CommManager):
 
 
 
+def make_well_plate_layout(top_level, parent, well_bmp, on_well_button):
+    col_labels = ['{}'.format(col) for col in range(1,13)]
+    row_labels = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
+    row_idx = -1
+    col_idx = 0
+    wells = ['{}{}'.format(row, col) for row in row_labels for col in col_labels]
+    well_ids_96 = {well :wx.NewIdRef() for well in wells}
+    reverse_well_ids_96 = {wid: well for (well, wid) in well_ids_96.items()}
+
+    well_box = wx.StaticBox(parent, label='Well Plate')
+
+    well_plate_96 = wx.FlexGridSizer(cols=13, rows=9, hgap=top_level._FromDIP(0),
+        vgap=top_level._FromDIP(0))
+    well_plate_96.AddSpacer(1)
+
+    for col in col_labels:
+        well_plate_96.Add(wx.StaticText(well_box, label=col),
+            flag=wx.ALIGN_CENTER_HORIZONTAL|wx.ALIGN_CENTER_VERTICAL)
+
+    for i in range(104):
+        if i % 13 == 0:
+            row_idx += 1
+            col_idx = 0
+            row = row_labels[row_idx]
+
+            well_plate_96.Add(wx.StaticText(well_box, label=row),
+                flag=wx.ALIGN_CENTER_HORIZONTAL|wx.ALIGN_CENTER_VERTICAL)
+
+        else:
+            row = row_labels[row_idx]
+            col = col_labels[col_idx]
+            col_idx += 1
+
+            btn_id = well_ids_96['{}{}'.format(row, col)]
+
+            well_btn = wx.BitmapButton(well_box, btn_id, well_bmp,
+                style=wx.NO_BORDER)
+            well_btn.SetToolTip('{}{}'.format(row, col))
+            well_btn.Bind(wx.EVT_BUTTON, on_well_button)
+            well_plate_96.Add(well_btn,
+                flag=wx.LEFT|wx.ALIGN_CENTER_VERTICAL)
+
+    well_sizer = wx.StaticBoxSizer(well_box, wx.HORIZONTAL)
+    well_sizer.Add(well_plate_96,flag=wx.ALL, border=top_level._FromDIP(5))
+
+    return well_sizer, well_ids_96, reverse_well_ids_96
+
 
 class AutosamplerPanel(utils.DevicePanel):
 
@@ -1865,10 +1912,10 @@ class AutosamplerPanel(utils.DevicePanel):
         ctrl_sub_sizer1.Add(wx.StaticText(as_box, label='Load volume [uL]:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
         ctrl_sub_sizer1.Add(self.load_volume, flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
-        ctrl_sub_sizer1.Add(wx.StaticText(as_box, label='Buffer start delay [s]:'),
+        ctrl_sub_sizer1.Add(wx.StaticText(as_box, label='Delay after trigger [s]:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
         ctrl_sub_sizer1.Add(self.buffer_start_delay, flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
-        ctrl_sub_sizer1.Add(wx.StaticText(as_box, label='Buffer end delay [s]:'),
+        ctrl_sub_sizer1.Add(wx.StaticText(as_box, label='Delay after injection [s]:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
         ctrl_sub_sizer1.Add(self.buffer_end_delay, flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
         ctrl_sub_sizer1.Add(self.load_and_inject_btn, flag=wx.ALIGN_CENTER_VERTICAL)
@@ -1879,49 +1926,8 @@ class AutosamplerPanel(utils.DevicePanel):
         ctrl_sizer.Add(status_sizer, flag=wx.EXPAND)
         ctrl_sizer.Add(ctrl_sub_sizer1, flag=wx.TOP, border=self._FromDIP(5))
 
-        col_labels = ['{}'.format(col) for col in range(1,13)]
-        row_labels = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
-        row_idx = -1
-        col_idx = 0
-        wells = ['{}{}'.format(row, col) for row in row_labels for col in col_labels]
-        self.well_ids_96 = {well :wx.NewIdRef() for well in wells}
-        self.reverse_well_ids_96 = {wid: well for (well, wid) in self.well_ids_96.items()}
-
-        well_box = wx.StaticBox(as_box, label='Well Plate')
-
-        self.well_plate_96 = wx.FlexGridSizer(cols=13, rows=9, hgap=self._FromDIP(0),
-            vgap=self._FromDIP(0))
-        self.well_plate_96.AddSpacer(1)
-
-        for col in col_labels:
-            self.well_plate_96.Add(wx.StaticText(well_box, label=col),
-                flag=wx.ALIGN_CENTER_HORIZONTAL|wx.ALIGN_CENTER_VERTICAL)
-
-        for i in range(104):
-            if i % 13 == 0:
-                row_idx += 1
-                col_idx = 0
-                row = row_labels[row_idx]
-
-                self.well_plate_96.Add(wx.StaticText(well_box, label=row),
-                    flag=wx.ALIGN_CENTER_HORIZONTAL|wx.ALIGN_CENTER_VERTICAL)
-
-            else:
-                row = row_labels[row_idx]
-                col = col_labels[col_idx]
-                col_idx += 1
-
-                btn_id = self.well_ids_96['{}{}'.format(row, col)]
-
-                well_btn = wx.BitmapButton(well_box, btn_id, self.well_bmp,
-                    style=wx.NO_BORDER)
-                well_btn.SetToolTip('{}{}'.format(row, col))
-                well_btn.Bind(wx.EVT_BUTTON, self._on_well_button)
-                self.well_plate_96.Add(well_btn,
-                    flag=wx.LEFT|wx.ALIGN_CENTER_VERTICAL)
-
-        well_sizer = wx.StaticBoxSizer(well_box, wx.HORIZONTAL)
-        well_sizer.Add(self.well_plate_96,flag=wx.ALL, border=self._FromDIP(5))
+        well_sizer, self.well_ids_96, self.reverse_well_ids_96 = make_well_plate_layout(
+                self, as_box, self.well_bmp, self._on_well_button)
 
         top_sizer = wx.StaticBoxSizer(as_box, wx.HORIZONTAL)
         top_sizer.Add(ctrl_sizer, flag=wx.TOP|wx.LEFT|wx.BOTTOM, border=self._FromDIP(5))
@@ -2660,7 +2666,8 @@ class AutosamplerPanel(utils.DevicePanel):
         elif cmd_name == 'load_and_inject':
             volume = cmd_args['volume']
             rate = cmd_args['rate']
-            delay = cmd_args['delay']
+            start_delay = cmd_args['start_delay']
+            end_delay = cmd_args['end_delay']
             trigger = cmd_args['trigger']
             row = cmd_args['row']
             column = cmd_args['column']
@@ -2670,8 +2677,9 @@ class AutosamplerPanel(utils.DevicePanel):
             dwell_time = cmd_args['dwell_time']
             clean_needle = cmd_args['clean_needle']
 
-            self._load_and_inject(row, col, volume, rate, delay, trigger,
-                vol_units, rate_units, draw_rate, dwell_time, clean_needle)
+            self._load_and_inject(row, col, volume, rate, start_delay,
+                end_delay, trigger, vol_units, rate_units, draw_rate,
+                dwell_time, clean_needle)
 
             state = 'load'
 
@@ -2704,14 +2712,15 @@ class AutosamplerPanel(utils.DevicePanel):
         elif cmd_name == 'inject':
             volume = cmd_args['volume']
             rate = cmd_args['rate']
-            delay = cmd_args['delay']
+            start_delay = cmd_args['start_delay']
+            end_delay = cmd_args['end_delay']
             trigger = cmd_args['trigger']
             vol_units = 'uL'
             rate_units = 'uL/min'
             clean_needle = cmd_args['clean_needle']
 
-            self._inject(volume, rate, delay, trigger, vol_units, rate_units,
-                clean_needle)
+            self._inject(volume, rate, start_delay, end_delay, trigger,
+                vol_units, rate_units, clean_needle)
 
             state = 'inject'
 

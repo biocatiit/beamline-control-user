@@ -40,6 +40,7 @@ import wx.lib.scrolledpanel as scrolled
 import utils
 import biohplccon
 import coflowcon
+import autosamplercon
 
 
 class Automator(threading.Thread):
@@ -1670,6 +1671,49 @@ default_sec_saxs_settings = {
     'coflow_fr'     : 0.,
     }
 
+default_batch_saxs_settings = {
+    # General parameters
+    'item_type'     : 'batch_sample',
+    'notes'         : '',
+    'conc'          : '',
+    'buf'           : '',
+    'inst'          : '',
+    'sample_name'   : '',
+    'is_buf'        : False,
+    'separate_buf'  : False,
+
+    # Loading parameters
+    'row'           : '',
+    'column'        : '',
+    'volume'        : 0.,
+    'draw_rate'     : 0.,
+    'dwell_time'    : 0.,
+
+    # Injection parameters
+    'rate'          : 0.,
+    'start_delay'   : 0.,
+    'end_delay'     : 0.,
+    'trigger'       : True,
+    'clean_needle'  : True,
+
+    # Exposure parameters
+    'frames_by_inj' : True,
+    'num_frames'    : 0,
+    'exp_time'      : 0.,
+    'exp_period'    : 0.,
+    'data_dir'      : '',
+    'filename'      : '',
+    'wait_for_trig' : True,
+    'num_trig'      : 0,
+    #Not used, for completeness
+    'struck_measurement_time' : 0.,
+
+    #Coflow parameters
+    'coflow_from_fr': True,
+    'start_coflow'  : True,
+    'stop_coflow'   : False,
+    'coflow_fr'     : 0.,
+}
 
 
 default_standalone_exp_settings = {
@@ -1997,6 +2041,180 @@ def make_sec_saxs_info_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
 
     return cmd_sizer
 
+def make_batch_saxs_info_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
+    well_bmp, well_callback, read_only=False):
+    ################ Metadata #################
+
+    metadata_settings = {
+        'sample_name'   : ['Sample:', ctrl_ids['sample_name'], 'text'],
+        'buf'           : ['Buffer:', ctrl_ids['buf'], 'text'],
+        'conc'          : ['Concentration [mg/ml]:', ctrl_ids['conc'], 'float'],
+        'is_buf'        : ['Is buffer', ctrl_ids['is_buf'], 'bool'],
+        'separate_buf'  : ['Use separate buffer measurement',
+                            ctrl_ids['separate_buf'], 'bool']
+        }
+
+    metadata_box = wx.StaticBox(parent, label='Metadata')
+    md_sizer1 = create_info_sizer(metadata_settings, top_level, metadata_box,
+        read_only)
+
+    notes = wx.TextCtrl(metadata_box, ctrl_ids['notes'],
+        style=wx.TE_MULTILINE, size=top_level._FromDIP((100, 100)))
+
+    if read_only:
+        notes.SetEditable(False)
+
+    md_sizer2 = wx.BoxSizer(wx.HORIZONTAL)
+    md_sizer2.Add(wx.StaticText(metadata_box, label='Notes:'),
+        border=top_level._FromDIP(5), flag=wx.TOP|wx.BOTTOM|wx.LEFT)
+    md_sizer2.Add(notes, proportion=1, border=top_level._FromDIP(5),
+        flag=wx.EXPAND|wx.ALL)
+
+    metadata_sizer = wx.StaticBoxSizer(metadata_box, wx.VERTICAL)
+    metadata_sizer.Add(md_sizer1, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
+        border=top_level._FromDIP(5))
+    metadata_sizer.Add(md_sizer2, proportion=1, flag=wx.EXPAND|wx.ALL,
+        border=top_level._FromDIP(5))
+
+    ################ Autosampler #################
+
+    as_settings = {
+        'volume'        : ['Injection volume [ul]:', ctrl_ids['volume'], 'float'],
+        }
+
+    as_adv_settings = {
+        'draw_rate'     : ['Sample draw rate [ul/min]:', ctrl_ids['draw_rate'], 'float'],
+        'dwell_time'    : ['Wait time after draw [s]:', ctrl_ids['dwell_time'], 'float'],
+        'rate'          : ['Injection rate [ul/min]:', ctrl_ids['rate'], 'float'],
+        'start_delay'   : ['Delay after trigger [s]:', ctrl_ids['start_delay'], 'float'],
+        'end_delay'     : ['Delay after injection [s]:', ctrl_ids['end_delay'], 'float'],
+        'clean_needle'  : ['Clean needle after elution', ctrl_ids['clean_needle'], 'bool'],
+        }
+
+    as_box = wx.StaticBox(parent, label='Autosampler Settings')
+
+    as_adv_pane = wx.CollapsiblePane(as_box, label="Advanced Settings")
+    as_adv_pane.Bind(wx.EVT_COLLAPSIBLEPANE_CHANGED, top_level.on_collapse)
+    as_adv_win = as_adv_pane.GetPane()
+
+    well_sizer, well_ids_96, reverse_well_ids_96 = autosamplercon.make_well_plate_layout(
+                top_level, as_box, well_bmp, well_callback)
+
+    sample_well = wx.StaticText(as_box, size=top_level._FromDIP((40,-1)),
+        style=wx.ST_NO_AUTORESIZE)
+
+    sample_sizer = wx.BoxSizer(wx.HORIZONTAL)
+    sample_sizer.Add(wx.StaticText(as_box, label='Sample Well:'),
+        flag=wx.ALIGN_CENTER_VERTICAL)
+    sample_sizer.Add(sample_well, flag=wx.ALIGN_CENTER_VERTICAL)
+
+    as_sizer1 = create_info_sizer(as_settings, top_level, as_box, read_only)
+    as_sizer2 = create_info_sizer(as_adv_settings, top_level, as_adv_win,
+        read_only)
+
+    as_adv_win.SetSizer(as_sizer2)
+    as_adv_pane.Collapse()
+
+    as_sizer = wx.StaticBoxSizer(as_box, wx.VERTICAL)
+    as_sizer.Add(well_sizer, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
+        border=top_level._FromDIP(5))
+    as_sizer.Add(sample_sizer, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
+        border=top_level._FromDIP(5))
+    as_sizer.Add(as_sizer1, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
+        border=top_level._FromDIP(5))
+    as_sizer.Add(as_adv_pane, flag=wx.EXPAND|wx.ALL, border=top_level._FromDIP(5))
+
+
+    ################ Exposure #################
+    exp_settings = {
+        'filename'      : ['File prefix:', ctrl_ids['filename'], 'text'],
+        'exp_time'      : ['Exposure time [s]:', ctrl_ids['exp_time'], 'float'],
+        'exp_period'    : ['Exposure period [s]:', ctrl_ids['exp_period'], 'float'],
+        }
+
+    exp_adv_settings = {
+        'frames_by_elut': ['Set number of frames from injection time',
+                            ctrl_ids['frames_by_inj'], 'bool'],
+        'num_frames'    : ['Number of frames:', ctrl_ids['num_frames'], 'int'],
+        'wait_for_trig' : ['Wait for external trigger', ctrl_ids['wait_for_trig'], 'bool'],
+        'num_trig'      : ['Number of triggers:', ctrl_ids['num_trig'], 'int'],
+        }
+
+    exp_box = wx.StaticBox(parent, label='Exposure Settings')
+
+    exp_adv_pane = wx.CollapsiblePane(exp_box, label="Advanced Settings")
+    exp_adv_pane.Bind(wx.EVT_COLLAPSIBLEPANE_CHANGED, top_level.on_collapse)
+    exp_adv_win = exp_adv_pane.GetPane()
+
+    exp_sizer1 = create_info_sizer(exp_settings, top_level, exp_box, read_only)
+    exp_sizer2 = create_info_sizer(exp_adv_settings, top_level, exp_adv_win,
+        read_only)
+
+    exp_adv_win.SetSizer(exp_sizer2)
+    exp_adv_pane.Collapse()
+
+    exp_sizer = wx.StaticBoxSizer(exp_box, wx.VERTICAL)
+    exp_sizer.Add(exp_sizer1, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
+        border=top_level._FromDIP(5))
+    exp_sizer.Add(exp_adv_pane, flag=wx.EXPAND|wx.ALL, border=top_level._FromDIP(5))
+
+
+    ################ Coflow #################
+    coflow_settings = {
+        'coflow_from_fr': ['Set coflow flow from injection flow rate',
+                            ctrl_ids['coflow_from_fr'], 'bool'],
+        'start_coflow'  : ['Start coflow automatically',
+                            ctrl_ids['start_coflow'], 'bool'],
+        }
+
+    coflow_adv_settings = {
+        'stop_cloflow'  : ['Stop coflow after exposure',
+                            ctrl_ids['stop_coflow'], 'bool'],
+        'coflow_fr'     : ['Coflow flow rate [mL/min]:',
+                            ctrl_ids['coflow_fr'], 'float'],
+        }
+
+    coflow_box = wx.StaticBox(parent, label='Coflow Settings')
+
+    coflow_adv_pane = wx.CollapsiblePane(coflow_box, label="Advanced Settings")
+    coflow_adv_pane.Bind(wx.EVT_COLLAPSIBLEPANE_CHANGED, top_level.on_collapse)
+    coflow_adv_win = coflow_adv_pane.GetPane()
+
+    coflow_sizer1 = create_info_sizer(coflow_settings, top_level, coflow_box,
+        read_only)
+    coflow_sizer2 = create_info_sizer(coflow_adv_settings, top_level,
+        coflow_adv_win, read_only)
+
+    coflow_adv_win.SetSizer(coflow_sizer2)
+    coflow_adv_pane.Collapse()
+
+    coflow_sizer = wx.StaticBoxSizer(coflow_box, wx.VERTICAL)
+    coflow_sizer.Add(coflow_sizer1, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
+        border=top_level._FromDIP(5))
+    coflow_sizer.Add(coflow_adv_pane, flag=wx.EXPAND|wx.ALL, border=top_level._FromDIP(5))
+
+    exp_coflow_sizer = wx.BoxSizer(wx.VERTICAL)
+    exp_coflow_sizer.Add(exp_sizer, flag=wx.EXPAND)
+    exp_coflow_sizer.Add(coflow_sizer, flag=wx.TOP|wx.EXPAND, border=top_level._FromDIP(5))
+
+    if cmd_sizer_dir == 'horiz':
+        cmd_sizer=wx.BoxSizer(wx.HORIZONTAL)
+        cmd_sizer.Add(metadata_sizer, proportion=1, flag=wx.RIGHT|wx.EXPAND,
+            border=top_level._FromDIP(5))
+        cmd_sizer.Add(as_sizer, flag=wx.RIGHT|wx.EXPAND,
+            border=top_level._FromDIP(5))
+        cmd_sizer.Add(exp_coflow_sizer, flag=wx.EXPAND,
+            border=top_level._FromDIP(5))
+    else:
+        cmd_sizer=wx.BoxSizer(wx.VERTICAL)
+        cmd_sizer.Add(metadata_sizer, flag=wx.BOTTOM|wx.EXPAND,
+            border=top_level._FromDIP(5))
+        cmd_sizer.Add(as_sizer, flag=wx.BOTTOM|wx.EXPAND,
+            border=top_level._FromDIP(5))
+        cmd_sizer.Add(exp_coflow_sizer, flag=wx.EXPAND,
+            border=top_level._FromDIP(5))
+
+    return cmd_sizer, sample_well, well_ids_96, reverse_well_ids_96
 
 def make_standalone_exp_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
     read_only=False):
@@ -3592,6 +3810,54 @@ class SecSampleCmdDialog(AutoCmdDialog):
 
         self.SetSizer(top_sizer)
 
+class BatchSampleCmdDialog(AutoCmdDialog):
+    """
+    Allows addition/editing of the buffer info in the buffer list
+    """
+    def __init__(self, parent, default_settings, *args, **kwargs):
+        AutoCmdDialog.__init__(self, parent, default_settings, *args, **kwargs)
+
+    def _create_layout(self):
+        parent = self
+
+        self.well_bmp = utils.load_DIP_bitmap('./resources/icons8-circled-thin-28.png',
+            wx.BITMAP_TYPE_PNG, False)['light']
+        self.selected_well_bmp = utils.load_DIP_bitmap('./resources/sel_icons8-circled-thin-28.png',
+            wx.BITMAP_TYPE_PNG, False)['light']
+
+        (cmd_sizer, self.sample_well, self.well_ids_96,
+            self.reverse_well_ids_96) =  make_batch_saxs_info_panel(self,
+            self, self.ctrl_ids, 'horiz', self.well_bmp, self._on_well_button)
+
+        button_sizer = self.CreateButtonSizer(wx.OK | wx.CANCEL)
+
+        top_sizer = wx.BoxSizer(wx.VERTICAL)
+        top_sizer.Add(cmd_sizer, proportion=1, flag=wx.EXPAND|wx.ALL,
+            border=self._FromDIP(5))
+        top_sizer.Add(button_sizer ,flag=wx.BOTTOM|wx.RIGHT|wx.LEFT|wx.ALIGN_RIGHT,
+            border=self._FromDIP(5))
+
+        self.SetSizer(top_sizer)
+
+    def _on_well_button(self, evt):
+        ctrl_id = evt.GetId()
+
+        well = self.reverse_well_ids_96[ctrl_id]
+
+        self._set_selected_well(well)
+
+    def _set_selected_well(self, well):
+        if self._selected_well in self.well_ids_96:
+            old_ctrl = wx.FindWindowById(self.well_ids_96[self._selected_well])
+            old_ctrl.SetBitmap(self.well_bmp)
+
+        new_ctrl = wx.FindWindowById(self.well_ids_96[well])
+
+        new_ctrl.SetBitmap(self.selected_well_bmp)
+        self._selected_well = well
+
+        self.sample_well.SetLabel(self._selected_well)
+
 class EquilibrateDialog(AutoCmdDialog):
     """
     Allows addition/editing of the buffer info in the buffer list
@@ -3965,36 +4231,38 @@ if __name__ == '__main__':
     app = wx.App()
     # logger.debug('Setting up wx app')
 
-    hplc_frame = biohplccon.HPLCFrame('HPLCFrame', hplc_settings, parent=None,
-        title='HPLC Control')
-    hplc_frame.Show()
+    # hplc_frame = biohplccon.HPLCFrame('HPLCFrame', hplc_settings, parent=None,
+    #     title='HPLC Control')
+    # hplc_frame.Show()
 
-    # coflow_frame = coflowcon.CoflowFrame(coflow_settings, True, parent=None, title='Coflow Control')
-    # coflow_frame.Show()
-
-
-    hplc_panel = hplc_frame.devices[0]
-    hplc_automator_callback = hplc_frame.devices[0].automator_callback
-    # coflow_automator_callback = coflow_frame.coflow_panel.automator_callback
-
-    automator_settings = default_automator_settings
-    automator_settings['automator_thread'] = automator
-    automator_settings['hplc_inst'] = 'hplc'
-    automator_settings['instruments'] = {
-        'hplc'    : {'num_paths': 2,
-                    'automator_callback': hplc_automator_callback,
-                    'hplc_panel'    : hplc_panel,},
-        # 'coflow'    : {'automator_callback': coflow_automator_callback},
-        # 'exp'       : {'automator_callback': test_cmd_func}
-        }
+    # # coflow_frame = coflowcon.CoflowFrame(coflow_settings, True, parent=None, title='Coflow Control')
+    # # coflow_frame.Show()
 
 
-    # app = wx.App()
-    logger.debug('Setting up wx app')
-    frame = AutoFrame('AutoFrame', automator_settings, parent=None,
-        title='Automator Control')
-    frame.Show()
+    # hplc_panel = hplc_frame.devices[0]
+    # hplc_automator_callback = hplc_frame.devices[0].automator_callback
+    # # coflow_automator_callback = coflow_frame.coflow_panel.automator_callback
 
+    # automator_settings = default_automator_settings
+    # automator_settings['automator_thread'] = automator
+    # automator_settings['hplc_inst'] = 'hplc'
+    # automator_settings['instruments'] = {
+    #     'hplc'    : {'num_paths': 2,
+    #                 'automator_callback': hplc_automator_callback,
+    #                 'hplc_panel'    : hplc_panel,},
+    #     # 'coflow'    : {'automator_callback': coflow_automator_callback},
+    #     # 'exp'       : {'automator_callback': test_cmd_func}
+    #     }
+
+
+    # # app = wx.App()
+    # logger.debug('Setting up wx app')
+    # frame = AutoFrame('AutoFrame', automator_settings, parent=None,
+    #     title='Automator Control')
+    # frame.Show()
+
+    dialog = BatchSampleCmdDialog(None, default_batch_saxs_settings)
+    dialog.Show()
     app.MainLoop()
 
     if automator is not None:
