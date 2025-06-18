@@ -1633,7 +1633,7 @@ class ASCommThread(utils.CommManager):
             'volume'    : val,
             'row'       : row,
             'column'    : column,
-            'vol_units' : vol_units,
+            'vol_units' : units,
             }
 
         self._return_value((name, cmd, load_settings), 'status')
@@ -2097,7 +2097,7 @@ class AutosamplerPanel(utils.DevicePanel):
     def _on_load_and_inject(self, evt):
         self._prepare_load_and_inject(True)
 
-    def _prepare_load_and_inject(self, verbose):
+    def get_load_and_inject_settings(self):
         well = self._selected_well
         volume = self.load_volume.GetValue()
         rate = self.inj_rate.GetValue()
@@ -2110,8 +2110,39 @@ class AutosamplerPanel(utils.DevicePanel):
         dwell_time = self.dwell_time.GetValue()
         clean_needle = self.clean_after_inject.GetValue()
 
+        settings = {
+            'sample_well'   : well,
+            'volume'        : volume,
+            'rate'          : rate,
+            'start_delay'   : start_delay,
+            'end_delay'     : end_delay,
+            'trigger'       : trigger,
+            'vol_units'     : vol_units,
+            'rate_units'    : rate_units,
+            'draw_rate'     : draw_rate,
+            'dwell_time'    : dwell_time,
+            'clean_needle'  : clean_needle,
+        }
+
+        return settings
+
+    def _prepare_load_and_inject(self, verbose):
+        settings = self.get_load_and_inject_settings()
+
+        well = settings['sample_well']
+        volume = settings['volume']
+        rate = settings['rate']
+        start_delay = settings['start_delay']
+        end_delay = settings['end_delay']
+        trigger = settings['trigger']
+        vol_units = settings['vol_units']
+        rate_units = settings['rate_units']
+        draw_rate = settings['draw_rate']
+        dwell_time = settings['dwell_time']
+        clean_needle = settings['clean_needle']
+
         (row, col, volume, rate, start_delay, end_delay, trigger, vol_units,
-            rate_units, draw_rate, dwell_time, errors) = self._validate_load_and_inject_params(
+            rate_units, draw_rate, dwell_time, errors) = self.validate_load_and_inject_params(
             well, volume, rate, start_delay, end_delay, trigger, vol_units,
             rate_units, draw_rate, dwell_time, verbose)
 
@@ -2132,7 +2163,7 @@ class AutosamplerPanel(utils.DevicePanel):
         self._send_cmd(dwell_cmd, False)
         self._send_cmd(inj_cmd, False)
 
-    def _validate_load_and_inject_params(self, well, volume, rate, start_delay,
+    def validate_load_and_inject_params(self, well, volume, rate, start_delay,
         end_delay, trigger, vol_units, rate_units, draw_rate, dwell_time, verbose):
 
         (volume, rate, start_delay, end_delay, trigger, vol_units, rate_units,
@@ -2196,9 +2227,6 @@ class AutosamplerPanel(utils.DevicePanel):
         self._send_cmd(rate_cmd, False)
         self._send_cmd(dwell_cmd, False)
         self._send_cmd(load_cmd, False)
-
-        if clean_needle:
-            self._send_cmd(['clean', [self.name,], {}], False)
 
     def _on_aspirate_sample(self, evt):
         self._prepare_aspirate(True)
@@ -2582,8 +2610,8 @@ class AutosamplerPanel(utils.DevicePanel):
                 self._current_trigger_on_inject = trigger
 
             if start_delay != self._current_buffer_start_delay:
-                self.buffer_start_delay.ChangeValue(str(delay))
-                self._current_buffer_start_delay = delay
+                self.buffer_start_delay.ChangeValue(str(start_delay))
+                self._current_buffer_start_delay = start_delay
 
             if end_delay != self._current_buffer_end_delay:
                 self.buffer_end_delay.ChangeValue(str(end_delay))
@@ -2659,6 +2687,14 @@ class AutosamplerPanel(utils.DevicePanel):
         if cmd_name == 'status':
             state = self._get_automator_state()
 
+        elif cmd_name == 'full_status':
+            state = self._get_automator_state()
+
+            if state != 'busy':
+                state = copy.copy(self._current_status)
+            else:
+                state = 'Busy'
+
         elif cmd_name == 'abort':
             self._abort()
             state = 'idle'
@@ -2670,7 +2706,7 @@ class AutosamplerPanel(utils.DevicePanel):
             end_delay = cmd_args['end_delay']
             trigger = cmd_args['trigger']
             row = cmd_args['row']
-            column = cmd_args['column']
+            col = cmd_args['column']
             vol_units = 'uL'
             rate_units = 'uL/min'
             draw_rate = cmd_args['draw_rate']
@@ -2698,9 +2734,9 @@ class AutosamplerPanel(utils.DevicePanel):
         elif cmd_name == 'load_and_move_to_inject':
             volume = cmd_args['volume']
             row = cmd_args['row']
-            column = cmd_args['column']
-            vol_units = 'uL'
-            rate_units = 'uL/min'
+            col = cmd_args['column']
+            vol_units = cmd_args['vol_units']
+            rate_units = cmd_args['rate_units']
             draw_rate = cmd_args['draw_rate']
             dwell_time = cmd_args['dwell_time']
 

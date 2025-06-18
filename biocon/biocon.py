@@ -45,6 +45,7 @@ import pipeline_ctrl
 import spectrometercon
 import biohplccon
 import autocon
+import autosamplercon
 
 class BioFrame(wx.Frame):
     """
@@ -230,6 +231,7 @@ class BioFrame(wx.Frame):
             inst_settings['hplc'] = {'num_paths': num_paths,
                 'automator_callback': hplc_automator_callback,
                 'hplc_panel'    : hplc_panel,}
+
         if 'coflow' in self.settings['components']:
             coflow_panel = self.component_panels['coflow']
             coflow_automator_callback = coflow_panel.automator_callback
@@ -239,6 +241,11 @@ class BioFrame(wx.Frame):
             exposure_panel = self.component_panels['exposure']
             exposure_automator_callback = exposure_panel.automator_callback
             inst_settings['exp'] = {'automator_callback': exposure_automator_callback}
+
+        if 'autosampler' in self.settings['components']:
+            autosampler_panel = self.component_panels['autosampler']
+            autosampler_automator_callback = autosampler_panel.automator_callback
+            inst_settings['exp'] = {'automator_callback': autosampler_automator_callback}
 
         self.settings[key]['instruments'] = inst_settings
 
@@ -501,6 +508,10 @@ if __name__ == '__main__':
     # Automator Settings
     automator_settings = autocon.default_automator_settings
 
+    ###################################################################
+    # Autosampler Settings
+    autosampler_settings = autosamplercon.default_autosampler_settings
+
 
     biocon_settings = {}
 
@@ -515,6 +526,7 @@ if __name__ == '__main__':
         # ('uv', spectrometercon.UVPanel),
         # ('hplc', biohplccon.HPLCPanel),
         # ('automator', autocon.AutoPanel),
+        # ('autosampler', autosamplercon.AutosamplerPanel),
         ])
 
     settings = {
@@ -528,6 +540,7 @@ if __name__ == '__main__':
         'uv'            : spectrometer_settings,
         'hplc'          : hplc_settings,
         'automator'     : automator_settings,
+        'autosampler'   : autosampler_settings,
         'components'    : components,
         'biocon'        : biocon_settings,
         }
