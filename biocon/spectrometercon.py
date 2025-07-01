@@ -1427,6 +1427,8 @@ class StellarnetUVVis(Spectrometer):
 
     def get_lightsource_uv_lamp(self):
         status = self.uv_lamp_status_pv.get()
+        #Light source is active low
+        status = not status
 
         logger.debug('Spectrometer %s: UV lamp on: %s',
             self.name, status)
@@ -1446,6 +1448,9 @@ class StellarnetUVVis(Spectrometer):
 
     def get_lightsource_vis_lamp(self):
         status = self.vis_lamp_status_pv.get()
+
+        #Light source is active low
+        status = not status
 
         logger.debug('Spectrometer %s: Vis lamp on: %s',
             self.name, status)
@@ -1649,6 +1654,7 @@ class UVCommThread(utils.CommManager):
             'abort_collection'  : self._abort_collection,
             'get_busy'          : self._get_busy,
             'get_spec_settings' : self._get_spec_settings,
+            'get_ls_status'     : self._get_ls_status,
             'set_ls_shutter'    : self._set_lightsource_shutter,
             'get_ls_shutter'    : self._get_lightsource_shutter,
             'set_uv_lamp'       : self._set_lightsource_uv_lamp,
@@ -2255,6 +2261,28 @@ class UVCommThread(utils.CommManager):
         self._return_value((name, cmd, ret_vals), comm_name)
 
         logger.debug('Got device %s settings: %s', name, ret_vals)
+
+    def _get_ls_status(self, name, **kwargs):
+        logger.debug('Getting device %s light source status', name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+
+        ls_shutter = device.get_lightsource_shutter()
+        ls_uv_lamp = device.get_lightsource_uv_lamp()
+        ls_vis_lamp = device.get_lightsource_vis_lamp()
+
+        ret_vals = {
+            'ls_shutter': ls_shutter,
+            'ls_uv_lamp': ls_uv_lamp,
+            'ls_vis_lamp': ls_vis_lamp,
+        }
+
+        self._return_value((name, cmd, ret_vals), comm_name)
+
+        logger.debug('Got device %s lightsource status: %s', name, ret_vals)
 
     def _set_lightsource_shutter(self, name, val, **kwargs):
         logger.debug("Device %s setting lightsource shutter %s", name, val)
@@ -3341,7 +3369,7 @@ class UVPanel(utils.DevicePanel):
     def _ls_uv_lamp_power(self, lamp_state):
         ls_uv_cmd = ['set_uv_lamp', [self.name, lamp_state], {}]
         self._send_cmd(ls_uv_cmd, get_response=True)
-        time.sleep(0.1)
+        time.sleep(1)
         ls_status_cmd = ['get_uv_lamp', [self.name,], {}]
         resp = self._send_cmd(ls_status_cmd, True)
 
@@ -3357,9 +3385,9 @@ class UVPanel(utils.DevicePanel):
     def _on_ls_vis_lamp(self, evt):
         obj = evt.GetEventObject()
 
-        if obj == self.ls_uv_on:
+        if obj == self.ls_vis_on:
             lamp_state = True
-        elif obj == self.ls_uv_off:
+        elif obj == self.ls_vis_off:
             lamp_state = False
 
         self._ls_vis_lamp_power(lamp_state)
@@ -3367,7 +3395,7 @@ class UVPanel(utils.DevicePanel):
     def _ls_vis_lamp_power(self, lamp_state):
         ls_uv_cmd = ['set_vis_lamp', [self.name, lamp_state], {}]
         self._send_cmd(ls_uv_cmd, get_response=True)
-        time.sleep(0.1)
+        time.sleep(1)
         ls_status_cmd = ['get_vis_lamp', [self.name,], {}]
         resp = self._send_cmd(ls_status_cmd, True)
 
@@ -3918,6 +3946,41 @@ class UVPanel(utils.DevicePanel):
 
                 self.ls_vis_status.SetLabel(vis_lamp_status)
 
+        elif cmd == 'get_ls_status':
+            ls_shutter = val['ls_shutter']
+            ls_uv_lamp = val['ls_uv_lamp']
+            ls_vis_lamp = val['ls_vis_lamp']
+
+            if ls_shutter != self._ls_shutter:
+                self._ls_shutter = ls_shutter
+
+                if self._ls_shutter:
+                    ls_status = 'Open'
+                else:
+                    ls_status = 'Closed'
+
+                self.ls_status.SetLabel(ls_status)
+
+            if not self.inline and ls_uv_lamp != self._ls_uv_lamp:
+                self._ls_uv_lamp = ls_uv_lamp
+
+                if self._ls_uv_lamp:
+                    uv_lamp_status = 'On'
+                else:
+                    uv_lamp_status = 'Off'
+
+                self.ls_uv_status.SetLabel(uv_lamp_status)
+
+            if not self.inline and ls_vis_lamp != self._ls_vis_lamp:
+                self._ls_vis_lamp = ls_vis_lamp
+
+                if self._ls_vis_lamp:
+                    vis_lamp_status = 'On'
+                else:
+                    vis_lamp_status = 'Off'
+
+                self.ls_vis_status.SetLabel(vis_lamp_status)
+
         elif cmd == 'collect_spec':
             self._add_new_spectrum(val)
 
@@ -3990,6 +4053,10 @@ class UVPanel(utils.DevicePanel):
         settings_cmd = ['get_spec_settings', [self.name], {}]
 
         self._update_status_cmd(settings_cmd, 60)
+
+        ls_cmd = ['get_ls_status', [self.name], {}]
+
+        self._update_status_cmd(ls_cmd, 10)
 
         busy_cmd = ['get_busy', [self.name,], {}]
 
