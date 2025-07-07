@@ -30,6 +30,7 @@ import traceback
 import time
 import sys
 import os
+import argparse
 
 if __name__ != '__main__':
     logger = logging.getLogger(__name__)
@@ -437,7 +438,7 @@ if __name__ == '__main__':
 
     standard_paths = wx.StandardPaths.Get() #Can't do this until you start the wx app
     info_dir = standard_paths.GetUserLocalDataDir()
-    print('Log directory: {}'.format(info_dir))
+
     if not os.path.exists(info_dir):
         os.mkdir(info_dir)
 
@@ -454,12 +455,22 @@ if __name__ == '__main__':
     port3 = '5558'
     port4 = '5559'
 
-    exp_type = 'coflow' #coflow or trsaxs_laminar or trsaxs_chaotic or hplc
-    # exp_type = 'trsaxs_chaotic'
-    # exp_type = 'trsaxs_laminar'
-    # exp_type = 'hplc'
-    # exp_type = 'autosampler'
 
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-e', '--exp_type', help='Experiment type for server',
+        type=str, choices=['coflow', 'trsaxs_chaotic', 'trsaxs_laminar',
+        'hplc', 'autosampler'], default='coflow')
+
+    args = parser.parse_args()
+    exp_type = args.exp_type
+
+    # exp_type = 'coflow' #coflow or trsaxs_laminar or trsaxs_chaotic or hplc
+    # # exp_type = 'trsaxs_chaotic'
+    # # exp_type = 'trsaxs_laminar'
+    # # exp_type = 'hplc'
+    # # exp_type = 'autosampler'
+
+    print('Log directory: {}'.format(info_dir))
 
     if exp_type == 'coflow':
         # Coflow
