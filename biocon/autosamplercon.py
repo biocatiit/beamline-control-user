@@ -3056,10 +3056,9 @@ default_autosampler_settings = {
 
         }},], # Compatibility with the standard format
     'device_communication'  : 'local',
-    # 'remote_pump_ip'        : '164.54.204.37',
-    # 'remote_pump_port'      : '5556',
-    # 'remote_fm_ip'          : '164.54.204.37',
-    # 'remote_fm_port'        : '5557',
+    'remote_device'         : '164.54.204.53',
+    'remote_port'           : '5557',
+    'remote'                : False,
     'volume_units'          : 'uL',
     'components'            : [],
 
@@ -3130,7 +3129,7 @@ if __name__ == '__main__':
     # com_thread = None
 
     settings = default_autosampler_settings
-    settings['components'] = ['uv']
+    settings['components'] = ['autosampler']
 
     settings['com_thread'] = com_thread
 
@@ -3154,7 +3153,8 @@ if __name__ == '__main__':
     # logger.addHandler(h2)
 
     logger.debug('Setting up wx app')
-    frame = AutosamplerFrame('AutosamplerFrame', settings, parent=None, title='Autosampler Control')
+    frame = AutosamplerFrame('AutosamplerFrame', settings, parent=None,
+        title='Autosampler Control')
     frame.Show()
     app.MainLoop()
 

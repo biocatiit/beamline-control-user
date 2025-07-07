@@ -511,6 +511,13 @@ if __name__ == '__main__':
     ###################################################################
     # Autosampler Settings
     autosampler_settings = autosamplercon.default_autosampler_settings
+    autosampler_settings['com_thread'] = None
+    autosampler_settings['remote'] = True
+    autosampler_settings['remote_device'] = 'autosampler'
+    autosampler_settings['remote_ip'] = '164.54.204.53'
+    autosampler_settings['remote_port'] = '5557'
+    autosampler_settings['device_data'] = autosampler_settings['device_init'][0]
+    autosampler_settings['inline_panel'] = True
 
 
     biocon_settings = {}
