@@ -408,14 +408,14 @@ if __name__ == '__main__':
         # 'scale': 2.5e6, 'offset': 0, 'dark': True, 'norm_time': True},
         # {'mx_record': 'mcs12', 'channel': 11, 'name': 'Length_Out',
         # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
-        # # {'mx_record': 'mcs13', 'channel': 13, 'name': 'Length_In',
-        # # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
+        # {'mx_record': 'mcs14', 'channel': 13, 'name': 'Length_In',
+        # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
         # {'mx_record': 'mcs13', 'channel': 12, 'name': 'Force',
         # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
         ]
     exposure_settings['warnings'] = {'shutter' : True, 'col_vac' : {'check': True,
         'thresh': 0.04}, 'guard_vac' : {'check': True, 'thresh': 0.04},
-        'sample_vac': {'check': False, 'thresh': 0.04}, 'sc_vac':
+        'sample_vac': {'check': True, 'thresh': 0.04}, 'sc_vac':
         {'check': True, 'thresh':0.04}}
     exposure_settings['base_data_dir'] = '/nas_data/Eiger2x/2025_Run2/' #CHANGE ME and pipeline local_basedir
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']
