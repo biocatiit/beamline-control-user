@@ -582,9 +582,9 @@ class Autosampler(object):
     def set_needle_in_position(self, needle_y):
         self.needle_in_position = needle_y
 
-    def set_plate_out_position(self, plate_x, plate_z):
-        self.plate_x_out = plate_x
-        self.plate_z_out = plate_z
+    def set_plate_out_position(self, plate_x_offset, plate_z_offset):
+        self.plate_x_out = self.base_position[0] + plate_x_offset
+        self.plate_z_out = self.base_position[1] + plate_z_offset
 
     def set_plate_load_position(self, plate_x, plate_z):
         self.plate_x_load = plate_x
@@ -3034,30 +3034,31 @@ default_autosampler_settings = {
         'needle_valve'          : {'name': 'Needle',
                                         'args':['Cheminert', 'COM11'],
                                         'kwargs': {'positions' : 6,
-                                        'comm_lock': threading.RLock()}},
+                                        'comm_lock': None}},
         'sample_pump'           : {'name': 'sample', 'args': ['Hamilton PSD6', 'COM9'],
                                     'kwargs': {'syringe_id': '0.1 mL, Hamilton Glass',
                                     'pump_address': '1', 'dual_syringe': 'False',
                                     'diameter': 1.46, 'max_volume': 0.1,
-                                    'max_rate': 1, 'comm_lock': threading.RLock(),},
+                                    'max_rate': 1, 'comm_lock': None,},
                                     'ctrl_args': {'flow_rate' : 100,
                                     'refill_rate' : 100, 'units': 'uL/min'}},
         'clean1_pump'           : {'name': 'water', 'args': ['KPHM100', 'COM10'],
                                     'kwargs': {'flow_cal': '319.2',
-                                    'comm_lock': threading.RLock()},
+                                    'comm_lock': None},
                                     'ctrl_args': {'flow_rate': 1}},
         'clean2_pump'           : {'name': 'ethanol', 'args': ['KPHM100', 'COM12'],
                                     'kwargs': {'flow_cal': '319.2',
-                                    'comm_lock': threading.RLock()},
+                                    'comm_lock': None},
                                     'ctrl_args': {'flow_rate': 1}},
         'clean3_pump'           : {'name': 'hellmanex', 'args': ['KPHM100', 'COM8'],
                                     'kwargs': {'flow_cal': '319.2',
-                                    'comm_lock': threading.RLock()},
+                                    'comm_lock': None},
                                     'ctrl_args': {'flow_rate': 1}},
 
         }},], # Compatibility with the standard format
     'device_communication'  : 'local',
-    'remote_device'         : '164.54.204.53',
+    'remote_device'         : 'autosampler',
+    'remote_ip'             : '164.54.204.53',
     'remote_port'           : '5557',
     'remote'                : False,
     'volume_units'          : 'uL',
@@ -3073,7 +3074,7 @@ default_autosampler_settings = {
     'clean_offsets'         : {'plate_x': 99, 'plate_z': -21.6, 'needle_y': -3}, # Relative to base position
     'needle_out_offset'     : 5, # mm
     'needle_in_position'    : 0,
-    'plate_out_position'    : {'plate_x': 241.4, 'plate_z': -75.9},
+    'plate_out_position'    : {'plate_x': -31, 'plate_z': 0},
     'plate_load_position'   : {'plate_x': 0, 'plate_z': -75.9},
     'coflow_y_ref_position' : 0, # Position for coflow y motor when base position was set
     'plate_type'            : 'Thermo-Fast 96 well PCR',
@@ -3122,17 +3123,21 @@ if __name__ == '__main__':
     # h1.setFormatter(formatter)
     # logger.addHandler(h1)
 
-     # Local
-    com_thread = ASCommThread('ASComm')
-    com_thread.start()
+    #  # Local
+    # com_thread = ASCommThread('ASComm')
+    # com_thread.start()
 
-    # # Remote
-    # com_thread = None
+    # Remote
+    com_thread = None
 
     settings = default_autosampler_settings
     settings['components'] = ['autosampler']
 
     settings['com_thread'] = com_thread
+
+    settings['remote'] = True
+    settings['device_communication'] = 'remote'
+    # settings['device_data'] = settings['device_init'][0]
 
     #Note, on linux to access serial ports must first sudo chmod 666 /dev/ttyUSB*
     # my_autosampler = Autosampler(settings)
