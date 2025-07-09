@@ -457,9 +457,9 @@ if __name__ == '__main__':
 
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('-e', '--exp_type', help='Experiment type for server',
+    parser.add_argument('exp_type', help='Experiment type for server',
         type=str, choices=['coflow', 'trsaxs_chaotic', 'trsaxs_laminar',
-        'hplc', 'autosampler'], default='coflow')
+        'hplc', 'autosampler'])
 
     args = parser.parse_args()
     exp_type = args.exp_type
@@ -483,13 +483,6 @@ if __name__ == '__main__':
         # ip = '164.54.204.24'
 
         spectrometer_settings = spectrometercon.default_spectrometer_settings
-        spectrometer_settings['device_init'] = [{'name': 'CoflowUV',
-            'args': ['StellarNet', None],
-            'kwargs': {'shutter_pv_name': '18ID:LJT4:2:Bo11',
-            'trigger_pv_name' : '18ID:LJT4:2:Bo12',
-            'out1_pv_name' : '18ID:E1608:Ao1',
-            'out2_pv_name' : '18ID:E1608:Ao2',
-            'trigger_in_pv_name' : '18ID:E1608:Bi8'}},]
         spectrometer_settings['remote'] = False
         spectrometer_settings['device_communication'] = 'local'
         spectrometer_settings['inline_panel'] = False
