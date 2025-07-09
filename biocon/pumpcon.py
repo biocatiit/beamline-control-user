@@ -6120,7 +6120,7 @@ if __name__ == '__main__':
 
     # Batch mode Hamilton PSD6 pump
     setup_devices = [
-        {'name': 'sample', 'args': ['Hamilton PSD6', 'COM3'],
+        {'name': 'sample', 'args': ['Hamilton PSD6', 'COM9'],
             'kwargs': {'syringe_id': '0.1 mL, Hamilton Glass',
             'pump_address': '1', 'dual_syringe': 'False',
             'diameter': 1.46, 'max_volume': 0.1,
