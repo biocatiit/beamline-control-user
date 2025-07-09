@@ -529,7 +529,10 @@ class Autosampler(object):
             self.clean2_pump.stop()
             self.clean3_pump.stop()
 
-            self.set_valve_position(self.settings['valve_positions']['sample'])
+            self.set_valve_position(self.settings['clean_valve_positions']['empty'])
+
+            self.sample_pump.set_valve_position(
+                self.settings['syringe_valve_positions']['sample'])
 
             self.abort_event.clear()
 
@@ -1021,8 +1024,8 @@ class Autosampler(object):
 
         self._status = 'Loading sample'
 
-        self.set_valve_position(self.settings['valve_positions']['sample'])
-        self.sample_pump.set_valve_position('Input')
+        self.sample_pump.set_valve_position(
+            self.settings['syringe_valve_positions']['sample'])
 
         success = self.move_to_load(row, column, False)
 
@@ -1059,7 +1062,8 @@ class Autosampler(object):
 
         self._status = 'Moving to inject'
 
-        self.set_valve_position(self.settings['valve_positions']['sample'])
+        self.sample_pump.set_valve_position(
+            self.settings['syringe_valve_positions']['sample'])
 
         if self.settings['inject_connect_vol'] > 0:
             self.set_pump_dispense_rates(self.settings['inject_connect_rate'],
@@ -1100,7 +1104,8 @@ class Autosampler(object):
 
         self._status = 'Injecting sample'
 
-        self.set_valve_position(self.settings['valve_positions']['sample'])
+        self.sample_pump.set_valve_position(
+            self.settings['syringe_valve_positions']['sample'])
 
         self.set_pump_dispense_rates(rate, rate_units, 'sample')
 
@@ -1216,16 +1221,26 @@ class Autosampler(object):
 
         success = self.move_to_clean(False)
 
-        self.sample_pump.set_valve_position('Output')
+        self.sample_pump.set_valve_position(
+            self.settings['syringe_valve_positions']['purge'])
         rate = self.settings['pump_rates']['purge'][1]
         self.set_pump_dispense_rates(rate, 'mL/min', 'sample')
         self.sample_pump.dispense_all(blocking=False)
+
+        while self.sample_pump.is_moving():
+            abort = self._sleep(0.02)
+            if abort:
+                success = not abort
+                break
+
+        self.sample_pump.set_valve_position(
+            self.settings['syringe_valve_positions']['clean'])
 
         if success:
             for clean_step in self.settings['clean_seq']:
                 pump = clean_step[0]
                 cmd = clean_step[1]
-                self.set_valve_position(self.settings['valve_positions'][pump])
+                self.set_valve_position(self.settings['clean_valve_positions'][pump])
 
                 if cmd == 'dispense':
                     rate = clean_step[2]
@@ -1241,13 +1256,7 @@ class Autosampler(object):
                 if not success:
                     break
 
-            self.set_valve_position(self.settings['valve_positions']['sample'])
-
-        while self.sample_pump.is_moving():
-            abort = self._sleep(0.02)
-            if abort:
-                success = not abort
-                break
+            self.set_valve_position(self.settings['clean_valve_positions']['empty'])
 
         if success:
             self.sample_pump.set_valve_position('Input')
@@ -1633,7 +1642,7 @@ class ASCommThread(utils.CommManager):
             'volume'    : val,
             'row'       : row,
             'column'    : column,
-            'vol_units' : vol_units,
+            'vol_units' : units,
             }
 
         self._return_value((name, cmd, load_settings), 'status')
@@ -1765,6 +1774,53 @@ class ASCommThread(utils.CommManager):
 
 
 
+def make_well_plate_layout(top_level, parent, well_bmp, on_well_button):
+    col_labels = ['{}'.format(col) for col in range(1,13)]
+    row_labels = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
+    row_idx = -1
+    col_idx = 0
+    wells = ['{}{}'.format(row, col) for row in row_labels for col in col_labels]
+    well_ids_96 = {well :wx.NewIdRef() for well in wells}
+    reverse_well_ids_96 = {wid: well for (well, wid) in well_ids_96.items()}
+
+    well_box = wx.StaticBox(parent, label='Well Plate')
+
+    well_plate_96 = wx.FlexGridSizer(cols=13, rows=9, hgap=top_level._FromDIP(0),
+        vgap=top_level._FromDIP(0))
+    well_plate_96.AddSpacer(1)
+
+    for col in col_labels:
+        well_plate_96.Add(wx.StaticText(well_box, label=col),
+            flag=wx.ALIGN_CENTER_HORIZONTAL|wx.ALIGN_CENTER_VERTICAL)
+
+    for i in range(104):
+        if i % 13 == 0:
+            row_idx += 1
+            col_idx = 0
+            row = row_labels[row_idx]
+
+            well_plate_96.Add(wx.StaticText(well_box, label=row),
+                flag=wx.ALIGN_CENTER_HORIZONTAL|wx.ALIGN_CENTER_VERTICAL)
+
+        else:
+            row = row_labels[row_idx]
+            col = col_labels[col_idx]
+            col_idx += 1
+
+            btn_id = well_ids_96['{}{}'.format(row, col)]
+
+            well_btn = wx.BitmapButton(well_box, btn_id, well_bmp,
+                style=wx.NO_BORDER)
+            well_btn.SetToolTip('{}{}'.format(row, col))
+            well_btn.Bind(wx.EVT_BUTTON, on_well_button)
+            well_plate_96.Add(well_btn,
+                flag=wx.LEFT|wx.ALIGN_CENTER_VERTICAL)
+
+    well_sizer = wx.StaticBoxSizer(well_box, wx.HORIZONTAL)
+    well_sizer.Add(well_plate_96,flag=wx.ALL, border=top_level._FromDIP(5))
+
+    return well_sizer, well_ids_96, reverse_well_ids_96
+
 
 class AutosamplerPanel(utils.DevicePanel):
 
@@ -1865,10 +1921,10 @@ class AutosamplerPanel(utils.DevicePanel):
         ctrl_sub_sizer1.Add(wx.StaticText(as_box, label='Load volume [uL]:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
         ctrl_sub_sizer1.Add(self.load_volume, flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
-        ctrl_sub_sizer1.Add(wx.StaticText(as_box, label='Buffer start delay [s]:'),
+        ctrl_sub_sizer1.Add(wx.StaticText(as_box, label='Delay after trigger [s]:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
         ctrl_sub_sizer1.Add(self.buffer_start_delay, flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
-        ctrl_sub_sizer1.Add(wx.StaticText(as_box, label='Buffer end delay [s]:'),
+        ctrl_sub_sizer1.Add(wx.StaticText(as_box, label='Delay after injection [s]:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
         ctrl_sub_sizer1.Add(self.buffer_end_delay, flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
         ctrl_sub_sizer1.Add(self.load_and_inject_btn, flag=wx.ALIGN_CENTER_VERTICAL)
@@ -1879,49 +1935,8 @@ class AutosamplerPanel(utils.DevicePanel):
         ctrl_sizer.Add(status_sizer, flag=wx.EXPAND)
         ctrl_sizer.Add(ctrl_sub_sizer1, flag=wx.TOP, border=self._FromDIP(5))
 
-        col_labels = ['{}'.format(col) for col in range(1,13)]
-        row_labels = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H']
-        row_idx = -1
-        col_idx = 0
-        wells = ['{}{}'.format(row, col) for row in row_labels for col in col_labels]
-        self.well_ids_96 = {well :wx.NewIdRef() for well in wells}
-        self.reverse_well_ids_96 = {wid: well for (well, wid) in self.well_ids_96.items()}
-
-        well_box = wx.StaticBox(as_box, label='Well Plate')
-
-        self.well_plate_96 = wx.FlexGridSizer(cols=13, rows=9, hgap=self._FromDIP(0),
-            vgap=self._FromDIP(0))
-        self.well_plate_96.AddSpacer(1)
-
-        for col in col_labels:
-            self.well_plate_96.Add(wx.StaticText(well_box, label=col),
-                flag=wx.ALIGN_CENTER_HORIZONTAL|wx.ALIGN_CENTER_VERTICAL)
-
-        for i in range(104):
-            if i % 13 == 0:
-                row_idx += 1
-                col_idx = 0
-                row = row_labels[row_idx]
-
-                self.well_plate_96.Add(wx.StaticText(well_box, label=row),
-                    flag=wx.ALIGN_CENTER_HORIZONTAL|wx.ALIGN_CENTER_VERTICAL)
-
-            else:
-                row = row_labels[row_idx]
-                col = col_labels[col_idx]
-                col_idx += 1
-
-                btn_id = self.well_ids_96['{}{}'.format(row, col)]
-
-                well_btn = wx.BitmapButton(well_box, btn_id, self.well_bmp,
-                    style=wx.NO_BORDER)
-                well_btn.SetToolTip('{}{}'.format(row, col))
-                well_btn.Bind(wx.EVT_BUTTON, self._on_well_button)
-                self.well_plate_96.Add(well_btn,
-                    flag=wx.LEFT|wx.ALIGN_CENTER_VERTICAL)
-
-        well_sizer = wx.StaticBoxSizer(well_box, wx.HORIZONTAL)
-        well_sizer.Add(self.well_plate_96,flag=wx.ALL, border=self._FromDIP(5))
+        well_sizer, self.well_ids_96, self.reverse_well_ids_96 = make_well_plate_layout(
+                self, as_box, self.well_bmp, self._on_well_button)
 
         top_sizer = wx.StaticBoxSizer(as_box, wx.HORIZONTAL)
         top_sizer.Add(ctrl_sizer, flag=wx.TOP|wx.LEFT|wx.BOTTOM, border=self._FromDIP(5))
@@ -2091,7 +2106,7 @@ class AutosamplerPanel(utils.DevicePanel):
     def _on_load_and_inject(self, evt):
         self._prepare_load_and_inject(True)
 
-    def _prepare_load_and_inject(self, verbose):
+    def get_load_and_inject_settings(self):
         well = self._selected_well
         volume = self.load_volume.GetValue()
         rate = self.inj_rate.GetValue()
@@ -2104,8 +2119,39 @@ class AutosamplerPanel(utils.DevicePanel):
         dwell_time = self.dwell_time.GetValue()
         clean_needle = self.clean_after_inject.GetValue()
 
+        settings = {
+            'sample_well'   : well,
+            'volume'        : volume,
+            'rate'          : rate,
+            'start_delay'   : start_delay,
+            'end_delay'     : end_delay,
+            'trigger'       : trigger,
+            'vol_units'     : vol_units,
+            'rate_units'    : rate_units,
+            'draw_rate'     : draw_rate,
+            'dwell_time'    : dwell_time,
+            'clean_needle'  : clean_needle,
+        }
+
+        return settings
+
+    def _prepare_load_and_inject(self, verbose):
+        settings = self.get_load_and_inject_settings()
+
+        well = settings['sample_well']
+        volume = settings['volume']
+        rate = settings['rate']
+        start_delay = settings['start_delay']
+        end_delay = settings['end_delay']
+        trigger = settings['trigger']
+        vol_units = settings['vol_units']
+        rate_units = settings['rate_units']
+        draw_rate = settings['draw_rate']
+        dwell_time = settings['dwell_time']
+        clean_needle = settings['clean_needle']
+
         (row, col, volume, rate, start_delay, end_delay, trigger, vol_units,
-            rate_units, draw_rate, dwell_time, errors) = self._validate_load_and_inject_params(
+            rate_units, draw_rate, dwell_time, errors) = self.validate_load_and_inject_params(
             well, volume, rate, start_delay, end_delay, trigger, vol_units,
             rate_units, draw_rate, dwell_time, verbose)
 
@@ -2126,7 +2172,7 @@ class AutosamplerPanel(utils.DevicePanel):
         self._send_cmd(dwell_cmd, False)
         self._send_cmd(inj_cmd, False)
 
-    def _validate_load_and_inject_params(self, well, volume, rate, start_delay,
+    def validate_load_and_inject_params(self, well, volume, rate, start_delay,
         end_delay, trigger, vol_units, rate_units, draw_rate, dwell_time, verbose):
 
         (volume, rate, start_delay, end_delay, trigger, vol_units, rate_units,
@@ -2190,9 +2236,6 @@ class AutosamplerPanel(utils.DevicePanel):
         self._send_cmd(rate_cmd, False)
         self._send_cmd(dwell_cmd, False)
         self._send_cmd(load_cmd, False)
-
-        if clean_needle:
-            self._send_cmd(['clean', [self.name,], {}], False)
 
     def _on_aspirate_sample(self, evt):
         self._prepare_aspirate(True)
@@ -2576,8 +2619,8 @@ class AutosamplerPanel(utils.DevicePanel):
                 self._current_trigger_on_inject = trigger
 
             if start_delay != self._current_buffer_start_delay:
-                self.buffer_start_delay.ChangeValue(str(delay))
-                self._current_buffer_start_delay = delay
+                self.buffer_start_delay.ChangeValue(str(start_delay))
+                self._current_buffer_start_delay = start_delay
 
             if end_delay != self._current_buffer_end_delay:
                 self.buffer_end_delay.ChangeValue(str(end_delay))
@@ -2653,6 +2696,14 @@ class AutosamplerPanel(utils.DevicePanel):
         if cmd_name == 'status':
             state = self._get_automator_state()
 
+        elif cmd_name == 'full_status':
+            state = self._get_automator_state()
+
+            if state != 'busy':
+                state = copy.copy(self._current_status)
+            else:
+                state = 'Busy'
+
         elif cmd_name == 'abort':
             self._abort()
             state = 'idle'
@@ -2660,18 +2711,20 @@ class AutosamplerPanel(utils.DevicePanel):
         elif cmd_name == 'load_and_inject':
             volume = cmd_args['volume']
             rate = cmd_args['rate']
-            delay = cmd_args['delay']
+            start_delay = cmd_args['start_delay']
+            end_delay = cmd_args['end_delay']
             trigger = cmd_args['trigger']
             row = cmd_args['row']
-            column = cmd_args['column']
+            col = cmd_args['column']
             vol_units = 'uL'
             rate_units = 'uL/min'
             draw_rate = cmd_args['draw_rate']
             dwell_time = cmd_args['dwell_time']
             clean_needle = cmd_args['clean_needle']
 
-            self._load_and_inject(row, col, volume, rate, delay, trigger,
-                vol_units, rate_units, draw_rate, dwell_time, clean_needle)
+            self._load_and_inject(row, col, volume, rate, start_delay,
+                end_delay, trigger, vol_units, rate_units, draw_rate,
+                dwell_time, clean_needle)
 
             state = 'load'
 
@@ -2690,9 +2743,9 @@ class AutosamplerPanel(utils.DevicePanel):
         elif cmd_name == 'load_and_move_to_inject':
             volume = cmd_args['volume']
             row = cmd_args['row']
-            column = cmd_args['column']
-            vol_units = 'uL'
-            rate_units = 'uL/min'
+            col = cmd_args['column']
+            vol_units = cmd_args['vol_units']
+            rate_units = cmd_args['rate_units']
             draw_rate = cmd_args['draw_rate']
             dwell_time = cmd_args['dwell_time']
 
@@ -2704,14 +2757,15 @@ class AutosamplerPanel(utils.DevicePanel):
         elif cmd_name == 'inject':
             volume = cmd_args['volume']
             rate = cmd_args['rate']
-            delay = cmd_args['delay']
+            start_delay = cmd_args['start_delay']
+            end_delay = cmd_args['end_delay']
             trigger = cmd_args['trigger']
             vol_units = 'uL'
             rate_units = 'uL/min'
             clean_needle = cmd_args['clean_needle']
 
-            self._inject(volume, rate, delay, trigger, vol_units, rate_units,
-                clean_needle)
+            self._inject(volume, rate, start_delay, end_delay, trigger,
+                vol_units, rate_units, clean_needle)
 
             state = 'inject'
 
@@ -3002,10 +3056,9 @@ default_autosampler_settings = {
 
         }},], # Compatibility with the standard format
     'device_communication'  : 'local',
-    # 'remote_pump_ip'        : '164.54.204.37',
-    # 'remote_pump_port'      : '5556',
-    # 'remote_fm_ip'          : '164.54.204.37',
-    # 'remote_fm_port'        : '5557',
+    'remote_device'         : '164.54.204.53',
+    'remote_port'           : '5557',
+    'remote'                : False,
     'volume_units'          : 'uL',
     'components'            : [],
 
@@ -3024,21 +3077,22 @@ default_autosampler_settings = {
     'coflow_y_ref_position' : 0, # Position for coflow y motor when base position was set
     'plate_type'            : 'Thermo-Fast 96 well PCR',
     # 'plate_type'            : 'Abgene 96 well deepwell storage',
-    'valve_positions'       : {'sample': 5, 'clean1': 1, 'clean2': 2, 'clean3': 3, 'clean4': 4},
+    'clean_valve_positions' : {'empty': 5, 'clean1': 1, 'clean2': 2, 'clean3': 3, 'clean4': 4},
+    'syringe_valve_positions': {'sample': 'Output', 'clean': 'Bypass', 'purge': 'Input'},
     'clean_seq'             : [('clean1', 'dispense', 5, 1), #A set of (a, b, c, d) a is the valve position, b is the command, and c and d are input params for the command
                                 ('clean3', 'dispense', 5, 1),
                                 ('clean1', 'dispense', 5, 1),
                                 ('clean2', 'dispense', 5, 1), # rate, volume in ml/min and ml
                                 ('clean4', 'wait', 60, 0),], #wait time in s, N/A
-    'pump_rates'            : {'sample': (0.1, 0.1), 'buffer': (0.1, 0.1), 'purge': (1, 1)}, # (refill, infuse) rates in ml/min
+    'pump_rates'            : {'sample': (0.3, 0.1), 'buffer': (0.3, 0.1), 'purge': (1, 1)}, # (refill, infuse) rates in ml/min
     'max_inject_rate'       : 0.5,
     'max_draw_rate'         : 0.5,
     'loop_volume'           : 100, #Loop volume in uL
     'min_load_volume'       : 2.0,
     'default_load_vol'      : 10.0,
     'default_start_delay_time': 10.0,
-    'default_end_delay_time': 10.0,
-    'load_dwell_time'       : 3, #Time to wait in well after aspirating
+    'default_end_delay_time': 30.0,
+    'load_dwell_time'       : 35.0, #Time to wait in well after aspirating
     'inject_connect_vol'    : 0, #Volume to eject from the needle after loading before re-entering the cell, to ensure a wet-to-wet entry for the needle and prevent bubbles, uL
     'inject_connect_rate'   : 100, #Rate to eject the inject connect volume at, in uL/min
     'reserve_vol'           : 1, #Volume to reserve from dispensing when measuring sample, to avoid bubbles, uL
@@ -3075,7 +3129,7 @@ if __name__ == '__main__':
     # com_thread = None
 
     settings = default_autosampler_settings
-    settings['components'] = ['uv']
+    settings['components'] = ['autosampler']
 
     settings['com_thread'] = com_thread
 
@@ -3099,7 +3153,8 @@ if __name__ == '__main__':
     # logger.addHandler(h2)
 
     logger.debug('Setting up wx app')
-    frame = AutosamplerFrame('AutosamplerFrame', settings, parent=None, title='Autosampler Control')
+    frame = AutosamplerFrame('AutosamplerFrame', settings, parent=None,
+        title='Autosampler Control')
     frame.Show()
     app.MainLoop()
 

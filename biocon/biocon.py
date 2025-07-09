@@ -45,6 +45,7 @@ import pipeline_ctrl
 import spectrometercon
 import biohplccon
 import autocon
+import autosamplercon
 
 class BioFrame(wx.Frame):
     """
@@ -230,6 +231,7 @@ class BioFrame(wx.Frame):
             inst_settings['hplc'] = {'num_paths': num_paths,
                 'automator_callback': hplc_automator_callback,
                 'hplc_panel'    : hplc_panel,}
+
         if 'coflow' in self.settings['components']:
             coflow_panel = self.component_panels['coflow']
             coflow_automator_callback = coflow_panel.automator_callback
@@ -239,6 +241,11 @@ class BioFrame(wx.Frame):
             exposure_panel = self.component_panels['exposure']
             exposure_automator_callback = exposure_panel.automator_callback
             inst_settings['exp'] = {'automator_callback': exposure_automator_callback}
+
+        if 'autosampler' in self.settings['components']:
+            autosampler_panel = self.component_panels['autosampler']
+            autosampler_automator_callback = autosampler_panel.automator_callback
+            inst_settings['exp'] = {'automator_callback': autosampler_automator_callback}
 
         self.settings[key]['instruments'] = inst_settings
 
@@ -382,7 +389,7 @@ if __name__ == '__main__':
     # Muscle settings
     exposure_settings['struck_measurement_time'] = '0.001'
     exposure_settings['tr_muscle_exp'] = False
-    exposure_settings['open_shutter_before_trig_cont_exp'] = True
+    exposure_settings['open_shutter_before_trig_cont_exp'] = False
 
     #Other settings
     exposure_settings['wait_for_trig'] = True
@@ -401,14 +408,14 @@ if __name__ == '__main__':
         # 'scale': 2.5e6, 'offset': 0, 'dark': True, 'norm_time': True},
         # {'mx_record': 'mcs12', 'channel': 11, 'name': 'Length_Out',
         # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
-        # # {'mx_record': 'mcs13', 'channel': 13, 'name': 'Length_In',
-        # # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
+        # {'mx_record': 'mcs14', 'channel': 13, 'name': 'Length_In',
+        # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
         # {'mx_record': 'mcs13', 'channel': 12, 'name': 'Force',
         # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
         ]
     exposure_settings['warnings'] = {'shutter' : True, 'col_vac' : {'check': True,
         'thresh': 0.04}, 'guard_vac' : {'check': True, 'thresh': 0.04},
-        'sample_vac': {'check': False, 'thresh': 0.04}, 'sc_vac':
+        'sample_vac': {'check': True, 'thresh': 0.04}, 'sc_vac':
         {'check': True, 'thresh':0.04}}
     exposure_settings['base_data_dir'] = '/nas_data/Eiger2x/2025_Run2/' #CHANGE ME and pipeline local_basedir
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']
@@ -501,6 +508,17 @@ if __name__ == '__main__':
     # Automator Settings
     automator_settings = autocon.default_automator_settings
 
+    ###################################################################
+    # Autosampler Settings
+    autosampler_settings = autosamplercon.default_autosampler_settings
+    autosampler_settings['com_thread'] = None
+    autosampler_settings['remote'] = True
+    autosampler_settings['remote_device'] = 'autosampler'
+    autosampler_settings['remote_ip'] = '164.54.204.53'
+    autosampler_settings['remote_port'] = '5557'
+    autosampler_settings['device_data'] = autosampler_settings['device_init'][0]
+    autosampler_settings['inline_panel'] = True
+
 
     biocon_settings = {}
 
@@ -512,9 +530,10 @@ if __name__ == '__main__':
         # ('scan',    scancon.ScanPanel),
         # ('metadata', metadata.ParamPanel),
         # ('pipeline', pipeline_ctrl.PipelineControl),
-        ('uv', spectrometercon.UVPanel),
+        # ('uv', spectrometercon.UVPanel),
         # ('hplc', biohplccon.HPLCPanel),
         # ('automator', autocon.AutoPanel),
+        # ('autosampler', autosamplercon.AutosamplerPanel),
         ])
 
     settings = {
@@ -528,6 +547,7 @@ if __name__ == '__main__':
         'uv'            : spectrometer_settings,
         'hplc'          : hplc_settings,
         'automator'     : automator_settings,
+        'autosampler'   : autosampler_settings,
         'components'    : components,
         'biocon'        : biocon_settings,
         }

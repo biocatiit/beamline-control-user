@@ -56,6 +56,7 @@ try:
     import stellarnet_driver3 as sn
 except ImportError:
     traceback.print_exc()
+    sn = None
     pass
 
 import client
@@ -355,6 +356,22 @@ class Spectrometer(object):
 
     def get_lightsource_shutter(self):
         logger.debug('Spectrometer %s: Shutter open: %s',
+            self.name, status)
+
+    def set_lightsource_uv_lamp(self, set_on):
+        logger.debug('Spectrometer %s: Setting UV lamp: %s',
+            self.name, set_on)
+
+    def get_lightsource_uv_lamp(self):
+        logger.debug('Spectrometer %s: UV lamp on: %s',
+            self.name, status)
+
+    def set_lightsource_vis_lamp(self, set_on):
+        logger.debug('Spectrometer %s: Setting Vis lamp: %s',
+            self.name, set_on)
+
+    def get_lightsource_vis_lamp(self):
+        logger.debug('Spectrometer %s: Vis lamp on: %s',
             self.name, status)
 
     def _collect_spectrum(self, int_trigger):
@@ -1246,9 +1263,13 @@ class StellarnetUVVis(Spectrometer):
     Stellarnet black comet UV-Vis spectrometer
     """
 
-    def __init__(self, name, device, shutter_pv_name='18ID:LJT4:2:Bo11',
+    def __init__(self, name, device, shutter_pv_name='18ID:E1608:Bo1',
         trigger_pv_name='18ID:LJT4:2:Bo12', out1_pv_name='18ID:E1608:Ao1',
-        out2_pv_name='18ID:E1608:Ao2', trigger_in_pv_name='18ID_E1608:Bi8'):
+        out2_pv_name='18ID:E1608:Ao2', trigger_in_pv_name='18ID_E1608:Bi8',
+        deut_lamp_ctrl_pv_name='18ID:E1608:Bo2',
+        hal_lamp_ctrl_pv_name='18ID:E1608:Bo3',
+        deut_lamp_status_pv_name='18ID:E1608:Bi4',
+        hal_lamp_status_pv_name='18ID:E1608:Bi5'):
 
         Spectrometer.__init__(self, name, device)
 
@@ -1263,10 +1284,8 @@ class StellarnetUVVis(Spectrometer):
 
         self.connected = False
 
-        self.shutter_pv = epics.get_pv(shutter_pv_name)
-        self.trigger_pv = epics.get_pv(trigger_pv_name)
 
-        self.shutter_pv.get()
+        self.trigger_pv = epics.get_pv(trigger_pv_name)
         self.trigger_pv.get()
 
         self.analog_outs = {'out1': epics.get_pv(out1_pv_name),
@@ -1278,22 +1297,40 @@ class StellarnetUVVis(Spectrometer):
         self.trigger_in_pv = epics.get_pv(trigger_in_pv_name)
         self.trigger_in_pv.get()
 
+        # Lightsource PVs
+        self.shutter_pv = epics.get_pv(shutter_pv_name)
+        self.uv_lamp_ctrl_pv = epics.get_pv(deut_lamp_ctrl_pv_name)
+        self.vis_lamp_ctrl_pv = epics.get_pv(hal_lamp_ctrl_pv_name)
+        self.uv_lamp_status_pv = epics.get_pv(deut_lamp_status_pv_name)
+        self.vis_lamp_status_pv = epics.get_pv(hal_lamp_status_pv_name)
+
+        self.shutter_pv.get()
+        self.uv_lamp_ctrl_pv.get()
+        self.vis_lamp_ctrl_pv.get()
+        self.uv_lamp_status_pv.get()
+        self.vis_lamp_status_pv.get()
+
         self.connect()
-        self._get_config()
+
+        if self.connected:
+            self._get_config()
 
     def connect(self):
         if not self.connected:
             logger.info('Spectrometer %s: Connecting', self.name)
 
-            spec, wav = sn.array_get_spec(0)
+            if sn is not None:
+                spec, wav = sn.array_get_spec(0)
 
-            self.spectrometer = spec
-            self.wav = wav
+                self.spectrometer = spec
+                self.wav = wav
 
-            self.wavelength = self.wav.reshape(self.wav.shape[0])
-            self.set_wavelength_range(self.wavelength[0], self.wavelength[-1])
+                self.wavelength = self.wav.reshape(self.wav.shape[0])
+                self.set_wavelength_range(self.wavelength[0], self.wavelength[-1])
 
-            self.connected = True
+                self.connected = True
+            else:
+                self.connected = False
 
         if self._live_update and not self._taking_series:
             self._live_update_evt.set()
@@ -1374,6 +1411,48 @@ class StellarnetUVVis(Spectrometer):
         status = self.shutter_pv.get()
 
         logger.debug('Spectrometer %s: Shutter open: %s',
+            self.name, status)
+
+        return status
+
+    def set_lightsource_uv_lamp(self, set_on):
+        logger.debug('Spectrometer %s: Setting UV lamp: %s',
+            self.name, set_on)
+        uv_lamp_status = self.get_lightsource_uv_lamp()
+
+        if (set_on and not uv_lamp_status) or (not set_on and uv_lamp_status):
+            self.uv_lamp_ctrl_pv.put(1, wait=True)
+            time.sleep(0.1)
+            self.uv_lamp_ctrl_pv.put(0, wait=True)
+
+    def get_lightsource_uv_lamp(self):
+        status = self.uv_lamp_status_pv.get()
+        #Light source is active low
+        status = not status
+
+        logger.debug('Spectrometer %s: UV lamp on: %s',
+            self.name, status)
+
+        return status
+
+    def set_lightsource_vis_lamp(self, set_on):
+        logger.debug('Spectrometer %s: Setting Vis lamp: %s',
+            self.name, set_on)
+
+        vis_lamp_status = self.get_lightsource_vis_lamp()
+
+        if (set_on and not vis_lamp_status) or (not set_on and vis_lamp_status):
+            self.vis_lamp_ctrl_pv.put(1, wait=True)
+            time.sleep(0.1)
+            self.vis_lamp_ctrl_pv.put(0, wait=True)
+
+    def get_lightsource_vis_lamp(self):
+        status = self.vis_lamp_status_pv.get()
+
+        #Light source is active low
+        status = not status
+
+        logger.debug('Spectrometer %s: Vis lamp on: %s',
             self.name, status)
 
         return status
@@ -1575,8 +1654,13 @@ class UVCommThread(utils.CommManager):
             'abort_collection'  : self._abort_collection,
             'get_busy'          : self._get_busy,
             'get_spec_settings' : self._get_spec_settings,
+            'get_ls_status'     : self._get_ls_status,
             'set_ls_shutter'    : self._set_lightsource_shutter,
             'get_ls_shutter'    : self._get_lightsource_shutter,
+            'set_uv_lamp'       : self._set_lightsource_uv_lamp,
+            'get_uv_lamp'       : self._get_lightsource_uv_lamp,
+            'set_vis_lamp'      : self._set_lightsource_vis_lamp,
+            'get_vis_lamp'      : self._get_lightsource_vis_lamp,
             'set_int_trig'      : self._set_internal_trigger,
             'set_wl_range'      : self._set_wavelength_range,
             'get_wl_range'      : self._get_wavelength_range,
@@ -2145,6 +2229,8 @@ class UVCommThread(utils.CommManager):
         abs_win = device.get_absorbance_window()
         hist_t = device.get_history_time(**kwargs)
         ls_shutter = device.get_lightsource_shutter()
+        ls_uv_lamp = device.get_lightsource_uv_lamp()
+        ls_vis_lamp = device.get_lightsource_vis_lamp()
         wl_range = device.get_wavelength_range()
         drift_win = device.get_drift_window()
         ao_params = device.get_analog_out_params()
@@ -2161,6 +2247,8 @@ class UVCommThread(utils.CommManager):
             'abs_win'   : abs_win,
             'hist_t'    : hist_t,
             'ls_shutter': ls_shutter,
+            'ls_uv_lamp': ls_uv_lamp,
+            'ls_vis_lamp': ls_vis_lamp,
             'wl_range'  : wl_range,
             'drift_win' : drift_win,
             'ao_on'     : ao_params['do_analog_out'],
@@ -2173,6 +2261,28 @@ class UVCommThread(utils.CommManager):
         self._return_value((name, cmd, ret_vals), comm_name)
 
         logger.debug('Got device %s settings: %s', name, ret_vals)
+
+    def _get_ls_status(self, name, **kwargs):
+        logger.debug('Getting device %s light source status', name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+
+        ls_shutter = device.get_lightsource_shutter()
+        ls_uv_lamp = device.get_lightsource_uv_lamp()
+        ls_vis_lamp = device.get_lightsource_vis_lamp()
+
+        ret_vals = {
+            'ls_shutter': ls_shutter,
+            'ls_uv_lamp': ls_uv_lamp,
+            'ls_vis_lamp': ls_vis_lamp,
+        }
+
+        self._return_value((name, cmd, ret_vals), comm_name)
+
+        logger.debug('Got device %s lightsource status: %s', name, ret_vals)
 
     def _set_lightsource_shutter(self, name, val, **kwargs):
         logger.debug("Device %s setting lightsource shutter %s", name, val)
@@ -2199,6 +2309,58 @@ class UVCommThread(utils.CommManager):
         self._return_value((name, cmd, val), comm_name)
 
         logger.debug("Device %s lightsource shutter: %s", name, val)
+
+    def _set_lightsource_uv_lamp(self, name, val, **kwargs):
+        logger.debug("Device %s setting lightsource uv lamp %s", name, val)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        device.set_lightsource_uv_lamp(val, **kwargs)
+
+        self._return_value((name, cmd, True), comm_name)
+
+        logger.debug("Device %s lightsource uv lamp set", name)
+
+    def _get_lightsource_uv_lamp(self, name, **kwargs):
+        logger.debug("Getting device %s lightsource uv lamp", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        val = device.get_lightsource_uv_lamp(**kwargs)
+
+        self._return_value((name, cmd, val), comm_name)
+
+        logger.debug("Device %s lightsource uv lamp: %s", name, val)
+
+    def _set_lightsource_vis_lamp(self, name, val, **kwargs):
+        logger.debug("Device %s setting lightsource vis lamp %s", name, val)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        device.set_lightsource_vis_lamp(val, **kwargs)
+
+        self._return_value((name, cmd, True), comm_name)
+
+        logger.debug("Device %s lightsource vis lamp set", name)
+
+    def _get_lightsource_vis_lamp(self, name, **kwargs):
+        logger.debug("Getting device %s lightsource vis lamp", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        val = device.get_lightsource_vis_lamp(**kwargs)
+
+        self._return_value((name, cmd, val), comm_name)
+
+        logger.debug("Device %s lightsource vis lamp: %s", name, val)
 
     def _set_internal_trigger(self, name, val, **kwargs):
         logger.debug("Device %s setting internal_trigger %s", name, val)
@@ -2398,6 +2560,8 @@ class UVPanel(utils.DevicePanel):
         self._series_scan_avg = None
 
         self._ls_shutter = None
+        self._ls_vis_lamp = None
+        self._ls_uv_lamp = None
 
         self.uvplot_frame = None
         self.uv_plot = None
@@ -2582,7 +2746,8 @@ class UVPanel(utils.DevicePanel):
             self.autosave_choice = wx.Choice(series_parent, choices=['Absorbance',
                 'Transmission', 'Raw', 'A & T', 'A & T & R', 'A & R', 'T & R'])
             self.autosave_prefix = wx.TextCtrl(series_parent)
-            self.autosave_dir = wx.TextCtrl(series_parent, style=wx.TE_READONLY)
+            self.autosave_dir = wx.TextCtrl(series_parent, style=wx.TE_READONLY,
+                size=self._FromDIP((130,-1)))
             file_open = wx.ArtProvider.GetBitmap(wx.ART_FOLDER_OPEN, wx.ART_BUTTON,
                 size=self._FromDIP((16,16)))
             self.change_dir_btn = wx.BitmapButton(series_parent, bitmap=file_open,
@@ -2630,6 +2795,8 @@ class UVPanel(utils.DevicePanel):
             series_sizer.Add(start_stop_sizer, (8,0), span=(1,3),
                 flag=wx.ALIGN_CENTER_HORIZONTAL)
 
+            series_sizer.AddGrowableCol(1)
+
             series_box_sizer = wx.StaticBoxSizer(series_parent,
                 wx.VERTICAL)
             series_box_sizer.Add(series_sizer, flag=wx.EXPAND|wx.ALL,
@@ -2642,15 +2809,36 @@ class UVPanel(utils.DevicePanel):
             self.ls_open = wx.Button(ls_parent, label='Open Shutter')
             self.ls_close = wx.Button(ls_parent, label='Close Shutter')
 
+            self.ls_uv_status = wx.StaticText(ls_parent, size=(150,-1),
+                style=wx.ST_NO_AUTORESIZE)
+            self.ls_uv_on = wx.Button(ls_parent, label='UV Lamp On')
+            self.ls_uv_off = wx.Button(ls_parent, label='UV Lamp Off')
+            self.ls_vis_status = wx.StaticText(ls_parent, size=(150,-1),
+                style=wx.ST_NO_AUTORESIZE)
+            self.ls_vis_on = wx.Button(ls_parent, label='Vis Lamp On')
+            self.ls_vis_off = wx.Button(ls_parent, label='Vis Lamp Off')
+
             self.ls_open.Bind(wx.EVT_BUTTON, self._on_ls_shutter)
             self.ls_close.Bind(wx.EVT_BUTTON, self._on_ls_shutter)
+            self.ls_uv_on.Bind(wx.EVT_BUTTON, self._on_ls_uv_lamp)
+            self.ls_uv_off.Bind(wx.EVT_BUTTON, self._on_ls_uv_lamp)
+            self.ls_vis_on.Bind(wx.EVT_BUTTON, self._on_ls_vis_lamp)
+            self.ls_vis_off.Bind(wx.EVT_BUTTON, self._on_ls_vis_lamp)
 
             ls_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(5),
                 hgap=self._FromDIP(5))
-            ls_sizer.Add(wx.StaticText(ls_parent, label='Status:'))
+            ls_sizer.Add(wx.StaticText(ls_parent, label='Shutter:'))
             ls_sizer.Add(self.ls_status, flag=wx.EXPAND|wx.ALIGN_CENTER_VERTICAL)
             ls_sizer.Add(self.ls_open, flag=wx.ALIGN_CENTER_VERTICAL)
             ls_sizer.Add(self.ls_close, flag=wx.ALIGN_CENTER_VERTICAL)
+            ls_sizer.Add(wx.StaticText(ls_parent, label='UV Lamp:'))
+            ls_sizer.Add(self.ls_uv_status, flag=wx.EXPAND|wx.ALIGN_CENTER_VERTICAL)
+            ls_sizer.Add(self.ls_uv_on, flag=wx.ALIGN_CENTER_VERTICAL)
+            ls_sizer.Add(self.ls_uv_off, flag=wx.ALIGN_CENTER_VERTICAL)
+            ls_sizer.Add(wx.StaticText(ls_parent, label='Vis Lamp:'))
+            ls_sizer.Add(self.ls_vis_status, flag=wx.EXPAND|wx.ALIGN_CENTER_VERTICAL)
+            ls_sizer.Add(self.ls_vis_on, flag=wx.ALIGN_CENTER_VERTICAL)
+            ls_sizer.Add(self.ls_vis_off, flag=wx.ALIGN_CENTER_VERTICAL)
 
             ls_box_sizer = wx.StaticBoxSizer(ls_parent,
                 wx.VERTICAL)
@@ -3168,6 +3356,58 @@ class UVPanel(utils.DevicePanel):
 
         self.ls_status.SetLabel(ls_status)
 
+    def _on_ls_uv_lamp(self, evt):
+        obj = evt.GetEventObject()
+
+        if obj == self.ls_uv_on:
+            lamp_state = True
+        elif obj == self.ls_uv_off:
+            lamp_state = False
+
+        self._ls_uv_lamp_power(lamp_state)
+
+    def _ls_uv_lamp_power(self, lamp_state):
+        ls_uv_cmd = ['set_uv_lamp', [self.name, lamp_state], {}]
+        self._send_cmd(ls_uv_cmd, get_response=True)
+        time.sleep(1)
+        ls_status_cmd = ['get_uv_lamp', [self.name,], {}]
+        resp = self._send_cmd(ls_status_cmd, True)
+
+        self._ls_uv_lamp = resp
+
+        if resp:
+            ls_uv_status = 'On'
+        else:
+            ls_uv_status = 'Off'
+
+        self.ls_uv_status.SetLabel(ls_uv_status)
+
+    def _on_ls_vis_lamp(self, evt):
+        obj = evt.GetEventObject()
+
+        if obj == self.ls_vis_on:
+            lamp_state = True
+        elif obj == self.ls_vis_off:
+            lamp_state = False
+
+        self._ls_vis_lamp_power(lamp_state)
+
+    def _ls_vis_lamp_power(self, lamp_state):
+        ls_uv_cmd = ['set_vis_lamp', [self.name, lamp_state], {}]
+        self._send_cmd(ls_uv_cmd, get_response=True)
+        time.sleep(1)
+        ls_status_cmd = ['get_vis_lamp', [self.name,], {}]
+        resp = self._send_cmd(ls_status_cmd, True)
+
+        self._ls_vis_lamp = resp
+
+        if resp:
+            ls_vis_status = 'On'
+        else:
+            ls_vis_status = 'Off'
+
+        self.ls_vis_status.SetLabel(ls_vis_status)
+
     def _collect_spectrum(self, stype='normal'):
         is_busy = self._get_busy()
 
@@ -3621,6 +3861,8 @@ class UVPanel(utils.DevicePanel):
             abs_win = val['abs_win']
             hist_t = val['hist_t']
             ls_shutter = val['ls_shutter']
+            ls_uv_lamp = val['ls_uv_lamp']
+            ls_vis_lamp = val['ls_vis_lamp']
             wl_range = val['wl_range']
             drift_win = val['drift_win']
             ao_on = val['ao_on']
@@ -3683,6 +3925,61 @@ class UVPanel(utils.DevicePanel):
                     ls_status = 'Closed'
 
                 self.ls_status.SetLabel(ls_status)
+
+            if not self.inline and ls_uv_lamp != self._ls_uv_lamp:
+                self._ls_uv_lamp = ls_uv_lamp
+
+                if self._ls_uv_lamp:
+                    uv_lamp_status = 'On'
+                else:
+                    uv_lamp_status = 'Off'
+
+                self.ls_uv_status.SetLabel(uv_lamp_status)
+
+            if not self.inline and ls_vis_lamp != self._ls_vis_lamp:
+                self._ls_vis_lamp = ls_vis_lamp
+
+                if self._ls_vis_lamp:
+                    vis_lamp_status = 'On'
+                else:
+                    vis_lamp_status = 'Off'
+
+                self.ls_vis_status.SetLabel(vis_lamp_status)
+
+        elif cmd == 'get_ls_status':
+            ls_shutter = val['ls_shutter']
+            ls_uv_lamp = val['ls_uv_lamp']
+            ls_vis_lamp = val['ls_vis_lamp']
+
+            if ls_shutter != self._ls_shutter:
+                self._ls_shutter = ls_shutter
+
+                if self._ls_shutter:
+                    ls_status = 'Open'
+                else:
+                    ls_status = 'Closed'
+
+                self.ls_status.SetLabel(ls_status)
+
+            if not self.inline and ls_uv_lamp != self._ls_uv_lamp:
+                self._ls_uv_lamp = ls_uv_lamp
+
+                if self._ls_uv_lamp:
+                    uv_lamp_status = 'On'
+                else:
+                    uv_lamp_status = 'Off'
+
+                self.ls_uv_status.SetLabel(uv_lamp_status)
+
+            if not self.inline and ls_vis_lamp != self._ls_vis_lamp:
+                self._ls_vis_lamp = ls_vis_lamp
+
+                if self._ls_vis_lamp:
+                    vis_lamp_status = 'On'
+                else:
+                    vis_lamp_status = 'Off'
+
+                self.ls_vis_status.SetLabel(vis_lamp_status)
 
         elif cmd == 'collect_spec':
             self._add_new_spectrum(val)
@@ -3756,6 +4053,10 @@ class UVPanel(utils.DevicePanel):
         settings_cmd = ['get_spec_settings', [self.name], {}]
 
         self._update_status_cmd(settings_cmd, 60)
+
+        ls_cmd = ['get_ls_status', [self.name], {}]
+
+        self._update_status_cmd(ls_cmd, 10)
 
         busy_cmd = ['get_busy', [self.name,], {}]
 
@@ -4535,11 +4836,15 @@ class UVFrame(utils.DeviceFrame):
 
 default_spectrometer_settings = {
         'device_init'           : [{'name': 'CoflowUV', 'args': ['StellarNet', None],
-                                    'kwargs': {'shutter_pv_name': '18ID:LJT4:2:Bo11',
+                                    'kwargs': {'shutter_pv_name': '18ID:E1608:Bo1',
                                     'trigger_pv_name' : '18ID:LJT4:2:Bo12',
                                     'out1_pv_name' : '18ID:E1608:Ao1',
                                     'out2_pv_name' : '18ID:E1608:Ao2',
-                                    'trigger_in_pv_name' : '18ID:E1608:Bi8'}},],
+                                    'trigger_in_pv_name' : '18ID:E1608:Bi8',
+                                    'deut_lamp_ctrl_pv_name' : '18ID:E1608:Bo2',
+                                    'hal_lamp_ctrl_pv_name' : '18ID:E1608:Bo3',
+                                    'deut_lamp_status_pv_name' : '18ID:E1608:Bi4',
+                                    'hal_lamp_status_pv_name' : '18ID:E1608:Bi5',}},],
         'max_int_t'             : 0.025, # in s
         'scan_avg'              : 1,
         'smoothing'             : 0,

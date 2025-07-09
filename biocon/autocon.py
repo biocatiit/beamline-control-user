@@ -40,6 +40,7 @@ import wx.lib.scrolledpanel as scrolled
 import utils
 import biohplccon
 import coflowcon
+import autosamplercon
 
 
 class Automator(threading.Thread):
@@ -731,6 +732,76 @@ class AutoCommand(object):
         self.auto_names.append(inst)
         self.auto_ids.append(cmd_id)
 
+
+class BatchSampleCommand(AutoCommand):
+    """
+    A command for running a batch sample and collecting SAXS data
+    """
+    def __init__(self, *args, **kwargs):
+        AutoCommand.__init__(self, *args, **kwargs)
+
+    def _initialize_cmd(self, cmd_info):
+        sample_wait_id = self.automator.get_wait_id()
+        sample_wait_cmd = 'wait_sync_{}'.format(sample_wait_id)
+        sample_conds = [['autosampler', [sample_wait_cmd,]], ['exp', [sample_wait_cmd,]],
+            ['coflow', [sample_wait_cmd,]],]
+
+        finish_wait_id = self.automator.get_wait_id()
+        finish_wait_cmd = 'wait_sync_{}'.format(finish_wait_id)
+        finish_conds = [['autosampler', [finish_wait_cmd,]], ['exp', [finish_wait_cmd,]],
+            ['coflow', [finish_wait_cmd,]],]
+
+        finish_wait_id2 = self.automator.get_wait_id()
+        finish_wait_cmd2 = 'wait_sync_{}'.format(finish_wait_id)
+        finish_conds2 = [['autosampler', [finish_wait_cmd2,]], ['exp', [finish_wait_cmd2,]],
+            ['coflow', [finish_wait_cmd2,]],]
+
+
+        self._add_automator_cmd('exp', sample_wait_cmd, [], {'condition': 'status',
+            'inst_conds': sample_conds})
+        self._add_automator_cmd('exp', 'expose', [], cmd_info)
+        self._add_automator_cmd('exp', finish_wait_cmd, [], {'condition': 'status',
+            'inst_conds': finish_conds})
+
+
+        batch_wait_id = self.automator.get_wait_id()
+        batch_wait_cmd = 'wait_sync_{}'.format(batch_wait_id)
+
+        self._add_automator_cmd('autosampler', sample_wait_cmd, [],
+            {'condition': 'status', 'inst_conds': sample_conds})
+        self._add_automator_cmd('autosampler', 'load_and_move_to_inject',
+            [], cmd_info)
+        self._add_automator_cmd('autosampler', batch_wait_cmd, [],
+            {'condition': 'status', 'inst_conds': [['autosampler',
+            [batch_wait_cmd,]], ['exp', ['exposing',]]]})
+        self._add_automator_cmd('autosampler', 'inject', [], inj_settings)
+        self._add_automator_cmd('autosampler', finish_wait_cmd, [],
+            {'condition': 'status', 'inst_conds': finish_conds})
+
+
+        self._add_automator_cmd('coflow', sample_wait_cmd, [],
+            {'condition': 'status', 'inst_conds': sample_conds})
+        if cmd_info['start_coflow']:
+            self._add_automator_cmd('coflow', 'start', [],
+                {'flow_rate': cmd_info['coflow_fr']})
+        else:
+            self._add_automator_cmd('coflow', 'change_flow', [],
+                {'flow_rate': cmd_info['coflow_fr']})
+        self._add_automator_cmd('coflow', finish_wait_cmd, [],
+            {'condition': 'status', 'inst_conds': finish_conds})
+
+        if cmd_info['stop_coflow']:
+            self._add_automator_cmd('coflow', 'stop', [], {})
+            self._add_automator_cmd('coflow', finish_wait_cmd2, [],
+                {'condition': 'status', 'inst_conds': finish_conds2})
+            self._add_automator_cmd('automator', finish_wait_cmd2, [],
+                {'condition': 'status', 'inst_conds': finish_conds2})
+            self._add_automator_cmd('exp', finish_wait_cmd2, [],
+                {'condition': 'status', 'inst_conds': finish_conds2})
+
+        self._post_initialize_cmd()
+
+
 class SecSampleCommand(AutoCommand):
     """
     A command for running a SEC sample and collecting SAXS data
@@ -1317,7 +1388,6 @@ class AutoStatusPanel(wx.Panel):
                     border=self._FromDIP(5))
 
 
-
         if 'exp' in self.settings['instruments']:
             exp_status_box  = wx.StaticBox(ctrl_parent, label='Exposure')
 
@@ -1349,7 +1419,7 @@ class AutoStatusPanel(wx.Panel):
             exp_sub_sizer1.Add(self.exp_runtime, border=self._FromDIP(5),
                 flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT)
             exp_sub_sizer1.Add(exp_stop_btn, border=self._FromDIP(5),
-                flag=wx.ALIGN_CENTER_VERTICAL)
+                flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT)
 
             exp_sizer = wx.StaticBoxSizer(exp_status_box, wx.HORIZONTAL)
             exp_sizer.Add(exp_sub_sizer1, flag=wx.ALL, border=self._FromDIP(5))
@@ -1370,10 +1440,38 @@ class AutoStatusPanel(wx.Panel):
 
                 exp_sizer.Add(exp_sub_sizer2, flag=wx.ALL, border=self._FromDIP(5))
 
+        if 'autosampler' in self.settings['instruments']:
+            as_status_box = wx.StaticBox(ctrl_parent, label='Autosampler')
+            as_stop_btn = wx.Button(as_status_box, label='Stop Autosampler')
+            as_stop_btn.Bind(wx.EVT_BUTTON, self._on_stop_as)
+
+            self.as_status = wx.StaticText(as_status_box,
+                size=self._FromDIP(120, -1), style=wx.ST_NO_AUTORESIZE)
+
+            as_sub_sizer = wx.BoxSizer(wx.HORIZONTAL)
+            as_sub_sizer.Add(wx.StaticText(as_status_box, label='Status:'),
+                flag=wx.ALIGN_CENTER_VERTICAL)
+            as_sub_sizer.Add(self.as_status, border=self._FromDIP(5),
+                flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT)
+            as_sub_sizer.Add(as_stop_btn, border=self._FromDIP(5),
+                flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT)
+
+            as_sizer = wx.StaticBoxSizer(as_status_box, wx.HORIZONTAL)
+            as_sizer.Add(as_sub_sizer, flag=wx.ALL, border=self._FromDIP(5))
 
         self.top_sizer = wx.StaticBoxSizer(status_box, wx.VERTICAL)
-        self.top_sizer.Add(auto_status_sizer, flag=wx.EXPAND|wx.ALL,
-            border=self._FromDIP(5))
+
+        if 'autosampler' in self.settings['instruments']:
+            sub_top_sizer = wx.BoxSizer(wx.HORIZONTAL)
+            sub_top_sizer.Add(auto_status_sizer, proportion=1)
+            sub_top_sizer.Add(as_sizer, proportion=1, border=self._FromDIP(5),
+                flag=wx.LEFT)
+
+            self.top_sizer.Add(sub_top_sizer, flag=wx.EXPAND|wx.ALL,
+                border=self._FromDIP(5))
+        else:
+            self.top_sizer.Add(auto_status_sizer, flag=wx.EXPAND|wx.ALL,
+                border=self._FromDIP(5))
 
         if 'hplc' in self.settings['instruments']:
             self.top_sizer.Add(hplc_sizer, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM,
@@ -1446,6 +1544,12 @@ class AutoStatusPanel(wx.Panel):
                 self.coflow_status.SetLabel(status['status'])
                 self.coflow_fr.SetLabel(status['fr'])
 
+        if 'autosampler' in self.settings['instruments']:
+            autosampler_callback = self.settings['instruments']['autosampler']['automator_callback']
+
+            status, success = autosampler_callback('full_status', [], {})
+            self.as_status.SetLabel(status)
+
     def _on_stop_exp(self, evt):
         exp_callback = self.settings['instruments']['exp']['automator_callback']
         status, success = exp_callback('abort', [], {})
@@ -1453,6 +1557,10 @@ class AutoStatusPanel(wx.Panel):
     def _on_stop_coflow(self, evt):
         coflow_callback = self.settings['instruments']['coflow']['automator_callback']
         status, success = coflow_callback('stop', [], {})
+
+    def _on_stop_as(self, evt):
+        autosampler_callback = self.settings['instruments']['autosampler']['automator_callback']
+        status, success = autosampler_callback('abort', [], {})
 
 
 class AutoSettings(scrolled.ScrolledPanel):
@@ -1463,6 +1571,7 @@ class AutoSettings(scrolled.ScrolledPanel):
 
         self.auto_panel = auto_panel
         self._sec_saxs_settings = copy.copy(default_sec_saxs_settings)
+        self._batch_saxs_settings = copy.copy(default_batch_saxs_settings)
         self._standalone_exp_settings = copy.copy(default_standalone_exp_settings)
         self._equilibrate_settings = copy.copy(default_equilibrate_settings)
         self._switch_pump_settings = copy.copy(default_switch_pump_settings)
@@ -1470,6 +1579,7 @@ class AutoSettings(scrolled.ScrolledPanel):
 
         self.ctrl_ids = {
             'sec_sample'    : {},
+            'batch_sample'  : {},
             'exposure'      : {},
             'equilibrate'   : {},
             'switch_pumps'  : {},
@@ -1478,6 +1588,9 @@ class AutoSettings(scrolled.ScrolledPanel):
 
         for key in self._sec_saxs_settings.keys():
             self.ctrl_ids['sec_sample'][key] = wx.NewIdRef()
+
+        for key in self._batch_saxs_settings.keys():
+            self.ctrl_ids['batch_sample'][key] = wx.NewIdRef()
 
         for key in self._standalone_exp_settings.keys():
             self.ctrl_ids['exposure'][key] = wx.NewIdRef()
@@ -1530,6 +1643,9 @@ class AutoSettings(scrolled.ScrolledPanel):
             self.ctrl_ids['sec_sample'], 'vert', num_flow_paths, acq_methods,
             sample_methods, read_only=True)
 
+        self.batch_saxs_panel = make_batch_saxs_info_panel(top_level, parent,
+            self.ctrl_ids['batch_sample'], 'vert', None, None, read_only=True)
+
         self.exp_panel = make_standalone_exp_panel(top_level, parent,
             self.ctrl_ids['exposure'], 'vert', read_only=True)
 
@@ -1545,6 +1661,8 @@ class AutoSettings(scrolled.ScrolledPanel):
         self.top_sizer = wx.BoxSizer(wx.VERTICAL)
         self.top_sizer.Add(self.sec_saxs_panel, flag=wx.ALL|wx.EXPAND, proportion=1,
             border=self._FromDIP(5))
+        self.top_sizer.Add(self.batch_saxs_panel, flag=wx.ALL|wx.EXPAND, proportion=1,
+            border=self._FromDIP(5))
         self.top_sizer.Add(self.exp_panel, flag=wx.ALL|wx.EXPAND, proportion=1,
             border=self._FromDIP(5))
         self.top_sizer.Add(self.equilibrate_panel, flag=wx.ALL|wx.EXPAND, proportion=1,
@@ -1555,6 +1673,7 @@ class AutoSettings(scrolled.ScrolledPanel):
             border=self._FromDIP(5))
 
         self.top_sizer.Hide(self.sec_saxs_panel, recursive=True)
+        self.top_sizer.Hide(self.batch_saxs_panel, recursive=True)
         self.top_sizer.Hide(self.exp_panel, recursive=True)
         self.top_sizer.Hide(self.equilibrate_panel, recursive=True)
         self.top_sizer.Hide(self.switch_panel, recursive=True)
@@ -1581,6 +1700,15 @@ class AutoSettings(scrolled.ScrolledPanel):
 
             if item_type == 'sec_sample':
                 self.top_sizer.Show(self.sec_saxs_panel, recursive=True)
+                self.top_sizer.Hide(self.batch_saxs_panel, recursive=True)
+                self.top_sizer.Hide(self.exp_panel, recursive=True)
+                self.top_sizer.Hide(self.equilibrate_panel, recursive=True)
+                self.top_sizer.Hide(self.switch_panel, recursive=True)
+                self.top_sizer.Hide(self.stop_flow_panel, recursive=True)
+
+            elif item_type == 'batch_sample':
+                self.top_sizer.Hide(self.sec_saxs_panel, recursive=True)
+                self.top_sizer.Show(self.batch_saxs_panel, recursive=True)
                 self.top_sizer.Hide(self.exp_panel, recursive=True)
                 self.top_sizer.Hide(self.equilibrate_panel, recursive=True)
                 self.top_sizer.Hide(self.switch_panel, recursive=True)
@@ -1588,6 +1716,7 @@ class AutoSettings(scrolled.ScrolledPanel):
 
             elif item_type == 'exposure':
                 self.top_sizer.Hide(self.sec_saxs_panel, recursive=True)
+                self.top_sizer.Hide(self.batch_saxs_panel, recursive=True)
                 self.top_sizer.Show(self.exp_panel, recursive=True)
                 self.top_sizer.Hide(self.equilibrate_panel, recursive=True)
                 self.top_sizer.Hide(self.switch_panel, recursive=True)
@@ -1595,6 +1724,7 @@ class AutoSettings(scrolled.ScrolledPanel):
 
             elif item_type == 'equilibrate':
                 self.top_sizer.Hide(self.sec_saxs_panel, recursive=True)
+                self.top_sizer.Hide(self.batch_saxs_panel, recursive=True)
                 self.top_sizer.Hide(self.exp_panel, recursive=True)
                 self.top_sizer.Show(self.equilibrate_panel, recursive=True)
                 self.top_sizer.Hide(self.switch_panel, recursive=True)
@@ -1602,6 +1732,7 @@ class AutoSettings(scrolled.ScrolledPanel):
 
             elif item_type == 'switch_pumps':
                 self.top_sizer.Hide(self.sec_saxs_panel, recursive=True)
+                self.top_sizer.Hide(self.batch_saxs_panel, recursive=True)
                 self.top_sizer.Hide(self.exp_panel, recursive=True)
                 self.top_sizer.Hide(self.equilibrate_panel, recursive=True)
                 self.top_sizer.Show(self.switch_panel, recursive=True)
@@ -1609,6 +1740,7 @@ class AutoSettings(scrolled.ScrolledPanel):
 
             elif item_type == 'stop_flow':
                 self.top_sizer.Hide(self.sec_saxs_panel, recursive=True)
+                self.top_sizer.Hide(self.batch_saxs_panel, recursive=True)
                 self.top_sizer.Hide(self.exp_panel, recursive=True)
                 self.top_sizer.Hide(self.equilibrate_panel, recursive=True)
                 self.top_sizer.Hide(self.switch_panel, recursive=True)
@@ -1619,6 +1751,7 @@ class AutoSettings(scrolled.ScrolledPanel):
 
         else:
             self.top_sizer.Hide(self.sec_saxs_panel, recursive=True)
+            self.top_sizer.Hide(self.batch_saxs_panel, recursive=True)
             self.top_sizer.Hide(self.exp_panel, recursive=True)
             self.top_sizer.Hide(self.equilibrate_panel, recursive=True)
             self.top_sizer.Hide(self.switch_panel, recursive=True)
@@ -1670,6 +1803,48 @@ default_sec_saxs_settings = {
     'coflow_fr'     : 0.,
     }
 
+default_batch_saxs_settings = {
+    # General parameters
+    'item_type'     : 'batch_sample',
+    'notes'         : '',
+    'conc'          : '',
+    'buf'           : '',
+    'inst'          : 'autosampler',
+    'sample_name'   : '',
+    'is_buf'        : False,
+    'separate_buf'  : False,
+
+    # Loading parameters
+    'sample_well'   : '',
+    'volume'        : 0.,
+    'draw_rate'     : 0.,
+    'dwell_time'    : 0.,
+
+    # Injection parameters
+    'rate'          : 0.,
+    'start_delay'   : 0.,
+    'end_delay'     : 0.,
+    'trigger'       : True,
+    'clean_needle'  : True,
+
+    # Exposure parameters
+    'frames_by_inj' : True,
+    'num_frames'    : 0,
+    'exp_time'      : 0.,
+    'exp_period'    : 0.,
+    'data_dir'      : '',
+    'filename'      : '',
+    'wait_for_trig' : True,
+    'num_trig'      : 0,
+    #Not used, for completeness
+    'struck_measurement_time' : 0.,
+
+    #Coflow parameters
+    'coflow_from_fr': True,
+    'start_coflow'  : True,
+    'stop_coflow'   : False,
+    'coflow_fr'     : 0.,
+}
 
 
 default_standalone_exp_settings = {
@@ -1997,6 +2172,186 @@ def make_sec_saxs_info_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
 
     return cmd_sizer
 
+def make_batch_saxs_info_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
+    well_bmp, well_callback, read_only=False):
+    ################ Metadata #################
+
+    metadata_settings = {
+        'sample_name'   : ['Sample:', ctrl_ids['sample_name'], 'text'],
+        'buf'           : ['Buffer:', ctrl_ids['buf'], 'text'],
+        'conc'          : ['Concentration [mg/ml]:', ctrl_ids['conc'], 'float'],
+        'is_buf'        : ['Is buffer', ctrl_ids['is_buf'], 'bool'],
+        'separate_buf'  : ['Use separate buffer measurement',
+                            ctrl_ids['separate_buf'], 'bool']
+        }
+
+    metadata_box = wx.StaticBox(parent, label='Metadata')
+    md_sizer1 = create_info_sizer(metadata_settings, top_level, metadata_box,
+        read_only)
+
+    notes = wx.TextCtrl(metadata_box, ctrl_ids['notes'],
+        style=wx.TE_MULTILINE, size=top_level._FromDIP((100, 100)))
+
+    if read_only:
+        notes.SetEditable(False)
+
+    md_sizer2 = wx.BoxSizer(wx.HORIZONTAL)
+    md_sizer2.Add(wx.StaticText(metadata_box, label='Notes:'),
+        border=top_level._FromDIP(5), flag=wx.TOP|wx.BOTTOM|wx.LEFT)
+    md_sizer2.Add(notes, proportion=1, border=top_level._FromDIP(5),
+        flag=wx.EXPAND|wx.ALL)
+
+    metadata_sizer = wx.StaticBoxSizer(metadata_box, wx.VERTICAL)
+    metadata_sizer.Add(md_sizer1, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
+        border=top_level._FromDIP(5))
+    metadata_sizer.Add(md_sizer2, proportion=1, flag=wx.EXPAND|wx.ALL,
+        border=top_level._FromDIP(5))
+
+    ################ Autosampler #################
+
+    as_settings = {
+        'volume'        : ['Injection volume [ul]:', ctrl_ids['volume'], 'float'],
+        }
+
+    as_adv_settings = {
+        'draw_rate'     : ['Sample draw rate [ul/min]:', ctrl_ids['draw_rate'], 'float'],
+        'dwell_time'    : ['Wait time after draw [s]:', ctrl_ids['dwell_time'], 'float'],
+        'rate'          : ['Injection rate [ul/min]:', ctrl_ids['rate'], 'float'],
+        'start_delay'   : ['Delay after trigger [s]:', ctrl_ids['start_delay'], 'float'],
+        'end_delay'     : ['Delay after injection [s]:', ctrl_ids['end_delay'], 'float'],
+        'clean_needle'  : ['Clean needle after elution', ctrl_ids['clean_needle'], 'bool'],
+        }
+
+    as_box = wx.StaticBox(parent, label='Autosampler Settings')
+
+    as_adv_pane = wx.CollapsiblePane(as_box, label="Advanced Settings")
+    as_adv_pane.Bind(wx.EVT_COLLAPSIBLEPANE_CHANGED, top_level.on_collapse)
+    as_adv_win = as_adv_pane.GetPane()
+
+    if not read_only:
+        well_sizer, well_ids_96, reverse_well_ids_96 = autosamplercon.make_well_plate_layout(
+            top_level, as_box, well_bmp, well_callback)
+    else:
+        well_ids_96 = None
+        reverse_well_ids_96 = None
+
+    sample_well = wx.StaticText(as_box, size=top_level._FromDIP((40,-1)),
+        style=wx.ST_NO_AUTORESIZE, id=ctrl_ids['sample_well'])
+
+    sample_sizer = wx.BoxSizer(wx.HORIZONTAL)
+    sample_sizer.Add(wx.StaticText(as_box, label='Sample well:'),
+        flag=wx.ALIGN_CENTER_VERTICAL)
+    sample_sizer.Add(sample_well, flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT,
+        border=top_level._FromDIP(5))
+
+    as_sizer1 = create_info_sizer(as_settings, top_level, as_box, read_only)
+    as_sizer2 = create_info_sizer(as_adv_settings, top_level, as_adv_win,
+        read_only)
+
+    as_adv_win.SetSizer(as_sizer2)
+    as_adv_pane.Collapse()
+
+    as_sizer = wx.StaticBoxSizer(as_box, wx.VERTICAL)
+    if not read_only:
+        as_sizer.Add(well_sizer, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
+            border=top_level._FromDIP(5))
+    as_sizer.Add(sample_sizer, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
+        border=top_level._FromDIP(5))
+    as_sizer.Add(as_sizer1, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
+        border=top_level._FromDIP(5))
+    as_sizer.Add(as_adv_pane, flag=wx.EXPAND|wx.ALL, border=top_level._FromDIP(5))
+
+
+    ################ Exposure #################
+    exp_settings = {
+        'filename'      : ['File prefix:', ctrl_ids['filename'], 'text'],
+        'exp_time'      : ['Exposure time [s]:', ctrl_ids['exp_time'], 'float'],
+        'exp_period'    : ['Exposure period [s]:', ctrl_ids['exp_period'], 'float'],
+        }
+
+    exp_adv_settings = {
+        'frames_by_elut': ['Set number of frames from injection time',
+                            ctrl_ids['frames_by_inj'], 'bool'],
+        'num_frames'    : ['Number of frames:', ctrl_ids['num_frames'], 'int'],
+        'wait_for_trig' : ['Wait for external trigger', ctrl_ids['wait_for_trig'], 'bool'],
+        'num_trig'      : ['Number of triggers:', ctrl_ids['num_trig'], 'int'],
+        }
+
+    exp_box = wx.StaticBox(parent, label='Exposure Settings')
+
+    exp_adv_pane = wx.CollapsiblePane(exp_box, label="Advanced Settings")
+    exp_adv_pane.Bind(wx.EVT_COLLAPSIBLEPANE_CHANGED, top_level.on_collapse)
+    exp_adv_win = exp_adv_pane.GetPane()
+
+    exp_sizer1 = create_info_sizer(exp_settings, top_level, exp_box, read_only)
+    exp_sizer2 = create_info_sizer(exp_adv_settings, top_level, exp_adv_win,
+        read_only)
+
+    exp_adv_win.SetSizer(exp_sizer2)
+    exp_adv_pane.Collapse()
+
+    exp_sizer = wx.StaticBoxSizer(exp_box, wx.VERTICAL)
+    exp_sizer.Add(exp_sizer1, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
+        border=top_level._FromDIP(5))
+    exp_sizer.Add(exp_adv_pane, flag=wx.EXPAND|wx.ALL, border=top_level._FromDIP(5))
+
+
+    ################ Coflow #################
+    coflow_settings = {
+        'coflow_from_fr': ['Set coflow flow from injection flow rate',
+                            ctrl_ids['coflow_from_fr'], 'bool'],
+        'start_coflow'  : ['Start coflow automatically',
+                            ctrl_ids['start_coflow'], 'bool'],
+        }
+
+    coflow_adv_settings = {
+        'stop_cloflow'  : ['Stop coflow after exposure',
+                            ctrl_ids['stop_coflow'], 'bool'],
+        'coflow_fr'     : ['Coflow flow rate [mL/min]:',
+                            ctrl_ids['coflow_fr'], 'float'],
+        }
+
+    coflow_box = wx.StaticBox(parent, label='Coflow Settings')
+
+    coflow_adv_pane = wx.CollapsiblePane(coflow_box, label="Advanced Settings")
+    coflow_adv_pane.Bind(wx.EVT_COLLAPSIBLEPANE_CHANGED, top_level.on_collapse)
+    coflow_adv_win = coflow_adv_pane.GetPane()
+
+    coflow_sizer1 = create_info_sizer(coflow_settings, top_level, coflow_box,
+        read_only)
+    coflow_sizer2 = create_info_sizer(coflow_adv_settings, top_level,
+        coflow_adv_win, read_only)
+
+    coflow_adv_win.SetSizer(coflow_sizer2)
+    coflow_adv_pane.Collapse()
+
+    coflow_sizer = wx.StaticBoxSizer(coflow_box, wx.VERTICAL)
+    coflow_sizer.Add(coflow_sizer1, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
+        border=top_level._FromDIP(5))
+    coflow_sizer.Add(coflow_adv_pane, flag=wx.EXPAND|wx.ALL, border=top_level._FromDIP(5))
+
+    exp_coflow_sizer = wx.BoxSizer(wx.VERTICAL)
+    exp_coflow_sizer.Add(exp_sizer, flag=wx.EXPAND)
+    exp_coflow_sizer.Add(coflow_sizer, flag=wx.TOP|wx.EXPAND, border=top_level._FromDIP(5))
+
+    if cmd_sizer_dir == 'horiz':
+        cmd_sizer=wx.BoxSizer(wx.HORIZONTAL)
+        cmd_sizer.Add(metadata_sizer, proportion=1, flag=wx.RIGHT|wx.EXPAND,
+            border=top_level._FromDIP(5))
+        cmd_sizer.Add(as_sizer, flag=wx.RIGHT|wx.EXPAND,
+            border=top_level._FromDIP(5))
+        cmd_sizer.Add(exp_coflow_sizer, flag=wx.EXPAND,
+            border=top_level._FromDIP(5))
+    else:
+        cmd_sizer=wx.BoxSizer(wx.VERTICAL)
+        cmd_sizer.Add(metadata_sizer, flag=wx.BOTTOM|wx.EXPAND,
+            border=top_level._FromDIP(5))
+        cmd_sizer.Add(as_sizer, flag=wx.BOTTOM|wx.EXPAND,
+            border=top_level._FromDIP(5))
+        cmd_sizer.Add(exp_coflow_sizer, flag=wx.EXPAND,
+            border=top_level._FromDIP(5))
+
+    return cmd_sizer, sample_well, well_ids_96, reverse_well_ids_96
 
 def make_standalone_exp_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
     read_only=False):
@@ -2395,6 +2750,16 @@ class AutoListPanel(wx.Panel):
             """
             command = SecSampleCommand(self.automator, item_info)
 
+        elif item_type == 'batch_sample':
+            """
+            Check various things, including:
+                *   Is there enough buffer to do the run
+                *   Do we need to add an instrument switch or an equilibration
+                    (should this be checked in the auto list, so that it can add
+                    an equilibration item or switch item above this?)
+            """
+            command = BatchSampleCommand(self.automator, item_info)
+
         elif item_type == 'equilibrate':
             command = EquilibrateCommand(self.automator, item_info)
 
@@ -2476,11 +2841,15 @@ class AutoList(utils.ItemList):
         if settings is None:
             actions = []
 
+            if ('autosampler' in self.auto_panel.settings['instruments'] and
+                'exp' in self.auto_panel.settings['instruments']):
+                actions.extend(['Run batch SAXS sample'])
+
             if ('hplc' in self.auto_panel.settings['instruments'] and
                 'exp' in self.auto_panel.settings['instruments'] and
                 'coflow' in self.auto_panel.settings['instruments']):
                 actions.extend(['Run SEC-SAXS sample', 'Equilibrate column',
-                'Switch pumps', 'Stop flow'])
+                    'Switch pumps', 'Stop flow'])
 
             actions.append('----Staff Methods----')
 
@@ -2505,6 +2874,8 @@ class AutoList(utils.ItemList):
         else:
             if settings['item_type'] == 'sec_sample':
                 choice = 'Run SEC-SAXS sample'
+            elif settings['item_type'] == 'batch_sample':
+                choice = 'Run batch SAXS sample'
             elif settings['item_type'] == 'equilibrate':
                 choice = 'Equilibrate column'
             elif settings['item_type'] == 'switch_pumps':
@@ -2538,7 +2909,64 @@ class AutoList(utils.ItemList):
 
     def _get_cmd_settings(self, choice, settings):
         if choice is not None and choice != '----Staff Methods----':
-            if choice == 'Run SEC-SAXS sample':
+            if choice == 'Run batch SAXS sample':
+                as_panel = wx.FindWindowByName('autosampler')
+                default_batch_settings = as_panel.get_load_and_inject_settings()
+
+                if settings is None:
+                    exp_panel = wx.FindWindowByName('exposure')
+                    default_exp_settings, _ = exp_panel.get_exp_values(False)
+
+                    coflow_panel = wx.FindWindowByName('coflow')
+                    coflow_fr = coflow_panel.get_flow_rate()
+                    try:
+                        coflow_fr = float(coflow_fr)
+                    except ValueError:
+                        coflow_fr = float(coflow_panel.settings['lc_flow_rate'])
+
+                    metadata_panel = wx.FindWindowByName('metadata')
+                    default_metadata = metadata_panel.metadata()
+
+                    default_settings = copy.deepcopy(default_batch_saxs_settings)
+
+                    # General parameters
+                    default_settings['notes'] = default_metadata['Notes:']
+                    default_settings['conc'] = default_metadata['Concentration [mg/ml]:']
+                    default_settings['buf'] = default_metadata['Buffer:']
+                    default_settings['sample_name'] = default_metadata['Sample:']
+                    default_settings['is_buf'] = default_metadata['Is Buffer:']
+                    default_settings['separate_buf'] = default_metadata['Needs Separate Buffer Measurement:']
+
+                    # Loading and injection parameters
+                    default_settings['volume'] = default_batch_settings['volume']
+                    default_settings['draw_rate'] = default_batch_settings['draw_rate']
+                    default_settings['dwell_time'] = default_batch_settings['dwell_time']
+                    default_settings['rate'] = default_batch_settings['rate']
+                    default_settings['start_delay'] = default_batch_settings['start_delay']
+                    default_settings['end_delay'] = default_batch_settings['end_delay']
+                    default_settings['clean_needle'] = default_batch_settings['clean_needle']
+
+
+                    # Exposure parameters
+                    default_settings['num_frames'] = default_exp_settings['num_frames']
+                    default_settings['exp_time'] = default_exp_settings['exp_time']
+                    default_settings['exp_period'] = default_exp_settings['exp_period']
+                    default_settings['data_dir'] = exp_panel.settings['base_data_dir']
+                    default_settings['num_trig'] = default_exp_settings['num_trig']
+                    #Not used, for completeness
+                    default_settings['struck_measurement_time'] = default_exp_settings['struck_measurement_time']
+
+                    #Coflow parameters
+                    default_settings['coflow_fr'] = coflow_fr
+
+                else:
+                    default_settings = settings
+                    default_settings['inst'] = 'autosampler'
+
+                cmd_dialog = BatchSampleCmdDialog(self, default_settings,
+                    title='Batch SAXS Sample Settings')
+
+            elif choice == 'Run SEC-SAXS sample':
                 hplc_panel = self.auto_panel.settings['instruments']['hplc']['hplc_panel']
                 default_inj_settings = hplc_panel.get_default_sample_settings()
 
@@ -2603,7 +3031,6 @@ class AutoList(utils.ItemList):
                     default_settings['exp_time'] = default_exp_settings['exp_time']
                     default_settings['exp_period'] = default_exp_settings['exp_period']
                     default_settings['data_dir'] = exp_panel.settings['base_data_dir']
-                    default_settings['wait_for_trig'] = default_exp_settings['wait_for_trig']
                     default_settings['num_trig'] = default_exp_settings['num_trig']
                     #Not used, for completeness
                     default_settings['struck_measurement_time'] = default_exp_settings['struck_measurement_time']
@@ -2789,7 +3216,49 @@ class AutoList(utils.ItemList):
     def _validate_cmd(self, cmd_settings):
         err_msg = ''
 
-        if cmd_settings['item_type'] == 'sec_sample':
+        if cmd_settings['item_type'] == 'batch_sample':
+            # Do exposure verification and autosampler param verification here
+            cmd_settings['data_dir'] = os.path.join(cmd_settings['data_dir'],
+                cmd_settings['filename'])
+
+            if cmd_settings['frames_by_elut']:
+                inj_time = float(cmd_settings['volume'])/float(cmd_settings['rate'])*60
+                inj_time += cmd_settings['start_delay'] + cmd_settings['end_delay']
+                exp_time = inj_time
+                num_frames = int(round(exp_time/float(cmd_settings['exp_period'])+0.5))
+                cmd_settings['num_frames'] = num_frames
+
+            if cmd_settings['coflow_from_fr']:
+                cmd_settings['coflow_fr'] = float(cmd_settings['flow_rate'])
+
+            cmd_settings, batch_valid, batch_errors = self._validate_batch_params(
+                cmd_settings)
+
+            cmd_settings, exp_valid, exp_errors = self._validate_exp_params(
+                cmd_settings)
+
+            cmd_settings, coflow_valid, coflow_errors = self._validate_coflow_params(
+                cmd_settings)
+
+            if not exp_valid or not coflow_valid or not batch_valid:
+                err_msg = 'The following field(s) have invalid values:'
+
+                if not exp_valid:
+                    err_msg += '\n\nExposure settings:'
+                    for err in exp_errors:
+                        err_msg = err_msg + '\n- ' + err
+
+                if not coflow_valid:
+                    err_msg += '\n\nCoflow settings:'
+                    for err in coflow_errors:
+                        err_msg = err_msg + '\n- ' + err
+
+                if not batch_valid > 0:
+                    err_msg += '\n\nLoad and injection settings:'
+                    for err in batch_errors:
+                        err_msg = err_msg + '\n- ' + err
+
+        elif cmd_settings['item_type'] == 'sec_sample':
             # Do exposure verification and hplc param verification here
             cmd_settings['inst'] = '{}{}'.format(cmd_settings['inst'],
                 cmd_settings['flow_path'])
@@ -3043,6 +3512,43 @@ class AutoList(utils.ItemList):
 
         return cmd_settings, valid, errors
 
+    def _validate_batch_params(self, cmd_settings):
+        as_panel = wx.FindWindowByName('autosampler')
+
+        well = cmd_settings['sample_well']
+        volume = cmd_settings['volume']
+        rate = cmd_settings['rate']
+        start_delay = cmd_settings['start_delay']
+        end_delay = cmd_settings['end_delay']
+        trigger = cmd_settings['trigger']
+        vol_units = cmd_settings['vol_units']
+        rate_units = cmd_settings['rate_units']
+        draw_rate = cmd_settings['draw_rate']
+        dwell_time = cmd_settings['dwell_time']
+
+        (row, col, volume, rate, start_delay, end_delay, trigger, vol_units,
+            rate_units, draw_rate, dwell_time, errors) = as_panel.validate_load_and_inject_params(
+            well, volume, rate, start_delay, end_delay, trigger, vol_units,
+            rate_units, draw_rate, dwell_time, False)
+
+        cmd_settings['sample_well'] = well
+        cmd_settings['volume'] = volume
+        cmd_settings['rate'] = rate
+        cmd_settings['start_delay'] = start_delay
+        cmd_settings['end_delay'] = end_delay
+        cmd_settings['trigger'] = trigger
+        cmd_settings['vol_units'] = vol_units
+        cmd_settings['rate_units'] = rate_units
+        cmd_settings['draw_rate'] = draw_rate
+        cmd_settings['dwell_time'] = dwell_time
+
+        if len(errors) > 0:
+            valid = False
+        else:
+            valid = True
+
+        return cmd_settings, valid, errors
+
     def _show_check_dialog(self, msg, caption):
         with wx.MessageDialog(self, msg, caption=caption,
             style=wx.YES_NO|wx.YES_DEFAULT) as check_dialog:
@@ -3283,6 +3789,8 @@ class AutoListItem(utils.ListItem):
             item_label = 'Standalone Exposure'
         elif self.item_type == 'stop_flow':
             item_label = 'Stop Flow'
+        elif self.item_type == 'batch_sample':
+            item_label = 'Batch sample'
         else:
             item_label = self.item_type.capitalize()
 
@@ -3307,15 +3815,18 @@ class AutoListItem(utils.ListItem):
 
         self.text_list.append(type_label)
 
+        status_label = wx.StaticText(item_parent, label='Status:')
         self.status_ctrl = wx.StaticText(item_parent, label='',
             size=self._FromDIP((60, -1)), style=wx.ST_NO_AUTORESIZE)
 
         std_sizer = wx.BoxSizer(wx.HORIZONTAL)
         std_sizer.Add(type_label, flag=wx.RIGHT|wx.LEFT, border=self._FromDIP(5))
-        std_sizer.Add(wx.StaticText(item_parent, label='Status:'), flag=wx.RIGHT,
+        std_sizer.Add(status_label, flag=wx.RIGHT,
             border=self._FromDIP(5))
         std_sizer.Add(self.status_ctrl, flag=wx.RIGHT|wx.LEFT,
             border=self._FromDIP(5))
+
+        self.text_list.extend([status_label, self.status_ctrl])
 
         if self.item_type == 'sec_sample':
 
@@ -3341,7 +3852,7 @@ class AutoListItem(utils.ListItem):
             item_sizer.Add(buffer_label, flag=wx.RIGHT, border=self._FromDIP(2))
             item_sizer.Add(self.buffer_ctrl, flag=wx.RIGHT, border=self._FromDIP(10))
 
-            self.text_list.extend([desc_label, self.desc_ctrl,
+            self.text_list.extend([name_label, self.name_ctrl, desc_label, self.desc_ctrl,
                 conc_label, self.conc_ctrl, buffer_label, self.buffer_ctrl])
 
         elif self.item_type == 'equilibrate':
@@ -3360,30 +3871,35 @@ class AutoListItem(utils.ListItem):
                 border=self._FromDIP(3))
             item_sizer.Add(self.buffer_ctrl, flag=wx.RIGHT, border=self._FromDIP(10))
 
-            self.text_list.extend([buffer_label, self.buffer_ctrl])
+            self.text_list.extend([buffer_pos_label, self.buffer_pos_ctrl,
+                buffer_label, self.buffer_ctrl])
 
         elif self.item_type == 'switch_pumps':
             item_sizer = wx.BoxSizer()
 
         elif self.item_type == 'stop_flow':
 
+            sp1_label = wx.StaticText(item_parent, label='Stop pump 1:')
+            sp2_label = wx.StaticText(item_parent, label='Stop pump 2:')
+            sc_label = wx.StaticText(item_parent, label='Stop coflow:')
+
             self.stop_flow1_ctrl = wx.StaticText(item_parent, label='')
             self.stop_flow2_ctrl = wx.StaticText(item_parent, label='')
             self.stop_coflow_ctrl = wx.StaticText(item_parent, label='')
 
             item_sizer = wx.BoxSizer(wx.HORIZONTAL)
-            item_sizer.Add(wx.StaticText(item_parent, label='Stop pump 1:'),
-                flag=wx.LEFT, border=self._FromDIP(5))
+            item_sizer.Add(sp1_label, flag=wx.LEFT, border=self._FromDIP(5))
             item_sizer.Add(self.stop_flow1_ctrl, flag=wx.LEFT,
                 border=self._FromDIP(5))
-            item_sizer.Add(wx.StaticText(item_parent, label='Stop pump 2:'),
-                flag=wx.LEFT, border=self._FromDIP(5))
+            item_sizer.Add(sp2_label, flag=wx.LEFT, border=self._FromDIP(5))
             item_sizer.Add(self.stop_flow2_ctrl, flag=wx.LEFT,
                 border=self._FromDIP(5))
-            item_sizer.Add(wx.StaticText(item_parent, label='Stop coflow:'),
-                flag=wx.LEFT, border=self._FromDIP(5))
+            item_sizer.Add(sc_label, flag=wx.LEFT, border=self._FromDIP(5))
             item_sizer.Add(self.stop_coflow_ctrl, flag=wx.LEFT,
                 border=self._FromDIP(5))
+
+            self.text_list.extend([sp1_label, self.stop_flow1_ctrl,
+                sp2_label, self.stop_flow2_ctrl, sc_label, self.stop_coflow_ctrl])
 
         elif self.item_type == 'exposure':
             name_label = wx.StaticText(item_parent, label='Filename:')
@@ -3392,6 +3908,39 @@ class AutoListItem(utils.ListItem):
             item_sizer = wx.BoxSizer(wx.HORIZONTAL)
             item_sizer.Add(name_label, flag=wx.RIGHT|wx.LEFT, border=self._FromDIP(5))
             item_sizer.Add(self.name_ctrl, flag=wx.RIGHT, border=self._FromDIP(5))
+
+            self.text_list.extend([name_label, self.name_ctrl])
+
+        elif self.item_type == 'batch_sample':
+
+            name_label = wx.StaticText(item_parent, label='Name:')
+            self.name_ctrl = wx.StaticText(item_parent, label='')
+
+            well_label = wx.StaticText(item_parent, label='Well:')
+            self.sample_well_ctrl = wx.StaticText(item_parent, label='')
+
+            desc_label = wx.StaticText(item_parent, label='Sample:')
+            self.desc_ctrl = wx.StaticText(item_parent, label='')
+
+            conc_label = wx.StaticText(item_parent, label='Conc. (mg/ml):')
+            self.conc_ctrl = wx.StaticText(item_parent, label='')
+
+            buffer_label = wx.StaticText(item_parent, label='Buffer:')
+            self.buffer_ctrl = wx.StaticText(item_parent, label='')
+
+            item_sizer = wx.BoxSizer(wx.HORIZONTAL)
+            item_sizer.Add(name_label, flag=wx.RIGHT|wx.LEFT, border=self._FromDIP(2))
+            item_sizer.Add(self.name_ctrl, flag=wx.RIGHT, border=self._FromDIP(10))
+            item_sizer.Add(desc_label, flag=wx.RIGHT, border=self._FromDIP(2))
+            item_sizer.Add(self.desc_ctrl, flag=wx.RIGHT, border=self._FromDIP(10))
+            item_sizer.Add(conc_label, flag=wx.RIGHT, border=self._FromDIP(2))
+            item_sizer.Add(self.conc_ctrl, flag=wx.RIGHT, border=self._FromDIP(10))
+            item_sizer.Add(buffer_label, flag=wx.RIGHT, border=self._FromDIP(2))
+            item_sizer.Add(self.buffer_ctrl, flag=wx.RIGHT, border=self._FromDIP(10))
+
+            self.text_list.extend([well_label, self.sample_well_ctrl,
+                name_label, self.name_ctrl, desc_label, self.desc_ctrl,
+                conc_label, self.conc_ctrl, buffer_label, self.buffer_ctrl])
 
 
 
@@ -3403,7 +3952,7 @@ class AutoListItem(utils.ListItem):
             child.Bind(wx.EVT_LEFT_DOWN, self._on_left_mouse_btn)
 
         # This should be moved into the list item?
-        if self.item_type == 'sec_sample':
+        if self.item_type == 'sec_sample' or self.item_type == 'batch_sample':
             name = self.item_info['filename']
             descrip = self.item_info['sample_name']
             conc = self.item_info['conc']
@@ -3412,6 +3961,9 @@ class AutoListItem(utils.ListItem):
             self.set_description(descrip)
             self.set_concentration(conc)
             self.set_buffer(buf)
+
+            if self.item_type == 'batch_sample':
+                self.set_well_position(self.item_info['sample_well'])
 
         elif self.item_type == 'equilibrate':
             buf = self.item_info['buf']
@@ -3452,6 +4004,9 @@ class AutoListItem(utils.ListItem):
 
     def set_status_label(self, status):
         self.status_ctrl.SetLabel(status)
+
+    def set_well_position(self, well):
+        self.sample_well_ctrl.SetLabel(well)
 
     def _on_command_status_change(self):
         wx.CallAfter(self.set_automator_status)
@@ -3534,6 +4089,8 @@ class AutoCmdDialog(wx.Dialog):
             if ctrl is not None:
                 if isinstance(ctrl, wx.Choice):
                     ctrl.SetStringSelection(str(default_val))
+                elif isinstance(ctrl, wx.StaticText):
+                    ctrl.SetLabel(str(default_val))
                 else:
                     try:
                         ctrl.SetValue(str(default_val))
@@ -3591,6 +4148,60 @@ class SecSampleCmdDialog(AutoCmdDialog):
             border=self._FromDIP(5))
 
         self.SetSizer(top_sizer)
+
+class BatchSampleCmdDialog(AutoCmdDialog):
+    """
+    Allows addition/editing of the buffer info in the buffer list
+    """
+    def __init__(self, parent, default_settings, *args, **kwargs):
+        self._selected_well = ''
+        AutoCmdDialog.__init__(self, parent, default_settings, *args, **kwargs)
+
+    def _create_layout(self):
+        parent = self
+
+        self.well_bmp = utils.load_DIP_bitmap('./resources/icons8-circled-thin-28.png',
+            wx.BITMAP_TYPE_PNG, False)['light']
+        self.selected_well_bmp = utils.load_DIP_bitmap('./resources/sel_icons8-circled-thin-28.png',
+            wx.BITMAP_TYPE_PNG, False)['light']
+
+        (cmd_sizer, self.sample_well, self.well_ids_96,
+            self.reverse_well_ids_96) =  make_batch_saxs_info_panel(self,
+            self, self.ctrl_ids, 'horiz', self.well_bmp, self._on_well_button)
+
+        button_sizer = self.CreateButtonSizer(wx.OK | wx.CANCEL)
+
+        top_sizer = wx.BoxSizer(wx.VERTICAL)
+        top_sizer.Add(cmd_sizer, proportion=1, flag=wx.EXPAND|wx.ALL,
+            border=self._FromDIP(5))
+        top_sizer.Add(button_sizer ,flag=wx.BOTTOM|wx.RIGHT|wx.LEFT|wx.ALIGN_RIGHT,
+            border=self._FromDIP(5))
+
+        self.SetSizer(top_sizer)
+
+        default_sample_well = self._default_settings['sample_well']
+
+        self._set_selected_well(default_sample_well)
+
+    def _on_well_button(self, evt):
+        ctrl_id = evt.GetId()
+
+        well = self.reverse_well_ids_96[ctrl_id]
+
+        self._set_selected_well(well)
+
+    def _set_selected_well(self, well):
+        if well != '':
+            if self._selected_well in self.well_ids_96:
+                old_ctrl = wx.FindWindowById(self.well_ids_96[self._selected_well])
+                old_ctrl.SetBitmap(self.well_bmp)
+
+            new_ctrl = wx.FindWindowById(self.well_ids_96[well])
+
+            new_ctrl.SetBitmap(self.selected_well_bmp)
+            self._selected_well = well
+
+            self.sample_well.SetLabel(self._selected_well)
 
 class EquilibrateDialog(AutoCmdDialog):
     """
@@ -3965,36 +4576,38 @@ if __name__ == '__main__':
     app = wx.App()
     # logger.debug('Setting up wx app')
 
-    hplc_frame = biohplccon.HPLCFrame('HPLCFrame', hplc_settings, parent=None,
-        title='HPLC Control')
-    hplc_frame.Show()
+    # hplc_frame = biohplccon.HPLCFrame('HPLCFrame', hplc_settings, parent=None,
+    #     title='HPLC Control')
+    # hplc_frame.Show()
 
-    # coflow_frame = coflowcon.CoflowFrame(coflow_settings, True, parent=None, title='Coflow Control')
-    # coflow_frame.Show()
-
-
-    hplc_panel = hplc_frame.devices[0]
-    hplc_automator_callback = hplc_frame.devices[0].automator_callback
-    # coflow_automator_callback = coflow_frame.coflow_panel.automator_callback
-
-    automator_settings = default_automator_settings
-    automator_settings['automator_thread'] = automator
-    automator_settings['hplc_inst'] = 'hplc'
-    automator_settings['instruments'] = {
-        'hplc'    : {'num_paths': 2,
-                    'automator_callback': hplc_automator_callback,
-                    'hplc_panel'    : hplc_panel,},
-        # 'coflow'    : {'automator_callback': coflow_automator_callback},
-        # 'exp'       : {'automator_callback': test_cmd_func}
-        }
+    # # coflow_frame = coflowcon.CoflowFrame(coflow_settings, True, parent=None, title='Coflow Control')
+    # # coflow_frame.Show()
 
 
-    # app = wx.App()
-    logger.debug('Setting up wx app')
-    frame = AutoFrame('AutoFrame', automator_settings, parent=None,
-        title='Automator Control')
-    frame.Show()
+    # hplc_panel = hplc_frame.devices[0]
+    # hplc_automator_callback = hplc_frame.devices[0].automator_callback
+    # # coflow_automator_callback = coflow_frame.coflow_panel.automator_callback
 
+    # automator_settings = default_automator_settings
+    # automator_settings['automator_thread'] = automator
+    # automator_settings['hplc_inst'] = 'hplc'
+    # automator_settings['instruments'] = {
+    #     'hplc'    : {'num_paths': 2,
+    #                 'automator_callback': hplc_automator_callback,
+    #                 'hplc_panel'    : hplc_panel,},
+    #     # 'coflow'    : {'automator_callback': coflow_automator_callback},
+    #     # 'exp'       : {'automator_callback': test_cmd_func}
+    #     }
+
+
+    # # app = wx.App()
+    # logger.debug('Setting up wx app')
+    # frame = AutoFrame('AutoFrame', automator_settings, parent=None,
+    #     title='Automator Control')
+    # frame.Show()
+
+    dialog = BatchSampleCmdDialog(None, default_batch_saxs_settings)
+    dialog.Show()
     app.MainLoop()
 
     if automator is not None:
