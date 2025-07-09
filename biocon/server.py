@@ -670,6 +670,12 @@ if __name__ == '__main__':
         as_settings['device_communication'] = 'local'
         as_settings['components'] = ['autosampler',]
 
+        as_settings['device_init']['needle_valve']['comm_lock'] = threading.RLock()
+        as_settings['device_init']['sample_pump']['comm_lock'] = threading.RLock()
+        as_settings['device_init']['clean1_pump']['comm_lock'] = threading.RLock()
+        as_settings['device_init']['clean2_pump']['comm_lock'] = threading.RLock()
+        as_settings['device_init']['clean3_pump']['comm_lock'] = threading.RLock()
+
 
     if exp_type == 'coflow':
 

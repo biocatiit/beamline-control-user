@@ -1166,7 +1166,10 @@ class DeviceFrame(wx.Frame):
                 dev_settings = {}
                 for key, val in self.settings.items():
                     if key != 'com_thread':
-                        dev_settings[key] = copy.deepcopy(val)
+                        try:
+                            dev_settings[key] = copy.deepcopy(val)
+                        except TypeError:
+                            dev_settings[key] = val
                     else:
                         dev_settings[key] = val
 
