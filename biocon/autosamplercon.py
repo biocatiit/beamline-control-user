@@ -1249,6 +1249,7 @@ class Autosampler(object):
                     success = self.dispense(vol, pump, units='mL')
 
                 elif cmd == 'wait':
+                    logger.info('Drying needle')
                     wait_time = clean_step[2]
                     abort = self._sleep(wait_time)
                     success = not abort
@@ -3031,25 +3032,25 @@ default_autosampler_settings = {
         'coflow_y_motor'        : {'name': 'coflow_y', 'args': ['18ID_DMC_E01:6'],
                                         'kwargs': {}},
         'needle_valve'          : {'name': 'Needle',
-                                        'args':['Cheminert', 'COM7'],
+                                        'args':['Cheminert', 'COM11'],
                                         'kwargs': {'positions' : 6,
                                         'comm_lock': threading.RLock()}},
-        'sample_pump'           : {'name': 'sample', 'args': ['Hamilton PSD6', 'COM3'],
+        'sample_pump'           : {'name': 'sample', 'args': ['Hamilton PSD6', 'COM9'],
                                     'kwargs': {'syringe_id': '0.1 mL, Hamilton Glass',
                                     'pump_address': '1', 'dual_syringe': 'False',
                                     'diameter': 1.46, 'max_volume': 0.1,
                                     'max_rate': 1, 'comm_lock': threading.RLock(),},
                                     'ctrl_args': {'flow_rate' : 100,
                                     'refill_rate' : 100, 'units': 'uL/min'}},
-        'clean1_pump'           : {'name': 'water', 'args': ['KPHM100', 'COM5'],
+        'clean1_pump'           : {'name': 'water', 'args': ['KPHM100', 'COM10'],
                                     'kwargs': {'flow_cal': '319.2',
                                     'comm_lock': threading.RLock()},
                                     'ctrl_args': {'flow_rate': 1}},
-        'clean2_pump'           : {'name': 'ethanol', 'args': ['KPHM100', 'COM4'],
+        'clean2_pump'           : {'name': 'ethanol', 'args': ['KPHM100', 'COM12'],
                                     'kwargs': {'flow_cal': '319.2',
                                     'comm_lock': threading.RLock()},
                                     'ctrl_args': {'flow_rate': 1}},
-        'clean3_pump'           : {'name': 'hellmanex', 'args': ['KPHM100', 'COM6'],
+        'clean3_pump'           : {'name': 'hellmanex', 'args': ['KPHM100', 'COM8'],
                                     'kwargs': {'flow_cal': '319.2',
                                     'comm_lock': threading.RLock()},
                                     'ctrl_args': {'flow_rate': 1}},
@@ -3068,8 +3069,8 @@ default_autosampler_settings = {
     'home_settings'         : {'plate_x': {'dir': -1, 'step': 0.1, 'pos': 0},
                                 'plate_z': {'dir': 1, 'step': 0.1, 'pos': 0},
                                 'needle_y': {'dir': -1, 'step': 0.01, 'pos': -2.20}}, #Direction 1/-1 for positive/negative. step is step size off limit, pos is what to set the home position as.
-    'base_position'         : {'plate_x': 272.0, 'plate_z': -76.4, 'needle_y': 113.95}, # A1 well position, needle height at chiller plate top
-    'clean_offsets'         : {'plate_x': 100, 'plate_z': -21.5, 'needle_y': -3}, # Relative to base position
+    'base_position'         : {'plate_x': 272.0, 'plate_z': -81.4, 'needle_y': 109.6}, # A1 well position, needle height at chiller plate top
+    'clean_offsets'         : {'plate_x': 99, 'plate_z': -21.6, 'needle_y': -3}, # Relative to base position
     'needle_out_offset'     : 5, # mm
     'needle_in_position'    : 0,
     'plate_out_position'    : {'plate_x': 241.4, 'plate_z': -75.9},

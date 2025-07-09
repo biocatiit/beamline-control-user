@@ -2006,6 +2006,7 @@ class HamiltonPSD6Pump(SyringePump):
         return status
 
     def set_valve_position(self, pos):
+        logger.info('Pump %s setting valve position %s', self.name, pos)
         if pos == 'Input':
             self.send_cmd('h23001')
         elif pos == 'Output':
