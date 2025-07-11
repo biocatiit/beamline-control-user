@@ -425,6 +425,15 @@ class ControlServer(threading.Thread):
         self._stop_event.set()
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('exp_type', help='Experiment type for server',
+        type=str, choices=['coflow', 'trsaxs_chaotic', 'trsaxs_laminar',
+        'hplc', 'autosampler'])
+
+    args = parser.parse_args()
+    exp_type = args.exp_type
+
+
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
     h1 = logging.StreamHandler(sys.stdout)
@@ -442,7 +451,7 @@ if __name__ == '__main__':
     if not os.path.exists(info_dir):
         os.mkdir(info_dir)
 
-    h2 = handlers.RotatingFileHandler(os.path.join(info_dir, 'biocon_server.log'),
+    h2 = handlers.RotatingFileHandler(os.path.join(info_dir, 'biocon_server_{}.log'.format(exp_type)),
         maxBytes=100e6, backupCount=20, delay=True)
     h2.setLevel(logging.DEBUG)
     formatter2 = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
@@ -450,27 +459,12 @@ if __name__ == '__main__':
 
     logger.addHandler(h2)
 
+    print('Log directory: {}'.format(info_dir))
+
     port1 = '5556'
     port2 = '5557'
     port3 = '5558'
     port4 = '5559'
-
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument('exp_type', help='Experiment type for server',
-        type=str, choices=['coflow', 'trsaxs_chaotic', 'trsaxs_laminar',
-        'hplc', 'autosampler'])
-
-    args = parser.parse_args()
-    exp_type = args.exp_type
-
-    # exp_type = 'coflow' #coflow or trsaxs_laminar or trsaxs_chaotic or hplc
-    # # exp_type = 'trsaxs_chaotic'
-    # # exp_type = 'trsaxs_laminar'
-    # # exp_type = 'hplc'
-    # # exp_type = 'autosampler'
-
-    print('Log directory: {}'.format(info_dir))
 
     if exp_type == 'coflow':
         # Coflow
@@ -670,11 +664,11 @@ if __name__ == '__main__':
         as_settings['device_communication'] = 'local'
         as_settings['components'] = ['autosampler',]
 
-        as_settings['device_init']['needle_valve']['comm_lock'] = threading.RLock()
-        as_settings['device_init']['sample_pump']['comm_lock'] = threading.RLock()
-        as_settings['device_init']['clean1_pump']['comm_lock'] = threading.RLock()
-        as_settings['device_init']['clean2_pump']['comm_lock'] = threading.RLock()
-        as_settings['device_init']['clean3_pump']['comm_lock'] = threading.RLock()
+        as_settings['device_init'][0]['kwargs']['needle_valve']['comm_lock'] = threading.RLock()
+        as_settings['device_init'][0]['kwargs']['sample_pump']['comm_lock'] = threading.RLock()
+        as_settings['device_init'][0]['kwargs']['clean1_pump']['comm_lock'] = threading.RLock()
+        as_settings['device_init'][0]['kwargs']['clean2_pump']['comm_lock'] = threading.RLock()
+        as_settings['device_init'][0]['kwargs']['clean3_pump']['comm_lock'] = threading.RLock()
 
 
     if exp_type == 'coflow':

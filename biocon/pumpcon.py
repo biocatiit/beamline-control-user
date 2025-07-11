@@ -2021,6 +2021,7 @@ class HamiltonPSD6Pump(SyringePump):
             self.send_cmd('J0')
 
     def dispense_with_trigger(self, vol, delay, units):
+        orig_vol = copy.copy(vol)
         vol = self._convert_volume(vol, units, self._pump_base_units.split('/')[0])
 
         if self._is_flowing:
@@ -2042,7 +2043,7 @@ class HamiltonPSD6Pump(SyringePump):
 
         if cont:
 
-            logger.info("Pump %s infusing %f %s at %f %s", self.name, vol, units,
+            logger.info("Pump %s infusing %f %s at %f %s", self.name, orig_vol, units,
                 self.flow_rate, self.units)
 
             cur_vol = self._convert_volume(self.volume, self.units.split('/')[0],
