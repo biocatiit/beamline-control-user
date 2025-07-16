@@ -143,7 +143,7 @@ known_well_plates = {
         'num_rows'      : 8,
         'col_step'      : 9.00, # mm
         'row_step'      : 9.00, # mm
-        'height'        : 0.7, # bottom of well from chiller base plate
+        'height'        : 0.5, # bottom of well from chiller base plate
         'plate_height'  : 15.5, # top of plate from chiller base plate
         }
 }
@@ -240,6 +240,8 @@ class Autosampler(object):
 
         self.set_coflow_y_ref_position(self.settings['coflow_y_ref_position'])
 
+        self.set_load_pos_y_offset(self.settings['load_pos_y_offset'])
+
 
     def _init_valves(self):
         logger.info('Initializing autosampler valves')
@@ -253,6 +255,11 @@ class Autosampler(object):
     def _init_pumps(self):
         logger.info('Initializing autosampler pumps')
 
+        syringe = self.device_settings['sample_pump']['kwargs']['syringe_id']
+        syringe_info = copy.deepcopy(pumpcon.known_syringes[syringe])
+        self.device_settings['sample_pump']['kwargs'].update(syringe_info)
+
+        logger.info(self.device_settings['sample_pump'])
         device = self.device_settings['sample_pump']['args'][0]
         sample_args = self.device_settings['sample_pump']['args'][1:]
         sample_kwargs = self.device_settings['sample_pump']['kwargs']
@@ -593,6 +600,9 @@ class Autosampler(object):
     def set_coflow_y_ref_position(self, coflow_ref):
         self.coflow_y_ref = coflow_ref
 
+    def set_load_pos_y_offset(self, load_pos_y_offset):
+        self.load_pos_y_offset = load_pos_y_offset
+
     def set_well_plate(self, plate_type):
         self.well_plate = WellPlate(plate_type)
 
@@ -632,6 +642,8 @@ class Autosampler(object):
     def get_well_position(self, row, column):
         delta_position = self.well_plate.get_relative_well_position(row, column)
         well_position = self.base_position + delta_position
+
+        well_position[2] += self.load_pos_y_offset
 
         return well_position
 
@@ -1027,6 +1039,11 @@ class Autosampler(object):
         self.sample_pump.set_valve_position(
             self.settings['syringe_valve_positions']['sample'])
 
+        while self.sample_pump.is_moving():
+            abort = self._sleep(0.02)
+            if abort:
+                break
+
         success = self.move_to_load(row, column, False)
 
         if success:
@@ -1064,6 +1081,11 @@ class Autosampler(object):
 
         self.sample_pump.set_valve_position(
             self.settings['syringe_valve_positions']['sample'])
+
+        while self.sample_pump.is_moving():
+            abort = self._sleep(0.02)
+            if abort:
+                break
 
         if self.settings['inject_connect_vol'] > 0:
             self.set_pump_dispense_rates(self.settings['inject_connect_rate'],
@@ -1107,6 +1129,10 @@ class Autosampler(object):
         self.sample_pump.set_valve_position(
             self.settings['syringe_valve_positions']['sample'])
 
+        while self.sample_pump.is_moving():
+            abort = self._sleep(0.02)
+            if abort:
+                break
         self.set_pump_dispense_rates(rate, rate_units, 'sample')
 
         load_vol = pumpcon.convert_volume(volume, vol_units, 'uL')
@@ -1170,7 +1196,8 @@ class Autosampler(object):
                     start_delay, end_delay, 'uL', rate_units, False)
 
                 if success:
-                    self.clean(False)
+                    if clean_needle:
+                        self.clean(False)
 
         self._active_count -= 1
 
@@ -1223,6 +1250,12 @@ class Autosampler(object):
 
         self.sample_pump.set_valve_position(
             self.settings['syringe_valve_positions']['purge'])
+
+        while self.sample_pump.is_moving():
+            abort = self._sleep(0.02)
+            if abort:
+                break
+
         rate = self.settings['pump_rates']['purge'][1]
         self.set_pump_dispense_rates(rate, 'mL/min', 'sample')
         self.sample_pump.dispense_all(blocking=False)
@@ -1253,6 +1286,18 @@ class Autosampler(object):
                     wait_time = clean_step[2]
                     abort = self._sleep(wait_time)
                     success = not abort
+
+                elif cmd == 'move_y':
+                    dist = clean_step[2]
+                    success = self.move_motors_relative(dist, 'needle_y')
+
+                elif cmd == 'move_x':
+                    dist = clean_step[2]
+                    success = self.move_motors_relative(dist, 'plate_x')
+
+                elif cmd == 'move_z':
+                    dist = clean_step[2]
+                    success = self.move_motors_relative(dist, 'plate_z')
 
                 if not success:
                     break
@@ -1314,6 +1359,7 @@ class ASCommThread(utils.CommManager):
             'move_plate_load'       : self._move_plate_load,
             'home_motor'            : self._home_motor,
             'set_valve_position'    : self._set_valve_position,
+            'set_sample_pump_valve' : self._set_sample_pump_valve,
             'set_aspirate_rates'    : self._set_pump_aspirate_rates,
             'set_dispense_rates'    : self._set_pump_dispense_rates,
             'set_pump_volumes'      : self._set_pump_volumes,
@@ -1535,6 +1581,19 @@ class ASCommThread(utils.CommManager):
 
         logger.debug("%s valve position set", name)
 
+    def _set_sample_pump_valve(self, name, val, **kwargs):
+        logger.info("Setting %s sample pump valve position to %s", name, val)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        device.sample_pump.set_valve_position(val, **kwargs)
+
+        self._return_value((name, cmd, True), comm_name)
+
+        logger.debug("%s valve position set", name)
+
     def _set_pump_aspirate_rates(self, name, val, units, pump, **kwargs):
         logger.info("Setting %s pump %s aspirate rates", name, pump)
 
@@ -1569,6 +1628,7 @@ class ASCommThread(utils.CommManager):
 
         device = self._connected_devices[name]
         device.set_sample_draw_rate(val, units, **kwargs)
+        device.set_pump_aspirate_rates(device._sample_draw_rate, units, 'sample')
 
         self._return_value((name, cmd, True), comm_name)
         self._return_value((name, cmd, val), 'status')
@@ -2257,11 +2317,13 @@ class AutosamplerPanel(utils.DevicePanel):
     def _aspirate(self, volume, vol_units, rate_units, draw_rate, dwell_time):
         rate_cmd = ['set_sample_draw_rate', [self.name, draw_rate, rate_units], {}]
         dwell_cmd = ['set_sample_dwell_time', [self.name, dwell_time,], {}]
-
+        valve_cmd = ['set_sample_pump_valve', [self.name,
+            self.settings['syringe_valve_positions']['sample']], {}]
         inj_cmd = ['pump_aspirate', [self.name, volume, vol_units, 'sample'], {}]
 
         self._send_cmd(rate_cmd, False)
         self._send_cmd(dwell_cmd, False)
+        self._send_cmd(valve_cmd, False)
         self._send_cmd(inj_cmd, False)
 
     def _validate_aspirate_params(self, volume, vol_units, rate_units,
@@ -3036,10 +3098,9 @@ default_autosampler_settings = {
                                         'kwargs': {'positions' : 6,
                                         'comm_lock': None}},
         'sample_pump'           : {'name': 'sample', 'args': ['Hamilton PSD6', 'COM9'],
-                                    'kwargs': {'syringe_id': '0.1 mL, Hamilton Glass',
+                                    'kwargs': {'syringe_id': '0.05 mL, Hamilton Glass',
                                     'pump_address': '1', 'dual_syringe': 'False',
-                                    'diameter': 1.46, 'max_volume': 0.1,
-                                    'max_rate': 1, 'comm_lock': None,},
+                                    'comm_lock': None,},
                                     'ctrl_args': {'flow_rate' : 100,
                                     'refill_rate' : 100, 'units': 'uL/min'}},
         'clean1_pump'           : {'name': 'water', 'args': ['KPHM100', 'COM10'],
@@ -3070,35 +3131,44 @@ default_autosampler_settings = {
     'home_settings'         : {'plate_x': {'dir': -1, 'step': 0.1, 'pos': 0},
                                 'plate_z': {'dir': 1, 'step': 0.1, 'pos': 0},
                                 'needle_y': {'dir': -1, 'step': 0.01, 'pos': -2.20}}, #Direction 1/-1 for positive/negative. step is step size off limit, pos is what to set the home position as.
-    'base_position'         : {'plate_x': 272.0, 'plate_z': -81.4, 'needle_y': 109.6}, # A1 well position, needle height at chiller plate top
-    'clean_offsets'         : {'plate_x': 99, 'plate_z': -21.6, 'needle_y': -3}, # Relative to base position
+    'base_position'         : {'plate_x': 272.1, 'plate_z': -81.6, 'needle_y': 109.6}, # A1 well position, needle height at chiller plate top
+    'clean_offsets'         : {'plate_x': 99.9, 'plate_z': -21.2, 'needle_y': -10}, # Relative to base position
     'needle_out_offset'     : 5, # mm
     'needle_in_position'    : 0,
-    'plate_out_position'    : {'plate_x': -31, 'plate_z': 0},
-    'plate_load_position'   : {'plate_x': 0, 'plate_z': -75.9},
+    'plate_out_position'    : {'plate_x': -31, 'plate_z': 0}, # Relative
+    'plate_load_position'   : {'plate_x': 0, 'plate_z': -75.9}, # Absolute
     'coflow_y_ref_position' : 0, # Position for coflow y motor when base position was set
     'plate_type'            : 'Thermo-Fast 96 well PCR',
     # 'plate_type'            : 'Abgene 96 well deepwell storage',
-    'clean_valve_positions' : {'empty': 5, 'clean1': 1, 'clean2': 2, 'clean3': 3, 'clean4': 4},
+    'clean_valve_positions' : {'empty': 5, 'clean1': 1, 'clean2': 2, 'clean3': 3, 'clean4': 4, 'clean5': 5,},
     'syringe_valve_positions': {'sample': 'Output', 'clean': 'Bypass', 'purge': 'Input'},
-    'clean_seq'             : [('clean1', 'dispense', 5, 1), #A set of (a, b, c, d) a is the valve position, b is the command, and c and d are input params for the command
-                                ('clean3', 'dispense', 5, 1),
-                                ('clean1', 'dispense', 5, 1),
-                                ('clean2', 'dispense', 5, 1), # rate, volume in ml/min and ml
-                                ('clean4', 'wait', 60, 0),], #wait time in s, N/A
-    'pump_rates'            : {'sample': (0.3, 0.1), 'buffer': (0.3, 0.1), 'purge': (1, 1)}, # (refill, infuse) rates in ml/min
+    'clean_seq'             : [
+                                ('clean1', 'dispense', 1, 0.3), #A set of (a, b, c, d) a is the valve position, b is the command, and c and d are input params for the command
+                                ('clean3', 'dispense', 1, 0.3),
+                                ('clean1', 'dispense', 1, 0.3),
+                                ('clean2', 'dispense', 1, 0.3), # rate, volume in ml/min and ml
+                                # ('clean2', 'move_y', 7, 0), #distance in mm relative to y position
+                                ('clean4', 'wait', 90, 0), #wait time in s, N/A
+                                ('clean5', 'move_y', 31.2, 0), #distance in mm relative to y position
+                                ('clean5', 'move_x', 10, 0), #distance in mm relative to y position
+                                ('clean4', 'wait', 10, 0),
+                                ('clean5', 'move_x', -10, 0), #distance in mm relative to y position
+
+                                ],
+    'pump_rates'            : {'sample': (0.05, 0.1), 'buffer': (0.05, 0.1), 'purge': (1, 1)}, # (refill, infuse) rates in ml/min
     'max_inject_rate'       : 0.5,
     'max_draw_rate'         : 0.5,
-    'loop_volume'           : 100, #Loop volume in uL
+    'loop_volume'           : 30, #Loop volume in uL
     'min_load_volume'       : 2.0,
-    'default_load_vol'      : 10.0,
+    'default_load_vol'      : 29.0,
     'default_start_delay_time': 10.0,
     'default_end_delay_time': 30.0,
-    'load_dwell_time'       : 35.0, #Time to wait in well after aspirating
+    'load_dwell_time'       : 45.0, #Time to wait in well after aspirating
     'inject_connect_vol'    : 0, #Volume to eject from the needle after loading before re-entering the cell, to ensure a wet-to-wet entry for the needle and prevent bubbles, uL
     'inject_connect_rate'   : 100, #Rate to eject the inject connect volume at, in uL/min
-    'reserve_vol'           : 1, #Volume to reserve from dispensing when measuring sample, to avoid bubbles, uL
+    'reserve_vol'           : 3.0, #Volume to reserve from dispensing when measuring sample, to avoid bubbles, uL
     'inline_panel'          : False,
+    'load_pos_y_offset'     : 0.4,
     }
 
 

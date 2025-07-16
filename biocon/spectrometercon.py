@@ -2904,7 +2904,8 @@ class UVPanel(utils.DevicePanel):
                 flag=wx.ALIGN_CENTER_VERTICAL)
             plot_settings_sizer.Add(self.update_period, flag=wx.ALIGN_CENTER_VERTICAL)
 
-            self.uv_plot = UVPlot(self.settings['plot_refresh_t'], plot_parent)
+            self.uv_plot = UVPlot(self._get_plot_data_callback,
+                self.settings['plot_refresh_t'], plot_parent)
 
             plot_sizer = wx.StaticBoxSizer(plot_parent, wx.VERTICAL)
             plot_sizer.Add(plot_settings_sizer, border=self._FromDIP(5),
@@ -4045,9 +4046,9 @@ class UVPanel(utils.DevicePanel):
         if val.abs_spectrum is not None:
             self._add_spectrum_to_history(val, 'abs')
 
-        if self.uv_plot is not None:
-            self.uv_plot.update_plot_data(val, self._absorbance_history,
-                self._current_abs_wav)
+        # if self.uv_plot is not None:
+        #     self.uv_plot.update_plot_data(val, self._absorbance_history,
+        #         self._current_abs_wav)
 
     def _set_status_commands(self):
         settings_cmd = ['get_spec_settings', [self.name], {}]
@@ -4244,6 +4245,9 @@ class UVPanel(utils.DevicePanel):
         else:
             self.uvplot_frame.Raise()
 
+    def _get_plot_data_callback(self):
+        return self._current_spectrum, self._absorbance_history, self._current_abs_wav
+
     def on_uv_frame_close(self):
         self.uvplot_frame = None
         self.uv_plot = None
@@ -4303,9 +4307,11 @@ class UVPanel(utils.DevicePanel):
 
 class UVPlot(wx.Panel):
 
-    def __init__(self, refresh_time=1, *args, **kwargs):
+    def __init__(self, data_callback, refresh_time=1, *args, **kwargs):
 
         super(UVPlot, self).__init__(*args, **kwargs)
+
+        self.data_callback = data_callback
 
         self.plot_type = 'Spectrum'
         self.spectrum_type = 'abs'
@@ -4461,7 +4467,7 @@ class UVPlot(wx.Panel):
 
     def set_time_zero(self):
         self._time_zero = time.time()
-        self.update_plot_data(self.spectrum, self.abs_history, self.abs_wvl, True)
+        # self.update_plot_data(self.spectrum, self.abs_history, self.abs_wvl, True)
 
     def _on_refresh_timer(self, evt):
         # a = time.time()
@@ -4469,14 +4475,49 @@ class UVPlot(wx.Panel):
             if (time.time() - self._last_refresh > self._refresh_time
                 and not self._updating_plot):
                 self._updating_plot = True
+                self.update_plot_data()
                 wx.CallAfter(self.plot_data)
                 self._last_refresh = time.time()
-                self._needs_refresh = False
+                # self._needs_refresh = False
         # print(time.time()-a)
 
-    def update_plot_data(self, spectrum, abs_history, abs_wvl, force_refresh=False):
+    # def update_plot_data(self, spectrum, abs_history, abs_wvl, force_refresh=False):
+    #     # print('updating_plot_data')
+    #     # a = time.time()
+
+    #     self.spectrum = spectrum
+    #     self.abs_history = abs_history
+    #     self.abs_wvl = abs_wvl
+
+    #     if abs_history is not None and len(abs_history['spectra']) > 0:
+    #         current_time = time.time()
+    #         timestamps = np.array(abs_history['timestamps'])
+    #         time_data = (timestamps - self._time_zero)/60
+
+    #         abs_data = []
+
+    #         if abs_wvl is not None:
+    #             for wvl in abs_wvl:
+    #                 spec_abs = [spectra.get_absorbance(wvl) for spectra in
+    #                         abs_history['spectra']]
+    #                 abs_data.append([time_data, np.array(spec_abs), str(wvl)])
+    #     else:
+    #         abs_data = []
+
+    #     self.abs_data = abs_data
+    #     # print(time.time()-a)
+
+    #     if not force_refresh:
+    #         self._needs_refresh = True
+    #     else:
+    #         self._updating_plot = True
+    #         wx.CallAfter(self.plot_data)
+
+    def update_plot_data(self):
         # print('updating_plot_data')
         # a = time.time()
+
+        spectrum, abs_history, abs_wvl = self.data_callback()
 
         self.spectrum = spectrum
         self.abs_history = abs_history
@@ -4500,11 +4541,11 @@ class UVPlot(wx.Panel):
         self.abs_data = abs_data
         # print(time.time()-a)
 
-        if not force_refresh:
-            self._needs_refresh = True
-        else:
-            self._updating_plot = True
-            wx.CallAfter(self.plot_data)
+        # if not force_refresh:
+        #     self._needs_refresh = True
+        # else:
+        #     self._updating_plot = True
+        #     wx.CallAfter(self.plot_data)
 
     def ax_redraw(self, widget=None):
         ''' Redraw plots on window resize event '''
