@@ -1643,7 +1643,7 @@ class AutoSettings(scrolled.ScrolledPanel):
             self.ctrl_ids['sec_sample'], 'vert', num_flow_paths, acq_methods,
             sample_methods, read_only=True)
 
-        self.batch_saxs_panel = make_batch_saxs_info_panel(top_level, parent,
+        self.batch_saxs_panel, _, _, _ = make_batch_saxs_info_panel(top_level, parent,
             self.ctrl_ids['batch_sample'], 'vert', None, None, read_only=True)
 
         self.exp_panel = make_standalone_exp_panel(top_level, parent,
