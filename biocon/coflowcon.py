@@ -2180,13 +2180,13 @@ class CoflowPanel(utils.DevicePanel):
                 self.settings['coflow_inc_T_pv'], auto_units=False,
                 fg='black', style=wx.ST_NO_AUTORESIZE, size=self._FromDIP((50,-1)))
             self.coflow_inc_setpoint = epics.wx.PVFloatCtrl(inc_box,
-                self.settings['coflow_inc_TSetpoint_pv'], auto_units=False,
+                self.settings['coflow_inc_TSetpoint_pv'],
                 fg='black', style=wx.ST_NO_AUTORESIZE, size=self._FromDIP((50,-1)))
             self.hplc_inc_temp = epics.wx.PVText(inc_box,
                 self.settings['hplc_inc_T_pv'], auto_units=False,
                 fg='black', style=wx.ST_NO_AUTORESIZE, size=self._FromDIP((50,-1)))
             self.hplc_inc_setpoint = epics.wx.PVFloatCtrl(inc_box,
-                self.settings['hplc_inc_TSetpoint_pv'], auto_units=False,
+                self.settings['hplc_inc_TSetpoint_pv'],
                 fg='black', style=wx.ST_NO_AUTORESIZE, size=self._FromDIP((50,-1)))
 
             inc_grid_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(5), hgap=self._FromDIP(2))
