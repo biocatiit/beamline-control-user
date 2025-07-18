@@ -141,9 +141,12 @@ class ExpCommThread(threading.Thread):
         elif self._settings['detector'].lower().split('_')[-1] == 'epics':
             logger.debug('Getting epics detector')
             record_name = self._settings['detector'].rstrip('_epics')
-
             det_args = self._settings['det_args']
-            det = detectorcon.EPICSEigerDetector(record_name, **det_args)
+
+            if 'eig' in record_name.lower():
+                det = detectorcon.EPICSEigerDetector(record_name, **det_args)
+            elif 'pil' in record_name.lower():
+                det = detectorcon.EPICSPilatusDetector(record_name, **det_args)
 
         logger.debug("Got detector records")
 
@@ -2215,7 +2218,7 @@ class ExpCommThread(threading.Thread):
                 self.return_queue.append(['timeout', [data_dir, os.path.expanduser('~')]])
                 data_dir = os.path.expanduser('~')
 
-        zpad = 6
+        zpad = 6 #CHANGE ME?
 
         log_file = os.path.join(data_dir, '{}.log'.format(fprefix))
 
@@ -2249,7 +2252,7 @@ class ExpCommThread(threading.Thread):
 
         logger.info(header.split('\n')[-2])
 
-        zpad = 6
+        zpad = 6 #CHANGE ME?
 
         log_file = os.path.join(data_dir, '{}.log'.format(fprefix))
 
@@ -2352,7 +2355,7 @@ class ExpCommThread(threading.Thread):
 
         # logger.debug(avg_index)
 
-        zpad = 6
+        zpad = 6 #CHANGE ME?
 
         with open(log_file, 'w') as f, open(log_summary_file, 'w') as f_sum:
             f.write(header)
@@ -4495,8 +4498,9 @@ default_exposure_settings = {
     # 'nparams_max'           : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
     # 'exp_period_delta'      : 0.00095,
     # 'local_dir_root'        : '/nas_data/Pilatus1M',
-    # 'remote_dir_root'       : '/nas_data',
-    # 'detector'              : 'pilatus_mx',
+    # 'remote_dir_root'       : '/ramdisk',
+    # # 'detector'              : 'pilatus_mx',
+    # 'detector'              : '18IDpil1M:_epics',
     # 'det_args'              : {}, #Allows detector specific keyword arguments
     # 'add_file_postfix'      : True,
 

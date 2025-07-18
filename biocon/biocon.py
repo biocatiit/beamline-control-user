@@ -382,6 +382,7 @@ if __name__ == '__main__':
     exposure_settings['shutter_speed_pad'] = 0.002
     exposure_settings['shutter_speed_cycle'] = 0.1
 
+    # EIGER2 XE 9M
     exposure_settings['det_args'] =  {'use_tiff_writer': False,
         'use_file_writer': True, 'photon_energy' : 12.0,
         'images_per_file': 300} #1 image/file for TR, 300 for eq SAXS, 1000 for muscle
@@ -479,6 +480,8 @@ if __name__ == '__main__':
         # 'raw_settings'  : '/nas_data/Pilatus1M/2021_Run1/20210129_Hopkins/setup/calibration/pipeline_SAXS.cfg',
         'local_basedir' : '/nas_data/Eiger2x',
         'data_basedir'  : '/nas_data/Eiger2x',
+        # 'local_basedir' : '/nas_data/Pilatus1M',
+        # 'data_basedir'  : '/nas_data/Pilatus1M',
         'output_basedir': '/nas_data/SAXS',
         'data_source'   : 'Stream', #File or stream
         'detector'      : 'Eiger',
@@ -524,12 +527,12 @@ if __name__ == '__main__':
 
     components = OrderedDict([
         ('exposure', expcon.ExpPanel),
-        # ('coflow', coflowcon.CoflowPanel),
+        ('coflow', coflowcon.CoflowPanel),
         # ('trsaxs_scan', trcon.TRScanPanel),
         # ('trsaxs_flow', trcon.TRFlowPanel),
         # ('scan',    scancon.ScanPanel),
-        # ('metadata', metadata.ParamPanel),
-        # ('pipeline', pipeline_ctrl.PipelineControl),
+        ('metadata', metadata.ParamPanel),
+        ('pipeline', pipeline_ctrl.PipelineControl),
         # ('uv', spectrometercon.UVPanel),
         # ('hplc', biohplccon.HPLCPanel),
         # ('automator', autocon.AutoPanel),
