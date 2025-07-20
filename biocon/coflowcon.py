@@ -2142,18 +2142,71 @@ class CoflowPanel(utils.DevicePanel):
             style=wx.ST_NO_AUTORESIZE, size=self._FromDIP((50,-1)))
 
         if self.settings['use_incubator_pvs']:
-            self.coflow_inc_temp = epics.wx.PVText(status_panel,
+            esensors_box = wx.StaticBox(status_panel, label='ESensors')
+            self.coflow_inc_esensor_temp = epics.wx.PVText(esensors_box,
                 self.settings['coflow_inc_esensor_T_pv'], auto_units=False,
                 fg='black', style=wx.ST_NO_AUTORESIZE, size=self._FromDIP((50,-1)))
-            self.coflow_inc_humid = epics.wx.PVText(status_panel,
+            self.coflow_inc_esensor_humid = epics.wx.PVText(esensors_box,
                 self.settings['coflow_inc_esensor_H_pv'], auto_units=False,
                 fg='black', style=wx.ST_NO_AUTORESIZE, size=self._FromDIP((50,-1)))
-            self.hplc_inc_temp = epics.wx.PVText(status_panel,
+            self.hplc_inc_esensor_temp = epics.wx.PVText(esensors_box,
                 self.settings['hplc_inc_esensor_T_pv'], auto_units=False,
                 fg='black', style=wx.ST_NO_AUTORESIZE, size=self._FromDIP((50,-1)))
-            self.hplc_inc_humid = epics.wx.PVText(status_panel,
+            self.hplc_inc_esensor_humid = epics.wx.PVText(esensors_box,
                 self.settings['hplc_inc_esensor_H_pv'], auto_units=False,
                 fg='black', style=wx.ST_NO_AUTORESIZE, size=self._FromDIP((50,-1)))
+
+
+            esensor_grid_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(5), hgap=self._FromDIP(2))
+            esensor_grid_sizer.Add(wx.StaticText(esensors_box, label='Coflow Inc. Temp. [C]:'),
+                flag=wx.ALIGN_CENTER_VERTICAL)
+            esensor_grid_sizer.Add(self.coflow_inc_esensor_temp, flag=wx.ALIGN_CENTER_VERTICAL)
+            esensor_grid_sizer.Add(wx.StaticText(esensors_box, label='Coflow Inc. Humidity [%]:'),
+                flag=wx.ALIGN_CENTER_VERTICAL)
+            esensor_grid_sizer.Add(self.coflow_inc_esensor_humid, flag=wx.ALIGN_CENTER_VERTICAL)
+            esensor_grid_sizer.Add(wx.StaticText(esensors_box, label='HPLC Inc. Temp. [C]:'),
+                flag=wx.ALIGN_CENTER_VERTICAL)
+            esensor_grid_sizer.Add(self.hplc_inc_esensor_temp, flag=wx.ALIGN_CENTER_VERTICAL)
+            esensor_grid_sizer.Add(wx.StaticText(esensors_box, label='HPLC Inc. Humidity [%]:'),
+                flag=wx.ALIGN_CENTER_VERTICAL)
+            esensor_grid_sizer.Add(self.hplc_inc_esensor_humid, flag=wx.ALIGN_CENTER_VERTICAL)
+
+            esensor_sizer = wx.StaticBoxSizer(esensors_box, wx.HORIZONTAL)
+            esensor_sizer.Add(esensor_grid_sizer, flag=wx.EXPAND|wx.ALL, proportion=1,
+                border=self._FromDIP(5))
+
+            inc_box = wx.StaticBox(status_panel, label='Incubators')
+            self.coflow_inc_temp = epics.wx.PVText(inc_box,
+                self.settings['coflow_inc_T_pv'], auto_units=False,
+                fg='black', style=wx.ST_NO_AUTORESIZE, size=self._FromDIP((50,-1)))
+            self.coflow_inc_setpoint = epics.wx.PVFloatCtrl(inc_box,
+                self.settings['coflow_inc_TSetpoint_pv'],
+                fg='black', style=wx.ST_NO_AUTORESIZE, size=self._FromDIP((50,-1)))
+            self.hplc_inc_temp = epics.wx.PVText(inc_box,
+                self.settings['hplc_inc_T_pv'], auto_units=False,
+                fg='black', style=wx.ST_NO_AUTORESIZE, size=self._FromDIP((50,-1)))
+            self.hplc_inc_setpoint = epics.wx.PVFloatCtrl(inc_box,
+                self.settings['hplc_inc_TSetpoint_pv'],
+                fg='black', style=wx.ST_NO_AUTORESIZE, size=self._FromDIP((50,-1)))
+
+            inc_grid_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(5), hgap=self._FromDIP(2))
+            inc_grid_sizer.Add(wx.StaticText(inc_box, label='Coflow Inc. Temp. [C]:'),
+                flag=wx.ALIGN_CENTER_VERTICAL)
+            inc_grid_sizer.Add(self.coflow_inc_temp, flag=wx.ALIGN_CENTER_VERTICAL)
+            inc_grid_sizer.Add(wx.StaticText(inc_box, label='Coflow Inc. Setpoint [C]:'),
+                flag=wx.ALIGN_CENTER_VERTICAL)
+            inc_grid_sizer.Add(self.coflow_inc_setpoint, flag=wx.ALIGN_CENTER_VERTICAL)
+            inc_grid_sizer.Add(wx.StaticText(inc_box, label='HPLC Inc. Temp. [C]:'),
+                flag=wx.ALIGN_CENTER_VERTICAL)
+            inc_grid_sizer.Add(self.hplc_inc_temp, flag=wx.ALIGN_CENTER_VERTICAL)
+            inc_grid_sizer.Add(wx.StaticText(inc_box, label='HPLC Inc. Setpoint [C]:'),
+                flag=wx.ALIGN_CENTER_VERTICAL)
+            inc_grid_sizer.Add(self.hplc_inc_setpoint, flag=wx.ALIGN_CENTER_VERTICAL)
+
+            inc_sizer = wx.StaticBoxSizer(inc_box, wx.HORIZONTAL)
+            inc_sizer.Add(inc_grid_sizer, flag=wx.EXPAND|wx.ALL, proportion=1,
+                border=self._FromDIP(5))
+
 
 
         self.status = wx.StaticText(status_panel, label='Coflow off', style=wx.ST_NO_AUTORESIZE,
@@ -2179,27 +2232,24 @@ class CoflowPanel(utils.DevicePanel):
         status_grid_sizer.Add(temp_label, flag=wx.ALIGN_CENTER_VERTICAL)
         status_grid_sizer.Add(self.cell_temp, flag=wx.ALIGN_CENTER_VERTICAL)
 
+        status_sizer = wx.BoxSizer(wx.VERTICAL)
+        status_sizer.Add(status_grid_sizer)
+
         if self.settings['use_incubator_pvs']:
-            status_grid_sizer.Add(wx.StaticText(status_panel, label='Coflow Inc. Temp. [C]:'),
-                flag=wx.ALIGN_CENTER_VERTICAL)
-            status_grid_sizer.Add(self.coflow_inc_temp, flag=wx.ALIGN_CENTER_VERTICAL)
-            status_grid_sizer.Add(wx.StaticText(status_panel, label='Coflow Inc. Humidity [%]:'),
-                flag=wx.ALIGN_CENTER_VERTICAL)
-            status_grid_sizer.Add(self.coflow_inc_humid, flag=wx.ALIGN_CENTER_VERTICAL)
-            status_grid_sizer.Add(wx.StaticText(status_panel, label='HPLC Inc. Temp. [C]:'),
-                flag=wx.ALIGN_CENTER_VERTICAL)
-            status_grid_sizer.Add(self.hplc_inc_temp, flag=wx.ALIGN_CENTER_VERTICAL)
-            status_grid_sizer.Add(wx.StaticText(status_panel, label='HPLC Inc. Humidity [%]:'),
-                flag=wx.ALIGN_CENTER_VERTICAL)
-            status_grid_sizer.Add(self.hplc_inc_humid, flag=wx.ALIGN_CENTER_VERTICAL)
+            status_sizer.Add(esensor_sizer, flag=wx.TOP, border=self.FromDIP(5))
+            status_sizer.Add(inc_sizer, flag=wx.TOP, border=self.FromDIP(5))
+
 
         coflow_buffer_sizer = self._create_buffer_ctrls(status_panel)
 
         coflow_status_sizer = wx.StaticBoxSizer(wx.StaticBox(status_panel,
             label='Coflow Status'), wx.HORIZONTAL)
-        coflow_status_sizer.Add(status_grid_sizer, border=self._FromDIP(5), flag=wx.ALL)
+        coflow_status_sizer.Add(status_sizer, border=self._FromDIP(5), flag=wx.ALL)
         coflow_status_sizer.Add(coflow_buffer_sizer, border=self._FromDIP(5),
             flag=wx.LEFT|wx.RIGHT|wx.BOTTOM|wx.EXPAND)
+
+
+
 
         coflow_status_sizer.AddStretchSpacer(1)
 
@@ -3647,6 +3697,10 @@ default_coflow_settings = {
         'coflow_inc_esensor_H_pv'   : '18ID:EnvMon:CoflowInc:Humid',
         'hplc_inc_esensor_T_pv'     : '18ID:EnvMon:HPLCInc:TempC',
         'hplc_inc_esensor_H_pv'     : '18ID:EnvMon:HPLCInc:Humid',
+        'coflow_inc_T_pv'           : '18ID:Memmert:CoflowInc:Temp',
+        'coflow_inc_TSetpoint_pv'   : '18ID:Memmert:CoflowInc:TempSetpoint',
+        'hplc_inc_T_pv'             : '18ID:Memmert:HPLCInc:Temp',
+        'hplc_inc_TSetpoint_pv'     : '18ID:Memmert:HPLCInc:TempSetpoint',
         'use_incubator_pvs'         : True,
         }}],
     }
