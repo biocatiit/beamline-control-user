@@ -1203,20 +1203,20 @@ class Autosampler(object):
 
         return success
 
-    def load_and_move_to_inject(self, volume, rate, row, column, vol_units='uL',
+    def load_and_move_to_inject(self, volume, row, column, vol_units='uL',
         rate_units='uL/min', thread=True):
         if not thread:
-            success = self._inner_load_and_move_to_inject(volume, rate, row,
+            success = self._inner_load_and_move_to_inject(volume, row,
                 column, vol_units, rate_units)
         else:
             self._cmd_queue.append([self._inner_load_and_move_to_inject, [volume,
-                rate, row, column], {'vol_units': vol_units,
+                row, column], {'vol_units': vol_units,
                 'rate_units': rate_units}])
             success = True
 
         return success
 
-    def _inner_load_and_move_to_inject(self, volume, rate, row, column, vol_units='uL',
+    def _inner_load_and_move_to_inject(self, volume, row, column, vol_units='uL',
         rate_units='uL/min'):
         initial_vol = pumpcon.convert_volume(volume, vol_units, 'uL')
 
@@ -2292,7 +2292,7 @@ class AutosamplerPanel(utils.DevicePanel):
         dwell_cmd = ['set_sample_dwell_time', [self.name, dwell_time,], {}]
 
         load_cmd = ['load_and_move_to_inject', [self.name, volume, row, col,
-            rate_units], {}]
+            vol_units, rate_units], {}]
 
         self._send_cmd(rate_cmd, False)
         self._send_cmd(dwell_cmd, False)
@@ -2772,18 +2772,18 @@ class AutosamplerPanel(utils.DevicePanel):
             state = 'idle'
 
         elif cmd_name == 'load_and_inject':
-            volume = cmd_args['volume']
-            rate = cmd_args['rate']
-            start_delay = cmd_args['start_delay']
-            end_delay = cmd_args['end_delay']
-            trigger = cmd_args['trigger']
-            row = cmd_args['row']
-            col = cmd_args['column']
+            volume = cmd_kwargs['volume']
+            rate = cmd_kwargs['rate']
+            start_delay = cmd_kwargs['start_delay']
+            end_delay = cmd_kwargs['end_delay']
+            trigger = cmd_kwargs['trigger']
+            row = cmd_kwargs['row']
+            col = cmd_kwargs['column']
             vol_units = 'uL'
             rate_units = 'uL/min'
-            draw_rate = cmd_args['draw_rate']
-            dwell_time = cmd_args['dwell_time']
-            clean_needle = cmd_args['clean_needle']
+            draw_rate = cmd_kwargs['draw_rate']
+            dwell_time = cmd_kwargs['dwell_time']
+            clean_needle = cmd_kwargs['clean_needle']
 
             self._load_and_inject(row, col, volume, rate, start_delay,
                 end_delay, trigger, vol_units, rate_units, draw_rate,
@@ -2804,13 +2804,13 @@ class AutosamplerPanel(utils.DevicePanel):
             state = 'move_to_clean'
 
         elif cmd_name == 'load_and_move_to_inject':
-            volume = cmd_args['volume']
-            row = cmd_args['row']
-            col = cmd_args['column']
-            vol_units = cmd_args['vol_units']
-            rate_units = cmd_args['rate_units']
-            draw_rate = cmd_args['draw_rate']
-            dwell_time = cmd_args['dwell_time']
+            volume = cmd_kwargs['volume']
+            row = cmd_kwargs['row']
+            col = cmd_kwargs['column']
+            vol_units = cmd_kwargs['vol_units']
+            rate_units = cmd_kwargs['rate_units']
+            draw_rate = cmd_kwargs['draw_rate']
+            dwell_time = cmd_kwargs['dwell_time']
 
             self._load_and_move_to_inject(row, col, volume, vol_units,
                 rate_units, draw_rate, dwell_time)
@@ -2818,14 +2818,14 @@ class AutosamplerPanel(utils.DevicePanel):
             state = 'load'
 
         elif cmd_name == 'inject':
-            volume = cmd_args['volume']
-            rate = cmd_args['rate']
-            start_delay = cmd_args['start_delay']
-            end_delay = cmd_args['end_delay']
-            trigger = cmd_args['trigger']
+            volume = cmd_kwargs['volume']
+            rate = cmd_kwargs['rate']
+            start_delay = cmd_kwargs['start_delay']
+            end_delay = cmd_kwargs['end_delay']
+            trigger = cmd_kwargs['trigger']
             vol_units = 'uL'
             rate_units = 'uL/min'
-            clean_needle = cmd_args['clean_needle']
+            clean_needle = cmd_kwargs['clean_needle']
 
             self._inject(volume, rate, start_delay, end_delay, trigger,
                 vol_units, rate_units, clean_needle)

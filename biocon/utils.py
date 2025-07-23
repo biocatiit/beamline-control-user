@@ -881,6 +881,7 @@ class DevicePanel(wx.Panel):
         self.status_q = deque()
 
         if not self.remote:
+            logger.debug('Setting up local communication')
             self.com_thread = settings['com_thread']
 
             self.com_timeout_event = None
@@ -891,6 +892,7 @@ class DevicePanel(wx.Panel):
                     self.status_q)
 
         else:
+            logger.debug('Setting up remote communication')
             self.com_abort_event = threading.Event()
             self.com_timeout_event = threading.Event()
 

@@ -4353,14 +4353,24 @@ class ExpPanel(wx.Panel):
             elif cmd_kwargs['item_type'] == 'exposure':
                 exp_type = cmd_kwargs['exp_type']
 
+            elif cmd_kwargs['item_type'] == 'batch_sample':
+                exp_type = 'Batch'
+
             if (exp_type == 'SEC-SAXS' or exp_type == 'SEC-MALS-SAXS' or
                 exp_type == 'IEC-SAXS'):
                 column = cmd_kwargs['column']
+                vol = cmd_kwargs['inj_vol']
+
+            elif exp_type == 'Batch':
+                vol = cmd_kwargs['volume']
+
+            else:
+                vol = None
 
             sample = cmd_kwargs['sample_name']
             buf = cmd_kwargs['buf']
 
-            vol = cmd_kwargs['inj_vol']
+
             conc = cmd_kwargs['conc']
             notes = cmd_kwargs['notes']
 
@@ -4373,9 +4383,11 @@ class ExpPanel(wx.Panel):
                 'Experiment type:'      : exp_type,
                 'Sample:'               : sample,
                 'Buffer:'               : buf,
-                'Loaded volume [uL]:'   : vol,
                 'Concentration [mg/ml]:': conc,
                 }
+
+            if vol is not None:
+                metadata['Loaded volume [uL]:'] = vol
 
             if temperature is not None:
                 metadata['Temperature [C]:'] = temperature

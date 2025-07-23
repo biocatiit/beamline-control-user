@@ -245,7 +245,7 @@ class BioFrame(wx.Frame):
         if 'autosampler' in self.settings['components']:
             autosampler_panel = self.component_panels['autosampler']
             autosampler_automator_callback = autosampler_panel.automator_callback
-            inst_settings['exp'] = {'automator_callback': autosampler_automator_callback}
+            inst_settings['autosampler'] = {'automator_callback': autosampler_automator_callback}
 
         self.settings[key]['instruments'] = inst_settings
 
@@ -308,7 +308,8 @@ class BioFrame(wx.Frame):
                 box = wx.StaticBox(box_panel, label=label)
                 # box.SetOwnForegroundColour(wx.Colour('firebrick'))
 
-                if key != 'uv' and key != 'hplc' and key != 'coflow':
+                if (key != 'uv' and key != 'hplc' and key != 'coflow'
+                    and key != 'autosampler'):
                     component_panel = self.settings['components'][key](self.settings[key],
                         box, name=key)
                 else:
@@ -359,7 +360,7 @@ if __name__ == '__main__':
 
     h1 = logging.StreamHandler(sys.stdout)
     h1.setLevel(logging.INFO)
-    # h1.setLevel(logging.DEBUG)
+    h1.setLevel(logging.DEBUG)
     formatter = logging.Formatter('%(asctime)s - %(message)s')
     h1.setFormatter(formatter)
 
@@ -515,13 +516,13 @@ if __name__ == '__main__':
     # Autosampler Settings
     autosampler_settings = autosamplercon.default_autosampler_settings
     autosampler_settings['com_thread'] = None
+    autosampler_settings['device_communication'] = 'remote'
     autosampler_settings['remote'] = True
     autosampler_settings['remote_device'] = 'autosampler'
     autosampler_settings['remote_ip'] = '164.54.204.53'
     autosampler_settings['remote_port'] = '5557'
     autosampler_settings['device_data'] = autosampler_settings['device_init'][0]
     autosampler_settings['inline_panel'] = True
-
 
     biocon_settings = {}
 
@@ -536,7 +537,7 @@ if __name__ == '__main__':
         ('uv', spectrometercon.UVPanel),
         ('hplc', biohplccon.HPLCPanel),
         ('automator', autocon.AutoPanel),
-        # ('autosampler', autosamplercon.AutosamplerPanel),
+        ('autosampler', autosamplercon.AutosamplerPanel),
         ])
 
     settings = {
