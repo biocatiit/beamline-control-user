@@ -2060,7 +2060,7 @@ class CoflowPanel(utils.DevicePanel):
         timer_box_sizer.Add(ft_sizer, flag=wx.ALL, border=self._FromDIP(2))
         timer_box_sizer.AddStretchSpacer(1)
 
-        adv_sizer.Add(timer_box_sizer, flag=wx.ALL|wx.EXPAND, border=self._FromDIP(5))
+
 
 
         actions_box = wx.StaticBox(adv_win, label='Actions')
@@ -2097,8 +2097,12 @@ class CoflowPanel(utils.DevicePanel):
         actions_box_sizer.Add(actions_top_sizer, flag=wx.ALL, border=self._FromDIP(2))
         actions_box_sizer.AddStretchSpacer(1)
 
-        adv_sizer.Add(actions_box_sizer, flag=wx.ALL|wx.EXPAND, border=self._FromDIP(2))
+        adv_sub_sizer1 = wx.BoxSizer(wx.HORIZONTAL)
+        adv_sub_sizer1.Add(timer_box_sizer, flag=wx.ALL|wx.EXPAND, border=self._FromDIP(5))
+        adv_sub_sizer1.Add(actions_box_sizer, flag=wx.ALL|wx.EXPAND, border=self._FromDIP(2))
 
+
+        adv_sizer.Add(adv_sub_sizer1, flag=wx.ALL|wx.EXPAND, border=self._FromDIP(5))
 
         if self.top_settings['device_communication'] == 'local':
             show_pump_btn = wx.Button(adv_win, label='Pump Ctrl.')
