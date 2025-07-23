@@ -4199,6 +4199,8 @@ class HPLCPanel(utils.DevicePanel):
         self._uv_280_abs = ''
         self._uv_260_abs = ''
 
+        self._last_sample_settings = {}
+
         super(HPLCPanel, self).__init__(parent, panel_id, settings,
             *args, **kwargs)
 
@@ -5857,18 +5859,38 @@ class HPLCPanel(utils.DevicePanel):
         except Exception:
             pressure_lim = self.settings['sample_pressure_lim']
 
+        if len(self._last_sample_settings) == 0:
+            acq_method = self.settings['acq_method']
+            sample_loc = self.settings['sample_loc']
+            inj_vol = self.settings['inj_vol']
+            elution_vol = self.settings['elution_vol']
+            result_path = self.settings['result_path']
+            sp_method = self.settings['sp_method']
+            wait_for_flow_ramp = self.settings['wait_for_flow_ramp']
+            settle_time = self.settings['settle_time']
+
+        else:
+            acq_method = self._last_sample_settings['acq_method']
+            sample_loc = self._last_sample_settings['sample_loc']
+            inj_vol = self._last_sample_settings['inj_vol']
+            elution_vol = self._last_sample_settings['elution_vol']
+            result_path = self._last_sample_settings['result_path']
+            sp_method = self._last_sample_settings['sp_method']
+            wait_for_flow_ramp = self._last_sample_settings['wait_for_flow_ramp']
+            settle_time = self._last_sample_settings['settle_time']
+
         default_sample_settings = {
-            'acq_method'    : self.settings['acq_method'],
-            'sample_loc'    : self.settings['sample_loc'],
-            'inj_vol'       : self.settings['inj_vol'],
+            'acq_method'    : acq_method,
+            'sample_loc'    : sample_loc,
+            'inj_vol'       : inj_vol,
             'flow_rate'     : flow_rate,
             'flow_accel'    : flow_accel,
-            'elution_vol'   : self.settings['elution_vol'],
+            'elution_vol'   : elution_vol,
             'pressure_lim'  : pressure_lim,
-            'result_path'   : self.settings['result_path'],
-            'sp_method'     : self.settings['sp_method'],
-            'wait_for_flow_ramp'    : self.settings['wait_for_flow_ramp'],
-            'settle_time'   : self.settings['settle_time'],
+            'result_path'   : result_path,
+            'sp_method'     : sp_method,
+            'wait_for_flow_ramp'    : wait_for_flow_ramp,
+            'settle_time'   : settle_time,
             'all_acq_methods'       : self._methods,
             'all_sample_methods'    : self._sp_methods,
             'flow_path'     : flow_path,
@@ -5932,6 +5954,17 @@ class HPLCPanel(utils.DevicePanel):
                 sample_loc, inj_vol, flow_rate, flow_accel, elution_vol,
                 pressure_lim], sample_settings]
             self._send_cmd(cmd, False)
+
+            self._last_sample_settings = {
+                'acq_method'    : acq_method,
+                'sample_loc'    : sample_loc,
+                'inj_vol'       : inj_vol,
+                'elution_vol'   : elution_vol,
+                'results_path'  : sample_settings['results_path'],
+                'sp_method'     : sample_settings['sp_method'],
+                'wait_for_flow_ramp'    : sample_settings['wait_for_flow_ramp'],
+                'settle_time'   : sample_settings['settle_time'],
+            }
 
             run_sample = True
 
