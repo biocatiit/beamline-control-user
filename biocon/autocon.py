@@ -756,14 +756,6 @@ class BatchSampleCommand(AutoCommand):
         finish_conds2 = [['autosampler', [finish_wait_cmd2,]], ['exp', [finish_wait_cmd2,]],
             ['coflow', [finish_wait_cmd2,]],]
 
-
-        self._add_automator_cmd('exp', sample_wait_cmd, [], {'condition': 'status',
-            'inst_conds': sample_conds})
-        self._add_automator_cmd('exp', 'expose', [], cmd_info)
-        self._add_automator_cmd('exp', finish_wait_cmd, [], {'condition': 'status',
-            'inst_conds': finish_conds})
-
-
         batch_wait_id = self.automator.get_wait_id()
         batch_wait_cmd = 'wait_sync_{}'.format(batch_wait_id)
 
@@ -777,6 +769,19 @@ class BatchSampleCommand(AutoCommand):
         self._add_automator_cmd('autosampler', 'inject', [], cmd_info)
         self._add_automator_cmd('autosampler', finish_wait_cmd, [],
             {'condition': 'status', 'inst_conds': finish_conds})
+
+
+        exp_wait_id = self.automator.get_wait_id()
+        exp_wait_cmd = 'wait_sync_{}'.format(exp_wait_id)
+
+        self._add_automator_cmd('exp', sample_wait_cmd, [], {'condition': 'status',
+            'inst_conds': sample_conds})
+        self._add_automator_cmd('exp', exp_wait_cmd, [],
+            {'condition': 'status', 'inst_conds': [['autosampler',
+            ['load',]], ['exp', [exp_wait_cmd,]]]})
+        self._add_automator_cmd('exp', 'expose', [], cmd_info)
+        self._add_automator_cmd('exp', finish_wait_cmd, [], {'condition': 'status',
+            'inst_conds': finish_conds})
 
 
         self._add_automator_cmd('coflow', sample_wait_cmd, [],
@@ -1692,6 +1697,8 @@ class AutoSettings(scrolled.ScrolledPanel):
                 if ctrl is not None:
                     if isinstance(ctrl, wx.Choice):
                         ctrl.SetStringSelection(str(default_val))
+                    elif isinstance(ctrl, wx.StaticText):
+                        ctrl.SetLabel(str(default_val))
                     else:
                         try:
                             ctrl.SetValue(str(default_val))
@@ -2843,15 +2850,15 @@ class AutoList(utils.ItemList):
         if settings is None:
             actions = []
 
-            if ('autosampler' in self.auto_panel.settings['instruments'] and
-                'exp' in self.auto_panel.settings['instruments']):
-                actions.extend(['Run batch SAXS sample'])
-
             if ('hplc' in self.auto_panel.settings['instruments'] and
                 'exp' in self.auto_panel.settings['instruments'] and
                 'coflow' in self.auto_panel.settings['instruments']):
                 actions.extend(['Run SEC-SAXS sample', 'Equilibrate column',
                     'Switch pumps', 'Stop flow'])
+
+            if ('autosampler' in self.auto_panel.settings['instruments'] and
+                'exp' in self.auto_panel.settings['instruments']):
+                actions.extend(['Run batch SAXS sample'])
 
             actions.append('----Staff Methods----')
 

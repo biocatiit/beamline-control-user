@@ -360,7 +360,7 @@ if __name__ == '__main__':
 
     h1 = logging.StreamHandler(sys.stdout)
     h1.setLevel(logging.INFO)
-    h1.setLevel(logging.DEBUG)
+    # h1.setLevel(logging.DEBUG)
     formatter = logging.Formatter('%(asctime)s - %(message)s')
     h1.setFormatter(formatter)
 

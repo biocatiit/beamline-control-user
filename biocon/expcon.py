@@ -4023,6 +4023,13 @@ class ExpPanel(wx.Panel):
             for key, value in uv_metadata.items():
                 metadata[key] = value
 
+        if 'autosampler' in self.settings['components']:
+            as_panel = wx.FindWindowByName('autosampler')
+            as_metadata = as_panel.metadata()
+
+            for key, value in as_metadata.items():
+                metadata[key] = value
+
         if ('coflow' in self.settings['components']
             and 'metadata' in self.settings['components']):
             if metadata['Coflow on:']:
