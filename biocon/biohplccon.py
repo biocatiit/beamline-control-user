@@ -5907,7 +5907,8 @@ class HPLCPanel(utils.DevicePanel):
 
         default_sp_method = default_sample_settings['sp_method']
         if default_sp_method not in default_sample_settings['all_sample_methods']:
-            if default_sp_method != '':
+            if (default_sp_method != '' and default_sp_method is not None
+                and default_sp_method != 'None'):
                 default_sp_method = os.path.splitext(default_sp_method)[0]+'.smx'
 
                 if default_method not in default_sample_settings['all_sample_methods']:
@@ -5960,11 +5961,15 @@ class HPLCPanel(utils.DevicePanel):
                 'sample_loc'    : sample_loc,
                 'inj_vol'       : inj_vol,
                 'elution_vol'   : elution_vol,
-                'results_path'  : sample_settings['results_path'],
-                'sp_method'     : sample_settings['sp_method'],
+                'result_path'  : sample_settings['result_path'],
                 'wait_for_flow_ramp'    : sample_settings['wait_for_flow_ramp'],
                 'settle_time'   : sample_settings['settle_time'],
             }
+
+            if sample_settings['sp_method'] == 'None' or sample_settings['sp_method'] is None:
+                self._last_sample_settings['sp_method'] = ''
+            else:
+                self._last_sample_settings['sp_method'] = sample_settings['sp_method']
 
             run_sample = True
 
