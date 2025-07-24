@@ -2734,7 +2734,7 @@ class AutosamplerPanel(utils.DevicePanel):
         metadata = OrderedDict()
 
         metadata['Well:'] = self._selected_well
-        metadata['Loaded volume:'] = self._current_load_volume
+        metadata['Loaded volume [uL]:'] = self._current_load_volume
         metadata['Draw rate [uL/min]:'] = self._current_draw_rate
         metadata['Wait time after draw [s]'] = self._current_dwell_time
         metadata['Injection rate [uL/min]:'] = self._current_inj_rate
@@ -2824,47 +2824,6 @@ class AutosamplerPanel(utils.DevicePanel):
 
             self._load_and_move_to_inject(row, col, volume, vol_units,
                 rate_units, draw_rate, dwell_time)
-
-            well = cmd_kwargs['sample_well']
-            vol = pumpcon.convert_volume(volume, vol_units, 'uL')
-            rate = pumpcon.convert_flow_rate(cmd_kwargs['rate'], rate_units, 'uL/min')
-
-            if vol != self._current_load_volume:
-                wx.CallAfter(self.load_volume.ChangeValue, str(vol))
-                self._current_load_volume = vol
-
-            if well != self._selected_well:
-                if self._selected_well in self.well_ids_96:
-                    old_ctrl = wx.FindWindowById(self.well_ids_96[self._selected_well])
-                    wx.CallAfter(old_ctrl.SetBitmap, self.well_bmp)
-
-                new_ctrl = wx.FindWindowById(self.well_ids_96[well])
-
-                wx.CallAfter(new_ctrl.SetBitmap, self.selected_well_bmp)
-                self._selected_well = well
-
-                wx.CallAfter(self.sample_well.SetLabel, self._selected_well)
-
-            if dwell_time != self._current_dwell_time:
-                wx.CallAfter(self.dwell_time.ChangeValue, str(dwell_time))
-                self._current_dwell_time = dwell_time
-
-            if rate != self._current_inj_rate:
-                wx.CallAfter(self.inj_rate.ChangeValue, str(rate))
-                self._current_inj_rate = rate
-
-            if cmd_kwargs['trigger'] != self._current_trigger_on_inject:
-                wx.CallAfter(self.trigger_on_inject.ChangeValue, cmd_kwargs['trigger'])
-                self._current_trigger_on_inject = cmd_kwargs['trigger']
-
-            if cmd_kwargs['start_delay'] != self._current_buffer_start_delay:
-                wx.CallAfter(self.buffer_start_delay.ChangeValue, str(cmd_kwargs['start_delay']))
-                self._current_buffer_start_delay = cmd_kwargs['start_delay']
-
-            if cmd_kwargs['end_delay'] != self._current_buffer_end_delay:
-                wx.CallAfter(self.buffer_end_delay.ChangeValue, str(cmd_kwargs['end_delay']))
-                self._current_buffer_end_delay = cmd_kwargs['end_delay']
-
 
             state = 'load'
 

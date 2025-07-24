@@ -3999,6 +3999,8 @@ class ExpPanel(wx.Panel):
             for key, value in scan_metadata.items():
                 metadata[key] = value
 
+        exp_type = None
+
         if 'metadata' in self.settings['components'] and metadata_vals is None:
             params_panel = wx.FindWindowByName('metadata')
             params_metadata = params_panel.metadata()
@@ -4008,6 +4010,8 @@ class ExpPanel(wx.Panel):
 
                 if key == 'Column:':
                     column = value
+                elif key == 'Experiment type:':
+                    exp_type = value
 
         elif metadata_vals is not None:
             for key, value in metadata_vals.items():
@@ -4015,6 +4019,8 @@ class ExpPanel(wx.Panel):
 
                 if key == 'Column:':
                     column = value
+                elif key == 'Experiment type:':
+                    exp_type = value
 
         if 'uv' in self.settings['components']:
             uv_panel = wx.FindWindowByName('uv')
@@ -4023,7 +4029,8 @@ class ExpPanel(wx.Panel):
             for key, value in uv_metadata.items():
                 metadata[key] = value
 
-        if 'autosampler' in self.settings['components']:
+        if ('autosampler' in self.settings['components']
+            and exp_type == 'Batch mode SAXS' and metadata_vals is None):
             as_panel = wx.FindWindowByName('autosampler')
             as_metadata = as_panel.metadata()
 
@@ -4365,12 +4372,9 @@ class ExpPanel(wx.Panel):
 
             if (exp_type == 'SEC-SAXS' or exp_type == 'SEC-MALS-SAXS' or
                 exp_type == 'IEC-SAXS'):
-                column = cmd_kwargs['column']
                 vol = cmd_kwargs['inj_vol']
-
             elif exp_type == 'Batch':
                 vol = cmd_kwargs['volume']
-
             else:
                 vol = None
 
@@ -4401,7 +4405,20 @@ class ExpPanel(wx.Panel):
 
             if (exp_type == 'SEC-SAXS' or exp_type == 'SEC-MALS-SAXS' or
                 exp_type == 'IEC-SAXS'):
-                metadata['Column:'] = column
+                metadata['Column:'] = cmd_kwargs['column']
+                metadata['Sample Location:'] = cmd_kwargs['sample_loc']
+                metadata['HPLC flow rate [mL/min]:'] = cmd_kwargs['flow_rate']
+                metadata['Elution volume [mL]:'] = cmd_kwargs['elution_vol']
+                metadata['HPLC acquisition method:'] = cmd_kwargs['acq_method']
+                metadata['HPLC sample prep method:'] = cmd_kwargs['sp_method']
+            elif exp_type == 'Batch mode SAXS'
+                metadata['Well:'] = cmd_kwargs['sample_well']
+                metadata['Draw rate [uL/min]:'] = cmd_kwargs['draw_rate']
+                metadata['Wait time after draw [s]'] = cmd_kwargs['dwell_time']
+                metadata['Injection rate [uL/min]:'] = cmd_kwargs['rate']
+                metadata['Delay injection after trigger [s]:'] = cmd_kwargs['start_delay']
+                metadata['Delay after injection end [s]:'] = cmd_kwargs['end_delay']
+                metadata['Trigger on inject:'] = cmd_kwargs['trigger']
 
             metadata['Notes:'] = notes
 
