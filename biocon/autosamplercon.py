@@ -37,9 +37,15 @@ import numpy as np
 import wx
 # import zaber.serial as zaber
 from six import string_types
-import epics
+try:
+    import epics
+except Exception:
+    pass
+try:
+    import motorcon
+except Exception:
+    pass
 
-import motorcon
 import valvecon
 import pumpcon
 import utils

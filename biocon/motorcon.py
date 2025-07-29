@@ -38,8 +38,11 @@ if __name__ != '__main__':
 import wx
 import wx.lib.buttons as buttons
 import numpy as np
-import epics
-from epics.wx.wxlib import EpicsFunction
+try:
+    import epics
+    from epics.wx.wxlib import EpicsFunction
+except Exception:
+    pass
 
 try:
     import serial.tools.list_ports as list_ports
@@ -53,7 +56,10 @@ except ModuleNotFoundError:
 
 import XPS_C8_drivers as xps_drivers
 import utils
-import custom_epics_widgets
+try:
+    import custom_epics_widgets
+except Exception:
+    pass
 
 
 class Motor(object):

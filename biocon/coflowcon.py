@@ -50,7 +50,10 @@ import client
 import pumpcon
 import fmcon
 import valvecon
-import motorcon
+try:
+    import motorcon
+except Exception:
+    pass
 import utils
 
 class CoflowControl(object):
