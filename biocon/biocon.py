@@ -245,7 +245,7 @@ class BioFrame(wx.Frame):
         if 'autosampler' in self.settings['components']:
             autosampler_panel = self.component_panels['autosampler']
             autosampler_automator_callback = autosampler_panel.automator_callback
-            inst_settings['exp'] = {'automator_callback': autosampler_automator_callback}
+            inst_settings['autosampler'] = {'automator_callback': autosampler_automator_callback}
 
         self.settings[key]['instruments'] = inst_settings
 
@@ -308,7 +308,8 @@ class BioFrame(wx.Frame):
                 box = wx.StaticBox(box_panel, label=label)
                 # box.SetOwnForegroundColour(wx.Colour('firebrick'))
 
-                if key != 'uv' and key != 'hplc' and key != 'coflow':
+                if (key != 'uv' and key != 'hplc' and key != 'coflow'
+                    and key != 'autosampler'):
                     component_panel = self.settings['components'][key](self.settings[key],
                         box, name=key)
                 else:
@@ -382,6 +383,7 @@ if __name__ == '__main__':
     exposure_settings['shutter_speed_pad'] = 0.002
     exposure_settings['shutter_speed_cycle'] = 0.1
 
+    # EIGER2 XE 9M
     exposure_settings['det_args'] =  {'use_tiff_writer': False,
         'use_file_writer': True, 'photon_energy' : 12.0,
         'images_per_file': 300} #1 image/file for TR, 300 for eq SAXS, 1000 for muscle
@@ -479,6 +481,8 @@ if __name__ == '__main__':
         # 'raw_settings'  : '/nas_data/Pilatus1M/2021_Run1/20210129_Hopkins/setup/calibration/pipeline_SAXS.cfg',
         'local_basedir' : '/nas_data/Eiger2x',
         'data_basedir'  : '/nas_data/Eiger2x',
+        # 'local_basedir' : '/nas_data/Pilatus1M',
+        # 'data_basedir'  : '/nas_data/Pilatus1M',
         'output_basedir': '/nas_data/SAXS',
         'data_source'   : 'Stream', #File or stream
         'detector'      : 'Eiger',
@@ -512,6 +516,7 @@ if __name__ == '__main__':
     # Autosampler Settings
     autosampler_settings = autosamplercon.default_autosampler_settings
     autosampler_settings['com_thread'] = None
+    autosampler_settings['device_communication'] = 'remote'
     autosampler_settings['remote'] = True
     autosampler_settings['remote_device'] = 'autosampler'
     autosampler_settings['remote_ip'] = '164.54.204.53'
@@ -519,21 +524,20 @@ if __name__ == '__main__':
     autosampler_settings['device_data'] = autosampler_settings['device_init'][0]
     autosampler_settings['inline_panel'] = True
 
-
     biocon_settings = {}
 
     components = OrderedDict([
         ('exposure', expcon.ExpPanel),
-        # ('coflow', coflowcon.CoflowPanel),
+        ('coflow', coflowcon.CoflowPanel),
         # ('trsaxs_scan', trcon.TRScanPanel),
         # ('trsaxs_flow', trcon.TRFlowPanel),
         # ('scan',    scancon.ScanPanel),
-        # ('metadata', metadata.ParamPanel),
-        # ('pipeline', pipeline_ctrl.PipelineControl),
-        # ('uv', spectrometercon.UVPanel),
-        # ('hplc', biohplccon.HPLCPanel),
-        # ('automator', autocon.AutoPanel),
-        # ('autosampler', autosamplercon.AutosamplerPanel),
+        ('metadata', metadata.ParamPanel),
+        ('pipeline', pipeline_ctrl.PipelineControl),
+        ('uv', spectrometercon.UVPanel),
+        ('hplc', biohplccon.HPLCPanel),
+        ('automator', autocon.AutoPanel),
+        ('autosampler', autosamplercon.AutosamplerPanel),
         ])
 
     settings = {

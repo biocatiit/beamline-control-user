@@ -141,9 +141,12 @@ class ExpCommThread(threading.Thread):
         elif self._settings['detector'].lower().split('_')[-1] == 'epics':
             logger.debug('Getting epics detector')
             record_name = self._settings['detector'].rstrip('_epics')
-
             det_args = self._settings['det_args']
-            det = detectorcon.EPICSEigerDetector(record_name, **det_args)
+
+            if 'eig' in record_name.lower():
+                det = detectorcon.EPICSEigerDetector(record_name, **det_args)
+            elif 'pil' in record_name.lower():
+                det = detectorcon.EPICSPilatusDetector(record_name, **det_args)
 
         logger.debug("Got detector records")
 
@@ -2215,7 +2218,7 @@ class ExpCommThread(threading.Thread):
                 self.return_queue.append(['timeout', [data_dir, os.path.expanduser('~')]])
                 data_dir = os.path.expanduser('~')
 
-        zpad = 6
+        zpad = 6 #CHANGE ME?
 
         log_file = os.path.join(data_dir, '{}.log'.format(fprefix))
 
@@ -2249,7 +2252,7 @@ class ExpCommThread(threading.Thread):
 
         logger.info(header.split('\n')[-2])
 
-        zpad = 6
+        zpad = 6 #CHANGE ME?
 
         log_file = os.path.join(data_dir, '{}.log'.format(fprefix))
 
@@ -2352,7 +2355,7 @@ class ExpCommThread(threading.Thread):
 
         # logger.debug(avg_index)
 
-        zpad = 6
+        zpad = 6 #CHANGE ME?
 
         with open(log_file, 'w') as f, open(log_summary_file, 'w') as f_sum:
             f.write(header)
@@ -3996,6 +3999,8 @@ class ExpPanel(wx.Panel):
             for key, value in scan_metadata.items():
                 metadata[key] = value
 
+        exp_type = None
+
         if 'metadata' in self.settings['components'] and metadata_vals is None:
             params_panel = wx.FindWindowByName('metadata')
             params_metadata = params_panel.metadata()
@@ -4005,6 +4010,8 @@ class ExpPanel(wx.Panel):
 
                 if key == 'Column:':
                     column = value
+                elif key == 'Experiment type:':
+                    exp_type = value
 
         elif metadata_vals is not None:
             for key, value in metadata_vals.items():
@@ -4012,12 +4019,22 @@ class ExpPanel(wx.Panel):
 
                 if key == 'Column:':
                     column = value
+                elif key == 'Experiment type:':
+                    exp_type = value
 
         if 'uv' in self.settings['components']:
             uv_panel = wx.FindWindowByName('uv')
             uv_metadata = uv_panel.metadata()
 
             for key, value in uv_metadata.items():
+                metadata[key] = value
+
+        if ('autosampler' in self.settings['components']
+            and exp_type == 'Batch mode SAXS' and metadata_vals is None):
+            as_panel = wx.FindWindowByName('autosampler')
+            as_metadata = as_panel.metadata()
+
+            for key, value in as_metadata.items():
                 metadata[key] = value
 
         if ('coflow' in self.settings['components']
@@ -4350,14 +4367,21 @@ class ExpPanel(wx.Panel):
             elif cmd_kwargs['item_type'] == 'exposure':
                 exp_type = cmd_kwargs['exp_type']
 
+            elif cmd_kwargs['item_type'] == 'batch_sample':
+                exp_type = 'Batch'
+
             if (exp_type == 'SEC-SAXS' or exp_type == 'SEC-MALS-SAXS' or
                 exp_type == 'IEC-SAXS'):
-                column = cmd_kwargs['column']
+                vol = cmd_kwargs['inj_vol']
+            elif exp_type == 'Batch':
+                vol = cmd_kwargs['volume']
+            else:
+                vol = None
 
             sample = cmd_kwargs['sample_name']
             buf = cmd_kwargs['buf']
 
-            vol = cmd_kwargs['inj_vol']
+
             conc = cmd_kwargs['conc']
             notes = cmd_kwargs['notes']
 
@@ -4370,16 +4394,31 @@ class ExpPanel(wx.Panel):
                 'Experiment type:'      : exp_type,
                 'Sample:'               : sample,
                 'Buffer:'               : buf,
-                'Loaded volume [uL]:'   : vol,
                 'Concentration [mg/ml]:': conc,
                 }
+
+            if vol is not None:
+                metadata['Loaded volume [uL]:'] = vol
 
             if temperature is not None:
                 metadata['Temperature [C]:'] = temperature
 
             if (exp_type == 'SEC-SAXS' or exp_type == 'SEC-MALS-SAXS' or
                 exp_type == 'IEC-SAXS'):
-                metadata['Column:'] = column
+                metadata['Column:'] = cmd_kwargs['column']
+                metadata['Sample Location:'] = cmd_kwargs['sample_loc']
+                metadata['HPLC flow rate [mL/min]:'] = cmd_kwargs['flow_rate']
+                metadata['Elution volume [mL]:'] = cmd_kwargs['elution_vol']
+                metadata['HPLC acquisition method:'] = cmd_kwargs['acq_method']
+                metadata['HPLC sample prep method:'] = cmd_kwargs['sp_method']
+            elif exp_type == 'Batch mode SAXS'
+                metadata['Well:'] = cmd_kwargs['sample_well']
+                metadata['Draw rate [uL/min]:'] = cmd_kwargs['draw_rate']
+                metadata['Wait time after draw [s]'] = cmd_kwargs['dwell_time']
+                metadata['Injection rate [uL/min]:'] = cmd_kwargs['rate']
+                metadata['Delay injection after trigger [s]:'] = cmd_kwargs['start_delay']
+                metadata['Delay after injection end [s]:'] = cmd_kwargs['end_delay']
+                metadata['Trigger on inject:'] = cmd_kwargs['trigger']
 
             metadata['Notes:'] = notes
 
@@ -4495,8 +4534,9 @@ default_exposure_settings = {
     # 'nparams_max'           : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
     # 'exp_period_delta'      : 0.00095,
     # 'local_dir_root'        : '/nas_data/Pilatus1M',
-    # 'remote_dir_root'       : '/nas_data',
-    # 'detector'              : 'pilatus_mx',
+    # 'remote_dir_root'       : '/ramdisk',
+    # # 'detector'              : 'pilatus_mx',
+    # 'detector'              : '18IDpil1M:_epics',
     # 'det_args'              : {}, #Allows detector specific keyword arguments
     # 'add_file_postfix'      : True,
 
