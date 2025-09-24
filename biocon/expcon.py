@@ -4411,7 +4411,7 @@ class ExpPanel(wx.Panel):
                 metadata['Elution volume [mL]:'] = cmd_kwargs['elution_vol']
                 metadata['HPLC acquisition method:'] = cmd_kwargs['acq_method']
                 metadata['HPLC sample prep method:'] = cmd_kwargs['sp_method']
-            elif exp_type == 'Batch mode SAXS'
+            elif exp_type == 'Batch mode SAXS':
                 metadata['Well:'] = cmd_kwargs['sample_well']
                 metadata['Draw rate [uL/min]:'] = cmd_kwargs['draw_rate']
                 metadata['Wait time after draw [s]'] = cmd_kwargs['dwell_time']
