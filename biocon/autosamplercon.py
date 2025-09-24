@@ -3110,24 +3110,24 @@ default_autosampler_settings = {
         'coflow_y_motor'        : {'name': 'coflow_y', 'args': ['18ID_DMC_E01:6'],
                                         'kwargs': {}},
         'needle_valve'          : {'name': 'Needle',
-                                        'args':['Cheminert', 'COM11'],
+                                        'args':['Cheminert', 'COM10'],
                                         'kwargs': {'positions' : 6,
                                         'comm_lock': None}},
-        'sample_pump'           : {'name': 'sample', 'args': ['Hamilton PSD6', 'COM9'],
+        'sample_pump'           : {'name': 'sample', 'args': ['Hamilton PSD6', 'COM8'],
                                     'kwargs': {'syringe_id': '0.05 mL, Hamilton Glass',
                                     'pump_address': '1', 'dual_syringe': 'False',
                                     'comm_lock': None,},
                                     'ctrl_args': {'flow_rate' : 100,
                                     'refill_rate' : 100, 'units': 'uL/min'}},
-        'clean1_pump'           : {'name': 'water', 'args': ['KPHM100', 'COM10'],
+        'clean1_pump'           : {'name': 'water', 'args': ['KPHM100', 'COM9'],
                                     'kwargs': {'flow_cal': '319.2',
                                     'comm_lock': None},
                                     'ctrl_args': {'flow_rate': 1}},
-        'clean2_pump'           : {'name': 'ethanol', 'args': ['KPHM100', 'COM12'],
+        'clean2_pump'           : {'name': 'ethanol', 'args': ['KPHM100', 'COM11'],
                                     'kwargs': {'flow_cal': '319.2',
                                     'comm_lock': None},
                                     'ctrl_args': {'flow_rate': 1}},
-        'clean3_pump'           : {'name': 'hellmanex', 'args': ['KPHM100', 'COM8'],
+        'clean3_pump'           : {'name': 'hellmanex', 'args': ['KPHM100', 'COM7'],
                                     'kwargs': {'flow_cal': '319.2',
                                     'comm_lock': None},
                                     'ctrl_args': {'flow_rate': 1}},
@@ -3147,7 +3147,7 @@ default_autosampler_settings = {
     'home_settings'         : {'plate_x': {'dir': -1, 'step': 0.1, 'pos': 0},
                                 'plate_z': {'dir': 1, 'step': 0.1, 'pos': 0},
                                 'needle_y': {'dir': -1, 'step': 0.01, 'pos': -2.20}}, #Direction 1/-1 for positive/negative. step is step size off limit, pos is what to set the home position as.
-    'base_position'         : {'plate_x': 272.1, 'plate_z': -81.6, 'needle_y': 109.6}, # A1 well position, needle height at chiller plate top
+    'base_position'         : {'plate_x': 269.85, 'plate_z': -76.6, 'needle_y': 111.7}, # A1 well position, needle height at chiller plate top
     'clean_offsets'         : {'plate_x': 99.9, 'plate_z': -21.2, 'needle_y': -10}, # Relative to base position
     'needle_out_offset'     : 5, # mm
     'needle_in_position'    : 0,
