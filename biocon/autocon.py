@@ -3251,7 +3251,7 @@ class AutoList(utils.ItemList):
                 cmd_settings)
 
             cmd_settings, exp_valid, exp_errors = self._validate_exp_params(
-                cmd_settings)
+                cmd_settings, sec_saxs=False)
 
             cmd_settings, coflow_valid, coflow_errors = self._validate_coflow_params(
                 cmd_settings)
