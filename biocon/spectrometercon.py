@@ -242,7 +242,7 @@ class SpectraData(object):
             np.savetxt(fname, self.get_spectrum(spec_type), delimiter=',',
                 header=header)
         except Exception:
-            pass
+            logger.error('Error saving %s', fname)
 
 class Spectrometer(object):
 
