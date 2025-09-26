@@ -238,8 +238,11 @@ class SpectraData(object):
         elif spec_type == 'abs':
             header = h_start + 'Absorbance_(mAu)'
 
-        np.savetxt(fname, self.get_spectrum(spec_type), delimiter=',',
-            header=header)
+        try:
+            np.savetxt(fname, self.get_spectrum(spec_type), delimiter=',',
+                header=header)
+        except Exception:
+            pass
 
 class Spectrometer(object):
 
