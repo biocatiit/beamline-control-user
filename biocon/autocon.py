@@ -2999,6 +2999,7 @@ class AutoList(utils.ItemList):
                     if not (exp_type == 'SEC-SAXS' or exp_type == 'SEC-MALS-SAXS' or
                         exp_type == 'IEC-SAXS'):
                         metadata_panel.saxs_panel.set_metadata({'Experiment type:' : 'SEC-SAXS'})
+                        default_metadata = metadata_panel.metadata()
 
                     default_settings = copy.deepcopy(default_sec_saxs_settings)
 

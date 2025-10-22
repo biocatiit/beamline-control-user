@@ -533,11 +533,11 @@ if __name__ == '__main__':
         # ('trsaxs_flow', trcon.TRFlowPanel),
         # ('scan',    scancon.ScanPanel),
         ('metadata', metadata.ParamPanel),
-        ('pipeline', pipeline_ctrl.PipelineControl),
-        ('uv', spectrometercon.UVPanel),
-        ('hplc', biohplccon.HPLCPanel),
-        ('automator', autocon.AutoPanel),
-        ('autosampler', autosamplercon.AutosamplerPanel),
+        # ('pipeline', pipeline_ctrl.PipelineControl),
+        # ('uv', spectrometercon.UVPanel),
+        # ('hplc', biohplccon.HPLCPanel),
+        # ('automator', autocon.AutoPanel),
+        # ('autosampler', autosamplercon.AutosamplerPanel),
         ])
 
     settings = {
