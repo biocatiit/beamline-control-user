@@ -427,7 +427,7 @@ class ControlServer(threading.Thread):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('exp_type', help='Experiment type for server',
-        type=str, choices=['coflow', 'trsaxs_chaotic', 'trsaxs_laminar',
+        type=str, choices=['coflow', 'coflow_nouv', 'trsaxs_chaotic', 'trsaxs_laminar',
         'hplc', 'autosampler'])
 
     args = parser.parse_args()
@@ -466,11 +466,15 @@ if __name__ == '__main__':
     port3 = '5558'
     port4 = '5559'
 
-    if exp_type == 'coflow':
+    if exp_type.startswith('coflow'):
         # Coflow
+        logger.info('Starting coflow server')
 
-        has_uv = True
-        # has_uv = False
+        if 'nouv' in exp_type:
+            has_uv = False
+            logger.info('No UV connected')
+        else:
+            has_uv = True
 
         ip = '164.54.204.53'
         # ip = '164.54.204.192'
@@ -493,6 +497,7 @@ if __name__ == '__main__':
 
     elif exp_type.startswith('trsaxs'):
         # TR SAXS
+        logger.info('Starting TRSAXS server')
 
         ip = '164.54.204.8'
         # ip = '164.54.204.24'
@@ -650,6 +655,7 @@ if __name__ == '__main__':
 
     elif exp_type == 'hplc':
         # HPLC control
+        logger.info('Starting HPLC server')
 
         ip = '164.54.204.113' # Dual pump system
 
@@ -657,6 +663,7 @@ if __name__ == '__main__':
 
     elif exp_type == 'autosampler':
         # Autosampler control
+        logger.info('Starting autosampler server')
 
         ip = '164.54.204.53' # Coflow laptop
 
@@ -671,7 +678,8 @@ if __name__ == '__main__':
         as_settings['device_init'][0]['kwargs']['clean3_pump']['comm_lock'] = threading.RLock()
 
 
-    if exp_type == 'coflow':
+    if exp_type.startswith('coflow'):
+
 
         control_server_coflow = ControlServer(ip, port1, name='CoflowControlServer',
             start_coflow=True)
@@ -793,7 +801,7 @@ if __name__ == '__main__':
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        if exp_type == 'coflow':
+        if exp_type.startswith('coflow'):
             control_server_coflow.stop()
             control_server_coflow.join(5)
 
