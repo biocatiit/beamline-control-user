@@ -3649,10 +3649,14 @@ default_coflow_settings = {
     'device_init'               : [{'name': 'Coflow', 'args': [], 'kwargs': {
         'remote_overflow_ip'        : '164.54.204.75',
         'flow_units'                : 'mL/min',
-        'sheath_pump'               : {'name': 'sheath', 'args': ['VICI M50', 'COM6'],
-                                        'kwargs': {'flow_cal': '627.2',
-                                        'backlash_cal': '8.598'},
-                                        'ctrl_args': {'flow_rate': 1}},
+        # 'sheath_pump'               : {'name': 'sheath', 'args': ['VICI M50', 'COM6'],
+        #                                 'kwargs': {'flow_cal': '627.2',
+        #                                 'backlash_cal': '8.598'},
+        #                                 'ctrl_args': {'flow_rate': 1}},
+        'sheath_pump'               : {'name': 'Pump 1', 'args': ['SSI Next Gen', 'COM12'],
+                                        'kwargs': {'flow_rate_scale': 1,
+                                        'flow_rate_offset': 0,'scale_type': 'up'},
+                                        'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
         # 'outlet_pump'               : {'name': 'outlet', 'args': ['VICI M50', 'COM4'],
         #                                 'kwargs': {'flow_cal': '628.68',
         #                                 'backlash_cal': '9.962'},
@@ -3719,7 +3723,7 @@ default_coflow_settings = {
         'coflow_inc_TSetpoint_pv'   : '18ID:Memmert:CoflowInc:TempSetpoint',
         'hplc_inc_T_pv'             : '18ID:Memmert:HPLCInc:Temp',
         'hplc_inc_TSetpoint_pv'     : '18ID:Memmert:HPLCInc:TempSetpoint',
-        'use_incubator_pvs'         : True,
+        'use_incubator_pvs'         : False,
         }}],
     }
 
