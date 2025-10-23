@@ -4368,12 +4368,12 @@ class ExpPanel(wx.Panel):
                 exp_type = cmd_kwargs['exp_type']
 
             elif cmd_kwargs['item_type'] == 'batch_sample':
-                exp_type = 'Batch'
+                exp_type = 'Batch mode SAXS'
 
             if (exp_type == 'SEC-SAXS' or exp_type == 'SEC-MALS-SAXS' or
                 exp_type == 'IEC-SAXS'):
                 vol = cmd_kwargs['inj_vol']
-            elif exp_type == 'Batch':
+            elif exp_type == 'Batch mode SAXS':
                 vol = cmd_kwargs['volume']
             else:
                 vol = None

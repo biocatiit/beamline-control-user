@@ -759,8 +759,15 @@ class BatchSampleCommand(AutoCommand):
         batch_wait_id = self.automator.get_wait_id()
         batch_wait_cmd = 'wait_sync_{}'.format(batch_wait_id)
 
+        check_wait_id = self.automator.get_wait_id()
+        check_wait_cmd = 'wait_check_{}'.format(check_wait_id)
+        check_conds = [['autosampler', [check_wait_cmd,]],['exp', [check_wait_cmd,]],
+            ['coflow', [check_wait_cmd,]],]
+
         self._add_automator_cmd('autosampler', sample_wait_cmd, [],
             {'condition': 'status', 'inst_conds': sample_conds})
+        self._add_automator_cmd('autosampler', check_wait_cmd, [], {'condition': 'check',
+            'inst_conds': check_conds})
         self._add_automator_cmd('autosampler', 'load_and_move_to_inject',
             [], cmd_info)
         self._add_automator_cmd('autosampler', batch_wait_cmd, [],
@@ -776,6 +783,8 @@ class BatchSampleCommand(AutoCommand):
 
         self._add_automator_cmd('exp', sample_wait_cmd, [], {'condition': 'status',
             'inst_conds': sample_conds})
+        self._add_automator_cmd('exp', check_wait_cmd, [], {'condition': 'check',
+            'inst_conds': check_conds})
         self._add_automator_cmd('exp', exp_wait_cmd, [],
             {'condition': 'status', 'inst_conds': [['autosampler',
             ['load',]], ['exp', [exp_wait_cmd,]]]})
@@ -786,6 +795,8 @@ class BatchSampleCommand(AutoCommand):
 
         self._add_automator_cmd('coflow', sample_wait_cmd, [],
             {'condition': 'status', 'inst_conds': sample_conds})
+        self._add_automator_cmd('coflow', check_wait_cmd, [], {'condition': 'check',
+            'inst_conds': check_conds})
         if cmd_info['start_coflow']:
             self._add_automator_cmd('coflow', 'start', [],
                 {'flow_rate': cmd_info['coflow_fr']})
@@ -3633,7 +3644,8 @@ class AutoList(utils.ItemList):
 
         item_type = item_info['item_type']
 
-        if item_type == 'sec_sample' or item_type == 'exposure':
+        if (item_type == 'sec_sample' or item_type == 'exposure'
+            or item_type == 'batch_sample'):
             command.add_check_cmd_callback(self._check_exposure_cmd)
 
         new_item = AutoListItem(self, item_type, command)
