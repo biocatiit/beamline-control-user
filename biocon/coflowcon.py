@@ -3709,7 +3709,7 @@ default_coflow_settings = {
         'show_outlet_warning'       : True,
         'use_overflow_control'      : True,
         'buffer_change_fr'          : [3, 2], #sheath and outlet in ml/min
-        'buffer_change_vol'         : 12, #in ml, for sheath
+        'buffer_change_vol'         : 15, #in ml, for sheath
         'air_density_thresh'        : 700, #g/L
         'sheath_valve_water_pos'    : 10,
         'sheath_valve_hellmanex_pos': 8,
