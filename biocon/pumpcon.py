@@ -3485,6 +3485,185 @@ class KPHM100Pump(M50Pump):
         else:
             self.send_cmd("VM {}".format(abs(self._flow_rate)))
 
+class LongerPeristalticPump(Pump):
+    """
+    """
+
+    def __init__(self, name, device, comm_lock=None, flow_cal=1):
+        """
+        This makes the initial serial connection, and then sets the MForce
+        controller parameters to the correct values.
+
+        :param device: The device comport as sent to pyserial
+        :type device: str
+
+        :param name: A unique identifier for the pump
+        :type name: str
+
+        :param flow_cal: The pump-specific flow calibration, in uL/rev. Defaults to 628 uL/rev
+        :type flow_cal: float
+
+        """
+        Pump.__init__(self, name, device, comm_lock=comm_lock)
+
+        logstr = ("Initializing pump {} on serial port {}".format(self.name,
+            self.device))
+        logger.info(logstr)
+
+        #Make sure parameters are set right
+
+        self._units = 'mL/min'
+        self._pump_base_units = 'uL/min'
+
+        self._flow_cal = float(flow_cal)
+
+    def connect(self):
+        if not self.connected:
+            with self.comm_lock:
+                self.pump_comm = SerialComm(self.device, baudrate=38400)
+
+            self.connected = True
+
+        return self.connected
+
+    @property
+    def flow_rate(self):
+        rate = float(self._flow_rate)/self.cal
+
+        rate = self._convert_flow_rate(rate, self._pump_base_units, self.units)
+
+        return rate
+
+    @flow_rate.setter
+    def flow_rate(self, rate):
+        logger.info("Setting pump %s flow rate to %f %s", self.name, rate, self.units)
+
+        rate = self._convert_flow_rate(rate, self.units, self._pump_base_units)
+
+        #Maximum continuous flow rate is 25 mL/min
+        if rate>25000/60.:
+            rate = 25000/60.
+            logger.warning("Requested flow rate > 25 mL/min, setting pump %s flow rate to 25 mL/min", self.name)
+        elif rate<-25000/60.:
+            rate = -25000/60.
+            logger.warning("Requested flow rate > 25 mL/min, setting pump %s flow rate to -25 mL/min", self.name)
+
+        #Minimum flow rate is 1 uL/min
+        if abs(rate) < 1/60. and rate != 0:
+            if rate>0:
+                logger.warning("Requested flow rate < 1 uL/min, setting pump %s flow rate to 1 uL/min", self.name)
+                rate = 1/60.
+            else:
+                logger.warning("Requested flow rate < 1 uL/min, setting pump %s flow rate to -1 uL/min", self.name)
+                rate = -1/60.
+
+
+        self._flow_rate = int(round(rate*self.cal))
+
+        if self._is_flowing and not self._is_dispensing:
+            self.send_cmd("SL {}".format(self._flow_rate))
+        else:
+            self.send_cmd("VM {}".format(abs(self._flow_rate)))
+
+
+    def send_cmd(self, cmd, get_response=True):
+        """
+        Sends a command to the pump.
+
+        :param cmd: The command to send to the pump.
+        :type cmd: str, bytes
+
+        :param get_response: Whether the program should get a response from the pump
+        :type get_response: bool
+        """
+        logger.debug("Sending pump %s cmd %r", self.name, cmd)
+
+        with self.comm_lock:
+            ret = self.pump_comm.write(cmd, get_response)
+
+        if get_response:
+            logger.debug("Pump %s returned %r", self.name, ret)
+
+        return ret
+
+
+    def is_moving(self):
+        status = self.send_cmd("PR MV")
+
+        status = status.split('\r\n')[-2][-1]
+        status = int(status)
+
+        if status == 1:
+            status = True
+        else:
+            status = False
+            self._is_dispensing = False
+            self._flow_dir = 0
+
+        self._is_flowing = status
+
+        logger.debug("Pump %s moving: %s", self.name, str(self._is_flowing))
+
+        return self._is_flowing
+
+    def start_flow(self):
+        if self._is_flowing:
+            logger.debug("Stopping pump %s current motion before starting continuous flow", self.name)
+            self.stop()
+
+        logger.info("Pump %s starting continuous flow at %f %s", self.name, self.flow_rate, self.units)
+        self.send_cmd("SL {}".format(self._flow_rate))
+
+        self._is_flowing = True
+
+        if self._flow_rate > 0:
+            self._flow_dir = 1
+        elif self._flow_rate < 0:
+            self._flow_dir = -1
+
+    def dispense(self, vol, units='uL'):
+        if self._is_flowing:
+            logger.debug("Stopping pump %s current motion before starting flow", self.name)
+            self.stop()
+
+        if vol > 0:
+            logger.info("Pump %s dispensing %f %s at %f %s", self.name, vol, units,
+                self.flow_rate, self.units)
+        elif vol < 0:
+            logger.info("Pump %s aspirating %f %s at %f %s", self.name, abs(vol),
+                units, self.flow_rate, self.units)
+
+        vol = self._convert_volume(vol, units, self._pump_base_units.split('/')[0])
+
+        if vol > 0 and self._flow_dir < 0:
+            vol = vol + self._backlash_cal
+            logger.debug("Pump %s added backlash correction for dispensing/aspirating", self.name)
+        elif vol < 0 and self._flow_dir > 0:
+            vol = vol - self._backlash_cal
+            logger.debug("Pump %s added backlash correction for dispensing/aspirating", self.name)
+
+        vol =int(round(vol*self.cal))
+
+        self.send_cmd("VM {}".format(abs(self._flow_rate)))
+        self.send_cmd("MR {}".format(vol))
+
+        self._is_flowing = True
+        self._is_dispensing = True
+        if vol > 0:
+            self._flow_dir = 1
+        elif vol < 0:
+            self._flow_dir = -1
+
+    def aspirate(self, vol, units='uL'):
+        self.dispense(-1*vol, units)
+
+    def stop(self):
+        logger.info("Pump %s stopping all motions", self.name)
+        self.send_cmd("SL 0")
+        self.send_cmd("\x1B")
+        self._is_flowing = False
+        self._is_dispensing = False
+
 class SoftPump(Pump):
     """
     This class contains the settings and communication for a generic pump.
