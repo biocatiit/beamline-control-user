@@ -401,9 +401,9 @@ class LongerSerialComm(SerialComm):
                             ret = s.read(s.in_waiting)
                             out += ret
 
-                        if len(out) >= 2 and resp_len == 0:
+                        if len(out) >= 3 and resp_len == 0:
                             resp = out.hex(' ')
-                            resp_len = int(resp.split()[1], 16)
+                            resp_len = int(resp.split()[2], 16)
 
                         if len(out) >= resp_len and resp_len != 0:
                             break
@@ -3727,6 +3727,8 @@ class LongerL1001S2Pump(Pump):
 
         status = status.split(' ')
 
+        logger.debug(status)
+
         cmd = bytes.fromhex(''.join(status[3:5])).decode('ascii')
 
         if cmd == 'RJ':
@@ -6521,8 +6523,8 @@ if __name__ == '__main__':
 
     # Longer pumps
     setup_devices = [
-        {'name': 'sheath', 'args': ['Longer L100S2', 'COM9'],
-            'kwargs': {'pump_addr': 1, 'flow_cal': 0.06},
+        {'name': 'sheath', 'args': ['Longer L100S2', 'COM11'],
+            'kwargs': {'pump_addr': 1, 'flow_cal': 0.0569},
             'ctrl_args': {'flow_rate': 1}},
         ]
 
