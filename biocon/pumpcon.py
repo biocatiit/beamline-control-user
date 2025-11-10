@@ -3554,10 +3554,10 @@ class LongerL1001S2Pump(Pump):
         :param device: The device comport as sent to pyserial
         :type device: str
 
-        :param name: A unique identifier for the pump
+        :param name: A unique identifier for the pumps
         :type name: str
 
-        :param flow_cal: The pump-specific flow calibration, in uL/rev.
+        :param flow_cal: The pump-specific flow calibration, in mL/rev.
         :type flow_cal: float
 
         """
@@ -6522,7 +6522,7 @@ if __name__ == '__main__':
     # Longer pumps
     setup_devices = [
         {'name': 'sheath', 'args': ['Longer L100S2', 'COM9'],
-            'kwargs': {'pump_addr': 1, 'flow_cal': '1'},
+            'kwargs': {'pump_addr': 1, 'flow_cal': 0.06},
             'ctrl_args': {'flow_rate': 1}},
         ]
 
