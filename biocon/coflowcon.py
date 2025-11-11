@@ -277,6 +277,18 @@ class CoflowControl(object):
             self.outlet_is_moving = self._send_pumpcmd(('is_moving',
                 (self.outlet_pump_name,), {}), response=True)
 
+            if not self.sheath_is_moving:
+                if 'ctrl_args' in sheath_pump:
+                    if 'flow_accel' in sheath_pump['ctrl_args']:
+                        self._send_pumpcmd(('set_flow_accel', (self.sheath_pump_name,
+                            sheath_pump['ctrl_args']['flow_accel']), {}))
+
+            if not self.outlet_is_moving:
+                if 'ctrl_args' in outlet_pump:
+                    if 'flow_accel' in outlet_pump['ctrl_args']:
+                        self._send_pumpcmd(('set_flow_accel', (self.outlet_pump_name,
+                            outlet_pump['ctrl_args']['flow_accel']), {}))
+
         logger.info('Coflow pumps initialization successful')
 
     def init_fms(self):
@@ -3650,8 +3662,8 @@ default_coflow_settings = {
         'remote_overflow_ip'        : '164.54.204.75',
         'flow_units'                : 'mL/min',
         # 'sheath_pump'               : {'name': 'sheath', 'args': ['VICI M50', 'COM6'],
-        #                                 'kwargs': {'flow_cal': '627.2',
-        #                                 'backlash_cal': '8.598'},
+        #                                 'kwargs': {'flow_cal': '630.4',
+        #                                 'backlash_cal': '11.175'},
         #                                 'ctrl_args': {'flow_rate': 1}},
         'sheath_pump'               : {'name': 'Pump 1', 'args': ['SSI Next Gen', 'COM12'],
                                         'kwargs': {'flow_rate_scale': 1,

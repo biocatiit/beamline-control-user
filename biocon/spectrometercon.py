@@ -880,7 +880,10 @@ class Spectrometer(object):
                 header.rstrip(',')
 
                 if out_data.size > 0:
-                    np.savetxt(out_file, out_data, delimiter=',', header=header)
+                    try:
+                        np.savetxt(out_file, out_data, delimiter=',', header=header)
+                    except Exception:
+                        logger.error('Error saving %s', out_file)
 
             self._taking_series = False
             self.series_ready_event.clear()
@@ -4914,7 +4917,7 @@ default_spectrometer_settings = {
         'analog_out_wav'        : {'out1': 280, 'out2': 260},
         'do_ao'                 : True,
         'remote_ip'             : '164.54.204.53',
-        'remote_port'           : '5559',
+        'remote_port'           : '5558',
         'device_communication'  : 'local',
         'remote'                : False,
         'remote_device'         : 'uv',
