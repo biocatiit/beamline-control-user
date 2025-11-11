@@ -279,13 +279,13 @@ class CoflowControl(object):
 
             if not self.sheath_is_moving:
                 if 'ctrl_args' in sheath_pump:
-                    if 'flow_accel' in sheath_pump:
+                    if 'flow_accel' in sheath_pump['ctrl_args']:
                         self._send_pumpcmd(('set_flow_accel', (self.sheath_pump_name,
                             sheath_pump['ctrl_args']['flow_accel']), {}))
 
             if not self.outlet_is_moving:
                 if 'ctrl_args' in outlet_pump:
-                    if 'flow_accel' in outlet_pump:
+                    if 'flow_accel' in outlet_pump['ctrl_args']:
                         self._send_pumpcmd(('set_flow_accel', (self.outlet_pump_name,
                             outlet_pump['ctrl_args']['flow_accel']), {}))
 
