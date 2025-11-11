@@ -525,6 +525,127 @@ class CheminertValve(Valve):
 
         return ret, success
 
+class MultiValve(Valve):
+    """
+    Pass in settings for multiple valves and changes their positions nearly
+    synchronously. Reports position if position from all valves agrees.
+    """
+
+    def __init__(self, name, device, positions, valve_settings):
+        """
+        :param str device: The device comport as sent to pyserial
+
+        :param str name: A unique identifier for the pump
+
+        :param list valve_settings: A list of valve settings, one for each
+            valve to be controlled by MultiValve. Settings should be as they
+            would be passed to the ValvePanel.
+        """
+        self._valve_settings = valve_settings
+        self._valves = {}
+
+        Valve.__init__(self, name, device)
+
+        logstr = ("Initializing valve {} on port {}".format(self.name,
+            self.device))
+        logger.info(logstr)
+
+        self._positions = int(positions)
+
+    def connect(self):
+        if not self.connected:
+            with self.comm_lock:
+                for settings in valve_settings:
+                    name = settings['name']
+                    args = settings['args']
+                    kwargs = settings['kwargs']
+
+                    device_type = args[0]
+                    device = args[1]
+
+                    valve = known_valves[device_type][name, device, **kwargs]
+
+                    self._valves[name] = valve
+
+            self.connected = True
+
+        return self.connected
+
+    def get_status(self):
+        status = ''
+        for vn in self._valves:
+            stat = self._valves[vn].get_status()
+
+            if stat is not None and stat != '':
+                status += '{} status: {}, '.format(vn, stat)
+
+        return status
+
+    def get_error(self):
+        error = ''
+        for vn in self._valves:
+            err = self._valves[vn].get_error()
+
+            if err is not None and err != '':
+                error += '{} error: {}, '.format(vn, err)
+
+        if len(error) == 0:
+            error = None
+
+        return error
+
+    def get_position(self):
+        valve_positions = [v.get_position() for v in self._valves.values()]
+
+        try:
+            positions = map(int, valve_positions)
+
+            same = True
+
+            for p in positions[1:]:
+                if p != positions[0]:
+                    same = False
+                    break
+
+            if same:
+                position = positions[0]
+                logger.debug("Valve %s position %s", self.name, position)
+            else:
+                position = None
+                logger.error('Valve %s not all sub-valve positions are the same',
+                    self.name)
+
+        except Exception:
+            logger.error('Valve %s not all sub-valves returned valid positions',
+                self.name)
+            position = None
+
+        self._position = position
+
+        return position
+
+    def set_position(self, position):
+        position = int(position)
+
+        if position > self._positions:
+            logger.error('Cannot set valve %s to position %i, maximum position is %i',
+                self.name, position, self._positions)
+            success = False
+        elif position < 1:
+            logger.error('Cannot set valve %s to position %i, minimum position is 1',
+                self.name, position)
+            success = False
+
+        else:
+            success = True
+
+            for valve in self._valves.values():
+                vs = valve.set_position(position)
+                success = success and vs
+
+        return success
+
+
 class SoftValve(Valve):
     """
     Software valve for testing.

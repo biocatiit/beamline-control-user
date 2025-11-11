@@ -3544,6 +3544,8 @@ class LongerL1001S2Pump(Pump):
     https://blog.darwin-microfluidics.com/control-command-string-generator-for-longer-peristaltic-pumps/
 
     Note that other longer peristatltic pumps have different command sets.
+
+    Flow calibration for the DG-1 10 roller head with 1x1 mm tubing is 0.0569 mL/rev
     """
 
     def __init__(self, name, device, pump_addr, comm_lock=None, flow_cal=1):
