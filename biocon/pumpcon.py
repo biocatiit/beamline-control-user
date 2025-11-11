@@ -5978,14 +5978,14 @@ if __name__ == '__main__':
     # my_pumpcon.stop()
 
     # Coflow pumps
-    # setup_devices = [
-    #     {'name': 'sheath', 'args': ['VICI M50', 'COM4'],
-    #         'kwargs': {'flow_cal': '627.72', 'backlash_cal': '9.814'},
-    #         'ctrl_args': {'flow_rate': 1}},
-    #     {'name': 'outlet', 'args': ['VICI M50', 'COM5'],
-    #         'kwargs': {'flow_cal': '628.68', 'backlash_cal': '9.962'},
-    #         'ctrl_args': {'flow_rate': 1}},
-    #     ]
+    setup_devices = [
+        {'name': 'sheath', 'args': ['VICI M50', 'COM6'],
+            'kwargs': {'flow_cal': '627.72', 'backlash_cal': '9.814'},
+            'ctrl_args': {'flow_rate': 1}},
+        # {'name': 'outlet', 'args': ['VICI M50', 'COM5'],
+        #     'kwargs': {'flow_cal': '628.68', 'backlash_cal': '9.962'},
+        #     'ctrl_args': {'flow_rate': 1}},
+        ]
 
     # # Batch mode pumps
     # setup_devices = [
@@ -6121,15 +6121,15 @@ if __name__ == '__main__':
     #     ]
 
     # Batch mode Hamilton PSD6 pump
-    setup_devices = [
-        {'name': 'sample', 'args': ['Hamilton PSD6', 'COM9'],
-            'kwargs': {'syringe_id': '0.1 mL, Hamilton Glass',
-            'pump_address': '1', 'dual_syringe': 'False',
-            'diameter': 1.46, 'max_volume': 0.1,
-            'max_rate': 1, 'comm_lock': threading.RLock(),},
-            'ctrl_args': {'flow_rate' : 100,
-            'refill_rate' : 100, 'units': 'uL/min'}},
-        ]
+    # setup_devices = [
+    #     {'name': 'sample', 'args': ['Hamilton PSD6', 'COM9'],
+    #         'kwargs': {'syringe_id': '0.1 mL, Hamilton Glass',
+    #         'pump_address': '1', 'dual_syringe': 'False',
+    #         'diameter': 1.46, 'max_volume': 0.1,
+    #         'max_rate': 1, 'comm_lock': threading.RLock(),},
+    #         'ctrl_args': {'flow_rate' : 100,
+    #         'refill_rate' : 100, 'units': 'uL/min'}},
+    #     ]
 
     # # Simulated pumps
     # setup_devices = [

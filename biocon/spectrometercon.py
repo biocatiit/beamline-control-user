@@ -880,7 +880,10 @@ class Spectrometer(object):
                 header.rstrip(',')
 
                 if out_data.size > 0:
-                    np.savetxt(out_file, out_data, delimiter=',', header=header)
+                    try:
+                        np.savetxt(out_file, out_data, delimiter=',', header=header)
+                    except Exception:
+                        logger.error('Error saving %s', out_file)
 
             self._taking_series = False
             self.series_ready_event.clear()
