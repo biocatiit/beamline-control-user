@@ -2412,7 +2412,7 @@ class AutosamplerPanel(utils.DevicePanel):
         self._abort()
 
     def _abort(self):
-        self.com_thread.abort()
+        self.com_thread._abort()
 
     def _on_change_plate_type(self, evt):
         plate_type = self.plate_types.GetStringSelection()
