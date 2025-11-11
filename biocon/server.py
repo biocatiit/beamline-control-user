@@ -427,7 +427,7 @@ class ControlServer(threading.Thread):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('exp_type', help='Experiment type for server',
-        type=str, choices=['coflow', 'coflow_nouv', 'trsaxs_chaotic', 'trsaxs_laminar',
+        type=str, choices=['coflow', 'uv', 'trsaxs_chaotic', 'trsaxs_laminar',
         'hplc', 'autosampler'])
 
     args = parser.parse_args()
@@ -461,30 +461,29 @@ if __name__ == '__main__':
 
     print('Log directory: {}'.format(info_dir))
 
-    port1 = '5556'
-    port2 = '5557'
-    port3 = '5558'
-    port4 = '5559'
+    port1 = '5556' #Coflow or hplc or TR pump
+    port2 = '5557' #Autosampler or TR fm
+    port3 = '5558' #UV or TR valve or UV
 
     if exp_type.startswith('coflow'):
         # Coflow
         logger.info('Starting coflow server')
 
-        if 'nouv' in exp_type:
-            has_uv = False
-            logger.info('No UV connected')
-        else:
-            has_uv = True
+        # if 'nouv' in exp_type:
+        #     has_uv = False
+        #     logger.info('No UV connected')
+        # else:
+        #     has_uv = True
 
         ip = '164.54.204.53'
         # ip = '164.54.204.192'
         # ip = '164.54.204.24'
 
-        spectrometer_settings = spectrometercon.default_spectrometer_settings
-        spectrometer_settings['remote'] = False
-        spectrometer_settings['device_communication'] = 'local'
-        spectrometer_settings['inline_panel'] = False
-        spectrometer_settings['plot_refresh_t'] = 1
+        # spectrometer_settings = spectrometercon.default_spectrometer_settings
+        # spectrometer_settings['remote'] = False
+        # spectrometer_settings['device_communication'] = 'local'
+        # spectrometer_settings['inline_panel'] = False
+        # spectrometer_settings['plot_refresh_t'] = 1
 
         coflow_settings = coflowcon.default_coflow_settings
 
@@ -494,6 +493,17 @@ if __name__ == '__main__':
         coflow_settings['device_init'][0]['kwargs']['outlet_pump']['kwargs']['comm_lock'] = ob1_comm_lock
         coflow_settings['device_init'][0]['kwargs']['outlet_fm']['kwargs']['comm_lock'] = outlet_fm_comm_lock
         coflow_settings['components'] = ['coflow',]
+
+    elif exp_type == 'uv':
+        logger.info('Starting UV server')
+
+        ip = '164.54.204.53'
+
+        spectrometer_settings = spectrometercon.default_spectrometer_settings
+        spectrometer_settings['remote'] = False
+        spectrometer_settings['device_communication'] = 'local'
+        spectrometer_settings['inline_panel'] = False
+        spectrometer_settings['plot_refresh_t'] = 1
 
     elif exp_type.startswith('trsaxs'):
         # TR SAXS
@@ -694,20 +704,19 @@ if __name__ == '__main__':
             title='Coflow Control')
         coflow_frame.Show()
 
-        if has_uv:
-            # Coflow only
-            control_server_uv = ControlServer(ip, port4, name='UVControlServer',
-                start_uv=True)
-            control_server_uv.start()
-            control_server_uv.ready_event.wait()
+    elif exp_type == 'uv':
+        control_server_uv = ControlServer(ip, port3, name='UVControlServer',
+            start_uv=True)
+        control_server_uv.start()
+        control_server_uv.ready_event.wait()
 
-            uv_comm_thread = control_server_uv.get_comm_thread('uv')
+        uv_comm_thread = control_server_uv.get_comm_thread('uv')
 
-            spectrometer_settings['com_thread'] = uv_comm_thread
+        spectrometer_settings['com_thread'] = uv_comm_thread
 
-            uv_frame = spectrometercon.UVFrame('UVFrame', spectrometer_settings,
-                parent=None, title='UV Spectrometer Control')
-            uv_frame.Show()
+        uv_frame = spectrometercon.UVFrame('UVFrame', spectrometer_settings,
+            parent=None, title='UV Spectrometer Control')
+        uv_frame.Show()
 
 
     elif exp_type.startswith('trsaxs'):
@@ -805,9 +814,9 @@ if __name__ == '__main__':
             control_server_coflow.stop()
             control_server_coflow.join(5)
 
-            if has_uv:
-                control_server_uv.stop()
-                control_server_uv.join(5)
+        elif exp_type == 'uv':
+            control_server_uv.stop()
+            control_server_uv.join(5)
 
         elif exp_type.startswith('trsaxs'):
             control_server_pump.stop()
