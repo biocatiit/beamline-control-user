@@ -30,6 +30,7 @@ import sys
 import ctypes
 import copy
 import traceback
+from concurrent.futures import ThreadPoolExecutor
 
 if __name__ != '__main__':
     logger = logging.getLogger(__name__)
@@ -555,7 +556,7 @@ class MultiValve(Valve):
     def connect(self):
         if not self.connected:
             with self.comm_lock:
-                for settings in valve_settings:
+                for settings in self._valve_settings:
                     name = settings['name']
                     args = settings['args']
                     kwargs = settings['kwargs']
@@ -563,7 +564,7 @@ class MultiValve(Valve):
                     device_type = args[0]
                     device = args[1]
 
-                    valve = known_valves[device_type][name, device, **kwargs]
+                    valve = known_valves[device_type](name, device, **kwargs)
 
                     self._valves[name] = valve
 
@@ -572,20 +573,32 @@ class MultiValve(Valve):
         return self.connected
 
     def get_status(self):
-        status = ''
-        for vn in self._valves:
-            stat = self._valves[vn].get_status()
+        with ThreadPoolExecutor() as executor:
+            futures = []
+            for valve in self._valves.values():
+                future = executor.submit(valve.get_status)
+                futures.append(future)
 
+            valve_status = [f.result() for f in futures]
+
+        status = ''
+        for stat in valve_status:
             if stat is not None and stat != '':
                 status += '{} status: {}, '.format(vn, stat)
 
         return status
 
     def get_error(self):
-        error = ''
-        for vn in self._valves:
-            err = self._valves[vn].get_error()
+        with ThreadPoolExecutor() as executor:
+            futures = []
+            for valve in self._valves.values():
+                future = executor.submit(valve.get_error)
+                futures.append(future)
 
+            valve_errs = [f.result() for f in futures]
+
+        error = ''
+        for err in valve_errs:
             if err is not None and err != '':
                 error += '{} error: {}, '.format(vn, err)
 
@@ -595,10 +608,16 @@ class MultiValve(Valve):
         return error
 
     def get_position(self):
-        valve_positions = [v.get_position() for v in self._valves.values()]
+        with ThreadPoolExecutor() as executor:
+            futures = []
+            for valve in self._valves.values():
+                future = executor.submit(valve.get_position)
+                futures.append(future)
+
+            valve_positions = [f.result() for f in futures]
 
         try:
-            positions = map(int, valve_positions)
+            positions = list(map(int, valve_positions))
 
             same = True
 
@@ -637,11 +656,14 @@ class MultiValve(Valve):
             success = False
 
         else:
-            success = True
 
-            for valve in self._valves.values():
-                vs = valve.set_position(position)
-                success = success and vs
+            with ThreadPoolExecutor() as executor:
+                futures = []
+                for valve in self._valves.values():
+                    future = executor.submit(valve.set_position, position)
+                    futures.append(future)
+
+                success = all([f.result() for f in futures])
 
         return success
 
@@ -693,6 +715,7 @@ known_valves = {
     'RheodyneTTL'   : RheodyneValveTTL,
     'Soft'          : SoftValve,
     'Cheminert'     : CheminertValve,
+    'Multi'         : MultiValve,
     }
 
 class ValveCommThread(utils.CommManager):
@@ -1021,11 +1044,11 @@ if __name__ == '__main__':
     #         'kwargs': {'positions' : 2}},
     #     ]
 
-    # Coflow buffer valve
-    setup_devices = [
-        {'name': 'Buffer', 'args': ['Cheminert', 'COM4'],
-            'kwargs': {'positions': 10}},
-        ]
+    # # Coflow buffer valve
+    # setup_devices = [
+    #     {'name': 'Buffer', 'args': ['Cheminert', 'COM4'],
+    #         'kwargs': {'positions': 10}},
+    #     ]
 
     # # TR-SAXS laminar flow
     # setup_devices = [
@@ -1087,6 +1110,17 @@ if __name__ == '__main__':
     #     {'name': 'MALS', 'args': ['Cheminert', 'COM8'],
     #         'kwargs': {'positions': 2}},
     #     ]
+
+     # SEC-MALS
+    setup_devices = [
+        {'name': 'Dual valve 1', 'args': ['Multi', None], 'kwargs': {'positions': 6,
+            'valve_settings': [
+                {'name': 'Selector 2', 'args': ['Rheodyne', 'COM13'],
+                    'kwargs': {'positions' : 6}},
+                {'name': 'Selector 6', 'args': ['Rheodyne', 'COM12'],
+                    'kwargs': {'positions' : 6}}]}}
+        ,
+        ]
 
     # Local
     com_thread = ValveCommThread('ValveComm')
