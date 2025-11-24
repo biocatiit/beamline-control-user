@@ -30,6 +30,7 @@ import traceback
 import time
 import sys
 import os
+import argparse
 
 if __name__ != '__main__':
     logger = logging.getLogger(__name__)
@@ -42,7 +43,9 @@ import fmcon
 import valvecon
 import spectrometercon
 import biohplccon
+import coflowcon
 import utils
+import autosamplercon
 
 
 class ControlServer(threading.Thread):
@@ -52,7 +55,8 @@ class ControlServer(threading.Thread):
 
     def __init__(self, ip, port, name='ControlServer', pump_comm_locks = None,
         valve_comm_locks=None, start_pump=False, start_fm=False,
-        start_valve=False, start_uv=False, start_hplc=False):
+        start_valve=False, start_uv=False, start_hplc=False, start_coflow=False,
+        start_autosampler=False):
         """
         Initializes the custom thread. Important parameters here are the
         list of known commands ``_commands`` and known pumps ``known_pumps``.
@@ -73,6 +77,7 @@ class ControlServer(threading.Thread):
             }
 
         self._stop_event = threading.Event()
+        self.ready_event = threading.Event()
 
         self.pump_comm_locks = pump_comm_locks
         self.valve_comm_locks = valve_comm_locks
@@ -82,6 +87,8 @@ class ControlServer(threading.Thread):
         self._start_valve = start_valve
         self._start_uv = start_uv
         self._start_hplc = start_hplc
+        self._start_coflow = start_coflow
+        self._start_autosampler = start_autosampler
 
     def run(self):
         """
@@ -193,6 +200,46 @@ class ControlServer(threading.Thread):
 
             self._device_control['hplc'] = hplc_ctrl
 
+        if self._start_coflow:
+            coflow_cmd_q = deque()
+            coflow_return_q = deque()
+            coflow_status_q = deque()
+            coflow_con = coflowcon.CoflowCommThread('CoflowCon')
+            coflow_con.start()
+
+            coflow_con.add_new_communication('zmq_server', coflow_cmd_q,
+                coflow_return_q, coflow_status_q)
+
+            coflow_ctrl = {
+                'queue'     : coflow_cmd_q,
+                'answer_q'  : coflow_return_q,
+                'status_q'  : coflow_status_q,
+                'thread'    : coflow_con,
+                }
+
+            self._device_control['coflow'] = coflow_ctrl
+
+        if self._start_autosampler:
+            autosampler_cmd_q = deque()
+            autosampler_return_q = deque()
+            autosampler_status_q = deque()
+            autosampler_con = autosamplercon.ASCommThread('AutosamplerCon')
+            autosampler_con.start()
+
+            autosampler_con.add_new_communication('zmq_server', autosampler_cmd_q,
+                autosampler_return_q, autosampler_status_q)
+
+            autosampler_ctrl = {
+                'queue'     : autosampler_cmd_q,
+                'answer_q'  : autosampler_return_q,
+                'status_q'  : autosampler_status_q,
+                'thread'    : autosampler_con,
+                }
+
+            self._device_control['autosampler'] = autosampler_ctrl
+
+        self.ready_event.set()
+
         while True:
             try:
                 cmds_run = False
@@ -282,11 +329,14 @@ class ControlServer(threading.Thread):
                                 answer = 'cmd sent'
 
                         if answer == '':
-                            logger.exception('No response received from device')
+                            logger.exception('No response received from device '
+                                '%s to cmd %s', device, device_cmd[0])
+                            answer = ['response', [device_cmd[1][0], device_cmd[0], None]]
                         else:
                             answer = ['response', answer]
                             logger.debug('Sending command response: %s', answer)
-                            self.socket.send_pyobj(answer, protocol=2, flags=zmq.NOBLOCK)
+
+                        self.socket.send_pyobj(answer, protocol=2, flags=zmq.NOBLOCK)
 
                     except zmq.ZMQError:
                         err = traceback.format_exc()
@@ -375,6 +425,15 @@ class ControlServer(threading.Thread):
         self._stop_event.set()
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('exp_type', help='Experiment type for server',
+        type=str, choices=['coflow', 'uv', 'trsaxs_chaotic', 'trsaxs_laminar',
+        'hplc', 'autosampler'])
+
+    args = parser.parse_args()
+    exp_type = args.exp_type
+
+
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
     h1 = logging.StreamHandler(sys.stdout)
@@ -388,11 +447,11 @@ if __name__ == '__main__':
 
     standard_paths = wx.StandardPaths.Get() #Can't do this until you start the wx app
     info_dir = standard_paths.GetUserLocalDataDir()
-    print('Log directory: {}'.format(info_dir))
+
     if not os.path.exists(info_dir):
         os.mkdir(info_dir)
 
-    h2 = handlers.RotatingFileHandler(os.path.join(info_dir, 'biocon_server.log'),
+    h2 = handlers.RotatingFileHandler(os.path.join(info_dir, 'biocon_server_{}.log'.format(exp_type)),
         maxBytes=100e6, backupCount=20, delay=True)
     h2.setLevel(logging.DEBUG)
     formatter2 = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
@@ -400,101 +459,55 @@ if __name__ == '__main__':
 
     logger.addHandler(h2)
 
-    port1 = '5556'
-    port2 = '5557'
-    port3 = '5558'
-    port4 = '5559'
+    print('Log directory: {}'.format(info_dir))
 
-    # exp_type = 'coflow' #coflow or trsaxs_laminar or trsaxs_chaotic or hplc
-    # exp_type = 'trsaxs_chaotic'
-    exp_type = 'trsaxs_laminar'
-    # exp_type = 'hplc'
+    port1 = '5556' #Coflow or hplc or TR pump
+    port2 = '5557' #Autosampler or TR fm
+    port3 = '5558' #UV or TR valve or UV
 
-
-    if exp_type == 'coflow':
+    if exp_type.startswith('coflow'):
         # Coflow
+        logger.info('Starting coflow server')
 
-        has_uv = True
-        # has_uv = False
+        # if 'nouv' in exp_type:
+        #     has_uv = False
+        #     logger.info('No UV connected')
+        # else:
+        #     has_uv = True
 
-        # ip = '164.54.204.53'
-        ip = '164.54.204.192'
+        ip = '164.54.204.53'
+        # ip = '164.54.204.192'
         # ip = '164.54.204.24'
 
-        # setup_pumps = [
-        #     {'name': 'sheath', 'args': ['VICI M50', 'COM3'],
-        #         'kwargs': {'flow_cal': '627.72', 'backlash_cal': '9.814'},
-        #         'ctrl_args': {'flow_rate': 1}},
-        #     {'name': 'outlet', 'args': ['VICI M50', 'COM4'],
-        #         'kwargs': {'flow_cal': '628.68', 'backlash_cal': '9.962'},
-        #         'ctrl_args': {'flow_rate': 1}},
-        #     ]
+        # spectrometer_settings = spectrometercon.default_spectrometer_settings
+        # spectrometer_settings['remote'] = False
+        # spectrometer_settings['device_communication'] = 'local'
+        # spectrometer_settings['inline_panel'] = False
+        # spectrometer_settings['plot_refresh_t'] = 1
+
+        coflow_settings = coflowcon.default_coflow_settings
 
         ob1_comm_lock = threading.RLock()
+        outlet_fm_comm_lock = threading.Lock()
+        coflow_settings['device_communication'] = 'local'
+        coflow_settings['device_init'][0]['kwargs']['outlet_pump']['kwargs']['comm_lock'] = ob1_comm_lock
+        coflow_settings['device_init'][0]['kwargs']['outlet_fm']['kwargs']['comm_lock'] = outlet_fm_comm_lock
+        coflow_settings['components'] = ['coflow',]
 
-        setup_pumps = [
-            {'name': 'sheath', 'args': ['VICI M50', 'COM5'],
-                'kwargs': {'flow_cal': '628.68', 'backlash_cal': '9.95'},
-                'ctrl_args': {'flow_rate': 1}},
-            {'name': 'outlet', 'args': ['OB1 Pump', 'COM8'],
-                'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
-                'min_pressure': -900, 'max_pressure': 1000, 'P': -2, 'I': -0.15,
-                'D': 0, 'bfs_instr_ID': None, 'comm_lock': ob1_comm_lock,
-                'calib_path': './resources/ob1_calib.txt'},
-                'ctrl_args': {}}
-            ]
+    elif exp_type == 'uv':
+        logger.info('Starting UV server')
 
-        setup_valves = [
-            {'name': 'Coflow Sheath', 'args': ['Cheminert', 'COM7'],
-                'kwargs': {'positions' : 10}},
-            ]
+        ip = '164.54.204.53'
 
         spectrometer_settings = spectrometercon.default_spectrometer_settings
-        spectrometer_settings['device_init'] = [{'name': 'CoflowUV',
-            'args': ['StellarNet', None],
-            'kwargs': {'shutter_pv_name': '18ID:LJT4:2:Bo11',
-            'trigger_pv_name' : '18ID:LJT4:2:Bo12',
-            'out1_pv_name' : '18ID:E1608:Ao1',
-            'out2_pv_name' : '18ID:E1608:Ao2',
-            'trigger_in_pv_name' : '18ID:E1608:Bi8'}},]
         spectrometer_settings['remote'] = False
         spectrometer_settings['device_communication'] = 'local'
         spectrometer_settings['inline_panel'] = False
         spectrometer_settings['plot_refresh_t'] = 1
 
-        # setup_uv = [
-        #     {'name': 'CoflowUV', 'args': ['StellarNet', None], 'kwargs':
-        #     {'shutter_pv_name': '18ID:LJT4:2:Bo11',
-        #     'trigger_pv_name' : '18ID:LJT4:2:Bo12'}},
-        #     ]
-
-        outlet_fm_comm_lock = threading.Lock()
-
-        setup_fms = [
-            {'name': 'sheath', 'args' : ['BFS', 'COM6'], 'kwargs': {}},
-            {'name': 'outlet', 'args' : ['BFS', 'COM9'], 'kwargs':
-                {'comm_lock': outlet_fm_comm_lock}}
-            ]
-
-        # # Simulated devices for testing
-
-        # setup_pumps = [
-        #     {'name': 'sheath', 'args': ['Soft', None], 'kwargs': {}},
-        #     {'name': 'outlet', 'args': ['Soft', None], 'kwargs': {}},
-        #     ]
-
-        # setup_valves = [
-        #     {'name': 'Coflow Sheath', 'args': ['Soft', None], 'kwargs':
-        #         {'positions': 10}},
-        #     ]
-
-        # setup_fms = [
-        #     {'name': 'sheath', 'args': ['Soft', None], 'kwargs': {}},
-        #     {'name': 'outlet', 'args': ['Soft', None], 'kwargs': {}},
-        #     ]
-
     elif exp_type.startswith('trsaxs'):
         # TR SAXS
+        logger.info('Starting TRSAXS server')
 
         ip = '164.54.204.8'
         # ip = '164.54.204.24'
@@ -652,16 +665,61 @@ if __name__ == '__main__':
 
     elif exp_type == 'hplc':
         # HPLC control
+        logger.info('Starting HPLC server')
 
         ip = '164.54.204.113' # Dual pump system
 
         hplc_settings = biohplccon.default_hplc_2pump_settings
 
+    elif exp_type == 'autosampler':
+        # Autosampler control
+        logger.info('Starting autosampler server')
 
-    # Both
+        ip = '164.54.204.53' # Coflow laptop
+
+        as_settings = autosamplercon.default_autosampler_settings
+        as_settings['device_communication'] = 'local'
+        as_settings['components'] = ['autosampler',]
+
+        as_settings['device_init'][0]['kwargs']['needle_valve']['comm_lock'] = threading.RLock()
+        as_settings['device_init'][0]['kwargs']['sample_pump']['comm_lock'] = threading.RLock()
+        as_settings['device_init'][0]['kwargs']['clean1_pump']['comm_lock'] = threading.RLock()
+        as_settings['device_init'][0]['kwargs']['clean2_pump']['comm_lock'] = threading.RLock()
+        as_settings['device_init'][0]['kwargs']['clean3_pump']['comm_lock'] = threading.RLock()
 
 
-    if exp_type != 'hplc':
+    if exp_type.startswith('coflow'):
+
+
+        control_server_coflow = ControlServer(ip, port1, name='CoflowControlServer',
+            start_coflow=True)
+        control_server_coflow.start()
+        control_server_coflow.ready_event.wait()
+
+        coflow_comm_thread = control_server_coflow.get_comm_thread('coflow')
+
+        coflow_settings['com_thread'] = coflow_comm_thread
+
+        coflow_frame = coflowcon.CoflowFrame('CoflowFrame', coflow_settings, parent=None,
+            title='Coflow Control')
+        coflow_frame.Show()
+
+    elif exp_type == 'uv':
+        control_server_uv = ControlServer(ip, port3, name='UVControlServer',
+            start_uv=True)
+        control_server_uv.start()
+        control_server_uv.ready_event.wait()
+
+        uv_comm_thread = control_server_uv.get_comm_thread('uv')
+
+        spectrometer_settings['com_thread'] = uv_comm_thread
+
+        uv_frame = spectrometercon.UVFrame('UVFrame', spectrometer_settings,
+            parent=None, title='UV Spectrometer Control')
+        uv_frame.Show()
+
+
+    elif exp_type.startswith('trsaxs'):
         control_server_pump = ControlServer(ip, port1, name='PumpControlServer',
             start_pump=True)
         control_server_pump.start()
@@ -674,7 +732,9 @@ if __name__ == '__main__':
             start_valve=True)
         control_server_valve.start()
 
-        time.sleep(1)
+        control_server_pump.ready_event.wait()
+        control_server_fm.ready_event.wait()
+        control_server_valve.ready_event.wait()
 
         fm_comm_thread = control_server_fm.get_comm_thread('fm')
 
@@ -687,31 +747,6 @@ if __name__ == '__main__':
         fm_frame = fmcon.FlowMeterFrame('FMFrame', fm_settings, parent=None,
             title='Flow Meter Control')
         fm_frame.Show()
-
-
-        if exp_type == 'coflow':
-            # For OB1 with feedback
-            fm_local_cmd_q = deque()
-            fm_local_ret_q = deque()
-            fm_local_status_q = deque()
-
-            fm_comm_thread.add_new_communication('local', fm_local_cmd_q,
-                fm_local_ret_q, fm_local_status_q)
-
-            cmd = ['get_bfs_instr_id', [setup_fms[1]['name'],], {}]
-
-            bfs_instr_id = utils.send_cmd(cmd, fm_local_cmd_q, fm_local_ret_q,
-                threading.Event(), threading.Lock(), False, 'fm', True)
-
-            # cmd = ['start_remote', [setup_fms[1]['name'],], {}]
-
-            # utils.send_cmd(cmd, fm_local_cmd_q, fm_local_ret_q, threading.Event(),
-            #     threading.Lock(), False, 'fm', False)
-
-            fm_comm_thread.remove_communication('local')
-
-            setup_pumps[1]['kwargs']['bfs_instr_ID'] = bfs_instr_id
-            setup_pumps[1]['kwargs']['fm_comm_lock'] = outlet_fm_comm_lock
 
         pump_comm_thread = control_server_pump.get_comm_thread('pump')
 
@@ -738,27 +773,12 @@ if __name__ == '__main__':
             title='Valve Control')
         valve_frame.Show()
 
-        if exp_type == 'coflow' and has_uv:
-            # Coflow only
-            control_server_uv = ControlServer(ip, port4, name='UVControlServer',
-                start_uv=True)
-            control_server_uv.start()
-
-            time.sleep(1)
-            uv_comm_thread = control_server_uv.get_comm_thread('uv')
-
-            spectrometer_settings['com_thread'] = uv_comm_thread
-
-            uv_frame = spectrometercon.UVFrame('UVFrame', spectrometer_settings,
-                parent=None, title='UV Spectrometer Control')
-            uv_frame.Show()
-
     elif exp_type == 'hplc':
         control_server_hplc = ControlServer(ip, port1, name='HPLCControlServer',
             start_hplc=True)
         control_server_hplc.start()
+        control_server_hplc.ready_event.wait()
 
-        time.sleep(1)
         hplc_comm_thread = control_server_hplc.get_comm_thread('hplc')
 
         hplc_settings['remote'] = False
@@ -768,6 +788,21 @@ if __name__ == '__main__':
             title='HPLC Control')
         hplc_frame.Show()
 
+    elif exp_type == 'autosampler':
+        control_server_as = ControlServer(ip, port2, name='AuotsamplerControlServer',
+            start_autosampler=True)
+        control_server_as.start()
+        control_server_as.ready_event.wait()
+
+        as_comm_thread = control_server_as.get_comm_thread('autosampler')
+
+        as_settings['remote'] = False
+        as_settings['com_thread'] = as_comm_thread
+
+        as_frame = autosamplercon.AutosamplerFrame('AutosamplerFrame', as_settings,
+            parent=None, title='Autosampler Control')
+        as_frame.Show()
+
 
     app.MainLoop()
 
@@ -775,22 +810,30 @@ if __name__ == '__main__':
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        if exp_type != 'hplc':
+        if exp_type.startswith('coflow'):
+            control_server_coflow.stop()
+            control_server_coflow.join(5)
+
+        elif exp_type == 'uv':
+            control_server_uv.stop()
+            control_server_uv.join(5)
+
+        elif exp_type.startswith('trsaxs'):
             control_server_pump.stop()
-            control_server_pump.join()
+            control_server_pump.join(5)
 
             control_server_fm.stop()
-            control_server_fm.join()
+            control_server_fm.join(5)
 
             control_server_valve.stop()
-            control_server_valve.join()
-
-            if exp_type == 'coflow' and has_uv:
-                control_server_uv.stop()
-                control_server_uv.join()
+            control_server_valve.join(5)
 
         elif exp_type == 'hplc':
             control_server_hplc.stop()
-            control_server_hplc.join()
+            control_server_hplc.join(5)
+
+        elif exp_type == 'autosampler':
+            control_server_as.stop()
+            control_server_as.join(5)
 
     logger.info("Quitting server")

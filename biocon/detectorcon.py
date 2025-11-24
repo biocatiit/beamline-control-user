@@ -102,7 +102,13 @@ class MXDetector(Detector):
         self.det_exp_time = mp.Net(server_record, det_exp_time_name)
         self.det_exp_period = mp.Net(server_record, det_exp_period_name)
 
+        self.det_datadir.get()
+        self.det_filename.get()
+        self.det_exp_time.get()
+        self.det_exp_period.get()
+
         det_local_datafile_root = mp.Net(server_record, det_local_datafile_root_name)
+        det_local_datafile_root.get()
         det_local_datafile_root.put(data_dir_root) #MX record field is read only?
 
         self.trigger_mode = 'ext_enable'
@@ -298,6 +304,7 @@ class EPICSEigerDetector(object):
 
         if trig_mode == 'Internal Series' or trig_mode == 'External Series':
             self.det.put('cam1:NumImages', num_frames, wait=True, timeout=1)
+            self.det.put('cam1:NumTriggers', 1, wait=True, timeout=1)
 
         elif trig_mode == 'Internal Enable' or trig_mode == 'External Enable':
             self.det.put('cam1:NumTriggers', num_frames, wait=True, timeout=1)
@@ -322,6 +329,124 @@ class EPICSEigerDetector(object):
 
         if mode == 'ext_enable' or mode == 'int_enable':
             self.det.put('cam1:NumImages', 1, wait=True, timeout=1)
+
+        self.det.put("cam1:TriggerMode", tm, wait=True, timeout=1)
+
+    def set_manual_trigger(self, mode):
+        self.det.put('cam1:ManualTrigger', mode, wait=True, timeout=1)
+
+    def stop(self):
+        # self.det.put("cam1:Acquire", 0, wait=True, timeout=1)
+        self.det.put('cam1:Acquire', 0, timeout=1)
+        # For some reason this is much faster without the wait=True, in terms of EPICS response
+        # So going with that for now. Maybe it's a bug that's been fixed in mroe
+        # Recent versions of pyepics? I should try when I convert to python 3.
+
+
+class AD_PilatusCamera(Device):
+    """
+    Basic AreaDetector Camera Device
+    """
+    attrs = ("cam1:Acquire", "cam1:AcquirePeriod", "cam1:AcquirePeriod_RBV",
+             "cam1:AcquireTime", "cam1:AcquireTime_RBV",
+             "cam1:ArrayCallbacks", "cam1:ArrayCallbacks_RBV",
+             "cam1:ArrayCounter", "cam1:ArrayCounter_RBV", "cam1:ArrayRate_RBV",
+             "cam1:ArraySizeX_RBV", "cam1:ArraySizeY_RBV", "cam1:ArraySize_RBV",
+             "cam1:BinX", "cam1:BinX_RBV", "cam1:BinY", "cam1:BinY_RBV",
+             "cam1:ColorMode", "cam1:ColorMode_RBV",
+             "cam1:DataType", "cam1:DataType_RBV", "cam1:DetectorState_RBV",
+             "cam1:Gain", "cam1:Gain_RBV",
+             "cam1:ImageMode", "cam1:ImageMode_RBV",
+             "cam1:MaxSizeX_RBV", "cam1:MaxSizeY_RBV",
+             "cam1:MinX", "cam1:MinX_RBV", "cam1:MinY", "cam1:MinY_RBV",
+             "cam1:NumImages", "cam1:NumImagesCounter_RBV", "cam1:NumImages_RBV",
+             # "cam1:PhotonEnergy", "cam1:PhotonEnergy_RBV",
+             "cam1:SizeX", "cam1:SizeX_RBV", "cam1:SizeY", "cam1:SizeY_RBV",
+             "cam1:TimeRemaining_RBV",
+             "cam1:TriggerMode", "cam1:TriggerMode_RBV",
+             )
+
+
+    _nonpvs = ('_prefix', '_pvs', '_delim')
+
+    def __init__(self, prefix):
+        Device.__init__(self, prefix, delim='', mutable=False,
+                              attrs=self.attrs)
+
+    def ensure_value(self, attr, value, wait=False):
+        """ensures that an attribute with an associated _RBV value is
+        set to the specifed value
+        """
+        rbv_attr = "%s_RBV" % attr
+        if rbv_attr not in self._pvs:
+            return self._pvs[attr].put(value, wait=wait)
+
+        if  self._pvs[rbv_attr].get(as_string=True) != value:
+            self._pvs[attr].put(value, wait=wait)
+
+class EPICSPilatusDetector(object):
+    def __init__(self, pv_prefix):
+        """
+        """
+        self.det = AD_PilatusCamera(pv_prefix)
+
+        # self.det.put('cam1:PhotonEnergy', photon_energy*1000, wait=True, timeout=1)
+
+    # def __repr__(self):
+    #     return '{}({}, {})'.format(self.__class__.__name__, self.name, self.device)
+
+    # def __str__(self):
+    #     return '{} {}, connected to {}'.format(self.__class__.__name__, self.name, self.device)
+
+    def abort(self):
+        self.det.put("cam1:Acquire", 0, wait=True, timeout=1)
+
+    def arm(self):
+        self.det.put("cam1:Acquire", 1, wait=True, timeout=1)
+
+    def trigger(self, wait=True):
+        self.det.put("cam1:Trigger", 1, wait=wait, timeout=1)
+
+    def get_status(self):
+        status = self.det.get("cam1:DetectorState_RBV")
+
+        if status == 10:
+            status = 0
+
+        return status
+
+    def get_data_dir(self):
+        return self.det.get('cam1:FilePath', as_string=True)
+
+    def set_data_dir(self, data_dir):
+        self.det.put("cam1:FilePath", data_dir, wait=True, timeout=1)
+
+    def set_exp_period(self, exp_period):
+        self.det.put('cam1:AcquirePeriod', exp_period, wait=True, timeout=1)
+
+    def set_exp_time(self, exp_time):
+        trig_mode = self.det.get('cam1:TriggerMode_RBV', as_string=True)
+
+        if trig_mode == 'Internal Enable':
+            self.det.put('cam1:TriggerExposure', exp_time, wait=True, timeout=1)
+        else:
+            self.det.put('cam1:AcquireTime', exp_time, wait=True, timeout=1)
+
+    def set_filename(self, filename):
+        self.det.put("cam1:FileName", filename, wait=True, timeout=1)
+
+    def set_num_frames(self, num_frames):
+        self.det.put('cam1:NumImages', num_frames, wait=True, timeout=1)
+
+    def set_trigger_mode(self, mode):
+        if mode == 'ext_enable':
+            tm = 1
+        elif mode == 'ext_trig':
+            tm = 2
+        elif mode == 'ext_gate':
+            tm = 3
+        elif mode == 'int_trig':
+            tm = 0
 
         self.det.put("cam1:TriggerMode", tm, wait=True, timeout=1)
 

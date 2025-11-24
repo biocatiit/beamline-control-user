@@ -141,9 +141,12 @@ class ExpCommThread(threading.Thread):
         elif self._settings['detector'].lower().split('_')[-1] == 'epics':
             logger.debug('Getting epics detector')
             record_name = self._settings['detector'].rstrip('_epics')
-
             det_args = self._settings['det_args']
-            det = detectorcon.EPICSEigerDetector(record_name, **det_args)
+
+            if 'eig' in record_name.lower():
+                det = detectorcon.EPICSEigerDetector(record_name, **det_args)
+            elif 'pil' in record_name.lower():
+                det = detectorcon.EPICSPilatusDetector(record_name, **det_args)
 
         logger.debug("Got detector records")
 
@@ -1556,14 +1559,19 @@ class ExpCommThread(threading.Thread):
         gh_burst = self._mx_data['gh_burst']   #UV trigger
         # dg645_trigger_source = self._mx_data['dg645_trigger_source']
 
-        if exp_type == 'muscle':
-            ab_burst_2 = self._mx_data['ab_burst_2']
-            cd_burst_2 = self._mx_data['cd_burst_2'] #Struck channel advance
-            ef_burst_2 = self._mx_data['ef_burst_2']
-            gh_burst_2 = self._mx_data['gh_burst_2']
-            # dg645_trigger_source2 = self._mx_data['dg645_trigger_source2']
-        else:
-            ab_burst_2 = None
+        # if exp_type == 'muscle':
+        #     ab_burst_2 = self._mx_data['ab_burst_2']
+        #     cd_burst_2 = self._mx_data['cd_burst_2'] #Struck channel advance
+        #     ef_burst_2 = self._mx_data['ef_burst_2']
+        #     gh_burst_2 = self._mx_data['gh_burst_2']
+        #     # dg645_trigger_source2 = self._mx_data['dg645_trigger_source2']
+        # else:
+        #     ab_burst_2 = None
+
+        ab_burst_2 = self._mx_data['ab_burst_2'] #Shutter
+        cd_burst_2 = self._mx_data['cd_burst_2']
+        ef_burst_2 = self._mx_data['ef_burst_2']
+        gh_burst_2 = self._mx_data['gh_burst_2']
 
         dio_out6 = self._mx_data['dio'][6]      #Xia/wharberton shutter N.C.
         dio_out9 = self._mx_data['dio'][9]      #Shutter control signal (alt.)
@@ -1644,13 +1652,20 @@ class ExpCommThread(threading.Thread):
 
         ab_burst.arm()
 
-        if exp_type == 'muscle':
-            ab_burst_2.setup(0.000001, 0.000000, 1, 0, 1, 2)
-            cd_burst_2.setup(0.000001, 0.000000, 1, 0, 1, 2)
-            ef_burst_2.setup(0.000001, 0.000000, 1, 0, 1, 2)
-            gh_burst_2.setup(0.000001, 0.000000, 1, 0, 1, 2)
+        # if exp_type == 'muscle':
+        #     ab_burst_2.setup(0.000001, 0.000000, 1, 0, 1, 2)
+        #     cd_burst_2.setup(0.000001, 0.000000, 1, 0, 1, 2)
+        #     ef_burst_2.setup(0.000001, 0.000000, 1, 0, 1, 2)
+        #     gh_burst_2.setup(0.000001, 0.000000, 1, 0, 1, 2)
 
-            ab_burst_2.arm()
+        #     ab_burst_2.arm()
+
+        ab_burst_2.setup(0.000001, 0.000000, 1, 0, 1, 2)
+        cd_burst_2.setup(0.000001, 0.000000, 1, 0, 1, 2)
+        ef_burst_2.setup(0.000001, 0.000000, 1, 0, 1, 2)
+        gh_burst_2.setup(0.000001, 0.000000, 1, 0, 1, 2)
+
+        ab_burst_2.arm()
 
         dio_out10.write( 1 )
         time.sleep(0.01)
@@ -1659,13 +1674,26 @@ class ExpCommThread(threading.Thread):
         while (ab_burst.get_status() & 0x1) != 0:
             time.sleep(0.01)
 
+        while (ab_burst_2.get_status() & 0x1) != 0:
+            time.sleep(0.01)
+
+        if exp_period - 0.5 > 0:
+            uv_time = exp_period - 0.5
+        else:
+            uv_time = exp_time
+
         if not continuous_exp:
             #Shutter opens and closes
             ab_burst.setup(exp_period, exp_time+s_open_time, num_frames, 0, 1, 2)
             cd_burst.setup(exp_period, (exp_period-(exp_time+s_open_time))/10.,
                 num_frames, exp_time+s_open_time, 1, 2)
             ef_burst.setup(exp_period, exp_time, num_frames, s_open_time, 1, 2)
-            gh_burst.setup(exp_period, exp_period/1.1, num_frames, s_open_time, 1, 2)
+            gh_burst.setup(exp_period, uv_time/1.1, num_frames, s_open_time, 1, 2)
+
+            ab_burst_2.setup(exp_period, exp_time+s_open_time, num_frames, 0, 1, 2)
+            cd_burst_2.setup(exp_period, exp_time+s_open_time, num_frames, 0, 1, 2) #Irrelevant
+            ef_burst_2.setup(exp_period, exp_time+s_open_time, num_frames, 0, 1, 2) #Irrelevant
+            gh_burst_2.setup(exp_period, exp_time+s_open_time, num_frames, 0, 1, 2) #Irrelevant
         else:
             #Shutter will be open continuously
             if exp_type == 'muscle':
@@ -1677,13 +1705,24 @@ class ExpCommThread(threading.Thread):
             cd_burst.setup(exp_period, (exp_period-exp_time)/10.,
                 num_frames, exp_time+(exp_period-exp_time)/10., 1, 2)
             ef_burst.setup(exp_period, exp_time, num_frames, offset, 1, 2)
-            gh_burst.setup(exp_period, exp_period/1.1, num_frames, 0, 1, 2)
+            gh_burst.setup(exp_period, uv_time/1.1, num_frames, 0, 1, 2)
 
-        if exp_type == 'muscle':
-            ab_burst_2.setup(struck_meas_time, 0, struck_num_meas+1, 0, 1, 2) #Irrelevant
-            cd_burst_2.setup(struck_meas_time, struck_meas_time/2., struck_num_meas+1, 0, 1, 2)
-            ef_burst_2.setup(struck_meas_time, 0, struck_num_meas+1, 0, 1, 2) #Irrelevant
-            gh_burst_2.setup(struck_meas_time, 0, struck_num_meas+1, 0, 1, 2) #Irrelevant
+            if exp_period*num_frames <= 1999:
+                ab_burst_2.setup(1, exp_period*num_frames, 1, 0, 1, 2)
+                cd_burst_2.setup(1, 0, 1, 0, 1, 2) #Irrelevant
+                ef_burst_2.setup(1, 0, 1, 0, 1, 2) #Irrelevant
+                gh_burst_2.setup(1, 0, 1, 0, 1, 2) #Irrelevant
+            else:
+                ab_burst_2.setup(1, 1999, 1, 0, 1, 2)
+                cd_burst_2.setup(1, 0, 1, 0, 1, 2) #Irrelevant
+                ef_burst_2.setup(1, 0, 1, 0, 1, 2) #Irrelevant
+                gh_burst_2.setup(1, 0, 1, 0, 1, 2) #Irrelevant
+
+        # if exp_type == 'muscle':
+        #     ab_burst_2.setup(struck_meas_time, 0, struck_num_meas+1, 0, 1, 2) #Irrelevant
+        #     cd_burst_2.setup(struck_meas_time, struck_meas_time/2., struck_num_meas+1, 0, 1, 2)
+        #     ef_burst_2.setup(struck_meas_time, 0, struck_num_meas+1, 0, 1, 2) #Irrelevant
+        #     gh_burst_2.setup(struck_meas_time, 0, struck_num_meas+1, 0, 1, 2) #Irrelevant
 
         for cur_trig in range(1,num_trig+1):
             #Runs a loop for each expected trigger signal (internal or external)
@@ -1793,6 +1832,7 @@ class ExpCommThread(threading.Thread):
         struck_meas_time, kwargs):
 
         metadata = kwargs['metadata']
+        open_shutter_before_trig_cont_exp = kwargs['open_shutter_before_trig_cont_exp']
 
         if det.get_status() !=0:
             try:
@@ -1809,8 +1849,10 @@ class ExpCommThread(threading.Thread):
         struck.stop()
         ab_burst.stop()
 
-        if exp_type == 'muscle':
-            ab_burst_2.stop()
+        # if exp_type == 'muscle':
+        #     ab_burst_2.stop()
+
+        ab_burst_2.stop()
 
         dio_out9.write(0) # Make sure the NM shutter is closed
         dio_out10.write(0) # Make sure the trigger is off
@@ -1830,11 +1872,14 @@ class ExpCommThread(threading.Thread):
         struck.start()
         ab_burst.arm()
 
-        if exp_type == 'muscle':
-            ab_burst_2.arm()
+        # if exp_type == 'muscle':
+        #     ab_burst_2.arm()
+
+        ab_burst_2.arm()
 
         if continuous_exp:
-            if not exp_type == 'muscle' and not wait_for_trig:
+            if not exp_type == 'muscle' and (not wait_for_trig or
+                open_shutter_before_trig_cont_exp):
                 dio_out9.write(1)
 
         time.sleep(1)
@@ -1848,6 +1893,11 @@ class ExpCommThread(threading.Thread):
             aborted = True
             return False
 
+        if continuous_exp:
+            if not exp_type == 'muscle' and (wait_for_trig and
+                not open_shutter_before_trig_cont_exp):
+                dio_out9.write(1)
+
         metadata['Date:'] = real_start_time
 
         if exp_type != 'muscle':
@@ -1860,6 +1910,8 @@ class ExpCommThread(threading.Thread):
         last_meas = 0
 
         timeouts = 0
+
+        header_readout_time = time.time()
 
         while True:
             #Struck is_busy doesn't work in thread! So have to go elsewhere
@@ -1879,7 +1931,7 @@ class ExpCommThread(threading.Thread):
                 aborted = True
                 break
 
-            if exp_type != 'muscle':
+            if exp_type != 'muscle' and time.time()-header_readout_time > exp_time:
                 current_meas = struck.get_last_measurement_number()
 
                 if current_meas != last_meas and current_meas != -1:
@@ -1897,7 +1949,9 @@ class ExpCommThread(threading.Thread):
 
                     last_meas = current_meas
 
-            time.sleep(0.01)
+                    header_readout_time = time.time()
+
+            time.sleep(0.1)
 
 
         if continuous_exp:
@@ -1929,6 +1983,9 @@ class ExpCommThread(threading.Thread):
                 kwargs['metadata'])
 
         ab_burst.get_status() #Maybe need to clear this status?
+
+        if ab_burst_2 is not None:
+            ab_burst_2.get_status() #Maybe need to clear this status?
 
         while det.get_status() !=0:
             time.sleep(0.001)
@@ -2161,7 +2218,7 @@ class ExpCommThread(threading.Thread):
                 self.return_queue.append(['timeout', [data_dir, os.path.expanduser('~')]])
                 data_dir = os.path.expanduser('~')
 
-        zpad = 6
+        zpad = 6 #CHANGE ME?
 
         log_file = os.path.join(data_dir, '{}.log'.format(fprefix))
 
@@ -2195,7 +2252,7 @@ class ExpCommThread(threading.Thread):
 
         logger.info(header.split('\n')[-2])
 
-        zpad = 6
+        zpad = 6 #CHANGE ME?
 
         log_file = os.path.join(data_dir, '{}.log'.format(fprefix))
 
@@ -2298,7 +2355,7 @@ class ExpCommThread(threading.Thread):
 
         # logger.debug(avg_index)
 
-        zpad = 6
+        zpad = 6 #CHANGE ME?
 
         with open(log_file, 'w') as f, open(log_summary_file, 'w') as f_sum:
             f.write(header)
@@ -3606,6 +3663,7 @@ class ExpPanel(wx.Panel):
         struck_log_vals = self.settings['struck_log_vals']
         joerger_log_vals = self.settings['joerger_log_vals']
         struck_measurement_time = float(self.muscle_sampling.GetValue())
+        open_shutter_before_trig_cont_exp = self.settings['open_shutter_before_trig_cont_exp']
 
         (num_frames, exp_time, exp_period, data_dir, filename,
             wait_for_trig, num_trig, local_data_dir, struck_num_meas, valid,
@@ -3630,6 +3688,7 @@ class ExpPanel(wx.Panel):
             'struck_log_vals'           : struck_log_vals,
             'struck_measurement_time'   : struck_measurement_time,
             'struck_num_meas'           : struck_num_meas,
+            'open_shutter_before_trig_cont_exp' : open_shutter_before_trig_cont_exp,
             }
 
         return exp_values, valid
@@ -3940,6 +3999,8 @@ class ExpPanel(wx.Panel):
             for key, value in scan_metadata.items():
                 metadata[key] = value
 
+        exp_type = None
+
         if 'metadata' in self.settings['components'] and metadata_vals is None:
             params_panel = wx.FindWindowByName('metadata')
             params_metadata = params_panel.metadata()
@@ -3949,6 +4010,8 @@ class ExpPanel(wx.Panel):
 
                 if key == 'Column:':
                     column = value
+                elif key == 'Experiment type:':
+                    exp_type = value
 
         elif metadata_vals is not None:
             for key, value in metadata_vals.items():
@@ -3956,12 +4019,22 @@ class ExpPanel(wx.Panel):
 
                 if key == 'Column:':
                     column = value
+                elif key == 'Experiment type:':
+                    exp_type = value
 
         if 'uv' in self.settings['components']:
             uv_panel = wx.FindWindowByName('uv')
             uv_metadata = uv_panel.metadata()
 
             for key, value in uv_metadata.items():
+                metadata[key] = value
+
+        if ('autosampler' in self.settings['components']
+            and exp_type == 'Batch mode SAXS' and metadata_vals is None):
+            as_panel = wx.FindWindowByName('autosampler')
+            as_metadata = as_panel.metadata()
+
+            for key, value in as_metadata.items():
                 metadata[key] = value
 
         if ('coflow' in self.settings['components']
@@ -3985,9 +4058,9 @@ class ExpPanel(wx.Panel):
 
                             errors.append(msg)
 
-                if int(metadata['Sheath valve position:']) != 1:
+                if int(metadata['Sheath valve position:']) >= 7:
                     msg = ('Sheath valve is in position {}, not the usual '
-                        'position 1.'.format(metadata['Sheath valve position:']))
+                        'positions 1-7.'.format(metadata['Sheath valve position:']))
 
                     errors.append(msg)
 
@@ -4255,6 +4328,7 @@ class ExpPanel(wx.Panel):
             struck_log_vals = self.settings['struck_log_vals']
             joerger_log_vals = self.settings['joerger_log_vals']
             struck_measurement_time = float(cmd_kwargs['struck_measurement_time'])
+            open_shutter_before_trig_cont_exp = self.settings['open_shutter_before_trig_cont_exp']
 
             if self.settings['tr_muscle_exp']:
                 struck_num_meas = exp_period*num_frames/struck_measurement_time
@@ -4284,6 +4358,7 @@ class ExpPanel(wx.Panel):
                 'struck_measurement_time'   : struck_measurement_time,
                 'struck_num_meas'           : struck_num_meas,
                 'filename'                  : filename,
+                'open_shutter_before_trig_cont_exp' : open_shutter_before_trig_cont_exp,
                 }
 
             if cmd_kwargs['item_type'] == 'sec_sample':
@@ -4292,14 +4367,21 @@ class ExpPanel(wx.Panel):
             elif cmd_kwargs['item_type'] == 'exposure':
                 exp_type = cmd_kwargs['exp_type']
 
+            elif cmd_kwargs['item_type'] == 'batch_sample':
+                exp_type = 'Batch mode SAXS'
+
             if (exp_type == 'SEC-SAXS' or exp_type == 'SEC-MALS-SAXS' or
                 exp_type == 'IEC-SAXS'):
-                column = cmd_kwargs['column']
+                vol = cmd_kwargs['inj_vol']
+            elif exp_type == 'Batch mode SAXS':
+                vol = cmd_kwargs['volume']
+            else:
+                vol = None
 
             sample = cmd_kwargs['sample_name']
             buf = cmd_kwargs['buf']
 
-            vol = cmd_kwargs['inj_vol']
+
             conc = cmd_kwargs['conc']
             notes = cmd_kwargs['notes']
 
@@ -4312,16 +4394,31 @@ class ExpPanel(wx.Panel):
                 'Experiment type:'      : exp_type,
                 'Sample:'               : sample,
                 'Buffer:'               : buf,
-                'Loaded volume [uL]:'   : vol,
                 'Concentration [mg/ml]:': conc,
                 }
+
+            if vol is not None:
+                metadata['Loaded volume [uL]:'] = vol
 
             if temperature is not None:
                 metadata['Temperature [C]:'] = temperature
 
             if (exp_type == 'SEC-SAXS' or exp_type == 'SEC-MALS-SAXS' or
                 exp_type == 'IEC-SAXS'):
-                metadata['Column:'] = column
+                metadata['Column:'] = cmd_kwargs['column']
+                metadata['Sample Location:'] = cmd_kwargs['sample_loc']
+                metadata['HPLC flow rate [mL/min]:'] = cmd_kwargs['flow_rate']
+                metadata['Elution volume [mL]:'] = cmd_kwargs['elution_vol']
+                metadata['HPLC acquisition method:'] = cmd_kwargs['acq_method']
+                metadata['HPLC sample prep method:'] = cmd_kwargs['sp_method']
+            elif exp_type == 'Batch mode SAXS':
+                metadata['Well:'] = cmd_kwargs['sample_well']
+                metadata['Draw rate [uL/min]:'] = cmd_kwargs['draw_rate']
+                metadata['Wait time after draw [s]'] = cmd_kwargs['dwell_time']
+                metadata['Injection rate [uL/min]:'] = cmd_kwargs['rate']
+                metadata['Delay injection after trigger [s]:'] = cmd_kwargs['start_delay']
+                metadata['Delay after injection end [s]:'] = cmd_kwargs['end_delay']
+                metadata['Trigger on inject:'] = cmd_kwargs['trigger']
 
             metadata['Notes:'] = notes
 
@@ -4437,8 +4534,9 @@ default_exposure_settings = {
     # 'nparams_max'           : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
     # 'exp_period_delta'      : 0.00095,
     # 'local_dir_root'        : '/nas_data/Pilatus1M',
-    # 'remote_dir_root'       : '/nas_data',
-    # 'detector'              : 'pilatus_mx',
+    # 'remote_dir_root'       : '/ramdisk',
+    # # 'detector'              : 'pilatus_mx',
+    # 'detector'              : '18IDpil1M:_epics',
     # 'det_args'              : {}, #Allows detector specific keyword arguments
     # 'add_file_postfix'      : True,
 
@@ -4483,6 +4581,7 @@ default_exposure_settings = {
     'wait_for_trig'         : True,
     'num_trig'              : '1',
     'show_advanced_options' : True,
+    'open_shutter_before_trig_cont_exp' : True,
     'beam_current_pv'       : 'XFD:srCurrent',
     'fe_shutter_pv'         : 'PA:18ID:STA_A_FES_OPEN_PL',
     'd_shutter_pv'          : 'PA:18ID:STA_D_SDS_OPEN_PL.VAL',

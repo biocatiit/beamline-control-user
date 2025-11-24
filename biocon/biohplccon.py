@@ -226,9 +226,9 @@ class AgilentHPLCStandard(AgilentHPLC):
 
     def  connect(self):
         """
-        Expected by the thread, but connection is don on init, so this does nothing
+        Expected by the thread, but connection is done on init, so this does nothing
         """
-        pass
+        return True
 
     def _connect_valves(self, p1_args, b1_args):
 
@@ -1897,7 +1897,7 @@ class AgilentHPLCStandard(AgilentHPLC):
             if flow_path == 1:
                 self._pump_flow_accel1 = flow_accel
             elif flow_path == 2:
-                self._pump_flow_accel1 = flow_accel
+                self._pump_flow_accel2 = flow_accel
 
         return success
 
@@ -3337,7 +3337,6 @@ class HPLCCommThread(utils.CommManager):
             'get_sample_prep_methods'   : self._get_sample_prep_methods,
             'get_run_status'            : self._get_run_status,
             'get_fast_hplc_status'      : self._get_fast_hplc_status,
-            'get_slow_hplc_status'      : self._get_slow_hplc_status,
             'get_valve_status'          : self._get_valve_status,
             'set_valve_position'        : self._set_valve_position,
             'purge_flow_path'           : self._purge_flow_path,
@@ -4200,6 +4199,8 @@ class HPLCPanel(utils.DevicePanel):
         self._uv_280_abs = ''
         self._uv_260_abs = ''
 
+        self._last_sample_settings = {}
+
         super(HPLCPanel, self).__init__(parent, panel_id, settings,
             *args, **kwargs)
 
@@ -4325,21 +4326,21 @@ class HPLCPanel(utils.DevicePanel):
 
         pump1_box = wx.StaticBox(flow_box, label='Pump 1')
         self._pump1_power_ctrl = wx.StaticText(pump1_box,
-            size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
+            size=self._FromDIP((45,-1)), style=wx.ST_NO_AUTORESIZE)
         self._pump1_flow_ctrl = wx.StaticText(pump1_box,
-            size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
+            size=self._FromDIP((45,-1)), style=wx.ST_NO_AUTORESIZE)
         self._pump1_flow_accel_ctrl = wx.StaticText(pump1_box,
-            size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
+            size=self._FromDIP((45,-1)), style=wx.ST_NO_AUTORESIZE)
         self._pump1_pressure_ctrl = wx.StaticText(pump1_box,
-            size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
+            size=self._FromDIP((45,-1)), style=wx.ST_NO_AUTORESIZE)
         self._pump1_pressure_lim_ctrl = wx.StaticText(pump1_box,
             size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
         self._pump1_purge_ctrl = wx.StaticText(pump1_box,
-            size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
+            size=self._FromDIP((45,-1)), style=wx.ST_NO_AUTORESIZE)
         self._pump1_purge_vol_ctrl = wx.StaticText(pump1_box,
             size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
         self._pump1_eq_ctrl = wx.StaticText(pump1_box,
-            size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
+            size=self._FromDIP((45,-1)), style=wx.ST_NO_AUTORESIZE)
         self._pump1_eq_vol_ctrl = wx.StaticText(pump1_box,
             size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
         self._pump1_flow_target_ctrl = wx.StaticText(pump1_box,
@@ -4535,21 +4536,21 @@ class HPLCPanel(utils.DevicePanel):
 
             pump2_box = wx.StaticBox(flow_box, label='Pump 2')
             self._pump2_power_ctrl = wx.StaticText(pump2_box,
-                size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
+                size=self._FromDIP((45,-1)), style=wx.ST_NO_AUTORESIZE)
             self._pump2_flow_ctrl = wx.StaticText(pump2_box,
-                size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
+                size=self._FromDIP((45,-1)), style=wx.ST_NO_AUTORESIZE)
             self._pump2_flow_accel_ctrl = wx.StaticText(pump2_box,
-                size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
+                size=self._FromDIP((45,-1)), style=wx.ST_NO_AUTORESIZE)
             self._pump2_pressure_ctrl = wx.StaticText(pump2_box,
-                size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
+                size=self._FromDIP((45,-1)), style=wx.ST_NO_AUTORESIZE)
             self._pump2_pressure_lim_ctrl = wx.StaticText(pump2_box,
                 size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
             self._pump2_purge_ctrl = wx.StaticText(pump2_box,
-                size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
+                size=self._FromDIP((45,-1)), style=wx.ST_NO_AUTORESIZE)
             self._pump2_purge_vol_ctrl = wx.StaticText(pump2_box,
                 size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
             self._pump2_eq_ctrl = wx.StaticText(pump2_box,
-                size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
+                size=self._FromDIP((45,-1)), style=wx.ST_NO_AUTORESIZE)
             self._pump2_eq_vol_ctrl = wx.StaticText(pump2_box,
                 size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
             self._pump2_flow_target_ctrl = wx.StaticText(pump2_box,
@@ -4819,13 +4820,13 @@ class HPLCPanel(utils.DevicePanel):
         sampler_box = wx.StaticBox(self, label='Autosampler')
 
         self._sampler_thermostat_power_ctrl = wx.StaticText(sampler_box,
-            size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
+            size=self._FromDIP((45,-1)), style=wx.ST_NO_AUTORESIZE)
         self._sampler_submitting_ctrl = wx.StaticText(sampler_box,
-            size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
+            size=self._FromDIP((45,-1)), style=wx.ST_NO_AUTORESIZE)
         self._sampler_temp_ctrl = wx.StaticText(sampler_box,
-            size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
+            size=self._FromDIP((45,-1)), style=wx.ST_NO_AUTORESIZE)
         self._sampler_setpoint_ctrl = wx.StaticText(sampler_box,
-            size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
+            size=self._FromDIP((45,-1)), style=wx.ST_NO_AUTORESIZE)
 
         sampler_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(5),
             hgap=self._FromDIP(5))
@@ -5022,7 +5023,7 @@ class HPLCPanel(utils.DevicePanel):
         Initializes the valve.
         """
         device_data = settings['device_data']
-        args = device_data['args']
+        args = copy.copy(device_data['args'])
         kwargs = device_data['kwargs']
 
         valve_max = kwargs['purge1_valve_args']['kwargs']['positions']
@@ -5858,18 +5859,38 @@ class HPLCPanel(utils.DevicePanel):
         except Exception:
             pressure_lim = self.settings['sample_pressure_lim']
 
+        if len(self._last_sample_settings) == 0:
+            acq_method = self.settings['acq_method']
+            sample_loc = self.settings['sample_loc']
+            inj_vol = self.settings['inj_vol']
+            elution_vol = self.settings['elution_vol']
+            result_path = self.settings['result_path']
+            sp_method = self.settings['sp_method']
+            wait_for_flow_ramp = self.settings['wait_for_flow_ramp']
+            settle_time = self.settings['settle_time']
+
+        else:
+            acq_method = self._last_sample_settings['acq_method']
+            sample_loc = self._last_sample_settings['sample_loc']
+            inj_vol = self._last_sample_settings['inj_vol']
+            elution_vol = self._last_sample_settings['elution_vol']
+            result_path = self._last_sample_settings['result_path']
+            sp_method = self._last_sample_settings['sp_method']
+            wait_for_flow_ramp = self._last_sample_settings['wait_for_flow_ramp']
+            settle_time = self._last_sample_settings['settle_time']
+
         default_sample_settings = {
-            'acq_method'    : self.settings['acq_method'],
-            'sample_loc'    : self.settings['sample_loc'],
-            'inj_vol'       : self.settings['inj_vol'],
+            'acq_method'    : acq_method,
+            'sample_loc'    : sample_loc,
+            'inj_vol'       : inj_vol,
             'flow_rate'     : flow_rate,
             'flow_accel'    : flow_accel,
-            'elution_vol'   : self.settings['elution_vol'],
+            'elution_vol'   : elution_vol,
             'pressure_lim'  : pressure_lim,
-            'result_path'   : self.settings['result_path'],
-            'sp_method'     : self.settings['sp_method'],
-            'wait_for_flow_ramp'    : self.settings['wait_for_flow_ramp'],
-            'settle_time'   : self.settings['settle_time'],
+            'result_path'   : result_path,
+            'sp_method'     : sp_method,
+            'wait_for_flow_ramp'    : wait_for_flow_ramp,
+            'settle_time'   : settle_time,
             'all_acq_methods'       : self._methods,
             'all_sample_methods'    : self._sp_methods,
             'flow_path'     : flow_path,
@@ -5886,7 +5907,8 @@ class HPLCPanel(utils.DevicePanel):
 
         default_sp_method = default_sample_settings['sp_method']
         if default_sp_method not in default_sample_settings['all_sample_methods']:
-            if default_sp_method != '':
+            if (default_sp_method != '' and default_sp_method is not None
+                and default_sp_method != 'None'):
                 default_sp_method = os.path.splitext(default_sp_method)[0]+'.smx'
 
                 if default_method not in default_sample_settings['all_sample_methods']:
@@ -5933,6 +5955,21 @@ class HPLCPanel(utils.DevicePanel):
                 sample_loc, inj_vol, flow_rate, flow_accel, elution_vol,
                 pressure_lim], sample_settings]
             self._send_cmd(cmd, False)
+
+            self._last_sample_settings = {
+                'acq_method'    : acq_method,
+                'sample_loc'    : sample_loc,
+                'inj_vol'       : inj_vol,
+                'elution_vol'   : elution_vol,
+                'result_path'  : sample_settings['result_path'],
+                'wait_for_flow_ramp'    : sample_settings['wait_for_flow_ramp'],
+                'settle_time'   : sample_settings['settle_time'],
+            }
+
+            if sample_settings['sp_method'] == 'None' or sample_settings['sp_method'] is None:
+                self._last_sample_settings['sp_method'] = ''
+            else:
+                self._last_sample_settings['sp_method'] = sample_settings['sp_method']
 
             run_sample = True
 
@@ -6135,7 +6172,7 @@ class HPLCPanel(utils.DevicePanel):
 
             for pos in remove_pos:
                 cmd = ['remove_buffer', [self.name, pos, flow_path], {}]
-                self._send_cmd(cmd, True)
+                self._send_cmd(cmd, False)
 
                 self._remove_buffer_from_list(flow_path, pos)
 
@@ -6758,6 +6795,7 @@ class HPLCPanel(utils.DevicePanel):
                 cur_buffer_pos = self._buffer1_valve
             elif int(flow_path) == 2:
                 cur_buffer_pos = self._buffer2_valve
+
             if str(buffer_position) == str(cur_buffer_pos):
                 state = 'idle'
             else:
@@ -7693,7 +7731,7 @@ default_hplc_2pump_settings = {
     'buffer_switch_restore_flow': False,
     'buffer_switch_with_sample' : False,
     'buffer_switch_with_active' : False,
-    'acq_method'                : 'SECSAXS_test',
+    'acq_method'                : 'SECSAXS_default',
     # 'acq_method'                : 'SEC-MALS',
     'sample_loc'                : 'D2F-A1',
     'inj_vol'                   : 240.0,
