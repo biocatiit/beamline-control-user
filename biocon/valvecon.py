@@ -349,6 +349,27 @@ class RheodyneValve(Valve):
 
 class RheodyneValveTTL(Valve):
     """
+    This uses the valve level logic control mode valve (note: only works for two
+    position valves). When the exernal level (e.g. TTL) is high the vale is in position 1,
+    when the external level is low the valve is in position 2.
+
+    This control expects an EPICS PV for a Digital output as device value
+
+    IMPORTANT NOTE: If a valve is set for the level logic control it will not
+    work in the standard USB control mode. In order to switch between the modes,
+    connect to the valve over USB as normal, and do the following:
+    1)  valve.send_command('D')
+        -   This checks the command state of the valve. A return value of 1
+            indicates that the valve is in the level logic state. Any other
+            return value indicates the valve is in a state that can be
+            controlled by USB commands.
+    2)  To switch to the USB control state, send the command valve.send_command('F02')
+        then power cycle the valve.
+    3)  To switch to level logic control, send the command valve.send_command('F01')
+        then power cycle the valve.
+    4)  After the valve power cycle, reconnect and check the state set correctly
+        using the command in step 1.
+
     """
 
     def __init__(self, name, device, positions, comm_lock=None):
@@ -356,7 +377,7 @@ class RheodyneValveTTL(Valve):
         This makes the initial serial connection, and then sets the MForce
         controller parameters to the correct values.
 
-        :param str device: The device comport as sent to pyserial
+        :param str device: EPICS PV
 
         :param str name: A unique identifier for the pump
         """
