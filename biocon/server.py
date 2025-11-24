@@ -519,25 +519,25 @@ if __name__ == '__main__':
             setup_pumps = [
                 {'name': 'Buffer 2', 'args': ['SSI Next Gen', 'COM14'],
                     'kwargs': {'flow_rate_scale': 1.0583,
-                    'flow_rate_offset': -33.462/1000,'scale_type': 'up'},
+                    'flow_rate_offset': -48.462/1000,'scale_type': 'up'},
                     'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
                 {'name': 'Sample', 'args': ['SSI Next Gen', 'COM17'],
                     'kwargs': {'flow_rate_scale': 1.0135,
-                    'flow_rate_offset': 5.1251/1000,'scale_type': 'up'},
+                    'flow_rate_offset': 0.1251/1000,'scale_type': 'up'},
                     'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
                 {'name': 'Buffer 1', 'args': ['SSI Next Gen', 'COM18'],
                     'kwargs': {'flow_rate_scale': 1.0497,
-                    'flow_rate_offset': -34.853/1000,'scale_type': 'up'},
+                    'flow_rate_offset': -19.853/1000,'scale_type': 'up'},
                     'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
                  ]
 
             setup_valves = [
                 # {'name': 'Injection', 'args': ['Rheodyne', 'COM6'],
                 #     'kwargs': {'positions' : 2}},
-                {'name': 'Injection', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo14'],
+                {'name': 'Injection 1', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo14'],
                     'kwargs': {'positions' : 2}},
-                # {'name': 'Injection 2', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo14'],
-                #     'kwargs': {'positions' : 2}},
+                {'name': 'Injection 2', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo14'],
+                    'kwargs': {'positions' : 2}},
                 ]
 
             setup_fms = [
