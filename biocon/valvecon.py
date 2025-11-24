@@ -995,7 +995,7 @@ if __name__ == '__main__':
     # my_valve = CheminertValve(valve_args['name'], valve_args['args'][1],
     #     valve_args['kwargs']['positions'], baud=9600)
 
-    # my_rv = RheodyneValve('injection', 'COM20', 2)
+    # my_rv = RheodyneValve('injection', 'COM17', 2)
     # my_rv67.get_position()
     # my_rv67.set_position(4)
 
@@ -1052,10 +1052,12 @@ if __name__ == '__main__':
 
     # # TR-SAXS laminar flow
     # setup_devices = [
-    #     {'name': 'Injection', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo14'],
-    #         'kwargs': {'positions' : 2}},
-    #     # {'name': 'Injection', 'args': ['Rheodyne', 'COM6'],
+    #     # {'name': 'Injection', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo14'],
     #     #     'kwargs': {'positions' : 2}},
+    #     {'name': 'Injection', 'args': ['Rheodyne', 'COM16'],
+    #         'kwargs': {'positions' : 2}},
+    #     {'name': 'Injection 2', 'args': ['Rheodyne', 'COM17'],
+    #         'kwargs': {'positions' : 2}},
     #     {'name': 'Buffer 1', 'args': ['Rheodyne', 'COM10'],
     #         'kwargs': {'positions' : 6}},
     #     {'name': 'Buffer 2', 'args': ['Rheodyne', 'COM4'],
@@ -1111,16 +1113,16 @@ if __name__ == '__main__':
     #         'kwargs': {'positions': 2}},
     #     ]
 
-     # SEC-MALS
-    setup_devices = [
-        {'name': 'Dual valve 1', 'args': ['Multi', None], 'kwargs': {'positions': 6,
-            'valve_settings': [
-                {'name': 'Selector 2', 'args': ['Rheodyne', 'COM13'],
-                    'kwargs': {'positions' : 6}},
-                {'name': 'Selector 6', 'args': ['Rheodyne', 'COM12'],
-                    'kwargs': {'positions' : 6}}]}}
-        ,
-        ]
+    #  # SEC-MALS
+    # setup_devices = [
+    #     {'name': 'Dual valve 1', 'args': ['Multi', None], 'kwargs': {'positions': 6,
+    #         'valve_settings': [
+    #             {'name': 'Selector 2', 'args': ['Rheodyne', 'COM13'],
+    #                 'kwargs': {'positions' : 6}},
+    #             {'name': 'Selector 6', 'args': ['Rheodyne', 'COM12'],
+    #                 'kwargs': {'positions' : 6}}]}}
+    #     ,
+    #     ]
 
     # Local
     com_thread = ValveCommThread('ValveComm')
