@@ -370,6 +370,9 @@ class RheodyneValveTTL(Valve):
     4)  After the valve power cycle, reconnect and check the state set correctly
         using the command in step 1.
 
+    Wiring for this uses the DB9 connector on the back of the rheodyne valve
+    and pin 1 to ground and pin 6 to positive.
+
     """
 
     def __init__(self, name, device, positions, comm_lock=None):
