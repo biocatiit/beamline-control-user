@@ -6443,6 +6443,10 @@ if __name__ == '__main__':
 
     # Teledyne SSI Reaxus pumps with scaling
     setup_devices = [
+        {'name': 'Pump 1', 'args': ['SSI Next Gen', 'COM18'],
+            'kwargs': {'flow_rate_scale': 1,
+            'flow_rate_offset': 0,'scale_type': 'up'},
+            'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
         {'name': 'Pump 4', 'args': ['SSI Next Gen', 'COM7'],
             'kwargs': {'flow_rate_scale': 1.0583,
             'flow_rate_offset': -33.462/1000,'scale_type': 'up'},
