@@ -1069,18 +1069,22 @@ class TRScanPanel(wx.Panel):
                         if x_start < x_end:
                             pco_start = x_start
                             pco_end = x_end
+                            backward = False
                         else:
-                            pco_start = x_start
-                            pco_end = x_end
+                            pco_start = x_end
+                            pco_end = x_start
+                            backward = True
                         pco_speed = vect_scan_speed[0]
                     else:
                         pco_step = y_pco_step
                         if y_start < y_end:
                             pco_start = y_start
                             pco_end = y_end
+                            backward = False
                         else:
-                            pco_start = y_start
-                            pco_end = y_end
+                            pco_start = y_end
+                            pco_end = y_start
+                            backward = True
                         pco_speed = vect_scan_speed[1]
 
                     if pco_start % encoder_resolution != 0:
@@ -1092,7 +1096,10 @@ class TRScanPanel(wx.Panel):
                             encoder_resolution)
 
                     if abs(pco_start-pco_end) % pco_step == 0:
-                        pco_end -= min(encoder_resolution, pco_step)
+                        if backward:
+                            pco_start += min(encoder_resolution, pco_step)
+                        else:
+                            pco_end -= min(encoder_resolution, pco_step)
 
                     if isinstance(pco_step, float):
                         # num_images = int(round(float(abs(pco_end-pco_start))/pco_step))
