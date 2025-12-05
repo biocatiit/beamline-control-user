@@ -488,7 +488,7 @@ class ExpCommThread(threading.Thread):
             gh_burst.setup(exp_time+0.007, exp_time, 1, 0, 1, 2)
         else:
             #Shutter will be open continuously, via dio_out9
-            ab_burst.setup(exp_time+0.001, exp_time, 1, 0, 1, 2) #Irrelevant
+            ab_burst.setup(exp_time+0.001, exp_time/4, 1, 0, 1, 2) #Irrelevant
             cd_burst.setup(exp_time+0.001, 0.0001, 1, exp_time+0.00015, 1, 2)
             ef_burst.setup(exp_time+0.001, exp_time, 1, 0, 1, 2)
             gh_burst.setup(exp_time+0.001, exp_time, 1, 0, 1, 2)
