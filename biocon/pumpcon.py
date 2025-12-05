@@ -3544,6 +3544,8 @@ class LongerL1001S2Pump(Pump):
     https://blog.darwin-microfluidics.com/control-command-string-generator-for-longer-peristaltic-pumps/
 
     Note that other longer peristatltic pumps have different command sets.
+
+    Flow calibration for the DG-1 10 roller head with 1x1 mm tubing is 0.0569 mL/rev
     """
 
     def __init__(self, name, device, pump_addr, comm_lock=None, flow_cal=1):
@@ -6440,32 +6442,36 @@ if __name__ == '__main__':
     #     ]
 
     # Teledyne SSI Reaxus pumps with scaling
-    # setup_devices = [
-    #     {'name': 'Pump 4', 'args': ['SSI Next Gen', 'COM14'],
-    #         'kwargs': {'flow_rate_scale': 1.0583,
-    #         'flow_rate_offset': -33.462/1000,'scale_type': 'up'},
-    #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-    #     {'name': 'Pump 3', 'args': ['SSI Next Gen', 'COM17'],
-    #         'kwargs': {'flow_rate_scale': 1.0135,
-    #         'flow_rate_offset': 5.1251/1000,'scale_type': 'up'},
-    #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-    #     {'name': 'Pump 2', 'args': ['SSI Next Gen', 'COM18'],
-    #         'kwargs': {'flow_rate_scale': 1.0497,
-    #         'flow_rate_offset': -34.853/1000,'scale_type': 'up'},
-    #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-    #      ]
+    setup_devices = [
+        {'name': 'Pump 1', 'args': ['SSI Next Gen', 'COM18'],
+            'kwargs': {'flow_rate_scale': 1,
+            'flow_rate_offset': 0,'scale_type': 'up'},
+            'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
+        {'name': 'Pump 4', 'args': ['SSI Next Gen', 'COM7'],
+            'kwargs': {'flow_rate_scale': 1.0583,
+            'flow_rate_offset': -33.462/1000,'scale_type': 'up'},
+            'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
+        {'name': 'Pump 3', 'args': ['SSI Next Gen', 'COM9'],
+            'kwargs': {'flow_rate_scale': 1.0135,
+            'flow_rate_offset': 5.1251/1000,'scale_type': 'up'},
+            'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
+        {'name': 'Pump 2', 'args': ['SSI Next Gen', 'COM15'],
+            'kwargs': {'flow_rate_scale': 1.0497,
+            'flow_rate_offset': -34.853/1000,'scale_type': 'up'},
+            'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
+         ]
 
     # # Teledyne SSI Reaxus pumps without scaling
     # setup_devices = [
-    #     {'name': 'Pump 4', 'args': ['SSI Next Gen', 'COM19'],
+    #     {'name': 'Pump 4', 'args': ['SSI Next Gen', 'COM7'],
     #         'kwargs': {'flow_rate_scale': 1,
     #         'flow_rate_offset': 0,'scale_type': 'up'},
     #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-    #     {'name': 'Pump 3', 'args': ['SSI Next Gen', 'COM14'],
+    #     {'name': 'Pump 3', 'args': ['SSI Next Gen', 'COM9'],
     #         'kwargs': {'flow_rate_scale': 1,
     #         'flow_rate_offset': 0,'scale_type': 'up'},
     #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-    #     {'name': 'Pump 2', 'args': ['SSI Next Gen', 'COM18'],
+    #     {'name': 'Pump 2', 'args': ['SSI Next Gen', 'COM15'],
     #         'kwargs': {'flow_rate_scale': 1,
     #         'flow_rate_offset': 0,'scale_type': 'up'},
     #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
@@ -6485,11 +6491,11 @@ if __name__ == '__main__':
     #         'kwargs': {'syringe_id': '3 mL, Medline P.C.',
     #         'pump_address': '00', 'dual_syringe': 'False'},
     #         'ctrl_args': {'flow_rate' : '1', 'refill_rate' : '1'}},
-    #     {'name': 'Sample', 'args': ['Pico Plus', 'COM9'],
+    #     {'name': 'Sample', 'args': ['Pico Plus', 'COM12'],
     #         'kwargs': {'syringe_id': '1 mL, Medline P.C.',
     #          'pump_address': '00', 'dual_syringe': 'False'},
     #         'ctrl_args': {'flow_rate' : '1', 'refill_rate' : '1'}},
-    #     {'name': 'Sheath', 'args': ['Pico Plus', 'COM7'],
+    #     {'name': 'Sheath', 'args': ['Pico Plus', 'COM14'],
     #         'kwargs': {'syringe_id': '1 mL, Medline P.C.',
     #          'pump_address': '00', 'dual_syringe': 'False'},
     #         'ctrl_args': {'flow_rate' : '1', 'refill_rate' : '1'}},
@@ -6521,12 +6527,12 @@ if __name__ == '__main__':
     #     {'name': 'outlet', 'args': ['Soft', None], 'kwargs': {}},
     #     ]
 
-    # Longer pumps
-    setup_devices = [
-        {'name': 'sheath', 'args': ['Longer L100S2', 'COM11'],
-            'kwargs': {'pump_addr': 1, 'flow_cal': 0.0569},
-            'ctrl_args': {'flow_rate': 1}},
-        ]
+    # # Longer pumps
+    # setup_devices = [
+    #     {'name': 'sheath', 'args': ['Longer L100S2', 'COM11'],
+    #         'kwargs': {'pump_addr': 1, 'flow_cal': 0.0569},
+    #         'ctrl_args': {'flow_rate': 1}},
+    #     ]
 
     # Local
     com_thread = PumpCommThread('PumpComm')
