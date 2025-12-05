@@ -332,7 +332,7 @@ class TRScanPanel(wx.Panel):
         self.run_centering = wx.Button(ctr_win, label='Center Mixer')
         self.run_centering.Bind(wx.EVT_BUTTON, self._on_run_centering)
 
-        self.auto_center.SetValue(True)
+        self.auto_center.SetValue(self.settings['center_mixer'])
         self.center_start.SetValue(str(self.settings['center_start']))
         self.center_stop.SetValue(str(self.settings['center_stop']))
         self.center_step.SetValue(str(self.settings['center_step']))
@@ -1076,6 +1076,7 @@ class TRScanPanel(wx.Panel):
                             backward = True
                         pco_speed = vect_scan_speed[0]
                     else:
+                        # print('here')
                         pco_step = y_pco_step
                         if y_start < y_end:
                             pco_start = y_start
@@ -1102,9 +1103,15 @@ class TRScanPanel(wx.Panel):
                             pco_end -= min(encoder_resolution, pco_step)
 
                     if isinstance(pco_step, float):
+                        # print(pco_step)
+                        # print(pco_end)
+                        # print(pco_start)
                         # num_images = int(round(float(abs(pco_end-pco_start))/pco_step))
                         num_images = int(round(ceil(float(abs(pco_end-pco_start))/pco_step)))
                     else:
+                        # print(pco_step)
+                        # print(pco_end)
+                        # print(pco_start)
                         # num_images = int(round(abs(pco_end-pco_start)/pco_step))
                         num_images = abs(pco_end-pco_start)/pco_step
                         num_images = num_images.to_integral_exact(rounding=ROUND_CEILING)
@@ -1806,7 +1813,7 @@ class TRScanPanel(wx.Panel):
 
         if y_pco_step % encoder_resolution != 0:
             y_pco_step = y_pco_step + encoder_resolution/D('2') #Round up
-            y_pco_step = self.round_to(x_pco_step, encoder_precision,
+            y_pco_step = self.round_to(y_pco_step, encoder_precision,
             encoder_resolution)
 
         return x_pco_step, y_pco_step, vect_scan_speed, vect_scan_accel, vect_return_speed, vect_return_accel
@@ -5560,9 +5567,11 @@ default_trsaxs_settings = {
     'y_end'                 : 0,
     'scan_speed'            : 2,
     'num_scans'             : 1,
-    'return_speed'          : 20,
+    # 'return_speed'          : 20,
+    'return_speed'          : 10,
     'scan_acceleration'     : 10,
-    'return_acceleration'   : 100,
+    # 'return_acceleration'   : 100,
+    'return_acceleration'   : 40,
     'constant_scan_speed'   : True,
     'scan_start_offset_dist': 0,
     'scan_end_offset_dist'  : 0,
@@ -5572,13 +5581,14 @@ default_trsaxs_settings = {
     'motor_group_name'      : 'XY',
     'motor_x_name'          : 'XY.X',
     'motor_y_name'          : 'XY.Y',
-    'pco_direction'         : 'x',
+    # 'pco_direction'         : 'x',
+    'pco_direction'         : 'y',
     'pco_pulse_width'       : D('10'), #In microseconds, opt: 0.2, 1, 2.5, 10
     'pco_encoder_settle_t'  : D('0.075'), #In microseconds, opt: 0.075, 1, 4, 12
-    'encoder_resolution'    : D('0.000001'), #for XMS160, in mm
-    'encoder_precision'     : 6, #Number of significant decimals in encoder value
-    # 'encoder_resolution'    : D('0.00001'), #for GS30V, in mm
-    # 'encoder_precision'     : 5, #Number of significant decimals in encoder value
+    # 'encoder_resolution'    : D('0.000001'), #for XMS160, in mm
+    # 'encoder_precision'     : 6, #Number of significant decimals in encoder value
+    'encoder_resolution'    : D('0.00001'), #for GS30V, in mm
+    'encoder_precision'     : 5, #Number of significant decimals in encoder value
     'min_off_time'          : D('0.001'),
     'x_range'               : (-80, 80),
     'y_range'               : (-5, 25),
@@ -5598,6 +5608,8 @@ default_trsaxs_settings = {
     'center_stop'           : 0.05,
     'center_step'           : 0.005,
     'center_offset'         : 0,
+    # 'center_mixer'          : True,
+    'center_mixer'          : False,
     'remote_pump_ip'        : '164.54.204.8',
     'remote_pump_port'      : '5556',
     'remote_fm_ip'          : '164.54.204.8',
