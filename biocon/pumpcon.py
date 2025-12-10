@@ -6442,28 +6442,28 @@ if __name__ == '__main__':
     #     ]
 
     # Teledyne SSI Reaxus pumps with scaling
-    setup_devices = [
-        {'name': 'Pump 1', 'args': ['SSI Next Gen', 'COM18'],
-            'kwargs': {'flow_rate_scale': 1,
-            'flow_rate_offset': 0,'scale_type': 'up'},
-            'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-        {'name': 'Pump 4', 'args': ['SSI Next Gen', 'COM7'],
-            'kwargs': {'flow_rate_scale': 1.0583,
-            'flow_rate_offset': -33.462/1000,'scale_type': 'up'},
-            'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-        {'name': 'Pump 3', 'args': ['SSI Next Gen', 'COM9'],
-            'kwargs': {'flow_rate_scale': 1.0135,
-            'flow_rate_offset': 5.1251/1000,'scale_type': 'up'},
-            'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-        {'name': 'Pump 2', 'args': ['SSI Next Gen', 'COM15'],
-            'kwargs': {'flow_rate_scale': 1.0497,
-            'flow_rate_offset': -34.853/1000,'scale_type': 'up'},
-            'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-         ]
+    # setup_devices = [
+    #     {'name': 'Pump 1: sheath', 'args': ['SSI Next Gen', 'COM18'],
+    #         'kwargs': {'flow_rate_scale': 1,
+    #         'flow_rate_offset': 0,'scale_type': 'up'},
+    #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
+    #     {'name': 'Pump 4: sucrose sheath', 'args': ['SSI Next Gen', 'COM7'],
+    #         'kwargs': {'flow_rate_scale': 1.0583,
+    #         'flow_rate_offset': -33.462/1000,'scale_type': 'up'},
+    #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
+    #     {'name': 'Pump 3: kenics B', 'args': ['SSI Next Gen', 'COM9'],
+    #         'kwargs': {'flow_rate_scale': 1.0135,
+    #         'flow_rate_offset': 5.1251/1000,'scale_type': 'up'},
+    #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
+    #     {'name': 'Pump 2: kenics A', 'args': ['SSI Next Gen', 'COM15'],
+    #         'kwargs': {'flow_rate_scale': 1.0497,
+    #         'flow_rate_offset': -34.853/1000,'scale_type': 'up'},
+    #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
+    #      ]
 
     # # Teledyne SSI Reaxus pumps without scaling
     # setup_devices = [
-    #     {'name': 'Pump 4', 'args': ['SSI Next Gen', 'COM7'],
+    #     {'name': 'Pump 4', 'args': ['SSI Next Gen', 'COM10'],
     #         'kwargs': {'flow_rate_scale': 1,
     #         'flow_rate_offset': 0,'scale_type': 'up'},
     #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
@@ -6471,7 +6471,7 @@ if __name__ == '__main__':
     #         'kwargs': {'flow_rate_scale': 1,
     #         'flow_rate_offset': 0,'scale_type': 'up'},
     #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-    #     {'name': 'Pump 2', 'args': ['SSI Next Gen', 'COM15'],
+    #     {'name': 'Pump 2', 'args': ['SSI Next Gen', 'COM7'],
     #         'kwargs': {'flow_rate_scale': 1,
     #         'flow_rate_offset': 0,'scale_type': 'up'},
     #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
@@ -6486,20 +6486,20 @@ if __name__ == '__main__':
     #     ]
 
     # # TR-SAXS Pico Plus pumps
-    # setup_devices = [
-    #     {'name': 'Buffer', 'args': ['Pico Plus', 'COM11'],
-    #         'kwargs': {'syringe_id': '3 mL, Medline P.C.',
-    #         'pump_address': '00', 'dual_syringe': 'False'},
-    #         'ctrl_args': {'flow_rate' : '1', 'refill_rate' : '1'}},
-    #     {'name': 'Sample', 'args': ['Pico Plus', 'COM12'],
-    #         'kwargs': {'syringe_id': '1 mL, Medline P.C.',
-    #          'pump_address': '00', 'dual_syringe': 'False'},
-    #         'ctrl_args': {'flow_rate' : '1', 'refill_rate' : '1'}},
-    #     {'name': 'Sheath', 'args': ['Pico Plus', 'COM14'],
-    #         'kwargs': {'syringe_id': '1 mL, Medline P.C.',
-    #          'pump_address': '00', 'dual_syringe': 'False'},
-    #         'ctrl_args': {'flow_rate' : '1', 'refill_rate' : '1'}},
-    #     ]
+    setup_devices = [
+        {'name': 'Buffer', 'args': ['Pico Plus', 'COM11'],
+            'kwargs': {'syringe_id': '3 mL, Medline P.C.',
+            'pump_address': '00', 'dual_syringe': 'False'},
+            'ctrl_args': {'flow_rate' : '1', 'refill_rate' : '1'}},
+        {'name': 'Sample', 'args': ['Pico Plus', 'COM12'],
+            'kwargs': {'syringe_id': '1 mL, Medline P.C.',
+             'pump_address': '00', 'dual_syringe': 'False'},
+            'ctrl_args': {'flow_rate' : '1', 'refill_rate' : '1'}},
+        {'name': 'Sheath', 'args': ['Pico Plus', 'COM14'],
+            'kwargs': {'syringe_id': '1 mL, Medline P.C.',
+             'pump_address': '00', 'dual_syringe': 'False'},
+            'ctrl_args': {'flow_rate' : '1', 'refill_rate' : '1'}},
+        ]
 
     # # Batch mode Hamilton PSD6 pump
     # setup_devices = [
