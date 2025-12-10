@@ -5560,11 +5560,11 @@ default_trsaxs_settings = {
     'y_end'                 : 0,
     'scan_speed'            : 2,
     'num_scans'             : 1,
-    # 'return_speed'          : 20,
-    'return_speed'          : 10,
+    'return_speed'          : 20,
+    # 'return_speed'          : 10,
     'scan_acceleration'     : 10,
-    # 'return_acceleration'   : 100,
-    'return_acceleration'   : 40,
+    'return_acceleration'   : 100,
+    # 'return_acceleration'   : 40,
     'constant_scan_speed'   : True,
     'scan_start_offset_dist': 0,
     'scan_end_offset_dist'  : 0,
@@ -5574,14 +5574,14 @@ default_trsaxs_settings = {
     'motor_group_name'      : 'XY',
     'motor_x_name'          : 'XY.X',
     'motor_y_name'          : 'XY.Y',
-    # 'pco_direction'         : 'x',
-    'pco_direction'         : 'y',
+    'pco_direction'         : 'x',
+    # 'pco_direction'         : 'y',
     'pco_pulse_width'       : D('10'), #In microseconds, opt: 0.2, 1, 2.5, 10
     'pco_encoder_settle_t'  : D('0.075'), #In microseconds, opt: 0.075, 1, 4, 12
-    # 'encoder_resolution'    : D('0.000001'), #for XMS160, in mm
-    # 'encoder_precision'     : 6, #Number of significant decimals in encoder value
-    'encoder_resolution'    : D('0.00001'), #for GS30V, in mm
-    'encoder_precision'     : 5, #Number of significant decimals in encoder value
+    'encoder_resolution'    : D('0.000001'), #for XMS160, in mm
+    'encoder_precision'     : 6, #Number of significant decimals in encoder value
+    # 'encoder_resolution'    : D('0.00001'), #for GS30V, in mm
+    # 'encoder_precision'     : 5, #Number of significant decimals in encoder value
     'min_off_time'          : D('0.001'),
     'x_range'               : (-80, 80),
     'y_range'               : (-5, 25),
@@ -5601,8 +5601,8 @@ default_trsaxs_settings = {
     'center_stop'           : 0.05,
     'center_step'           : 0.005,
     'center_offset'         : 0,
-    # 'center_mixer'          : True,
-    'center_mixer'          : False,
+    'center_mixer'          : True,
+    # 'center_mixer'          : False,
     'remote_pump_ip'        : '164.54.204.8',
     'remote_pump_port'      : '5556',
     'remote_fm_ip'          : '164.54.204.8',
@@ -5610,7 +5610,7 @@ default_trsaxs_settings = {
     'remote_valve_ip'       : '164.54.204.8',
     'remote_valve_port'     : '5558',
     'device_communication'  : 'remote',
-    'injection_valve'       : [{'name': 'Injection', 'args': ['Rheodyne', 'COM16'],  #Chaotic flow
+    'injection_valve'       : [{'name': 'Injection', 'args': ['Rheodyne', 'COM6'],  #Chaotic flow
                                 'kwargs': {'positions' : 2}},],
     # 'injection_valve'       : [{'name': 'Injection 1', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo14'],
     #                                 'kwargs': {'positions' : 2}},
@@ -5724,7 +5724,7 @@ default_trsaxs_settings = {
     # 'buffer2_valve_label'   : 'Sheath',
     'flow_units'            : 'mL/min',
     'pressure_units'        : 'psi',
-    'total_flow_rate_lam'   : '0.149', # For laminar flow
+    'total_flow_rate_lam'   : '0.150', # For laminar flow
     'total_flow_rate_ch'    : '6', # For chaotic flow
     'dilution_ratio'        : '10', # For chaotic flow
     'max_dilution'          : 50, # For chaotic flow
@@ -5747,8 +5747,8 @@ default_trsaxs_settings = {
     'autoinject_valve_pos'  : 1,
     'mixer_type'            : 'chaotic', # laminar or chaotic
     # 'mixer_type'            : 'laminar', # laminar or chaotic
-    'sample_ratio'          : '0.066', # For laminar flow
-    'sheath_ratio'          : '0.032', # For laminar flow
+    'sample_ratio'          : '0.06', # For laminar flow
+    'sheath_ratio'          : '0.0667', # For laminar flow
     'buffer_change_cycles'  : 5, # For syringe pumps
     'simulated'             : False, # VERY IMPORTANT. MAKE SURE THIS IS FALSE FOR EXPERIMENTS
     }
