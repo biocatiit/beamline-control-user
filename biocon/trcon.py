@@ -1069,9 +1069,11 @@ class TRScanPanel(wx.Panel):
                         if x_start < x_end:
                             pco_start = x_start
                             pco_end = x_end
+                            backward = False
                         else:
-                            pco_start = x_start
-                            pco_end = x_end
+                            pco_start = x_end
+                            pco_end = x_start
+                            backward = True
                         pco_speed = vect_scan_speed[0]
                     else:
                         # print('here')
@@ -1079,9 +1081,11 @@ class TRScanPanel(wx.Panel):
                         if y_start < y_end:
                             pco_start = y_start
                             pco_end = y_end
+                            backward = False
                         else:
-                            pco_start = y_start
-                            pco_end = y_end
+                            pco_start = y_end
+                            pco_end = y_start
+                            backward = True
                         pco_speed = vect_scan_speed[1]
 
                     if pco_start % encoder_resolution != 0:
@@ -1093,7 +1097,10 @@ class TRScanPanel(wx.Panel):
                             encoder_resolution)
 
                     if abs(pco_start-pco_end) % pco_step == 0:
-                        pco_end -= min(encoder_resolution, pco_step)
+                        if backward:
+                            pco_start += min(encoder_resolution, pco_step)
+                        else:
+                            pco_end -= min(encoder_resolution, pco_step)
 
                     if isinstance(pco_step, float):
                         # print(pco_step)
@@ -5610,73 +5617,73 @@ default_trsaxs_settings = {
     'remote_valve_ip'       : '164.54.204.8',
     'remote_valve_port'     : '5558',
     'device_communication'  : 'remote',
-    'injection_valve'       : [{'name': 'Injection', 'args': ['Rheodyne', 'COM6'],  #Chaotic flow
-                                'kwargs': {'positions' : 2}},],
+    # 'injection_valve'       : [{'name': 'Injection', 'args': ['Rheodyne', 'COM16'],  #Chaotic flow
+    #                             'kwargs': {'positions' : 2}},],
     # 'injection_valve'       : [{'name': 'Injection 1', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo14'],
     #                                 'kwargs': {'positions' : 2}},
     #                             {'name': 'Injection 2', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo14'],
     #                                 'kwargs': {'positions' : 2}},
     #                             ],
-    'sample_valve'          : [],
-    'buffer1_valve'         : [],
-    'buffer2_valve'         : [],
-    'buffer2_pump'          : [{'name': 'Buffer 2', 'args': ['SSI Next Gen', 'COM7'],
-                                'kwargs': {'flow_rate_scale': 1.0583,
-                                'flow_rate_offset': -48.462/1000,'scale_type': 'up'},
-                                'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0,
-                                'max_pressure': 2000, 'continuous': True}}],
-    'sample_pump'           : [{'name': 'Sample', 'args': ['SSI Next Gen', 'COM9'],
-                                'kwargs': {'flow_rate_scale': 1.0135,
-                                'flow_rate_offset': 0.1251/1000,'scale_type': 'up'},
-                                'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0,
-                                'max_pressure': 1800, 'continuous': True}}],
-    'buffer1_pump'           : [{'name': 'Buffer 1', 'args': ['SSI Next Gen', 'COM15'],
-                                'kwargs': {'flow_rate_scale': 1.0497,
-                                'flow_rate_offset': -19.853/1000,'scale_type': 'up'},
-                                'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0,
-                                'max_pressure': 2000, 'continuous': True}}],
-    'outlet_fm'             : {'name': 'outlet', 'args' : ['BFS', 'COM5'], 'kwargs': {}},
-    'injection_valve_label' : 'Injection',
-    'sample_valve_label'    : 'Sample',
-    'buffer1_valve_label'   : 'Buffer 1',
-    'buffer2_valve_label'   : 'Buffer 2',
-    # # 'injection_valve'       : [{'name': 'Injection', 'args': ['Rheodyne', 'COM16'], # Laminar flow
-    # #                             'kwargs': {'positions' : 2}},],
-    # 'injection_valve'       : [{'name': 'Injection', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo14'],
-    #                                 'kwargs': {'positions' : 2}},
-    #                             # {'name': 'Injection 2', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo14'],
-    #                             #     'kwargs': {'positions' : 2}},
-    #                             ],
-    # 'sample_valve'          : [{'name': 'Sample', 'args': ['Rheodyne', 'COM4'],
-    #                             'kwargs': {'positions' : 6}},],
-    # 'buffer1_valve'         : [{'name': 'Buffer 1', 'args': ['Rheodyne', 'COM21'],
-    #                             'kwargs': {'positions' : 6}},
-    #                             {'name': 'Buffer 2', 'args': ['Rheodyne', 'COM8'],
-    #                             'kwargs': {'positions' : 6}},],
-    # 'buffer2_valve'         : [{'name': 'Sheath 1', 'args': ['Rheodyne', 'COM6'],
-    #                             'kwargs': {'positions' : 6}},
-    #                             {'name': 'Sheath 2', 'args': ['Rheodyne', 'COM3'],
-    #                             'kwargs': {'positions' : 6}},],
-    # 'buffer1_pump'           : [{'name': 'Buffer', 'args': ['Pico Plus', 'COM11'],
-    #                             'kwargs': {'syringe_id': '3 mL, Medline P.C.',
-    #                             'pump_address': '00', 'dual_syringe': 'False'},
-    #                             'ctrl_args': {'flow_rate' : '0.068', 'refill_rate' : '3',
-    #                             'continuous': False}},],
-    # 'sample_pump'           : [{'name': 'Sample', 'args': ['Pico Plus', 'COM12'],
-    #                             'kwargs': {'syringe_id': '1 mL, Medline P.C.',
-    #                             'pump_address': '00', 'dual_syringe': 'False'}, 'ctrl_args':
-    #                             {'flow_rate' : '0.009', 'refill_rate' : '1',
-    #                             'continuous': False}}],
-    # 'buffer2_pump'          : [{'name': 'Sheath', 'args': ['Pico Plus', 'COM14'],
-    #                             'kwargs': {'syringe_id': '1 mL, Medline P.C.',
-    #                             'pump_address': '00', 'dual_syringe': 'False'}, 'ctrl_args':
-    #                             {'flow_rate' : '0.002', 'refill_rate' : '1',
-    #                             'continuous': False}},],
-    # 'outlet_fm'             : {'name': 'outlet', 'args' : ['BFS', 'COM13'], 'kwargs': {}},
+    # 'sample_valve'          : [],
+    # 'buffer1_valve'         : [],
+    # 'buffer2_valve'         : [],
+    # 'buffer2_pump'          : [{'name': 'Buffer 2', 'args': ['SSI Next Gen', 'COM7'],
+    #                             'kwargs': {'flow_rate_scale': 1.0583,
+    #                             'flow_rate_offset': -48.462/1000,'scale_type': 'up'},
+    #                             'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0,
+    #                             'max_pressure': 2000, 'continuous': True}}],
+    # 'sample_pump'           : [{'name': 'Sample', 'args': ['SSI Next Gen', 'COM9'],
+    #                             'kwargs': {'flow_rate_scale': 1.0135,
+    #                             'flow_rate_offset': 0.1251/1000,'scale_type': 'up'},
+    #                             'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0,
+    #                             'max_pressure': 1800, 'continuous': True}}],
+    # 'buffer1_pump'           : [{'name': 'Buffer 1', 'args': ['SSI Next Gen', 'COM15'],
+    #                             'kwargs': {'flow_rate_scale': 1.0497,
+    #                             'flow_rate_offset': -19.853/1000,'scale_type': 'up'},
+    #                             'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0,
+    #                             'max_pressure': 2000, 'continuous': True}}],
+    # 'outlet_fm'             : {'name': 'outlet', 'args' : ['BFS', 'COM5'], 'kwargs': {}},
     # 'injection_valve_label' : 'Injection',
     # 'sample_valve_label'    : 'Sample',
-    # 'buffer1_valve_label'   : 'Buffer',
-    # 'buffer2_valve_label'   : 'Sheath',
+    # 'buffer1_valve_label'   : 'Buffer 1',
+    # 'buffer2_valve_label'   : 'Buffer 2',
+    'injection_valve'       : [{'name': 'Injection', 'args': ['Rheodyne', 'COM16'], # Laminar flow
+                                'kwargs': {'positions' : 2}},],
+    # 'injection_valve'       : [{'name': 'Injection', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo14'],
+    #                                 'kwargs': {'positions' : 2}},
+                                # {'name': 'Injection 2', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo14'],
+                                #     'kwargs': {'positions' : 2}},
+                                # ],
+    'sample_valve'          : [{'name': 'Sample', 'args': ['Rheodyne', 'COM4'],
+                                'kwargs': {'positions' : 6}},],
+    'buffer1_valve'         : [{'name': 'Buffer 1', 'args': ['Rheodyne', 'COM21'],
+                                'kwargs': {'positions' : 6}},
+                                {'name': 'Buffer 2', 'args': ['Rheodyne', 'COM8'],
+                                'kwargs': {'positions' : 6}},],
+    'buffer2_valve'         : [{'name': 'Sheath 1', 'args': ['Rheodyne', 'COM6'],
+                                'kwargs': {'positions' : 6}},
+                                {'name': 'Sheath 2', 'args': ['Rheodyne', 'COM3'],
+                                'kwargs': {'positions' : 6}},],
+    'buffer1_pump'           : [{'name': 'Buffer', 'args': ['Pico Plus', 'COM11'],
+                                'kwargs': {'syringe_id': '3 mL, Medline P.C.',
+                                'pump_address': '00', 'dual_syringe': 'False'},
+                                'ctrl_args': {'flow_rate' : '0.068', 'refill_rate' : '3',
+                                'continuous': False}},],
+    'sample_pump'           : [{'name': 'Sample', 'args': ['Pico Plus', 'COM12'],
+                                'kwargs': {'syringe_id': '1 mL, Medline P.C.',
+                                'pump_address': '00', 'dual_syringe': 'False'}, 'ctrl_args':
+                                {'flow_rate' : '0.009', 'refill_rate' : '1',
+                                'continuous': False}}],
+    'buffer2_pump'          : [{'name': 'Sheath', 'args': ['Pico Plus', 'COM14'],
+                                'kwargs': {'syringe_id': '1 mL, Medline P.C.',
+                                'pump_address': '00', 'dual_syringe': 'False'}, 'ctrl_args':
+                                {'flow_rate' : '0.002', 'refill_rate' : '1',
+                                'continuous': False}},],
+    'outlet_fm'             : {'name': 'outlet', 'args' : ['BFS', 'COM13'], 'kwargs': {}},
+    'injection_valve_label' : 'Injection',
+    'sample_valve_label'    : 'Sample',
+    'buffer1_valve_label'   : 'Buffer',
+    'buffer2_valve_label'   : 'Sheath',
     # 'injection_valve'       : [{'name': 'Injection', 'args': ['Soft', None],    # Simulated Chaotic w/continuous pump
     #                             'kwargs': {'positions' : 2}},],
     # 'sample_valve'          : [],
@@ -5745,8 +5752,8 @@ default_trsaxs_settings = {
     'autoinject_scan'       : '5',
     'autoinject_delay'      : 0,
     'autoinject_valve_pos'  : 1,
-    'mixer_type'            : 'chaotic', # laminar or chaotic
-    # 'mixer_type'            : 'laminar', # laminar or chaotic
+    # 'mixer_type'            : 'chaotic', # laminar or chaotic
+    'mixer_type'            : 'laminar', # laminar or chaotic
     'sample_ratio'          : '0.06', # For laminar flow
     'sheath_ratio'          : '0.0667', # For laminar flow
     'buffer_change_cycles'  : 5, # For syringe pumps

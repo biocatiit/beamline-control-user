@@ -1080,8 +1080,6 @@ if __name__ == '__main__':
         #     'kwargs': {'positions' : 2}},
         {'name': 'Injection', 'args': ['Rheodyne', 'COM16'],
             'kwargs': {'positions' : 2}},
-        {'name': 'Injection 2', 'args': ['Rheodyne', 'COM17'],
-            'kwargs': {'positions' : 2}},
         {'name': 'Buffer 1', 'args': ['Rheodyne', 'COM21'],
             'kwargs': {'positions' : 6}},
         {'name': 'Buffer 2', 'args': ['Rheodyne', 'COM8'],
@@ -1137,14 +1135,35 @@ if __name__ == '__main__':
     #         'kwargs': {'positions': 2}},
     #     ]
 
-    #  # SEC-MALS
+    #
+
+
     # setup_devices = [
-    #     {'name': 'Dual valve 1', 'args': ['Multi', None], 'kwargs': {'positions': 6,
+    #     {'name': 'Sheath', 'args': ['Multi', None], 'kwargs': {'positions': 6,
     #         'valve_settings': [
-    #             {'name': 'Selector 2', 'args': ['Rheodyne', 'COM13'],
+    #             {'name': 'Sheath 1', 'args': ['Rheodyne', 'COM21'],
     #                 'kwargs': {'positions' : 6}},
-    #             {'name': 'Selector 6', 'args': ['Rheodyne', 'COM12'],
+    #             {'name': 'Sheath 2', 'args': ['Rheodyne', 'COM22'],
+    #                 'kwargs': {'positions' : 6}}]}},
+    #     {'name': 'Sucrose Sheath', 'args': ['Multi', None], 'kwargs': {'positions': 6,
+    #         'valve_settings': [
+    #             {'name': 'Selector 2', 'args': ['Rheodyne', 'COM8'],
+    #                 'kwargs': {'positions' : 6}},
+    #             {'name': 'Selector 6', 'args': ['Rheodyne', 'COM3'],
+    #                 'kwargs': {'positions' : 6}}]}},
+    #     {'name': 'Kenics B', 'args': ['Multi', None], 'kwargs': {'positions': 6,
+    #         'valve_settings': [
+    #             {'name': 'Selector 2', 'args': ['Rheodyne', 'COM6'],
+    #                 'kwargs': {'positions' : 6}},
+    #             {'name': 'Selector 6', 'args': ['Rheodyne', 'COM20'],
+    #                 'kwargs': {'positions' : 6}}]}},
+    #     {'name': 'Kenics A', 'args': ['Multi', None], 'kwargs': {'positions': 6,
+    #         'valve_settings': [
+    #             {'name': 'Selector 2', 'args': ['Rheodyne', 'COM4'],
+    #                 'kwargs': {'positions' : 6}},
+    #             {'name': 'Selector 6', 'args': ['Rheodyne', 'COM19'],
     #                 'kwargs': {'positions' : 6}}]}}
+
     #     ,
     #     ]
 
