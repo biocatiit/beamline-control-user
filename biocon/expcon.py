@@ -488,7 +488,7 @@ class ExpCommThread(threading.Thread):
             gh_burst.setup(exp_time+0.007, exp_time, 1, 0, 1, 2)
         else:
             #Shutter will be open continuously, via dio_out9
-            ab_burst.setup(exp_time+0.001, exp_time, 1, 0, 1, 2) #Irrelevant
+            ab_burst.setup(exp_time+0.001, exp_time/4, 1, 0, 1, 2) #Irrelevant
             cd_burst.setup(exp_time+0.001, 0.0001, 1, exp_time+0.00015, 1, 2)
             ef_burst.setup(exp_time+0.001, exp_time, 1, 0, 1, 2)
             gh_burst.setup(exp_time+0.001, exp_time, 1, 0, 1, 2)
@@ -512,8 +512,12 @@ class ExpCommThread(threading.Thread):
             set_step_speed = False
 
             if pco_direction == 'x':
-                x_positions = [i*tr_scan_settings['x_pco_step']+tr_scan_settings['x_pco_start']
-                    for i in range(num_frames)]
+                if x_start < x_end:
+                    x_positions = [tr_scan_settings['x_pco_start'] + i*tr_scan_settings['x_pco_step']
+                        for i in range(num_frames)]
+                else:
+                    x_positions = [tr_scan_settings['x_pco_end'] - i*tr_scan_settings['x_pco_step']
+                        for i in range(num_frames)]
 
                 step_start = tr_scan_settings['y_start']
                 step_end = tr_scan_settings['y_end']
@@ -524,8 +528,12 @@ class ExpCommThread(threading.Thread):
                     y_positions = np.array([step_start]*len(x_positions))
 
             else:
-                y_positions = [i*tr_scan_settings['y_pco_step']+tr_scan_settings['y_pco_start']
-                    for i in range(num_frames)]
+                if y_start < y_end:
+                    y_positions = [tr_scan_settings['y_pco_start'] + i*tr_scan_settings['y_pco_step']
+                        for i in range(num_frames)]
+                else:
+                    y_positions = [tr_scan_settings['y_pco_end'] - i*tr_scan_settings['y_pco_step']
+                        for i in range(num_frames)]
 
                 step_start = tr_scan_settings['x_start']
                 step_end = tr_scan_settings['x_end']
