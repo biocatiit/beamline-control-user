@@ -370,6 +370,7 @@ class TRScanPanel(wx.Panel):
             flag=wx.ALIGN_CENTER_VERTICAL)
         ctr_sub_sizer3.Add(self.center_offset, border=self._FromDIP(5),
             flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT)
+        ctr_sub_sizer3.AddGrowableCol(1)
 
 
         centering_sizer = wx.BoxSizer(wx.VERTICAL)
@@ -380,7 +381,7 @@ class TRScanPanel(wx.Panel):
         centering_sizer.Add(ctr_sub_sizer2, border=self._FromDIP(5),
             flag=wx.LEFT|wx.RIGHT|wx.BOTTOM)
         centering_sizer.Add(ctr_sub_sizer3, border=self._FromDIP(5),
-            flag=wx.LEFT|wx.RIGHT|wx.BOTTOM)
+            flag=wx.LEFT|wx.RIGHT|wx.BOTTOM|wx.EXPAND)
         centering_sizer.Add(self.run_centering, border=self._FromDIP(5),
             flag=wx.LEFT|wx.RIGHT|wx.ALIGN_CENTER_HORIZONTAL)
 
@@ -394,7 +395,7 @@ class TRScanPanel(wx.Panel):
         tr_ctrl_sizer.Add(advanced_settings_pane, border=5,
             flag=wx.LEFT|wx.RIGHT|wx.BOTTOM)
         tr_ctrl_sizer.Add(centering_settings_pane, border=5,
-            flag=wx.LEFT|wx.RIGHT|wx.BOTTOM)
+            flag=wx.LEFT|wx.RIGHT|wx.BOTTOM|wx.EXPAND)
 
 
         self.scan_length = wx.StaticText(self)
@@ -2893,7 +2894,7 @@ class TRFlowPanel(wx.Panel):
         self.buffer2_pump_panels = []
         self.pump_panels = {}
 
-        for pump in self.settings['buffer2_pump']:
+        for pump in self.settings['buffer1_pump']:
             panel = TRPumpPanel(pump_parent, self, pump)
 
             pump_sizer.Add(panel, flag=wx.LEFT|wx.TOP|wx.BOTTOM,
@@ -2901,7 +2902,7 @@ class TRFlowPanel(wx.Panel):
 
             self.pump_panels[pump['name']] = panel
 
-            self.buffer2_pump_panels.append(panel)
+            self.buffer1_pump_panels.append(panel)
 
         for pump in self.settings['sample_pump']:
             panel = TRPumpPanel(pump_parent, self, pump)
@@ -2913,7 +2914,7 @@ class TRFlowPanel(wx.Panel):
 
             self.sample_pump_panels.append(panel)
 
-        for pump in self.settings['buffer1_pump']:
+        for pump in self.settings['buffer2_pump']:
             panel = TRPumpPanel(pump_parent, self, pump)
 
             pump_sizer.Add(panel, flag=wx.LEFT|wx.TOP|wx.BOTTOM,
@@ -2921,7 +2922,7 @@ class TRFlowPanel(wx.Panel):
 
             self.pump_panels[pump['name']] = panel
 
-            self.buffer1_pump_panels.append(panel)
+            self.buffer2_pump_panels.append(panel)
 
         pump_sizer.AddSpacer(self._FromDIP(2))
 
@@ -4238,6 +4239,14 @@ class TRFlowPanel(wx.Panel):
                 if pump_panel.get_dual_syringe():
                     flow_rate = flow_rate*2
 
+                elif not self.chaotic_mixer:
+                    if (pump_name == self.settings['buffer1_pump'][0]['name']
+                        and len(self.settings['buffer1_pump']) == 1):
+                        flow_rate = flow_rate*2
+                    elif (pump_name == self.settings['buffer2_pump'][0]['name']
+                        and len(self.settings['buffer2_pump']) == 1):
+                        flow_rate = flow_rate*2
+
                 total_fr = total_fr + flow_rate
 
                 if pump_name == self.settings['sample_pump'][0]['name']:
@@ -4262,8 +4271,8 @@ class TRFlowPanel(wx.Panel):
                 metadata['Buffer 2 flow rate [{}]:'.format(flow_units)] = buffer2_fr
 
             else:
-                metadata['Buffer flow rate [{}]:'.format(flow_units)] = buffer1_fr
-                metadata['Sheath flow rate [{}]:'.format(flow_units)] = buffer2_fr
+                metadata['Total buffer flow rate [{}]:'.format(flow_units)] = buffer1_fr
+                metadata['Total sheath flow rate [{}]:'.format(flow_units)] = buffer2_fr
 
             metadata['Exposure start setting:'] = start_condition
             if start_condition == 'Fixed delay':
@@ -5604,8 +5613,10 @@ default_trsaxs_settings = {
     'center_fw_height'      : 0.85,
     'center_shutter_pvs'    : [{'name': '18ID:LJT4:2:Bo6', 'open': 0, 'close': 1},
                                 {'name': '18ID:LJT4:2:Bo9', 'open': 1, 'close': 0}],
-    'center_start'          : -0.05,
-    'center_stop'           : 0.05,
+    # 'center_start'          : -0.05,  # Chaotic
+    # 'center_stop'           : 0.05,
+    'center_start'          : -0.15,   # Laminar
+    'center_stop'           : 0.15,
     'center_step'           : 0.005,
     'center_offset'         : 0,
     'center_mixer'          : True,
@@ -5754,8 +5765,8 @@ default_trsaxs_settings = {
     'autoinject_valve_pos'  : 1,
     # 'mixer_type'            : 'chaotic', # laminar or chaotic
     'mixer_type'            : 'laminar', # laminar or chaotic
-    'sample_ratio'          : '0.06', # For laminar flow
-    'sheath_ratio'          : '0.0667', # For laminar flow
+    'sample_ratio'          : '0.0687', # For laminar flow
+    'sheath_ratio'          : '0.0763', # For laminar flow
     'buffer_change_cycles'  : 5, # For syringe pumps
     'simulated'             : False, # VERY IMPORTANT. MAKE SURE THIS IS FALSE FOR EXPERIMENTS
     }
