@@ -3106,6 +3106,38 @@ class ExpPanel(wx.Panel):
         else:
             self.d_hutch_H_pv = None
 
+        if self.settings['reopen_a_shutter']:
+
+            c_beam_ready_pv, connected = self._initialize_pv(self.settings['c_hutch_beam_ready_pv'])
+            if connected:
+                self.c_beam_ready_pv = c_beam_ready_pv
+            else:
+                self.c_beam_ready_pv = None
+
+            a_beam_ready_pv, connected = self._initialize_pv(self.settings['a_hutch_beam_ready_pv'])
+            if connected:
+                self.a_beam_ready_pv = a_beam_ready_pv
+            else:
+                self.a_beam_ready_pv = None
+
+            shutter_permit_pv, connected = self._initialize_pv(self.settings['shutter_permit_pv'])
+            if connected:
+                self.shutter_permit_pv = shutter_permit_pv
+            else:
+                self.shutter_permit_pv = None
+
+            fe_shutter_open_pv, connected = self._initialize_pv(self.settings['fe_shutter_open_pv'])
+            if connected:
+                self.fe_shutter_open_pv = fe_shutter_open_pv
+            else:
+                self.fe_shutter_open_pv = None
+
+
+            self._monitor_a_shutter_abort = threading.Event()
+            self._monitor_a_shutter_thread = threading.Thread(target=self._monitor_a_shutter_status)
+            self._monitor_a_shutter_thread.daemon = True
+            self._monitor_a_shutter_thread.start()
+
         self.warning_dialog = None
         self.timeout_dialog = None
 
@@ -4295,6 +4327,58 @@ class ExpPanel(wx.Panel):
         else:
             self.pipeline_warning_shown = False
 
+    def _monitor_a_shutter_status(self):
+        if (self.fe_shutter_pv is not None and self.c_beam_ready_pv is not None and
+            self.a_beam_ready_pv is not None and self.fe_shutter_open_pv is not None):
+
+            while True:
+                if self._monitor_a_shutter_abort.is_set():
+                    break
+
+                fes_val = self.fe_shutter_pv.get(timeout=2)
+
+                if fes_val is not None:
+                    if fes_val == 0:
+                        fes = False
+                    else:
+                        fes = True
+
+                if not fes:
+                    c_ready_val = self.c_beam_ready_pv.get(timeout=2)
+                    a_ready_val = self.a_beam_ready_pv.get(timeout=2)
+                    shutter_permit_val = self.shutter_permit_pv.get(timeout=2)
+
+                    if c_ready_val is not None:
+                        if c_ready_val == 0:
+                            c_ready = False
+                        else:
+                            c_ready = True
+
+                    if a_ready_val is not None:
+                        if a_ready_val == 0:
+                            a_ready = False
+                        else:
+                            a_ready = True
+
+                    if shutter_permit_val is not None:
+                        if shutter_permit_val == 0:
+                            shutter_permit = False
+                        else:
+                            shutter_permit = True
+
+                    if c_ready and a_ready and shutter_permit:
+                        logger.info('Opening A shutter')
+                        self.fe_shutter_open_pv.set(1, timeout=2)
+
+
+                a = time.time()
+
+                while time.time() - a < 60:
+                    if self._monitor_a_shutter_abort.is_set():
+                        break
+                    time.sleep(0.5)
+
+
     def automator_callback(self, cmd_name, cmd_args, cmd_kwargs):
         success = True
 
@@ -4481,6 +4565,10 @@ class ExpPanel(wx.Panel):
         except AttributeError:
             pass #For testing, when there is no exp_con
 
+        if self.settings['reopen_a_shutter']:
+            self._monitor_a_shutter_abort.set()
+            self._monitor_a_shutter_thread.join(10)
+
 class ExpFrame(wx.Frame):
     """
     A lightweight frame allowing one to work with arbitrary number of pumps.
@@ -4605,6 +4693,11 @@ default_exposure_settings = {
     'd_hutch_H_pv'          : '18ID:EnvMon:D:Humid',
     'use_old_i0_gain'       : True,
     'i0_gain_pv'            : '18ID_D_BPM_Gain:Level-SP',
+    'c_hutch_beam_ready_pv' : 'PA:18ID:STA_C_BEAMREADY_PL',
+    'a_hutch_beam_ready_pv' : 'PA:18ID:STA_A_BEAMREADY_PL',
+    'shutter_permit_pv'     : 'XFD:ShutterPermit',
+    'fe_shutter_open_pv'    : '18ID:rshtr:A:OPEN',
+    'reopen_a_shutter'      : True,
 
     'struck_log_vals'       : [
         # Format: (mx_record_name, struck_channel, header_name,
