@@ -4368,12 +4368,12 @@ class ExpPanel(wx.Panel):
 
                     if c_ready and a_ready and shutter_permit:
                         logger.info('Opening A shutter')
-                        self.fe_shutter_open_pv.set(1, timeout=2)
+                        self.fe_shutter_open_pv.put(1, timeout=2)
 
 
                 a = time.time()
 
-                while time.time() - a < 60:
+                while time.time() - a < 300:
                     if self._monitor_a_shutter_abort.is_set():
                         break
                     time.sleep(0.5)
@@ -4622,33 +4622,33 @@ default_exposure_settings = {
     'exp_period'            : '1',
     'exp_num'               : '2',
 
-    # 'exp_time_min'          : 0.00105,  # For Pilatus3 X 1M
-    # 'exp_time_max'          : 5184000,
-    # 'exp_period_min'        : 0.002,
-    # 'exp_period_max'        : 5184000,
-    # 'nframes_max'           : 15000, # For Pilatus: 999999, for Struck: 15000 (set by maxChannels in the driver configuration)
-    # 'nparams_max'           : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
-    # 'exp_period_delta'      : 0.00095,
-    # 'local_dir_root'        : '/nas_data/Pilatus1M',
-    # 'remote_dir_root'       : '/ramdisk',
-    # # 'detector'              : 'pilatus_mx',
-    # 'detector'              : '18IDpil1M:_epics',
-    # 'det_args'              : {}, #Allows detector specific keyword arguments
-    # 'add_file_postfix'      : True,
-
-    'exp_time_min'          : 0.000000050, #Eiger2 XE 9M
-    'exp_time_max'          : 3600,
-    'exp_period_min'        : 0.001785714286, #There's an 8bit undocumented mode that can go faster, in theory
-    'exp_period_max'        : 5184000, # Not clear there is a maximum, so left it at this
-    'nframes_max'           : 15000, # For Eiger: 2000000000, for Struck: 15000 (set by maxChannels in the driver configuration)
+    'exp_time_min'          : 0.00105,  # For Pilatus3 X 1M
+    'exp_time_max'          : 5184000,
+    'exp_period_min'        : 0.002,
+    'exp_period_max'        : 5184000,
+    'nframes_max'           : 15000, # For Pilatus: 999999, for Struck: 15000 (set by maxChannels in the driver configuration)
     'nparams_max'           : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
-    'exp_period_delta'      : 0.000000200,
-    'local_dir_root'        : '/nas_data/Eiger2x',
-    'remote_dir_root'       : '/nas_data/Eiger2x',
-    'detector'              : '18ID:EIG2:_epics',
-    'det_args'              :  {'use_tiff_writer': False, 'use_file_writer': True,
-                                'photon_energy' : 12.0, 'images_per_file': 1000}, #1 image/file for TR, 300 for equilibrium
-    'add_file_postfix'      : False,
+    'exp_period_delta'      : 0.00095,
+    'local_dir_root'        : '/nas_data/Pilatus1M',
+    'remote_dir_root'       : '/ramdisk',
+    # 'detector'              : 'pilatus_mx',
+    'detector'              : '18IDpil1M:_epics',
+    'det_args'              : {}, #Allows detector specific keyword arguments
+    'add_file_postfix'      : True,
+
+    # 'exp_time_min'          : 0.000000050, #Eiger2 XE 9M
+    # 'exp_time_max'          : 3600,
+    # 'exp_period_min'        : 0.001785714286, #There's an 8bit undocumented mode that can go faster, in theory
+    # 'exp_period_max'        : 5184000, # Not clear there is a maximum, so left it at this
+    # 'nframes_max'           : 15000, # For Eiger: 2000000000, for Struck: 15000 (set by maxChannels in the driver configuration)
+    # 'nparams_max'           : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
+    # 'exp_period_delta'      : 0.000000200,
+    # 'local_dir_root'        : '/nas_data/Eiger2x',
+    # 'remote_dir_root'       : '/nas_data/Eiger2x',
+    # 'detector'              : '18ID:EIG2:_epics',
+    # 'det_args'              :  {'use_tiff_writer': False, 'use_file_writer': True,
+    #                             'photon_energy' : 12.0, 'images_per_file': 1000}, #1 image/file for TR, 300 for equilibrium
+    # 'add_file_postfix'      : False,
 
     # 'shutter_speed_open'    : 0.004, #in s      NM vacuum shutter, broken
     # 'shutter_speed_close'   : 0.004, # in s
