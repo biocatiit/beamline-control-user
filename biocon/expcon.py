@@ -891,14 +891,20 @@ class ExpCommThread(threading.Thread):
 
         f_start = (int(current_run) - 1)*num_frames + 1
 
-        f_list = ['{}_data_{:06d}.h5'.format(fprefix, f_start+i) for i in range(num_frames)]
+        if self._settings['detector'] == '18ID:EIG2:_epics':
+            f_list = ['{}_data_{:06d}.h5'.format(fprefix, f_start+i) for i in range(num_frames)]
+        elif self._settings['detector'] == '18IDpil1M:_epics':
+            f_list = ['{}_{:06d}.tif'.format(fprefix, f_start+i) for i in range(num_frames)]
 
         timeout = False
 
         for i, f in enumerate(f_list):
             full_path = os.path.join(data_dir, f)
 
-            new_name = '{}_{:04d}_data_{:06d}.h5'.format(fprefix, int(current_run), i+1)
+            if self._settings['detector'] == '18ID:EIG2:_epics':
+                new_name = '{}_{:04d}_data_{:06d}.h5'.format(fprefix, int(current_run), i+1)
+            elif self._settings['detector'] == '18IDpil1M:_epics':
+                new_name = '{}_{:04d}_{:06d}.tif'.format(fprefix, int(current_run), i+1)
 
             full_new = os.path.join(data_dir, new_name)
 
