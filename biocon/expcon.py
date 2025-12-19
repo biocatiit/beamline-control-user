@@ -3138,6 +3138,9 @@ class ExpPanel(wx.Panel):
             else:
                 self.shutter_permit_pv = None
 
+            if self.shutter_permit_pv is not None:
+                self.shutter_permit_pv.add_callback(self._open_a_shutter)
+
             fe_shutter_open_pv, connected = self._initialize_pv(self.settings['fe_shutter_open_pv'])
             if connected:
                 self.fe_shutter_open_pv = fe_shutter_open_pv
@@ -4347,41 +4350,7 @@ class ExpPanel(wx.Panel):
                 if self._monitor_a_shutter_abort.is_set():
                     break
 
-                fes_val = self.fe_shutter_pv.get(timeout=2)
-
-                if fes_val is not None:
-                    if fes_val == 0:
-                        fes = False
-                    else:
-                        fes = True
-
-                if not fes:
-                    c_ready_val = self.c_beam_ready_pv.get(timeout=2)
-                    a_ready_val = self.a_beam_ready_pv.get(timeout=2)
-                    shutter_permit_val = self.shutter_permit_pv.get(timeout=2)
-
-                    if c_ready_val is not None:
-                        if c_ready_val == 0:
-                            c_ready = False
-                        else:
-                            c_ready = True
-
-                    if a_ready_val is not None:
-                        if a_ready_val == 0:
-                            a_ready = False
-                        else:
-                            a_ready = True
-
-                    if shutter_permit_val is not None:
-                        if shutter_permit_val == 0:
-                            shutter_permit = False
-                        else:
-                            shutter_permit = True
-
-                    if c_ready and a_ready and shutter_permit:
-                        logger.info('Opening A shutter')
-                        self.fe_shutter_open_pv.put(1, timeout=2)
-
+                self._open_a_shutter()
 
                 a = time.time()
 
@@ -4390,6 +4359,41 @@ class ExpPanel(wx.Panel):
                         break
                     time.sleep(0.5)
 
+    def _open_a_shutter(self, **kwargs):
+        fes_val = self.fe_shutter_pv.get(timeout=2)
+
+        if fes_val is not None:
+            if fes_val == 0:
+                fes = False
+            else:
+                fes = True
+
+        if not fes:
+            c_ready_val = self.c_beam_ready_pv.get(timeout=2)
+            a_ready_val = self.a_beam_ready_pv.get(timeout=2)
+            shutter_permit_val = self.shutter_permit_pv.get(timeout=2)
+
+            if c_ready_val is not None:
+                if c_ready_val == 0:
+                    c_ready = False
+                else:
+                    c_ready = True
+
+            if a_ready_val is not None:
+                if a_ready_val == 0:
+                    a_ready = False
+                else:
+                    a_ready = True
+
+            if shutter_permit_val is not None:
+                if shutter_permit_val == 0:
+                    shutter_permit = False
+                else:
+                    shutter_permit = True
+
+            if c_ready and a_ready and shutter_permit:
+                logger.info('Opening A shutter')
+                self.fe_shutter_open_pv.put(1, timeout=2)
 
     def automator_callback(self, cmd_name, cmd_args, cmd_kwargs):
         success = True
@@ -4578,8 +4582,12 @@ class ExpPanel(wx.Panel):
             pass #For testing, when there is no exp_con
 
         if self.settings['reopen_a_shutter']:
+            if self.shutter_permit_pv is not None:
+                self.shutter_permit_pv.remove_callback()
+
             self._monitor_a_shutter_abort.set()
             self._monitor_a_shutter_thread.join(10)
+
 
 class ExpFrame(wx.Frame):
     """
