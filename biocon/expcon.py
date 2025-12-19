@@ -111,7 +111,7 @@ class ExpCommThread(threading.Thread):
         logger.debug("Initialized mx database")
 
         if self._settings['detector'].lower().split('_')[-1] == 'mx':
-            logger.debug('Getting mx detector')
+            logger.info('Getting mx detector')
             record_name = self._settings['detector'].rstrip('_mx')
 
             data_dir_root = copy.deepcopy(self._settings['base_data_dir']).replace(
@@ -466,13 +466,16 @@ class ExpCommThread(threading.Thread):
         tot_frames = num_frames*num_runs
         logger.info(tot_frames)
         det.set_data_dir(data_dir)
-        det.set_num_frames(tot_frames)
-        # det.set_num_frames(num_frames)
-        det.set_filename(new_fname)
         det.set_trigger_mode('ext_enable')
         det.set_exp_time(exp_time)
         det.set_exp_period(exp_period)
-        det.arm()
+
+        if self._settings['detector'] == '18ID:EIG2:_epics':
+            det.set_num_frames(tot_frames)
+            det.set_filename(new_fname)
+            det.arm()
+        elif self._settings['detector'] == '18IDpil1M:_epics' or self._settings['dectector'] == 'pilatus_mx':
+            det.set_num_frames(num_frames)
 
         # struck_mode_pv.caput(1, timeout=5)
         struck.set_measurement_time(exp_time)   #Ignored for external LNE of Struck
@@ -561,19 +564,21 @@ class ExpCommThread(threading.Thread):
                     autoinject, autoinject_scan, start_autoinject_event, s_counters, log_vals,
                     x_positions, y_positions, comp_settings, tr_scan_settings)
 
-                logger.info('starting renum thread')
-                renum_t = threading.Thread(target=self.renum_scan_files,
-                    args=(data_dir, fprefix, num_frames, current_run))
-                renum_t.daemon = True
-                renum_t.start()
+                if self._settings['detector'] == '18ID:EIG2:_epics':
+                    logger.debug('starting renum thread')
+                    renum_t = threading.Thread(target=self.renum_scan_files,
+                        args=(data_dir, fprefix, num_frames, current_run))
+                    renum_t.daemon = True
+                    renum_t.start()
 
-                renum_threads.append(renum_t)
-                logger.info('renum thread started')
+                    renum_threads.append(renum_t)
+                    logger.debug('renum thread started')
 
                 logger.info('Scan %s done', current_run)
 
-            for t in renum_threads:
-                t.join()
+            if self._settings['detector'] == '18ID:EIG2:_epics':
+                for t in renum_threads:
+                    t.join()
 
         else:
             if step_axis == 'x':
@@ -733,9 +738,9 @@ class ExpCommThread(threading.Thread):
         struck.start()
         ab_burst.arm()
 
-        # det.set_filename(new_fname)
-
-        # det.arm()
+        if self._settings['detector'] == '18IDpil1M:_epics' or self._settings['dectector'] == 'pilatus_mx':
+            det.set_filename(new_fname)
+            det.arm()
 
         start = time.time()
         timeout = False
@@ -893,7 +898,7 @@ class ExpCommThread(threading.Thread):
 
         if self._settings['detector'] == '18ID:EIG2:_epics':
             f_list = ['{}_data_{:06d}.h5'.format(fprefix, f_start+i) for i in range(num_frames)]
-        elif self._settings['detector'] == '18IDpil1M:_epics':
+        elif self._settings['detector'] == '18IDpil1M:_epics' or self._settings['dectector'] == 'pilatus_mx':
             f_list = ['{}_{:06d}.tif'.format(fprefix, f_start+i) for i in range(num_frames)]
 
         timeout = False
@@ -903,7 +908,7 @@ class ExpCommThread(threading.Thread):
 
             if self._settings['detector'] == '18ID:EIG2:_epics':
                 new_name = '{}_{:04d}_data_{:06d}.h5'.format(fprefix, int(current_run), i+1)
-            elif self._settings['detector'] == '18IDpil1M:_epics':
+            elif self._settings['detector'] == '18IDpil1M:_epics' or self._settings['dectector'] == 'pilatus_mx':
                 new_name = '{}_{:04d}_{:06d}.tif'.format(fprefix, int(current_run), i+1)
 
             full_new = os.path.join(data_dir, new_name)
@@ -915,6 +920,7 @@ class ExpCommThread(threading.Thread):
                 if time.time() - start > 10:
                     timeout = True
                     break
+                    logger.debug('Timeouot waiting for %s', full_path)
                 else:
                     time.sleep(0.1)
 
