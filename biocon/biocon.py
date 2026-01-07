@@ -383,10 +383,10 @@ if __name__ == '__main__':
     exposure_settings['shutter_speed_pad'] = 0.002
     exposure_settings['shutter_speed_cycle'] = 0.1
 
-    # EIGER2 XE 9M
-    exposure_settings['det_args'] =  {'use_tiff_writer': False,
-        'use_file_writer': True, 'photon_energy' : 12.0,
-        'images_per_file': 1} #1 image/file for TR, 300 for eq SAXS, 1000 for muscle
+    # # EIGER2 XE 9M
+    # exposure_settings['det_args'] =  {'use_tiff_writer': False,
+    #     'use_file_writer': True, 'photon_energy' : 12.0,
+    #     'images_per_file': 1} #1 image/file for TR, 300 for eq SAXS, 1000 for muscle
 
     # Muscle settings
     exposure_settings['struck_measurement_time'] = '0.001'
@@ -419,7 +419,7 @@ if __name__ == '__main__':
         'thresh': 0.04}, 'guard_vac' : {'check': True, 'thresh': 0.04},
         'sample_vac': {'check': False, 'thresh': 0.04}, 'sc_vac':
         {'check': True, 'thresh':0.04}}
-    exposure_settings['base_data_dir'] = '/nas_data/Eiger2x/2025_Run3/' #CHANGE ME and pipeline local_basedir
+    exposure_settings['base_data_dir'] = '/nas_data/Pilatus1M/2025_1M/2025_Run3/' #CHANGE ME and pipeline local_basedir
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']
 
 
@@ -530,7 +530,7 @@ if __name__ == '__main__':
         ('exposure', expcon.ExpPanel),
         # ('coflow', coflowcon.CoflowPanel),
         ('trsaxs_scan', trcon.TRScanPanel),
-        # ('trsaxs_flow', trcon.TRFlowPanel),
+        ('trsaxs_flow', trcon.TRFlowPanel),
         # ('scan',    scancon.ScanPanel),
         ('metadata', metadata.ParamPanel),
         # ('pipeline', pipeline_ctrl.PipelineControl),
