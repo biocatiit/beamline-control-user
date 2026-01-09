@@ -517,27 +517,27 @@ if __name__ == '__main__':
 
             # Teledyne SSI Reaxus pumps with scaling
             setup_pumps = [
-                {'name': 'Buffer 2', 'args': ['SSI Next Gen', 'COM7'],
-                    'kwargs': {'flow_rate_scale': 1.0583,
+                {'name': 'Buffer 2', 'args': ['SSI Next Gen', 'COM10'],
+                    'kwargs': {'flow_rate_scale': 1.045,
                     'flow_rate_offset': -48.462/1000,'scale_type': 'up'},
                     'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
                 {'name': 'Sample', 'args': ['SSI Next Gen', 'COM9'],
-                    'kwargs': {'flow_rate_scale': 1.0135,
+                    'kwargs': {'flow_rate_scale': 1.02,
                     'flow_rate_offset': 0.1251/1000,'scale_type': 'up'},
                     'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-                {'name': 'Buffer 1', 'args': ['SSI Next Gen', 'COM15'],
-                    'kwargs': {'flow_rate_scale': 1.0497,
+                {'name': 'Buffer 1', 'args': ['SSI Next Gen', 'COM7'],
+                    'kwargs': {'flow_rate_scale': 1.03,
                     'flow_rate_offset': -19.853/1000,'scale_type': 'up'},
                     'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
                  ]
 
             setup_valves = [
-                {'name': 'Injection', 'args': ['Rheodyne', 'COM16'],
+                # {'name': 'Injection', 'args': ['Rheodyne', 'COM16'],
+                #     'kwargs': {'positions' : 2}},
+                {'name': 'Injection 1', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo15'],
                     'kwargs': {'positions' : 2}},
-                # {'name': 'Injection 1', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo14'],
-                #     'kwargs': {'positions' : 2}},
-                # {'name': 'Injection 2', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo14'],
-                #     'kwargs': {'positions' : 2}},
+                {'name': 'Injection 2', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo15'],
+                    'kwargs': {'positions' : 2}},
                 ]
 
             setup_fms = [
@@ -595,7 +595,7 @@ if __name__ == '__main__':
                 {'name': 'Buffer', 'args': ['Pico Plus', 'COM11'],
                     'kwargs': {'syringe_id': '3 mL, Medline P.C.',
                     'pump_address': '00', 'dual_syringe': 'False'},
-                    'ctrl_args': {'flow_rate' : '0.068', 'refill_rate' : '3'}},
+                    'ctrl_args': {'flow_rate' : '0.0655', 'refill_rate' : '3'}},
                 {'name': 'Sample', 'args': ['Pico Plus', 'COM12'],
                     'kwargs': {'syringe_id': '1 mL, Medline P.C.',
                     'pump_address': '00', 'dual_syringe': 'False'},
@@ -603,7 +603,7 @@ if __name__ == '__main__':
                 {'name': 'Sheath', 'args': ['Pico Plus', 'COM14'],
                     'kwargs': {'syringe_id': '1 mL, Medline P.C.',
                     'pump_address': '00', 'dual_syringe': 'False'},
-                    'ctrl_args': {'flow_rate' : '0.002', 'refill_rate' : '1.0'}},
+                    'ctrl_args': {'flow_rate' : '0.005', 'refill_rate' : '1.0'}},
                 ]
 
             setup_valves = [

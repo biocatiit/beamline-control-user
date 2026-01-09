@@ -111,7 +111,7 @@ class ExpCommThread(threading.Thread):
         logger.debug("Initialized mx database")
 
         if self._settings['detector'].lower().split('_')[-1] == 'mx':
-            logger.debug('Getting mx detector')
+            logger.info('Getting mx detector')
             record_name = self._settings['detector'].rstrip('_mx')
 
             data_dir_root = copy.deepcopy(self._settings['base_data_dir']).replace(
@@ -466,13 +466,16 @@ class ExpCommThread(threading.Thread):
         tot_frames = num_frames*num_runs
         logger.info(tot_frames)
         det.set_data_dir(data_dir)
-        det.set_num_frames(tot_frames)
-        # det.set_num_frames(num_frames)
-        det.set_filename(new_fname)
         det.set_trigger_mode('ext_enable')
         det.set_exp_time(exp_time)
         det.set_exp_period(exp_period)
-        det.arm()
+
+        if self._settings['detector'] == '18ID:EIG2:_epics':
+            det.set_num_frames(tot_frames)
+            det.set_filename(new_fname)
+            det.arm()
+        elif self._settings['detector'] == '18IDpil1M:_epics' or self._settings['dectector'] == 'pilatus_mx':
+            det.set_num_frames(num_frames)
 
         # struck_mode_pv.caput(1, timeout=5)
         struck.set_measurement_time(exp_time)   #Ignored for external LNE of Struck
@@ -488,7 +491,7 @@ class ExpCommThread(threading.Thread):
             gh_burst.setup(exp_time+0.007, exp_time, 1, 0, 1, 2)
         else:
             #Shutter will be open continuously, via dio_out9
-            ab_burst.setup(exp_time+0.001, exp_time, 1, 0, 1, 2) #Irrelevant
+            ab_burst.setup(exp_time+0.001, exp_time/4, 1, 0, 1, 2) #Irrelevant
             cd_burst.setup(exp_time+0.001, 0.0001, 1, exp_time+0.00015, 1, 2)
             ef_burst.setup(exp_time+0.001, exp_time, 1, 0, 1, 2)
             gh_burst.setup(exp_time+0.001, exp_time, 1, 0, 1, 2)
@@ -512,8 +515,12 @@ class ExpCommThread(threading.Thread):
             set_step_speed = False
 
             if pco_direction == 'x':
-                x_positions = [i*tr_scan_settings['x_pco_step']+tr_scan_settings['x_pco_start']
-                    for i in range(num_frames)]
+                if x_start < x_end:
+                    x_positions = [tr_scan_settings['x_pco_start'] + i*tr_scan_settings['x_pco_step']
+                        for i in range(num_frames)]
+                else:
+                    x_positions = [tr_scan_settings['x_pco_end'] - i*tr_scan_settings['x_pco_step']
+                        for i in range(num_frames)]
 
                 step_start = tr_scan_settings['y_start']
                 step_end = tr_scan_settings['y_end']
@@ -524,8 +531,12 @@ class ExpCommThread(threading.Thread):
                     y_positions = np.array([step_start]*len(x_positions))
 
             else:
-                y_positions = [i*tr_scan_settings['y_pco_step']+tr_scan_settings['y_pco_start']
-                    for i in range(num_frames)]
+                if y_start < y_end:
+                    y_positions = [tr_scan_settings['y_pco_start'] + i*tr_scan_settings['y_pco_step']
+                        for i in range(num_frames)]
+                else:
+                    y_positions = [tr_scan_settings['y_pco_end'] - i*tr_scan_settings['y_pco_step']
+                        for i in range(num_frames)]
 
                 step_start = tr_scan_settings['x_start']
                 step_end = tr_scan_settings['x_end']
@@ -553,19 +564,21 @@ class ExpCommThread(threading.Thread):
                     autoinject, autoinject_scan, start_autoinject_event, s_counters, log_vals,
                     x_positions, y_positions, comp_settings, tr_scan_settings)
 
-                logger.info('starting renum thread')
-                renum_t = threading.Thread(target=self.renum_scan_files,
-                    args=(data_dir, fprefix, num_frames, current_run))
-                renum_t.daemon = True
-                renum_t.start()
+                if self._settings['detector'] == '18ID:EIG2:_epics':
+                    logger.debug('starting renum thread')
+                    renum_t = threading.Thread(target=self.renum_scan_files,
+                        args=(data_dir, fprefix, num_frames, current_run))
+                    renum_t.daemon = True
+                    renum_t.start()
 
-                renum_threads.append(renum_t)
-                logger.info('renum thread started')
+                    renum_threads.append(renum_t)
+                    logger.debug('renum thread started')
 
                 logger.info('Scan %s done', current_run)
 
-            for t in renum_threads:
-                t.join()
+            if self._settings['detector'] == '18ID:EIG2:_epics':
+                for t in renum_threads:
+                    t.join()
 
         else:
             if step_axis == 'x':
@@ -725,9 +738,9 @@ class ExpCommThread(threading.Thread):
         struck.start()
         ab_burst.arm()
 
-        # det.set_filename(new_fname)
-
-        # det.arm()
+        if self._settings['detector'] == '18IDpil1M:_epics' or self._settings['dectector'] == 'pilatus_mx':
+            det.set_filename(new_fname)
+            det.arm()
 
         start = time.time()
         timeout = False
@@ -883,14 +896,20 @@ class ExpCommThread(threading.Thread):
 
         f_start = (int(current_run) - 1)*num_frames + 1
 
-        f_list = ['{}_data_{:06d}.h5'.format(fprefix, f_start+i) for i in range(num_frames)]
+        if self._settings['detector'] == '18ID:EIG2:_epics':
+            f_list = ['{}_data_{:06d}.h5'.format(fprefix, f_start+i) for i in range(num_frames)]
+        elif self._settings['detector'] == '18IDpil1M:_epics' or self._settings['dectector'] == 'pilatus_mx':
+            f_list = ['{}_{:06d}.tif'.format(fprefix, f_start+i) for i in range(num_frames)]
 
         timeout = False
 
         for i, f in enumerate(f_list):
             full_path = os.path.join(data_dir, f)
 
-            new_name = '{}_{:04d}_data_{:06d}.h5'.format(fprefix, int(current_run), i+1)
+            if self._settings['detector'] == '18ID:EIG2:_epics':
+                new_name = '{}_{:04d}_data_{:06d}.h5'.format(fprefix, int(current_run), i+1)
+            elif self._settings['detector'] == '18IDpil1M:_epics' or self._settings['dectector'] == 'pilatus_mx':
+                new_name = '{}_{:04d}_{:06d}.tif'.format(fprefix, int(current_run), i+1)
 
             full_new = os.path.join(data_dir, new_name)
 
@@ -901,6 +920,7 @@ class ExpCommThread(threading.Thread):
                 if time.time() - start > 10:
                     timeout = True
                     break
+                    logger.debug('Timeouot waiting for %s', full_path)
                 else:
                     time.sleep(0.1)
 
@@ -3098,6 +3118,41 @@ class ExpPanel(wx.Panel):
         else:
             self.d_hutch_H_pv = None
 
+        if self.settings['reopen_a_shutter']:
+
+            c_beam_ready_pv, connected = self._initialize_pv(self.settings['c_hutch_beam_ready_pv'])
+            if connected:
+                self.c_beam_ready_pv = c_beam_ready_pv
+            else:
+                self.c_beam_ready_pv = None
+
+            a_beam_ready_pv, connected = self._initialize_pv(self.settings['a_hutch_beam_ready_pv'])
+            if connected:
+                self.a_beam_ready_pv = a_beam_ready_pv
+            else:
+                self.a_beam_ready_pv = None
+
+            shutter_permit_pv, connected = self._initialize_pv(self.settings['shutter_permit_pv'])
+            if connected:
+                self.shutter_permit_pv = shutter_permit_pv
+            else:
+                self.shutter_permit_pv = None
+
+            if self.shutter_permit_pv is not None:
+                self.shutter_permit_pv.add_callback(self._open_a_shutter)
+
+            fe_shutter_open_pv, connected = self._initialize_pv(self.settings['fe_shutter_open_pv'])
+            if connected:
+                self.fe_shutter_open_pv = fe_shutter_open_pv
+            else:
+                self.fe_shutter_open_pv = None
+
+
+            self._monitor_a_shutter_abort = threading.Event()
+            self._monitor_a_shutter_thread = threading.Thread(target=self._monitor_a_shutter_status)
+            self._monitor_a_shutter_thread.daemon = True
+            self._monitor_a_shutter_thread.start()
+
         self.warning_dialog = None
         self.timeout_dialog = None
 
@@ -4287,6 +4342,59 @@ class ExpPanel(wx.Panel):
         else:
             self.pipeline_warning_shown = False
 
+    def _monitor_a_shutter_status(self):
+        if (self.fe_shutter_pv is not None and self.c_beam_ready_pv is not None and
+            self.a_beam_ready_pv is not None and self.fe_shutter_open_pv is not None):
+
+            while True:
+                if self._monitor_a_shutter_abort.is_set():
+                    break
+
+                self._open_a_shutter()
+
+                a = time.time()
+
+                while time.time() - a < 300:
+                    if self._monitor_a_shutter_abort.is_set():
+                        break
+                    time.sleep(0.5)
+
+    def _open_a_shutter(self, **kwargs):
+        fes_val = self.fe_shutter_pv.get(timeout=2)
+
+        if fes_val is not None:
+            if fes_val == 0:
+                fes = False
+            else:
+                fes = True
+
+        if not fes:
+            c_ready_val = self.c_beam_ready_pv.get(timeout=2)
+            a_ready_val = self.a_beam_ready_pv.get(timeout=2)
+            shutter_permit_val = self.shutter_permit_pv.get(timeout=2)
+
+            if c_ready_val is not None:
+                if c_ready_val == 0:
+                    c_ready = False
+                else:
+                    c_ready = True
+
+            if a_ready_val is not None:
+                if a_ready_val == 0:
+                    a_ready = False
+                else:
+                    a_ready = True
+
+            if shutter_permit_val is not None:
+                if shutter_permit_val == 0:
+                    shutter_permit = False
+                else:
+                    shutter_permit = True
+
+            if c_ready and a_ready and shutter_permit:
+                logger.info('Opening A shutter')
+                self.fe_shutter_open_pv.put(1, timeout=2)
+
     def automator_callback(self, cmd_name, cmd_args, cmd_kwargs):
         success = True
 
@@ -4473,6 +4581,14 @@ class ExpPanel(wx.Panel):
         except AttributeError:
             pass #For testing, when there is no exp_con
 
+        if self.settings['reopen_a_shutter']:
+            if self.shutter_permit_pv is not None:
+                self.shutter_permit_pv.remove_callback()
+
+            self._monitor_a_shutter_abort.set()
+            self._monitor_a_shutter_thread.join(10)
+
+
 class ExpFrame(wx.Frame):
     """
     A lightweight frame allowing one to work with arbitrary number of pumps.
@@ -4526,33 +4642,33 @@ default_exposure_settings = {
     'exp_period'            : '1',
     'exp_num'               : '2',
 
-    # 'exp_time_min'          : 0.00105,  # For Pilatus3 X 1M
-    # 'exp_time_max'          : 5184000,
-    # 'exp_period_min'        : 0.002,
-    # 'exp_period_max'        : 5184000,
-    # 'nframes_max'           : 15000, # For Pilatus: 999999, for Struck: 15000 (set by maxChannels in the driver configuration)
-    # 'nparams_max'           : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
-    # 'exp_period_delta'      : 0.00095,
-    # 'local_dir_root'        : '/nas_data/Pilatus1M',
-    # 'remote_dir_root'       : '/ramdisk',
-    # # 'detector'              : 'pilatus_mx',
-    # 'detector'              : '18IDpil1M:_epics',
-    # 'det_args'              : {}, #Allows detector specific keyword arguments
-    # 'add_file_postfix'      : True,
-
-    'exp_time_min'          : 0.000000050, #Eiger2 XE 9M
-    'exp_time_max'          : 3600,
-    'exp_period_min'        : 0.001785714286, #There's an 8bit undocumented mode that can go faster, in theory
-    'exp_period_max'        : 5184000, # Not clear there is a maximum, so left it at this
-    'nframes_max'           : 15000, # For Eiger: 2000000000, for Struck: 15000 (set by maxChannels in the driver configuration)
+    'exp_time_min'          : 0.00105,  # For Pilatus3 X 1M
+    'exp_time_max'          : 5184000,
+    'exp_period_min'        : 0.002,
+    'exp_period_max'        : 5184000,
+    'nframes_max'           : 15000, # For Pilatus: 999999, for Struck: 15000 (set by maxChannels in the driver configuration)
     'nparams_max'           : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
-    'exp_period_delta'      : 0.000000200,
-    'local_dir_root'        : '/nas_data/Eiger2x',
-    'remote_dir_root'       : '/nas_data/Eiger2x',
-    'detector'              : '18ID:EIG2:_epics',
-    'det_args'              :  {'use_tiff_writer': False, 'use_file_writer': True,
-                                'photon_energy' : 12.0, 'images_per_file': 1000}, #1 image/file for TR, 300 for equilibrium
-    'add_file_postfix'      : False,
+    'exp_period_delta'      : 0.00095,
+    'local_dir_root'        : '/nas_data/Pilatus1M',
+    'remote_dir_root'       : '/ramdisk',
+    # 'detector'              : 'pilatus_mx',
+    'detector'              : '18IDpil1M:_epics',
+    'det_args'              : {}, #Allows detector specific keyword arguments
+    'add_file_postfix'      : True,
+
+    # 'exp_time_min'          : 0.000000050, #Eiger2 XE 9M
+    # 'exp_time_max'          : 3600,
+    # 'exp_period_min'        : 0.001785714286, #There's an 8bit undocumented mode that can go faster, in theory
+    # 'exp_period_max'        : 5184000, # Not clear there is a maximum, so left it at this
+    # 'nframes_max'           : 15000, # For Eiger: 2000000000, for Struck: 15000 (set by maxChannels in the driver configuration)
+    # 'nparams_max'           : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
+    # 'exp_period_delta'      : 0.000000200,
+    # 'local_dir_root'        : '/nas_data/Eiger2x',
+    # 'remote_dir_root'       : '/nas_data/Eiger2x',
+    # 'detector'              : '18ID:EIG2:_epics',
+    # 'det_args'              :  {'use_tiff_writer': False, 'use_file_writer': True,
+    #                             'photon_energy' : 12.0, 'images_per_file': 1000}, #1 image/file for TR, 300 for equilibrium
+    # 'add_file_postfix'      : False,
 
     # 'shutter_speed_open'    : 0.004, #in s      NM vacuum shutter, broken
     # 'shutter_speed_close'   : 0.004, # in s
@@ -4597,6 +4713,11 @@ default_exposure_settings = {
     'd_hutch_H_pv'          : '18ID:EnvMon:D:Humid',
     'use_old_i0_gain'       : True,
     'i0_gain_pv'            : '18ID_D_BPM_Gain:Level-SP',
+    'c_hutch_beam_ready_pv' : 'PA:18ID:STA_C_BEAMREADY_PL',
+    'a_hutch_beam_ready_pv' : 'PA:18ID:STA_A_BEAMREADY_PL',
+    'shutter_permit_pv'     : 'XFD:ShutterPermit',
+    'fe_shutter_open_pv'    : '18ID:rshtr:A:OPEN',
+    'reopen_a_shutter'      : True,
 
     'struck_log_vals'       : [
         # Format: (mx_record_name, struck_channel, header_name,
