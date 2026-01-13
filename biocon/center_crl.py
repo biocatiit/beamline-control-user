@@ -1,4 +1,5 @@
 import time
+import traceback
 
 import numpy as np
 import scipy
@@ -21,8 +22,8 @@ def do_centering_scan(scan_settings):
     shutter_pvs = scan_settings['shutter_pvs']
 
     motor = scan_settings['motor']
-    scan_positioner = scan_settings['positioner']
-    scan_mindex = scan_settings['motor_index']
+    scan_positioner = scan_settings['scan_positioner']
+    scan_mindex = scan_settings['scan_mindex']
 
     initial_pos = motor.get_positioner_position(scan_positioner, scan_mindex)
 
@@ -185,23 +186,36 @@ def calc_fw_position(mtr_pos, scaler_vals, fw_height):
     return center, fwhm
 
 
-if __name__ == 'main':
+if __name__ == '__main__':
 
     xps = xps_drivers.XPS()
     np_motor = motorcon.NewportXPSMotor('HEXAPOD', xps,
                 '164.54.204.49', 5001, 20, 'HEXAPOD', 6, True)
 
-    motors = ['HEXAPOD.X', 'HEXAPOD.Y', 'HEXAPOD.Z', 'HEXAPOD.U',
-        'HEXAPOD.V', 'HEXAPOD.W']
-    index_ref = {'HEXAPOD.X': 0, 'HEXAPOD.Y': 1, 'HEXAPOD.Z': 2,
-        'HEXAPOD.U': 3, 'HEXAPOD.V': 4, 'HEXAPOD.W': 5}
+    motors = [
+        # 'HEXAPOD.X',
+        'HEXAPOD.Y',
+        'HEXAPOD.Z',
+        'HEXAPOD.U',
+        'HEXAPOD.V',
+        'HEXAPOD.W'
+        ]
+
+    index_ref = {
+        # 'HEXAPOD.X': 0,
+        'HEXAPOD.Y': 1,
+        'HEXAPOD.Z': 2,
+        'HEXAPOD.U': 3,
+        'HEXAPOD.V': 4,
+        'HEXAPOD.W': 5
+        }
 
 
     scan_settings = {
-        'start'         : -1,
-        'stop'           : 1,
+        'start'         : -1.5,
+        'stop'           : 1.5,
         'step'          : 0.1,
-        'meas_pv_name'  : '18ID:scaler2.S6',
+        'meas_pv_name'  : '18ID:scaler2.S5',
         'scaler_pv_name': '18ID:scaler2',
         'meas_time'     : 0.1,
         'fw_height'     : 0.5,
@@ -247,7 +261,10 @@ if __name__ == 'main':
 
                 new_pos = do_centering_scan(scan_settings)
 
-                if np.isclose(new_pos, last_positions[mname], rtol=1e-4):
+                print('Previous {} center at: {}'.format(mname, last_positions[mname]))
+                print('Difference: {}'.format(last_positions[mname]/new_pos))
+
+                if np.isclose(new_pos, last_positions[mname], rtol=1e-3):
                     settled[mname] = True
                 else:
                     settled[mname] = False
@@ -260,6 +277,7 @@ if __name__ == 'main':
 
     except:
         print('Centering interrupted before converging!')
+        traceback.print_exc()
     finally:
         # Clean up
         for mname in motors:
