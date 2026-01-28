@@ -29,11 +29,13 @@ import logging
 import sys
 import copy
 import platform
+import itertools
 import requests
 
 if __name__ != '__main__':
     logger = logging.getLogger(__name__)
 
+import numpy as np
 import wx
 import matplotlib
 from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg
@@ -962,9 +964,11 @@ class CoflowControl(object):
 
                 if self.monitor:
                     if sheath_monitor_avg or outlet_monitor_avg:
-                        max_pts = sheath_mon_avg_time/0.25 + 4
-                        idx = np.argmin(np.ags(np.array(self.fr_time_list[-max_pts:])
-                            -(cur_fr_time-sheath_mon_avg_time)))
+                        max_pts = int(sheath_mon_avg_time/0.25 + 4)
+                        pts = np.array(list(itertools.islice(self.fr_time_list,
+                            len(self.fr_time_list)-max_pts, len(self.fr_time_list))))
+                        idx = np.argmin(np.abs(pts-(cur_fr_time-sheath_mon_avg_time)))
+                        idx += len(self.fr_time_list)-max_pts
 
                     if not sheath_monitor_avg:
                         if ((sheath_fr < sheath_low_warning*self.sheath_setpoint or
@@ -978,7 +982,8 @@ class CoflowControl(object):
                             self._sheath_oob_flow = sheath_fr
 
                     else:
-                        mean_fr = np.mean(self.sheath_fr_list[idx:])
+                        mean_fr = np.mean(list(itertools.islice(self.sheath_fr_list, idx,
+                            len(self.sheath_fr_list))))
 
                         if ((mean_fr < sheath_low_warning*self.sheath_setpoint or
                             mean_fr > sheath_high_warning*self.sheath_setpoint)):
@@ -1003,7 +1008,8 @@ class CoflowControl(object):
                             self._outlet_oob_flow = outlet_fr
 
                     else:
-                        mean_fr = np.mean(self.outlet_fr_list[idx:])
+                        mean_fr = np.mean(list(itertools.islice(self.outlet_fr_list, idx,
+                            len(self.sheath_fr_list))))
 
                         if ((mean_fr < outlet_low_warning*self.outlet_setpoint or
                             mean_fr > outlet_high_warning*self.outlet_setpoint)):
