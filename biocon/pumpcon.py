@@ -6391,7 +6391,7 @@ if __name__ == '__main__':
     #     {'name': 'sheath', 'args': ['VICI M50', 'COM6'],
     #         'kwargs': {'flow_cal': '627.72', 'backlash_cal': '9.814'},
     #         'ctrl_args': {'flow_rate': 1}},
-    #     {'name': 'outlet', 'args': ['OB1 Pump', 'COM15'],
+    #     {'name': 'outlet', 'args': ['OB1 Pump', 'COM14'],
     #         'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
     #         'min_pressure': -1000, 'max_pressure': 1000, 'P': -2, 'I': -0.15,
     #         'D': 0, 'bfs_instr_ID': bfs.instr_ID, 'comm_lock': ob1_comm_lock,
@@ -6523,8 +6523,8 @@ if __name__ == '__main__':
 
     # Longer pumps
     setup_devices = [
-        {'name': 'sheath', 'args': ['Longer L100S2', 'COM11'],
-            'kwargs': {'pump_addr': 1, 'flow_cal': 0.0569},
+        {'name': 'test', 'args': ['Longer L100S2', 'COM15'],
+            'kwargs': {'pump_addr': 1, 'flow_cal': 0.0512},
             'ctrl_args': {'flow_rate': 1}},
         ]
 
