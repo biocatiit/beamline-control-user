@@ -44,20 +44,41 @@ import serial.tools.list_ports as list_ports
 import wx
 from six import string_types
 
-sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\DLL64\\DLL64') #add the path of the library here
-sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\python_64')#add the path of the LoadElveflow.py
-sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\DLL32\\DLL32') #add the path of the library here
-sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\python_32')#add the path of the LoadElveflow.py
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_03_00\\DLL64\\Elveflow64DLL') #add the path of the library here
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_03_00\\python_64')#add the path of the LoadElveflow.py
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_03_00\\DLL32\\Elveflow32DLL') #add the path of the library here
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_03_00\\python_32')#add the path of the LoadElveflow.py
+# elve_version = '3.03.00'
+
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\DLL64\\DLL64') #add the path of the library here
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\Python_64')#add the path of the LoadElveflow.py
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\DLL32\\DLL32') #add the path of the library here
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\Python_32')#add the path of the LoadElveflow.py
+# elve_version = '3.07.02'
+
+sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_03\\DLL64\\DLL64') #add the path of the library here
+sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_03\\Python_64')#add the path of the LoadElveflow.py
+sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_03\\DLL32\\DLL32') #add the path of the library here
+sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_03\\Python_32')#add the path of the LoadElveflow.py
+elve_version = '3.07.03'
 
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_08_06\\DLL\\DLL64') #add the path of the library here
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_08_06\\DLL\\Python\\Python_64')#add the path of the LoadElveflow.py
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_08_06\\DLL\\DLL32') #add the path of the library here
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_08_06\\DLL\\Python\\Python_32')#add the path of the LoadElveflow.py
+# elve_version = '3.08.06'
 
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_09_04\\DLL\\DLL64') #add the path of the library here
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_09_04\\DLL\\Python\\Python_64')#add the path of the LoadElveflow.py
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_09_04\\DLL\\DLL32') #add the path of the library here
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_09_04\\DLL\\Python\\Python_32')#add the path of the LoadElveflow.py
+# elve_version = '3.09.04'
+
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_10_03\\DLL\\DLL64') #add the path of the library here
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_10_03\\DLL\\Python\\Python_64')#add the path of the LoadElveflow.py
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_10_03\\DLL\\DLL32') #add the path of the library here
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_10_03\\DLL\\Python\\Python_32')#add the path of the LoadElveflow.py
+# elve_version = '3.10.03'
 
 try:
     import Elveflow64 as Elveflow
@@ -2789,6 +2810,8 @@ class SSINextGenPump(Pump):
             'Lower pressure limit' : self.lpl_fault, 'Leak': self.leak_fault,
             }
 
+        # print(faults)
+
         return faults
 
     def get_pressure(self):
@@ -3544,6 +3567,8 @@ class LongerL1001S2Pump(Pump):
     https://blog.darwin-microfluidics.com/control-command-string-generator-for-longer-peristaltic-pumps/
 
     Note that other longer peristatltic pumps have different command sets.
+
+    Flow calibration for the DG-1 10 roller head with 1x1 mm tubing is 0.0569 mL/rev
     """
 
     def __init__(self, name, device, pump_addr, comm_lock=None, flow_cal=1):
@@ -6441,35 +6466,39 @@ if __name__ == '__main__':
 
     # Teledyne SSI Reaxus pumps with scaling
     # setup_devices = [
-    #     {'name': 'Pump 4', 'args': ['SSI Next Gen', 'COM14'],
+    #     {'name': 'Pump 1: sheath', 'args': ['SSI Next Gen', 'COM18'],
+    #         'kwargs': {'flow_rate_scale': 1,
+    #         'flow_rate_offset': 0,'scale_type': 'up'},
+    #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
+    #     {'name': 'Pump 4: sucrose sheath', 'args': ['SSI Next Gen', 'COM9'],
     #         'kwargs': {'flow_rate_scale': 1.0583,
     #         'flow_rate_offset': -33.462/1000,'scale_type': 'up'},
     #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-    #     {'name': 'Pump 3', 'args': ['SSI Next Gen', 'COM17'],
+    #     {'name': 'Pump 3: kenics B', 'args': ['SSI Next Gen', 'COM10'],
     #         'kwargs': {'flow_rate_scale': 1.0135,
     #         'flow_rate_offset': 5.1251/1000,'scale_type': 'up'},
     #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-    #     {'name': 'Pump 2', 'args': ['SSI Next Gen', 'COM18'],
+    #     {'name': 'Pump 2: kenics A', 'args': ['SSI Next Gen', 'COM11'],
     #         'kwargs': {'flow_rate_scale': 1.0497,
     #         'flow_rate_offset': -34.853/1000,'scale_type': 'up'},
     #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
     #      ]
 
-    # # Teledyne SSI Reaxus pumps without scaling
-    # setup_devices = [
-    #     {'name': 'Pump 4', 'args': ['SSI Next Gen', 'COM19'],
-    #         'kwargs': {'flow_rate_scale': 1,
-    #         'flow_rate_offset': 0,'scale_type': 'up'},
-    #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-    #     {'name': 'Pump 3', 'args': ['SSI Next Gen', 'COM14'],
-    #         'kwargs': {'flow_rate_scale': 1,
-    #         'flow_rate_offset': 0,'scale_type': 'up'},
-    #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-    #     {'name': 'Pump 2', 'args': ['SSI Next Gen', 'COM18'],
-    #         'kwargs': {'flow_rate_scale': 1,
-    #         'flow_rate_offset': 0,'scale_type': 'up'},
-    #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-    #     ]
+    # Teledyne SSI Reaxus pumps without scaling
+    setup_devices = [
+        {'name': 'Pump 4', 'args': ['SSI Next Gen', 'COM16'],
+            'kwargs': {'flow_rate_scale': 1,
+            'flow_rate_offset': 0,'scale_type': 'up'},
+            'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
+        {'name': 'Pump 3', 'args': ['SSI Next Gen', 'COM9'],
+            'kwargs': {'flow_rate_scale': 1,
+            'flow_rate_offset': 0,'scale_type': 'up'},
+            'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
+        {'name': 'Pump 2', 'args': ['SSI Next Gen', 'COM11'],
+            'kwargs': {'flow_rate_scale': 1,
+            'flow_rate_offset': 0,'scale_type': 'up'},
+            'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
+        ]
 
     # # SEC-SAXS pump, Teledyne SSI Reaxus pumps without scaling
     # setup_devices = [
@@ -6479,17 +6508,17 @@ if __name__ == '__main__':
     #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
     #     ]
 
-    # # TR-SAXS Pico Plus pumps
+    # # # TR-SAXS Pico Plus pumps
     # setup_devices = [
-    #     {'name': 'Buffer', 'args': ['Pico Plus', 'COM11'],
+    #     {'name': 'Buffer', 'args': ['Pico Plus', 'COM12'],
     #         'kwargs': {'syringe_id': '3 mL, Medline P.C.',
     #         'pump_address': '00', 'dual_syringe': 'False'},
     #         'ctrl_args': {'flow_rate' : '1', 'refill_rate' : '1'}},
-    #     {'name': 'Sample', 'args': ['Pico Plus', 'COM9'],
+    #     {'name': 'Sample', 'args': ['Pico Plus', 'COM13'],
     #         'kwargs': {'syringe_id': '1 mL, Medline P.C.',
     #          'pump_address': '00', 'dual_syringe': 'False'},
     #         'ctrl_args': {'flow_rate' : '1', 'refill_rate' : '1'}},
-    #     {'name': 'Sheath', 'args': ['Pico Plus', 'COM7'],
+    #     {'name': 'Sheath', 'args': ['Pico Plus', 'COM14'],
     #         'kwargs': {'syringe_id': '1 mL, Medline P.C.',
     #          'pump_address': '00', 'dual_syringe': 'False'},
     #         'ctrl_args': {'flow_rate' : '1', 'refill_rate' : '1'}},

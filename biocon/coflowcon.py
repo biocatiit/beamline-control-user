@@ -871,6 +871,11 @@ class CoflowControl(object):
         outlet_low_warning = self.settings['outlet_warning_threshold_low']
         outlet_high_warning = self.settings['outlet_warning_threshold_high']
 
+        sheath_monitor_avg = self.settings['sheath_monitor_avg']
+        outlet_monitor_avg = self.settings['outlet_monitor_avg']
+        sheath_mon_avg_time = self.settings['sheath_mon_avg_time']
+        outlet_mon_avg_time = self.settings['outlet_mon_avg_time']
+
         s1_type = None
         o1_type = None
         s2_type = None
@@ -956,26 +961,59 @@ class CoflowControl(object):
                     self.new_fr_time_list.append(cur_fr_time)
 
                 if self.monitor:
-                    if ((sheath_fr < sheath_low_warning*self.sheath_setpoint or
-                        sheath_fr > sheath_high_warning*self.sheath_setpoint)):
-                        logger.error('Sheath flow out of bounds (%f to %f): %f',
-                            sheath_low_warning*self.sheath_setpoint,
-                            sheath_high_warning*self.sheath_setpoint,
-                            sheath_fr)
+                    if sheath_monitor_avg or outlet_monitor_avg:
+                        max_pts = sheath_mon_avg_time/0.25 + 4
+                        idx = np.argmin(np.ags(np.array(self.fr_time_list[-max_pts:])
+                            -(cur_fr_time-sheath_mon_avg_time)))
 
-                        self._sheath_oob_error = True
-                        self._sheath_oob_flow = sheath_fr
+                    if not sheath_monitor_avg:
+                        if ((sheath_fr < sheath_low_warning*self.sheath_setpoint or
+                            sheath_fr > sheath_high_warning*self.sheath_setpoint)):
+                            logger.error('Sheath flow out of bounds (%f to %f): %f',
+                                sheath_low_warning*self.sheath_setpoint,
+                                sheath_high_warning*self.sheath_setpoint,
+                                sheath_fr)
+
+                            self._sheath_oob_error = True
+                            self._sheath_oob_flow = sheath_fr
+
+                    else:
+                        mean_fr = np.mean(self.sheath_fr_list[idx:])
+
+                        if ((mean_fr < sheath_low_warning*self.sheath_setpoint or
+                            mean_fr > sheath_high_warning*self.sheath_setpoint)):
+                            logger.error('Sheath flow out of bounds (%f to %f): %f',
+                                sheath_low_warning*self.sheath_setpoint,
+                                sheath_high_warning*self.sheath_setpoint,
+                                mean_fr)
+
+                            self._sheath_oob_error = True
+                            self._sheath_oob_flow = mean_fr
 
 
-                    if ((outlet_fr < outlet_low_warning*self.outlet_setpoint or
-                        outlet_fr > outlet_high_warning*self.outlet_setpoint)):
-                        logger.error('Outlet flow out of bounds (%f to %f): %f',
-                            outlet_low_warning*self.outlet_setpoint,
-                            outlet_high_warning*self.outlet_setpoint,
-                            outlet_fr)
+                    if not outlet_monitor_avg:
+                        if ((outlet_fr < outlet_low_warning*self.outlet_setpoint or
+                            outlet_fr > outlet_high_warning*self.outlet_setpoint)):
+                            logger.error('Outlet flow out of bounds (%f to %f): %f',
+                                outlet_low_warning*self.outlet_setpoint,
+                                outlet_high_warning*self.outlet_setpoint,
+                                outlet_fr)
 
-                        self._outlet_oob_error = True
-                        self._outlet_oob_flow = outlet_fr
+                            self._outlet_oob_error = True
+                            self._outlet_oob_flow = outlet_fr
+
+                    else:
+                        mean_fr = np.mean(self.outlet_fr_list[idx:])
+
+                        if ((mean_fr < outlet_low_warning*self.outlet_setpoint or
+                            mean_fr > outlet_high_warning*self.outlet_setpoint)):
+                            logger.error('Outlet flow out of bounds (%f to %f): %f',
+                                outlet_low_warning*self.outlet_setpoint,
+                                outlet_high_warning*self.outlet_setpoint,
+                                mean_fr)
+
+                            self._outlet_oob_error = True
+                            self._outlet_oob_flow = mean_fr
 
 
             if (not self._terminate_monitor_flow.is_set()
@@ -3715,6 +3753,10 @@ default_coflow_settings = {
         # 'outlet_warning_threshold_high' : 1.2,
         'outlet_warning_threshold_low'  : 0.98,
         'outlet_warning_threshold_high' : 1.02,
+        'sheath_monitor_avg'        : True,
+        'outlet_monitor_avg'        : False,
+        'sheath_mon_avg_time'       : 30,
+        'outlet_mon_avg_time'       : 30,
         'sheath_fr_mult'            : 1,
         'outlet_fr_mult'            : 1,
         # 'outlet_fr_mult'            : -1,

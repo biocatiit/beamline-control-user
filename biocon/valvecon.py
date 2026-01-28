@@ -30,6 +30,7 @@ import sys
 import ctypes
 import copy
 import traceback
+from concurrent.futures import ThreadPoolExecutor
 
 if __name__ != '__main__':
     logger = logging.getLogger(__name__)
@@ -348,6 +349,30 @@ class RheodyneValve(Valve):
 
 class RheodyneValveTTL(Valve):
     """
+    This uses the valve level logic control mode valve (note: only works for two
+    position valves). When the exernal level (e.g. TTL) is high the vale is in position 1,
+    when the external level is low the valve is in position 2.
+
+    This control expects an EPICS PV for a Digital output as device value
+
+    IMPORTANT NOTE: If a valve is set for the level logic control it will not
+    work in the standard USB control mode. In order to switch between the modes,
+    connect to the valve over USB as normal, and do the following:
+    1)  valve.send_command('D')
+        -   This checks the command state of the valve. A return value of 1
+            indicates that the valve is in the level logic state. Any other
+            return value indicates the valve is in a state that can be
+            controlled by USB commands.
+    2)  To switch to the USB control state, send the command valve.send_command('F02')
+        then power cycle the valve.
+    3)  To switch to level logic control, send the command valve.send_command('F01')
+        then power cycle the valve.
+    4)  After the valve power cycle, reconnect and check the state set correctly
+        using the command in step 1.
+
+    Wiring for this uses the DB9 connector on the back of the rheodyne valve
+    and pin 1 to ground and pin 6 to positive.
+
     """
 
     def __init__(self, name, device, positions, comm_lock=None):
@@ -355,7 +380,7 @@ class RheodyneValveTTL(Valve):
         This makes the initial serial connection, and then sets the MForce
         controller parameters to the correct values.
 
-        :param str device: The device comport as sent to pyserial
+        :param str device: EPICS PV
 
         :param str name: A unique identifier for the pump
         """
@@ -525,6 +550,148 @@ class CheminertValve(Valve):
 
         return ret, success
 
+class MultiValve(Valve):
+    """
+    Pass in settings for multiple valves and changes their positions nearly
+    synchronously. Reports position if position from all valves agrees.
+    """
+
+    def __init__(self, name, device, positions, valve_settings):
+        """
+        :param str device: The device comport as sent to pyserial
+
+        :param str name: A unique identifier for the pump
+
+        :param list valve_settings: A list of valve settings, one for each
+            valve to be controlled by MultiValve. Settings should be as they
+            would be passed to the ValvePanel.
+        """
+        self._valve_settings = valve_settings
+        self._valves = {}
+
+        Valve.__init__(self, name, device)
+
+        logstr = ("Initializing valve {} on port {}".format(self.name,
+            self.device))
+        logger.info(logstr)
+
+        self._positions = int(positions)
+
+    def connect(self):
+        if not self.connected:
+            with self.comm_lock:
+                for settings in self._valve_settings:
+                    name = settings['name']
+                    args = settings['args']
+                    kwargs = settings['kwargs']
+
+                    device_type = args[0]
+                    device = args[1]
+
+                    valve = known_valves[device_type](name, device, **kwargs)
+
+                    self._valves[name] = valve
+
+            self.connected = True
+
+        return self.connected
+
+    def get_status(self):
+        with ThreadPoolExecutor() as executor:
+            futures = []
+            for valve in self._valves.values():
+                future = executor.submit(valve.get_status)
+                futures.append(future)
+
+            valve_status = [f.result() for f in futures]
+
+        status = ''
+        for stat in valve_status:
+            if stat is not None and stat != '':
+                status += '{} status: {}, '.format(vn, stat)
+
+        return status
+
+    def get_error(self):
+        with ThreadPoolExecutor() as executor:
+            futures = []
+            for valve in self._valves.values():
+                future = executor.submit(valve.get_error)
+                futures.append(future)
+
+            valve_errs = [f.result() for f in futures]
+
+        error = ''
+        for err in valve_errs:
+            if err is not None and err != '':
+                error += '{} error: {}, '.format(vn, err)
+
+        if len(error) == 0:
+            error = None
+
+        return error
+
+    def get_position(self):
+        with ThreadPoolExecutor() as executor:
+            futures = []
+            for valve in self._valves.values():
+                future = executor.submit(valve.get_position)
+                futures.append(future)
+
+            valve_positions = [f.result() for f in futures]
+
+        try:
+            positions = list(map(int, valve_positions))
+
+            same = True
+
+            for p in positions[1:]:
+                if p != positions[0]:
+                    same = False
+                    break
+
+            if same:
+                position = positions[0]
+                logger.debug("Valve %s position %s", self.name, position)
+            else:
+                position = None
+                logger.error('Valve %s not all sub-valve positions are the same',
+                    self.name)
+
+        except Exception:
+            logger.error('Valve %s not all sub-valves returned valid positions',
+                self.name)
+            position = None
+
+        self._position = position
+
+        return position
+
+    def set_position(self, position):
+        position = int(position)
+
+        if position > self._positions:
+            logger.error('Cannot set valve %s to position %i, maximum position is %i',
+                self.name, position, self._positions)
+            success = False
+        elif position < 1:
+            logger.error('Cannot set valve %s to position %i, minimum position is 1',
+                self.name, position)
+            success = False
+
+        else:
+
+            with ThreadPoolExecutor() as executor:
+                futures = []
+                for valve in self._valves.values():
+                    future = executor.submit(valve.set_position, position)
+                    futures.append(future)
+
+                success = all([f.result() for f in futures])
+
+        return success
+
+
 class SoftValve(Valve):
     """
     Software valve for testing.
@@ -572,6 +739,7 @@ known_valves = {
     'RheodyneTTL'   : RheodyneValveTTL,
     'Soft'          : SoftValve,
     'Cheminert'     : CheminertValve,
+    'Multi'         : MultiValve,
     }
 
 class ValveCommThread(utils.CommManager):
@@ -851,7 +1019,7 @@ if __name__ == '__main__':
     # my_valve = CheminertValve(valve_args['name'], valve_args['args'][1],
     #     valve_args['kwargs']['positions'], baud=9600)
 
-    # my_rv = RheodyneValve('injection', 'COM20', 2)
+    # my_rv = RheodyneValve('injection', 'COM17', 2)
     # my_rv67.get_position()
     # my_rv67.set_position(4)
 
@@ -900,29 +1068,29 @@ if __name__ == '__main__':
     #         'kwargs': {'positions' : 2}},
     #     ]
 
-    # Coflow buffer valve
-    setup_devices = [
-        {'name': 'Buffer', 'args': ['Cheminert', 'COM4'],
-            'kwargs': {'positions': 10}},
-        ]
-
-    # # TR-SAXS laminar flow
+    # # Coflow buffer valve
     # setup_devices = [
-    #     {'name': 'Injection', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo14'],
-    #         'kwargs': {'positions' : 2}},
-    #     # {'name': 'Injection', 'args': ['Rheodyne', 'COM6'],
-    #     #     'kwargs': {'positions' : 2}},
-    #     {'name': 'Buffer 1', 'args': ['Rheodyne', 'COM10'],
-    #         'kwargs': {'positions' : 6}},
-    #     {'name': 'Buffer 2', 'args': ['Rheodyne', 'COM4'],
-    #         'kwargs': {'positions' : 6}},
-    #     {'name': 'Sample', 'args': ['Rheodyne', 'COM3'],
-    #         'kwargs': {'positions' : 6}},
-    #     {'name': 'Sheath 1', 'args': ['Rheodyne', 'COM21'],
-    #         'kwargs': {'positions' : 6}},
-    #     {'name': 'Sheath 2', 'args': ['Rheodyne', 'COM8'],
-    #         'kwargs': {'positions' : 6}},
+    #     {'name': 'Buffer', 'args': ['Cheminert', 'COM4'],
+    #         'kwargs': {'positions': 10}},
     #     ]
+
+    # TR-SAXS laminar flow
+    setup_devices = [
+        # {'name': 'Injection', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo14'],
+        #     'kwargs': {'positions' : 2}},
+        # {'name': 'Injection', 'args': ['Rheodyne', 'COM16'],
+        #     'kwargs': {'positions' : 2}},
+        {'name': 'Buffer 1', 'args': ['Rheodyne', 'COM6'],
+            'kwargs': {'positions' : 6}},
+        {'name': 'Buffer 2', 'args': ['Rheodyne', 'COM8'],
+            'kwargs': {'positions' : 6}},
+        {'name': 'Sample', 'args': ['Rheodyne', 'COM4'],
+            'kwargs': {'positions' : 6}},
+        {'name': 'Sheath 1', 'args': ['Rheodyne', 'COM5'],
+            'kwargs': {'positions' : 6}},
+        {'name': 'Sheath 2', 'args': ['Rheodyne', 'COM7'],
+            'kwargs': {'positions' : 6}},
+        ]
 
     # # New HPLC
     # setup_devices = [
@@ -965,6 +1133,38 @@ if __name__ == '__main__':
     # setup_devices = [
     #     {'name': 'MALS', 'args': ['Cheminert', 'COM8'],
     #         'kwargs': {'positions': 2}},
+    #     ]
+
+    #
+
+
+    # setup_devices = [
+    #     {'name': 'Sheath', 'args': ['Multi', None], 'kwargs': {'positions': 6,
+    #         'valve_settings': [
+    #             {'name': 'Sheath 1', 'args': ['Rheodyne', 'COM21'],
+    #                 'kwargs': {'positions' : 6}},
+    #             {'name': 'Sheath 2', 'args': ['Rheodyne', 'COM22'],
+    #                 'kwargs': {'positions' : 6}}]}},
+    #     {'name': 'Sucrose Sheath', 'args': ['Multi', None], 'kwargs': {'positions': 6,
+    #         'valve_settings': [
+    #             {'name': 'Selector 2', 'args': ['Rheodyne', 'COM8'],
+    #                 'kwargs': {'positions' : 6}},
+    #             {'name': 'Selector 6', 'args': ['Rheodyne', 'COM3'],
+    #                 'kwargs': {'positions' : 6}}]}},
+    #     {'name': 'Kenics B', 'args': ['Multi', None], 'kwargs': {'positions': 6,
+    #         'valve_settings': [
+    #             {'name': 'Selector 2', 'args': ['Rheodyne', 'COM6'],
+    #                 'kwargs': {'positions' : 6}},
+    #             {'name': 'Selector 6', 'args': ['Rheodyne', 'COM20'],
+    #                 'kwargs': {'positions' : 6}}]}},
+    #     {'name': 'Kenics A', 'args': ['Multi', None], 'kwargs': {'positions': 6,
+    #         'valve_settings': [
+    #             {'name': 'Selector 2', 'args': ['Rheodyne', 'COM4'],
+    #                 'kwargs': {'positions' : 6}},
+    #             {'name': 'Selector 6', 'args': ['Rheodyne', 'COM19'],
+    #                 'kwargs': {'positions' : 6}}]}}
+
+    #     ,
     #     ]
 
     # Local

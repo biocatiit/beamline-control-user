@@ -332,7 +332,7 @@ class TRScanPanel(wx.Panel):
         self.run_centering = wx.Button(ctr_win, label='Center Mixer')
         self.run_centering.Bind(wx.EVT_BUTTON, self._on_run_centering)
 
-        self.auto_center.SetValue(True)
+        self.auto_center.SetValue(self.settings['center_mixer'])
         self.center_start.SetValue(str(self.settings['center_start']))
         self.center_stop.SetValue(str(self.settings['center_stop']))
         self.center_step.SetValue(str(self.settings['center_step']))
@@ -370,6 +370,7 @@ class TRScanPanel(wx.Panel):
             flag=wx.ALIGN_CENTER_VERTICAL)
         ctr_sub_sizer3.Add(self.center_offset, border=self._FromDIP(5),
             flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT)
+        ctr_sub_sizer3.AddGrowableCol(1)
 
 
         centering_sizer = wx.BoxSizer(wx.VERTICAL)
@@ -380,7 +381,7 @@ class TRScanPanel(wx.Panel):
         centering_sizer.Add(ctr_sub_sizer2, border=self._FromDIP(5),
             flag=wx.LEFT|wx.RIGHT|wx.BOTTOM)
         centering_sizer.Add(ctr_sub_sizer3, border=self._FromDIP(5),
-            flag=wx.LEFT|wx.RIGHT|wx.BOTTOM)
+            flag=wx.LEFT|wx.RIGHT|wx.BOTTOM|wx.EXPAND)
         centering_sizer.Add(self.run_centering, border=self._FromDIP(5),
             flag=wx.LEFT|wx.RIGHT|wx.ALIGN_CENTER_HORIZONTAL)
 
@@ -394,7 +395,7 @@ class TRScanPanel(wx.Panel):
         tr_ctrl_sizer.Add(advanced_settings_pane, border=5,
             flag=wx.LEFT|wx.RIGHT|wx.BOTTOM)
         tr_ctrl_sizer.Add(centering_settings_pane, border=5,
-            flag=wx.LEFT|wx.RIGHT|wx.BOTTOM)
+            flag=wx.LEFT|wx.RIGHT|wx.BOTTOM|wx.EXPAND)
 
 
         self.scan_length = wx.StaticText(self)
@@ -1069,18 +1070,23 @@ class TRScanPanel(wx.Panel):
                         if x_start < x_end:
                             pco_start = x_start
                             pco_end = x_end
+                            backward = False
                         else:
-                            pco_start = x_start
-                            pco_end = x_end
+                            pco_start = x_end
+                            pco_end = x_start
+                            backward = True
                         pco_speed = vect_scan_speed[0]
                     else:
+                        # print('here')
                         pco_step = y_pco_step
                         if y_start < y_end:
                             pco_start = y_start
                             pco_end = y_end
+                            backward = False
                         else:
-                            pco_start = y_start
-                            pco_end = y_end
+                            pco_start = y_end
+                            pco_end = y_start
+                            backward = True
                         pco_speed = vect_scan_speed[1]
 
                     if pco_start % encoder_resolution != 0:
@@ -1092,12 +1098,21 @@ class TRScanPanel(wx.Panel):
                             encoder_resolution)
 
                     if abs(pco_start-pco_end) % pco_step == 0:
-                        pco_end -= min(encoder_resolution, pco_step)
+                        if backward:
+                            pco_start += min(encoder_resolution, pco_step)
+                        else:
+                            pco_end -= min(encoder_resolution, pco_step)
 
                     if isinstance(pco_step, float):
+                        # print(pco_step)
+                        # print(pco_end)
+                        # print(pco_start)
                         # num_images = int(round(float(abs(pco_end-pco_start))/pco_step))
                         num_images = int(round(ceil(float(abs(pco_end-pco_start))/pco_step)))
                     else:
+                        # print(pco_step)
+                        # print(pco_end)
+                        # print(pco_start)
                         # num_images = int(round(abs(pco_end-pco_start)/pco_step))
                         num_images = abs(pco_end-pco_start)/pco_step
                         num_images = num_images.to_integral_exact(rounding=ROUND_CEILING)
@@ -1799,7 +1814,7 @@ class TRScanPanel(wx.Panel):
 
         if y_pco_step % encoder_resolution != 0:
             y_pco_step = y_pco_step + encoder_resolution/D('2') #Round up
-            y_pco_step = self.round_to(x_pco_step, encoder_precision,
+            y_pco_step = self.round_to(y_pco_step, encoder_precision,
             encoder_resolution)
 
         return x_pco_step, y_pco_step, vect_scan_speed, vect_scan_accel, vect_return_speed, vect_return_accel
@@ -2879,7 +2894,7 @@ class TRFlowPanel(wx.Panel):
         self.buffer2_pump_panels = []
         self.pump_panels = {}
 
-        for pump in self.settings['buffer2_pump']:
+        for pump in self.settings['buffer1_pump']:
             panel = TRPumpPanel(pump_parent, self, pump)
 
             pump_sizer.Add(panel, flag=wx.LEFT|wx.TOP|wx.BOTTOM,
@@ -2887,7 +2902,7 @@ class TRFlowPanel(wx.Panel):
 
             self.pump_panels[pump['name']] = panel
 
-            self.buffer2_pump_panels.append(panel)
+            self.buffer1_pump_panels.append(panel)
 
         for pump in self.settings['sample_pump']:
             panel = TRPumpPanel(pump_parent, self, pump)
@@ -2899,7 +2914,7 @@ class TRFlowPanel(wx.Panel):
 
             self.sample_pump_panels.append(panel)
 
-        for pump in self.settings['buffer1_pump']:
+        for pump in self.settings['buffer2_pump']:
             panel = TRPumpPanel(pump_parent, self, pump)
 
             pump_sizer.Add(panel, flag=wx.LEFT|wx.TOP|wx.BOTTOM,
@@ -2907,7 +2922,7 @@ class TRFlowPanel(wx.Panel):
 
             self.pump_panels[pump['name']] = panel
 
-            self.buffer1_pump_panels.append(panel)
+            self.buffer2_pump_panels.append(panel)
 
         pump_sizer.AddSpacer(self._FromDIP(2))
 
@@ -4224,6 +4239,14 @@ class TRFlowPanel(wx.Panel):
                 if pump_panel.get_dual_syringe():
                     flow_rate = flow_rate*2
 
+                elif not self.chaotic_mixer:
+                    if (pump_name == self.settings['buffer1_pump'][0]['name']
+                        and len(self.settings['buffer1_pump']) == 1):
+                        flow_rate = flow_rate*2
+                    elif (pump_name == self.settings['buffer2_pump'][0]['name']
+                        and len(self.settings['buffer2_pump']) == 1):
+                        flow_rate = flow_rate*2
+
                 total_fr = total_fr + flow_rate
 
                 if pump_name == self.settings['sample_pump'][0]['name']:
@@ -4248,8 +4271,8 @@ class TRFlowPanel(wx.Panel):
                 metadata['Buffer 2 flow rate [{}]:'.format(flow_units)] = buffer2_fr
 
             else:
-                metadata['Buffer flow rate [{}]:'.format(flow_units)] = buffer1_fr
-                metadata['Sheath flow rate [{}]:'.format(flow_units)] = buffer2_fr
+                metadata['Total buffer flow rate [{}]:'.format(flow_units)] = buffer1_fr
+                metadata['Total sheath flow rate [{}]:'.format(flow_units)] = buffer2_fr
 
             metadata['Exposure start setting:'] = start_condition
             if start_condition == 'Fixed delay':
@@ -5554,8 +5577,10 @@ default_trsaxs_settings = {
     'scan_speed'            : 2,
     'num_scans'             : 1,
     'return_speed'          : 20,
+    # 'return_speed'          : 10,
     'scan_acceleration'     : 10,
     'return_acceleration'   : 100,
+    # 'return_acceleration'   : 40,
     'constant_scan_speed'   : True,
     'scan_start_offset_dist': 0,
     'scan_end_offset_dist'  : 0,
@@ -5566,6 +5591,7 @@ default_trsaxs_settings = {
     'motor_x_name'          : 'XY.X',
     'motor_y_name'          : 'XY.Y',
     'pco_direction'         : 'x',
+    # 'pco_direction'         : 'y',
     'pco_pulse_width'       : D('10'), #In microseconds, opt: 0.2, 1, 2.5, 10
     'pco_encoder_settle_t'  : D('0.075'), #In microseconds, opt: 0.075, 1, 4, 12
     'encoder_resolution'    : D('0.000001'), #for XMS160, in mm
@@ -5587,10 +5613,15 @@ default_trsaxs_settings = {
     'center_fw_height'      : 0.85,
     'center_shutter_pvs'    : [{'name': '18ID:LJT4:2:Bo6', 'open': 0, 'close': 1},
                                 {'name': '18ID:LJT4:2:Bo9', 'open': 1, 'close': 0}],
-    'center_start'          : -0.05,
+    'center_start'          : -0.05,  # Chaotic
     'center_stop'           : 0.05,
-    'center_step'           : 0.005,
+    'center_step'           : 0.002,
+    # 'center_start'          : -0.15,   # Laminar
+    # 'center_stop'           : 0.15,
+    # 'center_step'           : 0.005,
     'center_offset'         : 0,
+    'center_mixer'          : True,
+    # 'center_mixer'          : False,
     'remote_pump_ip'        : '164.54.204.8',
     'remote_pump_port'      : '5556',
     'remote_fm_ip'          : '164.54.204.8',
@@ -5598,28 +5629,28 @@ default_trsaxs_settings = {
     'remote_valve_ip'       : '164.54.204.8',
     'remote_valve_port'     : '5558',
     'device_communication'  : 'remote',
-    # 'injection_valve'       : [{'name': 'Injection', 'args': ['Rheodyne', 'COM6'],  #Chaotic flow
+    # 'injection_valve'       : [{'name': 'Injection', 'args': ['Rheodyne', 'COM16'],  #Chaotic flow
     #                             'kwargs': {'positions' : 2}},],
-    'injection_valve'       : [{'name': 'Injection 1', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo14'],
+    'injection_valve'       : [{'name': 'Injection 1', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo15'],
                                     'kwargs': {'positions' : 2}},
-                                {'name': 'Injection 2', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo14'],
+                                {'name': 'Injection 2', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo15'],
                                     'kwargs': {'positions' : 2}},
                                 ],
     'sample_valve'          : [],
     'buffer1_valve'         : [],
     'buffer2_valve'         : [],
-    'buffer2_pump'          : [{'name': 'Buffer 2', 'args': ['SSI Next Gen', 'COM14'],
-                                'kwargs': {'flow_rate_scale': 1.0583,
+    'buffer2_pump'          : [{'name': 'Buffer 2', 'args': ['SSI Next Gen', 'COM10'],
+                                'kwargs': {'flow_rate_scale': 1.045,
                                 'flow_rate_offset': -48.462/1000,'scale_type': 'up'},
                                 'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0,
                                 'max_pressure': 2000, 'continuous': True}}],
-    'sample_pump'           : [{'name': 'Sample', 'args': ['SSI Next Gen', 'COM17'],
-                                'kwargs': {'flow_rate_scale': 1.0135,
+    'sample_pump'           : [{'name': 'Sample', 'args': ['SSI Next Gen', 'COM9'],
+                                'kwargs': {'flow_rate_scale': 1.02,
                                 'flow_rate_offset': 0.1251/1000,'scale_type': 'up'},
                                 'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0,
                                 'max_pressure': 1800, 'continuous': True}}],
-    'buffer1_pump'           : [{'name': 'Buffer 1', 'args': ['SSI Next Gen', 'COM18'],
-                                'kwargs': {'flow_rate_scale': 1.0497,
+    'buffer1_pump'           : [{'name': 'Buffer 1', 'args': ['SSI Next Gen', 'COM7'],
+                                'kwargs': {'flow_rate_scale': 1.03,
                                 'flow_rate_offset': -19.853/1000,'scale_type': 'up'},
                                 'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0,
                                 'max_pressure': 2000, 'continuous': True}}],
@@ -5628,34 +5659,34 @@ default_trsaxs_settings = {
     'sample_valve_label'    : 'Sample',
     'buffer1_valve_label'   : 'Buffer 1',
     'buffer2_valve_label'   : 'Buffer 2',
-    # # 'injection_valve'       : [{'name': 'Injection', 'args': ['Rheodyne', 'COM6'], # Laminar flow
-    # #                             'kwargs': {'positions' : 2}},],
-    # 'injection_valve'       : [{'name': 'Injection', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo14'],
-    #                                 'kwargs': {'positions' : 2}},
+    # 'injection_valve'       : [{'name': 'Injection', 'args': ['Rheodyne', 'COM16'], # Laminar flow
+    #                             'kwargs': {'positions' : 2}},],
+    # # 'injection_valve'       : [{'name': 'Injection', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo14'],
+    # #                                 'kwargs': {'positions' : 2}},
     #                             # {'name': 'Injection 2', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo14'],
     #                             #     'kwargs': {'positions' : 2}},
-    #                             ],
-    # 'sample_valve'          : [{'name': 'Sample', 'args': ['Rheodyne', 'COM3'],
+    #                             # ],
+    # 'sample_valve'          : [{'name': 'Sample', 'args': ['Rheodyne', 'COM4'],
     #                             'kwargs': {'positions' : 6}},],
-    # 'buffer1_valve'         : [{'name': 'Buffer 1', 'args': ['Rheodyne', 'COM10'],
+    # 'buffer1_valve'         : [{'name': 'Buffer 1', 'args': ['Rheodyne', 'COM21'],
     #                             'kwargs': {'positions' : 6}},
-    #                             {'name': 'Buffer 2', 'args': ['Rheodyne', 'COM4'],
+    #                             {'name': 'Buffer 2', 'args': ['Rheodyne', 'COM8'],
     #                             'kwargs': {'positions' : 6}},],
-    # 'buffer2_valve'         : [{'name': 'Sheath 1', 'args': ['Rheodyne', 'COM21'],
+    # 'buffer2_valve'         : [{'name': 'Sheath 1', 'args': ['Rheodyne', 'COM6'],
     #                             'kwargs': {'positions' : 6}},
-    #                             {'name': 'Sheath 2', 'args': ['Rheodyne', 'COM8'],
+    #                             {'name': 'Sheath 2', 'args': ['Rheodyne', 'COM3'],
     #                             'kwargs': {'positions' : 6}},],
     # 'buffer1_pump'           : [{'name': 'Buffer', 'args': ['Pico Plus', 'COM11'],
     #                             'kwargs': {'syringe_id': '3 mL, Medline P.C.',
     #                             'pump_address': '00', 'dual_syringe': 'False'},
     #                             'ctrl_args': {'flow_rate' : '0.068', 'refill_rate' : '3',
     #                             'continuous': False}},],
-    # 'sample_pump'           : [{'name': 'Sample', 'args': ['Pico Plus', 'COM9'],
+    # 'sample_pump'           : [{'name': 'Sample', 'args': ['Pico Plus', 'COM12'],
     #                             'kwargs': {'syringe_id': '1 mL, Medline P.C.',
     #                             'pump_address': '00', 'dual_syringe': 'False'}, 'ctrl_args':
     #                             {'flow_rate' : '0.009', 'refill_rate' : '1',
     #                             'continuous': False}}],
-    # 'buffer2_pump'          : [{'name': 'Sheath', 'args': ['Pico Plus', 'COM7'],
+    # 'buffer2_pump'          : [{'name': 'Sheath', 'args': ['Pico Plus', 'COM14'],
     #                             'kwargs': {'syringe_id': '1 mL, Medline P.C.',
     #                             'pump_address': '00', 'dual_syringe': 'False'}, 'ctrl_args':
     #                             {'flow_rate' : '0.002', 'refill_rate' : '1',
@@ -5712,12 +5743,12 @@ default_trsaxs_settings = {
     # 'buffer2_valve_label'   : 'Sheath',
     'flow_units'            : 'mL/min',
     'pressure_units'        : 'psi',
-    'total_flow_rate_lam'   : '0.149', # For laminar flow
+    'total_flow_rate_lam'   : '0.150', # For laminar flow
     'total_flow_rate_ch'    : '6', # For chaotic flow
-    'dilution_ratio'        : '10', # For chaotic flow
+    'dilution_ratio'        : '5', # For chaotic flow
     'max_dilution'          : 50, # For chaotic flow
-    'max_flow_lam'              : 2, # For laminar flow
-    'max_flow_ch'              : 8, # For chaotic flow
+    'max_flow_lam'          : 2, # For laminar flow
+    'max_flow_ch'           : 8, # For chaotic flow
     'auto_set_valves'       : True,
     'valve_start_positions' : {'sample_valve': 2, 'buffer1_valve': 2,
                                 'buffer2_valve': 2, 'injection_valve': 2},
@@ -5735,8 +5766,8 @@ default_trsaxs_settings = {
     'autoinject_valve_pos'  : 1,
     'mixer_type'            : 'chaotic', # laminar or chaotic
     # 'mixer_type'            : 'laminar', # laminar or chaotic
-    'sample_ratio'          : '0.066', # For laminar flow
-    'sheath_ratio'          : '0.032', # For laminar flow
+    'sample_ratio'          : '0.0687', # For laminar flow
+    'sheath_ratio'          : '0.0763', # For laminar flow
     'buffer_change_cycles'  : 5, # For syringe pumps
     'simulated'             : False, # VERY IMPORTANT. MAKE SURE THIS IS FALSE FOR EXPERIMENTS
     }
