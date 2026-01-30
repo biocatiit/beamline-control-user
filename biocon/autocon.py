@@ -2943,9 +2943,27 @@ class AutoList(utils.ItemList):
                 file = None
 
         if file is not None:
-            self._add_spreadsheet(self, file)
+            with wx.TextEntryDialog(self, 'Enter filename prefix',
+                'Filename Prefix') as dialog:
 
-    def _add_spreadsheet(self, file):
+                if dialog.ShowModal() == wx.ID_OK:
+                    fname = dialog.GetValue()
+                else:
+                    fname = None
+
+        if file is not None and fname is not None:
+            with wx.NumberEntryDialog(self, 'Enter starting filename number',
+                'Filename Number') as dialog:
+
+                if dialog.ShowModal() == wx.ID_OK:
+                    fnum = dialog.GetValue()
+                else:
+                    fnum = None
+
+        if file is not None and fname is not None and fnum is not None:
+            self._add_spreadsheet(self, file, fname, fnum)
+
+    def _add_spreadsheet(self, file, fname, fnum):
         df = pd.read_excel(file)
 
         # Find starting well
@@ -3036,7 +3054,10 @@ class AutoList(utils.ItemList):
 
         sample_list.extend(sample_list_unordered)
 
-        for cmd_settings in sample_list:
+        for i, cmd_settings in sample_list:
+            filename = '{}{:04d}'.format(fname, fnum+i)
+            cmd_settings['filename'] = filename
+
             valid, err_msg = self._validate_cmd(cmd_settings)
 
             if valid:
