@@ -50,17 +50,17 @@ from six import string_types
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_03_00\\python_32')#add the path of the LoadElveflow.py
 # elve_version = '3.03.00'
 
-# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\DLL64\\DLL64') #add the path of the library here
-# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\Python_64')#add the path of the LoadElveflow.py
-# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\DLL32\\DLL32') #add the path of the library here
-# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\Python_32')#add the path of the LoadElveflow.py
-# elve_version = '3.07.02'
+sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\DLL64\\DLL64') #add the path of the library here
+sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\Python_64')#add the path of the LoadElveflow.py
+sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\DLL32\\DLL32') #add the path of the library here
+sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\Python_32')#add the path of the LoadElveflow.py
+elve_version = '3.07.02'
 
-sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_03\\DLL64\\DLL64') #add the path of the library here
-sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_03\\Python_64')#add the path of the LoadElveflow.py
-sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_03\\DLL32\\DLL32') #add the path of the library here
-sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_03\\Python_32')#add the path of the LoadElveflow.py
-elve_version = '3.07.03'
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_03\\DLL64\\DLL64') #add the path of the library here
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_03\\Python_64')#add the path of the LoadElveflow.py
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_03\\DLL32\\DLL32') #add the path of the library here
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_03\\Python_32')#add the path of the LoadElveflow.py
+# elve_version = '3.07.03'
 
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_08_06\\DLL\\DLL64') #add the path of the library here
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_08_06\\DLL\\Python\\Python_64')#add the path of the LoadElveflow.py
@@ -6416,7 +6416,7 @@ if __name__ == '__main__':
     #     {'name': 'sheath', 'args': ['VICI M50', 'COM6'],
     #         'kwargs': {'flow_cal': '627.72', 'backlash_cal': '9.814'},
     #         'ctrl_args': {'flow_rate': 1}},
-    #     {'name': 'outlet', 'args': ['OB1 Pump', 'COM15'],
+    #     {'name': 'outlet', 'args': ['OB1 Pump', 'COM14'],
     #         'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
     #         'min_pressure': -1000, 'max_pressure': 1000, 'P': -2, 'I': -0.15,
     #         'D': 0, 'bfs_instr_ID': bfs.instr_ID, 'comm_lock': ob1_comm_lock,
@@ -6550,12 +6550,12 @@ if __name__ == '__main__':
     #     {'name': 'outlet', 'args': ['Soft', None], 'kwargs': {}},
     #     ]
 
-    # # Longer pumps
-    # setup_devices = [
-    #     {'name': 'sheath', 'args': ['Longer L100S2', 'COM11'],
-    #         'kwargs': {'pump_addr': 1, 'flow_cal': 0.0569},
-    #         'ctrl_args': {'flow_rate': 1}},
-    #     ]
+    # Longer pumps
+    setup_devices = [
+        {'name': 'test', 'args': ['Longer L100S2', 'COM15'],
+            'kwargs': {'pump_addr': 1, 'flow_cal': 0.0512},
+            'ctrl_args': {'flow_rate': 1}},
+        ]
 
     # Local
     com_thread = PumpCommThread('PumpComm')
