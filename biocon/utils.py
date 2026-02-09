@@ -526,7 +526,13 @@ class WarningMessage(wx.Frame):
 
 class ValueEntry(wx.TextCtrl):
     def __init__(self, enter_callback, *args, **kwargs):
-        wx.TextCtrl.__init__(self, *args, style=wx.TE_PROCESS_ENTER, **kwargs)
+        if 'style' in kwargs:
+            st = kwargs.pop('style')
+            style = st|wx.TE_PROCESS_ENTER
+        else:
+            style = wx.TE_PROCESS_ENTER
+
+        wx.TextCtrl.__init__(self, *args, style=style, **kwargs)
 
         self._enter_callback = enter_callback
 
