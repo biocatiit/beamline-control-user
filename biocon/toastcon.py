@@ -80,6 +80,16 @@ class ToastMotorPanel(utils.DevicePanel):
             settings['device_data']['kwargs']['low_pv']))
         self.start_pv, connected = self._initialize_pv('{}.VAL'.format(
             settings['device_data']['kwargs']['start_pv']))
+        self.start_lnk1, connected = self._initialize_pv('{}.LNK1'.format(
+            settings['device_data']['kwargs']['start_pv']))
+        self.start_lnk2, connected = self._initialize_pv('{}.LNK2'.format(
+            settings['device_data']['kwargs']['start_pv']))
+
+        self.start_lnk1.put('{} CA'.format(settings['device_data']['kwargs']
+            ['motor']['args'][0]))
+        self.start_lnk2.put('{} CA'.format(settings['device_data']['kwargs']
+            ['motor']['args'][0]))
+
         self.motor_egu_pv, connected = self._initialize_pv('{}.EGU'.format(
             settings['device_data']['kwargs']['motor']['args'][0]))
         self.motor_speed_pv, connected = self._initialize_pv('{}.VELO'.format(
@@ -270,9 +280,9 @@ default_autosampler_settings = {
             }},
         ], # Compatibility with the standard format
     'device_communication'  : 'local',
-    'remote_device'         : 'toaster',
-    'remote_ip'             : '164.54.204.53',
-    'remote_port'           : '5557',
+    'remote_device'         : 'toaster', #Ignore
+    'remote_ip'             : '164.54.204.53', #Ignore
+    'remote_port'           : '5557', #Ignore
     'remote'                : False,
     'components'            : [],
     }
