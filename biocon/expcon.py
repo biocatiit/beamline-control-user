@@ -2885,6 +2885,7 @@ class ExpPanel(wx.Panel):
             size=self._FromDIP((60,-1)), validator=utils.CharValidator('int'))
         self.soft_trig = wx.Button(self, label='Send trigger')
         self.soft_trig.Bind(wx.EVT_BUTTOn, self._on_send_trigger)
+        self.soft_trig.Disable()
         self.muscle_sampling = wx.TextCtrl(self, value=self.settings['struck_measurement_time'],
             size=self._FromDIP((60,-1)), validator=utils.CharValidator('float'))
 
@@ -3478,8 +3479,10 @@ class ExpPanel(wx.Panel):
                 wx.CallAfter(self._show_timeout_dialog, val)
             elif status == 'waiting':
                 wx.CallAfter(self.set_status, 'Waiting for Trigger')
+                wx.CallAfter(self.soft_trig.Enable)
             elif status == 'exposing':
                 wx.CallAfter(self.set_status, 'Exposing')
+                wx.CallAfter(self.soft_trig.Disable)
 
         return status, val
 
