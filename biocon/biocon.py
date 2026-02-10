@@ -70,6 +70,7 @@ class BioFrame(wx.Frame):
 
         self._create_layout()
 
+        self.Layout()
         self.Fit()
         self.Raise()
 
@@ -547,7 +548,7 @@ if __name__ == '__main__':
         # ('hplc', biohplccon.HPLCPanel),
         # ('automator', autocon.AutoPanel),
         # ('autosampler', autosamplercon.AutosamplerPanel),
-        # ('toaster', toastcon.ToasterPanel),
+        ('toaster', toastcon.ToasterPanel),
         ])
 
     settings = {

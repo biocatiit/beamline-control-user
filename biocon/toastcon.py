@@ -60,9 +60,6 @@ class ToastMotorPanel(utils.DevicePanel):
 
         self.top_settings = settings
 
-        if biocon is not None:
-            settings['device_data'] = settings['device_init'][0]
-
         if settings['device_communication'] == 'remote':
             settings['remote'] = True
         else:
@@ -143,7 +140,8 @@ class ToastMotorPanel(utils.DevicePanel):
             None, motor_box)
 
         motor_sizer = wx.StaticBoxSizer(motor_box, wx.VERTICAL)
-        motor_sizer.Add(self.motor_panel, flag=wx.EXPAND, proportion=1)
+        motor_sizer.Add(self.motor_panel, flag=wx.EXPAND|wx.ALL,
+            border=self._FromDIP(5), proportion=1)
 
 
         toast_box = wx.StaticBox(parent, label='{} Controls'.format(
@@ -276,6 +274,8 @@ class ToasterPanel(wx.Panel):
 
         self.devices =[]
 
+        self.device_panel = ToastMotorPanel
+
         self._create_layout()
 
         # Enable these to init devices on startup
@@ -362,6 +362,10 @@ class ToasterPanel(wx.Panel):
         for device in self.devices:
             device.auto_stop()
 
+    def on_exit(self):
+        for device in self.devices:
+            device.on_exit()
+
 class ToasterFrame(utils.DeviceFrame):
 
     def __init__(self, name, settings, *args, **kwargs):
@@ -405,6 +409,7 @@ default_toaster_settings = {
     'remote_ip'             : '164.54.204.53', #Ignore
     'remote_port'           : '5557', #Ignore
     'remote'                : False,
+    'com_thread'            : None,
     'components'            : [],
     }
 

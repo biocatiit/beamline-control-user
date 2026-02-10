@@ -1639,7 +1639,7 @@ class ExpCommThread(threading.Thread):
         # det_exp_time.put(exp_time)
         # det_exp_period.put(exp_period)
 
-        if if self._settings['detector'] == '18IDpil1M:_epics':
+        if self._settings['detector'] == '18IDpil1M:_epics':
             det.set_trigger_mode('ext_trig')
         else:
             det.set_trigger_mode('ext_enable')
@@ -2884,7 +2884,7 @@ class ExpPanel(wx.Panel):
         self.num_trig = wx.TextCtrl(self, value=self.settings['num_trig'],
             size=self._FromDIP((60,-1)), validator=utils.CharValidator('int'))
         self.soft_trig = wx.Button(self, label='Send trigger')
-        self.soft_trig.Bind(wx.EVT_BUTTOn, self._on_send_trigger)
+        self.soft_trig.Bind(wx.EVT_BUTTON, self._on_send_trigger)
         self.soft_trig.Disable()
         self.muscle_sampling = wx.TextCtrl(self, value=self.settings['struck_measurement_time'],
             size=self._FromDIP((60,-1)), validator=utils.CharValidator('float'))
@@ -2936,7 +2936,7 @@ class ExpPanel(wx.Panel):
             border=self._FromDIP(15), flag=wx.LEFT|wx.ALIGN_CENTER_VERTICAL)
         trig_sizer.Add(self.num_trig, border=self._FromDIP(2),
             flag=wx.LEFT|wx.ALIGN_CENTER_VERTICAL)
-        trig_sizer.Add(self.wait_for_trig, border=self._FromDIP(2),
+        trig_sizer.Add(self.soft_trig, border=self._FromDIP(15),
             flag=wx.LEFT|wx.ALIGN_CENTER_VERTICAL)
         trig_sizer.AddStretchSpacer(1)
 
@@ -4757,7 +4757,7 @@ default_exposure_settings = {
     'shutter_permit_pv'     : 'XFD:ShutterPermit',
     'fe_shutter_open_pv'    : '18ID:rshtr:A:OPEN',
     'reopen_a_shutter'      : True,
-    'trigger_pv'            : '18ID:LJT4:2:Bo11.VAL'
+    'trigger_pv'            : '18ID:LJT4:2:Bo10.VAL',
 
     'struck_log_vals'       : [
         # Format: (mx_record_name, struck_channel, header_name,

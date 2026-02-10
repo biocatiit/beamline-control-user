@@ -3683,7 +3683,7 @@ class EpicsMXMotorPanel(wx.Panel):
 
         status_sizer = wx.StaticBoxSizer(wx.StaticBox(self, label='Info'),
             wx.VERTICAL)
-        status_sizer.Add(status_grid, 1, flag=wx.EXPAND)
+        status_sizer.Add(status_grid, 1, flag=wx.EXPAND|wx.ALL, border=self._FromDIP(2))
 
         self.pos_ctrl = wx.TextCtrl(self, value='',
             size=self._FromDIP((50,self.vert_size)),
@@ -3793,15 +3793,15 @@ class EpicsMXMotorPanel(wx.Panel):
         control_sizer = wx.StaticBoxSizer(wx.StaticBox(self, label='Controls'),
             wx.VERTICAL)
         control_sizer.Add(self.pos_sizer, border=self._FromDIP(2),
-            flag=wx.EXPAND|wx.BOTTOM)
+            flag=wx.EXPAND|wx.ALL)
         control_sizer.Add(mabs_sizer, border=self._FromDIP(2),
-            flag=wx.EXPAND|wx.BOTTOM)
+            flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM)
         control_sizer.Add(mrel_sizer, border=self._FromDIP(2),
-            flag=wx.EXPAND|wx.BOTTOM|wx.TOP)
+            flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM)
         control_sizer.Add(wx.StaticLine(self), border=self._FromDIP(10),
-            flag=wx.EXPAND|wx.LEFT|wx.RIGHT)
+            flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM)
         control_sizer.Add(ctrl_btn_sizer, border=self._FromDIP(2),
-            flag=wx.TOP|wx.EXPAND)
+            flag=wx.LEFT|wx.RIGHT|wx.BOTTOM|wx.EXPAND)
 
         top_sizer = wx.BoxSizer(wx.VERTICAL)
         top_sizer.Add(status_sizer, flag=wx.EXPAND)
