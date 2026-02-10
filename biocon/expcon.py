@@ -2880,6 +2880,8 @@ class ExpPanel(wx.Panel):
         self.wait_for_trig.SetValue(self.settings['wait_for_trig'])
         self.num_trig = wx.TextCtrl(self, value=self.settings['num_trig'],
             size=self._FromDIP((60,-1)), validator=utils.CharValidator('int'))
+        self.soft_trig = wx.Button(self, label='Send trigger')
+        self.soft_trig.Bind(wx.EVT_BUTTOn, self._on_send_trigger)
         self.muscle_sampling = wx.TextCtrl(self, value=self.settings['struck_measurement_time'],
             size=self._FromDIP((60,-1)), validator=utils.CharValidator('float'))
 
@@ -2929,6 +2931,8 @@ class ExpPanel(wx.Panel):
         trig_sizer.Add(wx.StaticText(self, label='Number of triggers:'),
             border=self._FromDIP(15), flag=wx.LEFT|wx.ALIGN_CENTER_VERTICAL)
         trig_sizer.Add(self.num_trig, border=self._FromDIP(2),
+            flag=wx.LEFT|wx.ALIGN_CENTER_VERTICAL)
+        trig_sizer.Add(self.wait_for_trig, border=self._FromDIP(2),
             flag=wx.LEFT|wx.ALIGN_CENTER_VERTICAL)
         trig_sizer.AddStretchSpacer(1)
 
@@ -3118,6 +3122,12 @@ class ExpPanel(wx.Panel):
         else:
             self.d_hutch_H_pv = None
 
+        trig_pv, connected = self._initialize_pv(self.settings['trigger_pv'])
+        if connected:
+            self.trigger_pv = trig_pv
+        else:
+            self.trigger_pv = None
+
         if self.settings['reopen_a_shutter']:
 
             c_beam_ready_pv, connected = self._initialize_pv(self.settings['c_hutch_beam_ready_pv'])
@@ -3232,6 +3242,12 @@ class ExpPanel(wx.Panel):
 
     def _on_stop_exp(self, evt):
         self.stop_exp()
+
+    def _on_send_trigger(self, evt):
+        if self.trigger_pv is not None:
+            self.trigger_pv.put(1, wait=True)
+            time.sleep(0.01)
+            self.trigger_pv.put(0)
 
     def start_exp(self, exp_only, exp_values=None, metadata_vals=None, verbose=True):
         self.abort_event.clear()
@@ -3384,6 +3400,10 @@ class ExpPanel(wx.Panel):
         if 'trsaxs_flow' in self.settings['components']:
             trsaxs_flow_panel = wx.FindWindowByName('trsaxs_flow')
             trsaxs_flow_panel.on_exposure_stop()
+
+        if 'toaster' in self.settings['components']:
+            toaster_panel = wx.FindWindowByName('toaster')
+            toaster_panel.auto_stop()
 
     def set_status(self, status):
         wx.CallAfter(self.status.SetLabel, status)
@@ -3920,11 +3940,24 @@ class ExpPanel(wx.Panel):
         else:
             uv_valid = True
 
+        if 'toaster' in self.settings['components']:
+            toaster_panel = wx.FindWindowByName('toaster')
+            toaster_started = toaster_panel.auto_start()
+        else:
+            toaster_started = True
+
         if not coflow_started:
             msg = ('Coflow failed to start, so exposure has been canceled. '
                 'Please correct the errors then start the exposure again.')
 
             wx.CallAfter(wx.MessageBox, msg, 'Error starting coflow',
+                style=wx.OK|wx.ICON_ERROR)
+
+        if not toaster_started:
+            msg = ('Toasting failed to start, so exposure has been canceled. '
+                'Please correct the errors then start the exposure again.')
+
+            wx.CallAfter(wx.MessageBox, msg, 'Error starting toasting',
                 style=wx.OK|wx.ICON_ERROR)
 
         if ('trsaxs_scan' in self.settings['components'] and 'trsaxs_flow' in self.settings['components']
@@ -3961,7 +3994,7 @@ class ExpPanel(wx.Panel):
             valid = True
         else:
             valid = (coflow_started and trsaxs_scan_valid and trsaxs_flow_valid
-                and scan_valid and uv_valid)
+                and scan_valid and uv_valid and toaster_started)
 
         return valid, comp_settings
 
@@ -4718,6 +4751,7 @@ default_exposure_settings = {
     'shutter_permit_pv'     : 'XFD:ShutterPermit',
     'fe_shutter_open_pv'    : '18ID:rshtr:A:OPEN',
     'reopen_a_shutter'      : True,
+    'trigger_pv'            : '18ID:LJT4:2:Bo11.VAL'
 
     'struck_log_vals'       : [
         # Format: (mx_record_name, struck_channel, header_name,

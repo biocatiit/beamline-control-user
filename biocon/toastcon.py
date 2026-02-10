@@ -58,6 +58,8 @@ class ToastMotorPanel(utils.DevicePanel):
         except Exception:
             biocon = None
 
+        self.top_settings = settings
+
         if biocon is not None:
             settings['device_data'] = settings['device_init'][0]
 
@@ -79,6 +81,8 @@ class ToastMotorPanel(utils.DevicePanel):
         self.low_pv, connected = self._initialize_pv('{}.VAL'.format(
             settings['device_data']['kwargs']['low_pv']))
         self.start_pv, connected = self._initialize_pv('{}.VAL'.format(
+            settings['device_data']['kwargs']['start_pv']))
+        self.stop_pv, connected = self._initialize_pv('{}.ABORT'.format(
             settings['device_data']['kwargs']['start_pv']))
         self.start_lnk1, connected = self._initialize_pv('{}.LNK1'.format(
             settings['device_data']['kwargs']['start_pv']))
@@ -189,10 +193,16 @@ class ToastMotorPanel(utils.DevicePanel):
         toast_ctrl_sizer.Add(self.speed_ctrl, flag=wx.ALIGN_CENTER_VERTICAL)
         toast_ctrl_sizer.Add(speed_units, flag=wx.ALIGN_CENTER_VERTICAL)
 
+        self.auto_toast = wx.CheckBox(toast_box, label='Start/stop toasting with exposure')
+        self.auto_toast.SetValue(False)
+
+        if 'exposure' not in self.top_settings['components']:
+            self.auto_toast.Disable()
+            self.auto_toast.Hide()
+
         start_button = epics.wx.PVButton(toast_box, self.start_pv, pushValue=1,
             label='Start')
-        stop_button = epics.wx.PVButton(toast_box, '{}.ABORT'.format(
-            self.settings['device_data']['kwargs']['start_pv']), pushValue=1,
+        stop_button = epics.wx.PVButton(toast_box, self.stop_pv, pushValue=1,
         label='Stop')
 
         button_sizer = wx.BoxSizer(wx.HORIZONTAL)
@@ -201,6 +211,8 @@ class ToastMotorPanel(utils.DevicePanel):
 
         toast_sizer = wx.StaticBoxSizer(toast_box, wx.VERTICAL)
         toast_sizer.Add(toast_ctrl_sizer, flag=wx.EXPAND|wx.ALL,
+            border=self._FromDIP(5))
+        toast_sizer.Add(self.auto_toast, flag=wx.BOTTOM|wx.LEFT|wx.RIGHT,
             border=self._FromDIP(5))
         toast_sizer.Add(button_sizer, flag=wx.BOTTOM|wx.LEFT|wx.RIGHT|
             wx.ALIGN_CENTER_HORIZONTAL, border=self._FromDIP(5))
@@ -233,6 +245,20 @@ class ToastMotorPanel(utils.DevicePanel):
         if speed is not None:
             self.speed_ctrl.SafeChangeValue(str(speed))
 
+    def auto_start(self):
+        auto = self.auto_toast.GetValue()
+
+        if auto:
+            self.start_pv.put(1, wait=True)
+
+        return True
+
+    def auto_stop(self):
+        auto = self.auto_toast.GetValue()
+
+        if auto:
+            self.stop_pv.put(1)
+
     def _on_close(self):
         """Device specific stuff goes here"""
         for pv, cbid in self._callbacks:
@@ -240,6 +266,101 @@ class ToastMotorPanel(utils.DevicePanel):
 
     def on_exit(self):
         self.close()
+
+class ToasterPanel(wx.Panel):
+
+    def __init__(self, settings, *args, **kwargs):
+
+        wx.Panel.__init__(self, *args, **kwargs)
+        self.settings = settings
+
+        self.devices =[]
+
+        self._create_layout()
+
+        # Enable these to init devices on startup
+        self.setup_devices = self.settings.pop('device_init', None)
+        self._init_devices()
+
+    def _FromDIP(self, size):
+        # This is a hack to provide easy back compatibility with wxpython < 4.1
+        try:
+            return self.FromDIP(size)
+        except Exception:
+            return size
+
+
+    def _create_layout(self):
+        """Creates the layout"""
+
+        #Overwrite this
+        self.sizer = wx.BoxSizer(wx.HORIZONTAL)
+
+        device_sizer = wx.BoxSizer(wx.VERTICAL)
+        device_sizer.Add(self.sizer, 1, flag=wx.EXPAND)
+
+        self.device_parent = wx.Panel(self)
+
+        self.device_parent.SetSizer(device_sizer)
+
+        top_sizer = wx.BoxSizer(wx.VERTICAL)
+        top_sizer.Add(self.device_parent, 1, flag=wx.EXPAND)
+
+        self.SetSizer(top_sizer)
+
+    def _init_devices(self):
+        """
+        This is a convenience function for initalizing devices on startup, if you
+        already know what devices you want to add. You can add/comment it out in
+        the ``__init__`` if you want to not load any devices on startup.
+
+        If you want to add devices here, add them to the ``setup_devices`` list.
+        Each entry should be an iterable with the following parameters: name,
+        device type, comport, arg list, and kwarg dict in that order. How the
+        arg list and kwarg dict are handled are defined in the
+        DevicePanel._init_devices function, and depends on the device type.
+
+        Add this to the _init__ and add a self.setup_devices list to the init
+        """
+        if not self.devices:
+            try:
+                self.sizer.Remove(0)
+            except Exception:
+                pass
+
+        logger.info('Initializing %s devices on startup', str(len(self.setup_devices)))
+
+        if self.setup_devices is not None:
+            for device in self.setup_devices:
+                dev_settings = {}
+                for key, val in self.settings.items():
+                    if key != 'com_thread':
+                        try:
+                            dev_settings[key] = copy.deepcopy(val)
+                        except TypeError:
+                            dev_settings[key] = val
+                    else:
+                        dev_settings[key] = val
+
+                dev_settings['device_data'] = device
+                new_device = self.device_panel(self.device_parent, wx.ID_ANY,
+                    dev_settings)
+
+                self.sizer.Add(new_device, 1, flag=wx.EXPAND|wx.ALL,
+                    border=self._FromDIP(3))
+                self.devices.append(new_device)
+
+        self.Layout()
+        self.Fit()
+
+    def auto_start(self):
+        success = [device.auto_start() for device in self.devices]
+
+        return all(success)
+
+    def auto_stop(self):
+        for device in self.devices:
+            device.auto_stop()
 
 class ToasterFrame(utils.DeviceFrame):
 
@@ -258,7 +379,7 @@ class ToasterFrame(utils.DeviceFrame):
 
 
 #Settings
-default_autosampler_settings = {
+default_toaster_settings = {
     'device_init'           : [
         {'name': 'Toast H', 'args': [], 'kwargs': {
             'motor'             : {'name': 'toast_h', 'args': ['18ID_DMC_E05:33'],
