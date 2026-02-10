@@ -1078,17 +1078,17 @@ if __name__ == '__main__':
     setup_devices = [
         # {'name': 'Injection', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo14'],
         #     'kwargs': {'positions' : 2}},
-        {'name': 'Injection', 'args': ['Rheodyne', 'COM16'],
-            'kwargs': {'positions' : 2}},
-        {'name': 'Buffer 1', 'args': ['Rheodyne', 'COM21'],
+        # {'name': 'Injection', 'args': ['Rheodyne', 'COM16'],
+        #     'kwargs': {'positions' : 2}},
+        {'name': 'Buffer 1', 'args': ['Rheodyne', 'COM6'],
             'kwargs': {'positions' : 6}},
         {'name': 'Buffer 2', 'args': ['Rheodyne', 'COM8'],
             'kwargs': {'positions' : 6}},
         {'name': 'Sample', 'args': ['Rheodyne', 'COM4'],
             'kwargs': {'positions' : 6}},
-        {'name': 'Sheath 1', 'args': ['Rheodyne', 'COM6'],
+        {'name': 'Sheath 1', 'args': ['Rheodyne', 'COM5'],
             'kwargs': {'positions' : 6}},
-        {'name': 'Sheath 2', 'args': ['Rheodyne', 'COM3'],
+        {'name': 'Sheath 2', 'args': ['Rheodyne', 'COM7'],
             'kwargs': {'positions' : 6}},
         ]
 

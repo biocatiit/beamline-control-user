@@ -46,6 +46,7 @@ import spectrometercon
 import biohplccon
 import autocon
 import autosamplercon
+import toastcon
 
 class BioFrame(wx.Frame):
     """
@@ -183,6 +184,10 @@ class BioFrame(wx.Frame):
                 'metadata' in component_sizers and 'coflow' in component_sizers):
                     exp_sizer.Add(component_sizers['uv'], border=self._FromDIP(5),
                         flag=wx.EXPAND|wx.ALL)
+
+            if 'toaster' in component_sizers:
+                exp_sizer.Add(component_sizers['toaster'], border=self._FromDIP(5),
+                    flag=wx.EXPAND|wx.ALL)
 
             panel_sizer.Add(exp_sizer, flag=wx.EXPAND)
 
@@ -524,6 +529,10 @@ if __name__ == '__main__':
     autosampler_settings['device_data'] = autosampler_settings['device_init'][0]
     autosampler_settings['inline_panel'] = True
 
+    ###################################################################
+    # Toaster Settings
+    toaster_settings = toastcon.default_toaster_settings
+
     biocon_settings = {}
 
     components = OrderedDict([
@@ -538,6 +547,7 @@ if __name__ == '__main__':
         # ('hplc', biohplccon.HPLCPanel),
         # ('automator', autocon.AutoPanel),
         # ('autosampler', autosamplercon.AutosamplerPanel),
+        # ('toaster', toastcon.ToasterPanel),
         ])
 
     settings = {
@@ -552,6 +562,7 @@ if __name__ == '__main__':
         'hplc'          : hplc_settings,
         'automator'     : automator_settings,
         'autosampler'   : autosampler_settings,
+        'toaster'       : toaster_settings,
         'components'    : components,
         'biocon'        : biocon_settings,
         }

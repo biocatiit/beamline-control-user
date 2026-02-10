@@ -36,6 +36,7 @@ if __name__ != '__main__':
 
 import wx
 import wx.lib.scrolledpanel as scrolled
+import pandas as pd
 
 import utils
 import biohplccon
@@ -2842,12 +2843,17 @@ class AutoList(utils.ItemList):
         move_item_down_btn = wx.Button(button_parent, label='Move down')
         move_item_down_btn.Bind(wx.EVT_BUTTON, self._on_move_item_down)
 
+        add_spreadsheet_btn = wx.Button(button_parent, label='Add from Spreadsheet')
+        add_spreadsheet_btn.Bind(wx.EVT_BUTTON, self._on_add_spreadsheet)
+
         button_sizer = wx.BoxSizer(wx.HORIZONTAL)
         button_sizer.Add(add_item_btn, border=self._FromDIP(5), flag=wx.LEFT)
         button_sizer.Add(remove_item_btn, border=self._FromDIP(5), flag=wx.LEFT)
         button_sizer.Add(move_item_up_btn, border=self._FromDIP(5),
             flag=wx.LEFT)
         button_sizer.Add(move_item_down_btn, border=self._FromDIP(5),
+            flag=wx.LEFT)
+        button_sizer.Add(add_spreadsheet_btn, border=self._FromDIP(5),
             flag=wx.LEFT)
 
         return button_sizer
@@ -2927,58 +2933,156 @@ class AutoList(utils.ItemList):
                     elif ret == wx.ID_NO:
                         self._add_item(cmd_settings)
 
+    def _on_add_spreadsheet(self, evt):
+        with wx.FileDialog(self, 'Select a sample spreadsheet',
+            style=wx.FD_OPEN) as dialog:
+
+            if dialog.ShowModal() == wx.ID_OK:
+                file = dialog.GetPath()
+            else:
+                file = None
+
+        if file is not None:
+            with wx.TextEntryDialog(self, 'Enter filename prefix',
+                'Filename Prefix') as dialog:
+
+                if dialog.ShowModal() == wx.ID_OK:
+                    fname = dialog.GetValue()
+                else:
+                    fname = None
+
+        if file is not None and fname is not None:
+            with wx.NumberEntryDialog(self, 'Enter starting filename number',
+                'Filename Number') as dialog:
+
+                if dialog.ShowModal() == wx.ID_OK:
+                    fnum = dialog.GetValue()
+                else:
+                    fnum = None
+
+        if file is not None and fname is not None and fnum is not None:
+            self._add_spreadsheet(self, file, fname, fnum)
+
+    def _add_spreadsheet(self, file, fname, fnum):
+        df = pd.read_excel(file)
+
+        # Find starting well
+        temp = df.where(df == 'Well').dropna(how='all').dropna(axis=1)
+        row = list(temp.index)[0]
+
+        # Drop excess rows and rename columns appropriately
+        # Also trim to just columns of interest.
+        df = df.drop(index=range(0, row)).reset_index(drop=True)
+        df = df.rename(columns=df.iloc[0])
+        df = df.drop(index=0).reset_index(drop=True).loc[:, "Well":"Notes"]
+
+        # Filter out every row that doesn't have a injection volume
+        final_df = df[df['Injection volume (uL)'].notnull()]
+
+        default_settings = self._get_default_batch_autosampler_settings()
+
+        sample_list_ordered = []
+        sample_list_unordered = []
+
+        for val, row in final_df.iterrows():
+            settings = copy.deepcopy(default_settings)
+
+            order_val = row['Order']
+
+            if pd.isna(order_val):
+                ordered = False
+                order = [1]
+            else:
+                ordered = True
+                order = order_val.split(',')
+
+            for ov in order:
+                # General parameters
+                if not pd.isna(row['Notes']):
+                    settings['notes'] = row['Notes']
+                else:
+                    settings['notes'] = ''
+
+                if not pd.isna(row['Concentration (mg/ml)']):
+                    settings['conc'] = row['Concentration (mg/ml)']
+                else:
+                    settings['conc'] = ''
+
+                if not pd.isna(row['Buffer']):
+                    settings['buf'] = row['Buffer']
+                else:
+                    settings['buf'] = ''
+
+                if not pd.isna(row['Sample']):
+                    settings['sample_name'] = row['Sample']
+                else:
+                    settings['sample_name'] = ''
+
+                if not pd.isna(row['Is buffer?']):
+                    if row['Is buffer'].lower().startswith('y'):
+                        settings['is_buf'] = True
+                    else:
+                        settings['is_buf'] = False
+                else:
+                    settings['is_buf'] = False
+
+                if not pd.isna(row['Use separate buffer']):
+                    if row['Use separate buffer'].lower().startswith('y'):
+                        settings['separate_buf'] = True
+                    else:
+                        settings['separate_buf'] = False
+                else:
+                    settings['separate_buf'] = False
+
+                # Loading and injection parameters
+                settings['volume'] = float(row['Injection volume (uL)'])
+
+                # Autosampler parameters
+                settings['sample_well'] = row['Well']
+
+                if ordered:
+                    sample_list_ordered.append([int(ov), settings])
+                else:
+                    sample_list_unordered.append(settings)
+
+        sample_list_ordered.sort(key=lambda val: val[0])
+
+        sample_list = []
+
+        for val, settings in sample_list_ordered:
+            sample_list.append(settings)
+
+        sample_list.extend(sample_list_unordered)
+
+        for i, cmd_settings in sample_list:
+            filename = '{}{:04d}'.format(fname, fnum+i)
+            cmd_settings['filename'] = filename
+
+            valid, err_msg = self._validate_cmd(cmd_settings)
+
+            if valid:
+                self._add_item(cmd_settings)
+            else:
+                with wx.MessageDialog(self, err_msg,
+                    caption='Action Parameter Errors',
+                    style=wx.YES_NO|wx.CANCEL|wx.YES_DEFAULT) as err_dialog:
+
+                    err_dialog.SetYesNoLabels('Fix errors', 'Continue without fixing')
+
+                    ret = err_dialog.ShowModal()
+
+                    if ret == wx.ID_YES:
+                        wx.CallAfter(self._add_action, cmd_settings)
+                    elif ret == wx.ID_NO:
+                        self._add_item(cmd_settings)
+                    elif ret == wx.ID_CANCEL:
+                        break
+
     def _get_cmd_settings(self, choice, settings):
         if choice is not None and choice != '----Staff Methods----':
             if choice == 'Run batch SAXS sample':
-                as_panel = wx.FindWindowByName('autosampler')
-                default_batch_settings = as_panel.get_load_and_inject_settings()
-
                 if settings is None:
-                    exp_panel = wx.FindWindowByName('exposure')
-                    default_exp_settings, _ = exp_panel.get_exp_values(False)
-
-                    coflow_panel = wx.FindWindowByName('coflow')
-                    coflow_fr = coflow_panel.get_flow_rate()
-                    try:
-                        coflow_fr = float(coflow_fr)
-                    except ValueError:
-                        coflow_fr = float(coflow_panel.settings['lc_flow_rate'])
-
-                    metadata_panel = wx.FindWindowByName('metadata')
-                    metadata_panel.saxs_panel.set_metadata({'Experiment type:' : 'Batch mode SAXS'})
-                    default_metadata = metadata_panel.metadata()
-
-                    default_settings = copy.deepcopy(default_batch_saxs_settings)
-
-                    # General parameters
-                    default_settings['notes'] = default_metadata['Notes:']
-                    default_settings['conc'] = default_metadata['Concentration [mg/ml]:']
-                    default_settings['buf'] = default_metadata['Buffer:']
-                    default_settings['sample_name'] = default_metadata['Sample:']
-                    default_settings['is_buf'] = default_metadata['Is Buffer:']
-                    default_settings['separate_buf'] = default_metadata['Needs Separate Buffer Measurement:']
-
-                    # Loading and injection parameters
-                    default_settings['volume'] = default_batch_settings['volume']
-                    default_settings['draw_rate'] = default_batch_settings['draw_rate']
-                    default_settings['dwell_time'] = default_batch_settings['dwell_time']
-                    default_settings['rate'] = default_batch_settings['rate']
-                    default_settings['start_delay'] = default_batch_settings['start_delay']
-                    default_settings['end_delay'] = default_batch_settings['end_delay']
-                    default_settings['clean_needle'] = default_batch_settings['clean_needle']
-
-
-                    # Exposure parameters
-                    default_settings['num_frames'] = default_exp_settings['num_frames']
-                    default_settings['exp_time'] = default_exp_settings['exp_time']
-                    default_settings['exp_period'] = default_exp_settings['exp_period']
-                    default_settings['data_dir'] = exp_panel.settings['base_data_dir']
-                    default_settings['num_trig'] = default_exp_settings['num_trig']
-                    #Not used, for completeness
-                    default_settings['struck_measurement_time'] = default_exp_settings['struck_measurement_time']
-
-                    #Coflow parameters
-                    default_settings['coflow_fr'] = coflow_fr
+                    default_settings = self._get_default_batch_autosampler_settings()
 
                 else:
                     default_settings = settings
@@ -3240,6 +3344,59 @@ class AutoList(utils.ItemList):
             cmd_settings = None
 
         return cmd_settings
+
+    def _get_default_batch_autosampler_settings(self):
+
+        as_panel = wx.FindWindowByName('autosampler')
+        default_batch_settings = as_panel.get_load_and_inject_settings()
+
+        exp_panel = wx.FindWindowByName('exposure')
+        default_exp_settings, _ = exp_panel.get_exp_values(False)
+
+        coflow_panel = wx.FindWindowByName('coflow')
+        coflow_fr = coflow_panel.get_flow_rate()
+        try:
+            coflow_fr = float(coflow_fr)
+        except ValueError:
+            coflow_fr = float(coflow_panel.settings['lc_flow_rate'])
+
+        metadata_panel = wx.FindWindowByName('metadata')
+        metadata_panel.saxs_panel.set_metadata({'Experiment type:' : 'Batch mode SAXS'})
+        default_metadata = metadata_panel.metadata()
+
+        default_settings = copy.deepcopy(default_batch_saxs_settings)
+
+        # General parameters
+        default_settings['notes'] = default_metadata['Notes:']
+        default_settings['conc'] = default_metadata['Concentration [mg/ml]:']
+        default_settings['buf'] = default_metadata['Buffer:']
+        default_settings['sample_name'] = default_metadata['Sample:']
+        default_settings['is_buf'] = default_metadata['Is Buffer:']
+        default_settings['separate_buf'] = default_metadata['Needs Separate Buffer Measurement:']
+
+        # Loading and injection parameters
+        default_settings['volume'] = default_batch_settings['volume']
+        default_settings['draw_rate'] = default_batch_settings['draw_rate']
+        default_settings['dwell_time'] = default_batch_settings['dwell_time']
+        default_settings['rate'] = default_batch_settings['rate']
+        default_settings['start_delay'] = default_batch_settings['start_delay']
+        default_settings['end_delay'] = default_batch_settings['end_delay']
+        default_settings['clean_needle'] = default_batch_settings['clean_needle']
+
+
+        # Exposure parameters
+        default_settings['num_frames'] = default_exp_settings['num_frames']
+        default_settings['exp_time'] = default_exp_settings['exp_time']
+        default_settings['exp_period'] = default_exp_settings['exp_period']
+        default_settings['data_dir'] = exp_panel.settings['base_data_dir']
+        default_settings['num_trig'] = default_exp_settings['num_trig']
+        #Not used, for completeness
+        default_settings['struck_measurement_time'] = default_exp_settings['struck_measurement_time']
+
+        #Coflow parameters
+        default_settings['coflow_fr'] = coflow_fr
+
+        return default_settings
 
     def _validate_cmd(self, cmd_settings):
         err_msg = ''

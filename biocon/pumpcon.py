@@ -44,20 +44,41 @@ import serial.tools.list_ports as list_ports
 import wx
 from six import string_types
 
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_03_00\\DLL64\\Elveflow64DLL') #add the path of the library here
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_03_00\\python_64')#add the path of the LoadElveflow.py
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_03_00\\DLL32\\Elveflow32DLL') #add the path of the library here
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_03_00\\python_32')#add the path of the LoadElveflow.py
+# elve_version = '3.03.00'
+
 sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\DLL64\\DLL64') #add the path of the library here
-sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\python_64')#add the path of the LoadElveflow.py
+sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\Python_64')#add the path of the LoadElveflow.py
 sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\DLL32\\DLL32') #add the path of the library here
-sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\python_32')#add the path of the LoadElveflow.py
+sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\Python_32')#add the path of the LoadElveflow.py
+elve_version = '3.07.02'
+
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_03\\DLL64\\DLL64') #add the path of the library here
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_03\\Python_64')#add the path of the LoadElveflow.py
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_03\\DLL32\\DLL32') #add the path of the library here
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_03\\Python_32')#add the path of the LoadElveflow.py
+# elve_version = '3.07.03'
 
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_08_06\\DLL\\DLL64') #add the path of the library here
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_08_06\\DLL\\Python\\Python_64')#add the path of the LoadElveflow.py
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_08_06\\DLL\\DLL32') #add the path of the library here
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_08_06\\DLL\\Python\\Python_32')#add the path of the LoadElveflow.py
+# elve_version = '3.08.06'
 
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_09_04\\DLL\\DLL64') #add the path of the library here
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_09_04\\DLL\\Python\\Python_64')#add the path of the LoadElveflow.py
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_09_04\\DLL\\DLL32') #add the path of the library here
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_09_04\\DLL\\Python\\Python_32')#add the path of the LoadElveflow.py
+# elve_version = '3.09.04'
+
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_10_03\\DLL\\DLL64') #add the path of the library here
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_10_03\\DLL\\Python\\Python_64')#add the path of the LoadElveflow.py
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_10_03\\DLL\\DLL32') #add the path of the library here
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_10_03\\DLL\\Python\\Python_32')#add the path of the LoadElveflow.py
+# elve_version = '3.10.03'
 
 try:
     import Elveflow64 as Elveflow
@@ -2788,6 +2809,8 @@ class SSINextGenPump(Pump):
             'Upper pressure limit' : self.upl_fault,
             'Lower pressure limit' : self.lpl_fault, 'Leak': self.leak_fault,
             }
+
+        # print(faults)
 
         return faults
 
@@ -6393,7 +6416,7 @@ if __name__ == '__main__':
     #     {'name': 'sheath', 'args': ['VICI M50', 'COM6'],
     #         'kwargs': {'flow_cal': '627.72', 'backlash_cal': '9.814'},
     #         'ctrl_args': {'flow_rate': 1}},
-    #     {'name': 'outlet', 'args': ['OB1 Pump', 'COM15'],
+    #     {'name': 'outlet', 'args': ['OB1 Pump', 'COM14'],
     #         'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
     #         'min_pressure': -1000, 'max_pressure': 1000, 'P': -2, 'I': -0.15,
     #         'D': 0, 'bfs_instr_ID': bfs.instr_ID, 'comm_lock': ob1_comm_lock,
@@ -6447,15 +6470,15 @@ if __name__ == '__main__':
     #         'kwargs': {'flow_rate_scale': 1,
     #         'flow_rate_offset': 0,'scale_type': 'up'},
     #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-    #     {'name': 'Pump 4: sucrose sheath', 'args': ['SSI Next Gen', 'COM7'],
+    #     {'name': 'Pump 4: sucrose sheath', 'args': ['SSI Next Gen', 'COM9'],
     #         'kwargs': {'flow_rate_scale': 1.0583,
     #         'flow_rate_offset': -33.462/1000,'scale_type': 'up'},
     #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-    #     {'name': 'Pump 3: kenics B', 'args': ['SSI Next Gen', 'COM9'],
+    #     {'name': 'Pump 3: kenics B', 'args': ['SSI Next Gen', 'COM10'],
     #         'kwargs': {'flow_rate_scale': 1.0135,
     #         'flow_rate_offset': 5.1251/1000,'scale_type': 'up'},
     #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-    #     {'name': 'Pump 2: kenics A', 'args': ['SSI Next Gen', 'COM15'],
+    #     {'name': 'Pump 2: kenics A', 'args': ['SSI Next Gen', 'COM11'],
     #         'kwargs': {'flow_rate_scale': 1.0497,
     #         'flow_rate_offset': -34.853/1000,'scale_type': 'up'},
     #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
@@ -6463,7 +6486,7 @@ if __name__ == '__main__':
 
     # Teledyne SSI Reaxus pumps without scaling
     setup_devices = [
-        {'name': 'Pump 4', 'args': ['SSI Next Gen', 'COM10'],
+        {'name': 'Pump 4', 'args': ['SSI Next Gen', 'COM16'],
             'kwargs': {'flow_rate_scale': 1,
             'flow_rate_offset': 0,'scale_type': 'up'},
             'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
@@ -6471,7 +6494,7 @@ if __name__ == '__main__':
             'kwargs': {'flow_rate_scale': 1,
             'flow_rate_offset': 0,'scale_type': 'up'},
             'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-        {'name': 'Pump 2', 'args': ['SSI Next Gen', 'COM7'],
+        {'name': 'Pump 2', 'args': ['SSI Next Gen', 'COM11'],
             'kwargs': {'flow_rate_scale': 1,
             'flow_rate_offset': 0,'scale_type': 'up'},
             'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
@@ -6487,11 +6510,11 @@ if __name__ == '__main__':
 
     # # # TR-SAXS Pico Plus pumps
     # setup_devices = [
-    #     {'name': 'Buffer', 'args': ['Pico Plus', 'COM11'],
+    #     {'name': 'Buffer', 'args': ['Pico Plus', 'COM12'],
     #         'kwargs': {'syringe_id': '3 mL, Medline P.C.',
     #         'pump_address': '00', 'dual_syringe': 'False'},
     #         'ctrl_args': {'flow_rate' : '1', 'refill_rate' : '1'}},
-    #     {'name': 'Sample', 'args': ['Pico Plus', 'COM12'],
+    #     {'name': 'Sample', 'args': ['Pico Plus', 'COM13'],
     #         'kwargs': {'syringe_id': '1 mL, Medline P.C.',
     #          'pump_address': '00', 'dual_syringe': 'False'},
     #         'ctrl_args': {'flow_rate' : '1', 'refill_rate' : '1'}},
@@ -6527,12 +6550,12 @@ if __name__ == '__main__':
     #     {'name': 'outlet', 'args': ['Soft', None], 'kwargs': {}},
     #     ]
 
-    # # Longer pumps
-    # setup_devices = [
-    #     {'name': 'sheath', 'args': ['Longer L100S2', 'COM11'],
-    #         'kwargs': {'pump_addr': 1, 'flow_cal': 0.0569},
-    #         'ctrl_args': {'flow_rate': 1}},
-    #     ]
+    # Longer pumps
+    setup_devices = [
+        {'name': 'test', 'args': ['Longer L100S2', 'COM15'],
+            'kwargs': {'pump_addr': 1, 'flow_cal': 0.0512},
+            'ctrl_args': {'flow_rate': 1}},
+        ]
 
     # Local
     com_thread = PumpCommThread('PumpComm')

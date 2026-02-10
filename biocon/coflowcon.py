@@ -29,11 +29,13 @@ import logging
 import sys
 import copy
 import platform
+import itertools
 import requests
 
 if __name__ != '__main__':
     logger = logging.getLogger(__name__)
 
+import numpy as np
 import wx
 import matplotlib
 from matplotlib.backends.backend_wxagg import FigureCanvasWxAgg
@@ -871,6 +873,11 @@ class CoflowControl(object):
         outlet_low_warning = self.settings['outlet_warning_threshold_low']
         outlet_high_warning = self.settings['outlet_warning_threshold_high']
 
+        sheath_monitor_avg = self.settings['sheath_monitor_avg']
+        outlet_monitor_avg = self.settings['outlet_monitor_avg']
+        sheath_mon_avg_time = self.settings['sheath_mon_avg_time']
+        outlet_mon_avg_time = self.settings['outlet_mon_avg_time']
+
         s1_type = None
         o1_type = None
         s2_type = None
@@ -956,26 +963,63 @@ class CoflowControl(object):
                     self.new_fr_time_list.append(cur_fr_time)
 
                 if self.monitor:
-                    if ((sheath_fr < sheath_low_warning*self.sheath_setpoint or
-                        sheath_fr > sheath_high_warning*self.sheath_setpoint)):
-                        logger.error('Sheath flow out of bounds (%f to %f): %f',
-                            sheath_low_warning*self.sheath_setpoint,
-                            sheath_high_warning*self.sheath_setpoint,
-                            sheath_fr)
+                    if sheath_monitor_avg or outlet_monitor_avg:
+                        max_pts = int(sheath_mon_avg_time/0.25 + 4)
+                        pts = np.array(list(itertools.islice(self.fr_time_list,
+                            len(self.fr_time_list)-max_pts, len(self.fr_time_list))))
+                        idx = np.argmin(np.abs(pts-(cur_fr_time-sheath_mon_avg_time)))
+                        idx += len(self.fr_time_list)-max_pts
 
-                        self._sheath_oob_error = True
-                        self._sheath_oob_flow = sheath_fr
+                    if not sheath_monitor_avg:
+                        if ((sheath_fr < sheath_low_warning*self.sheath_setpoint or
+                            sheath_fr > sheath_high_warning*self.sheath_setpoint)):
+                            logger.error('Sheath flow out of bounds (%f to %f): %f',
+                                sheath_low_warning*self.sheath_setpoint,
+                                sheath_high_warning*self.sheath_setpoint,
+                                sheath_fr)
+
+                            self._sheath_oob_error = True
+                            self._sheath_oob_flow = sheath_fr
+
+                    else:
+                        mean_fr = np.mean(list(itertools.islice(self.sheath_fr_list, idx,
+                            len(self.sheath_fr_list))))
+
+                        if ((mean_fr < sheath_low_warning*self.sheath_setpoint or
+                            mean_fr > sheath_high_warning*self.sheath_setpoint)):
+                            logger.error('Sheath flow out of bounds (%f to %f): %f',
+                                sheath_low_warning*self.sheath_setpoint,
+                                sheath_high_warning*self.sheath_setpoint,
+                                mean_fr)
+
+                            self._sheath_oob_error = True
+                            self._sheath_oob_flow = mean_fr
 
 
-                    if ((outlet_fr < outlet_low_warning*self.outlet_setpoint or
-                        outlet_fr > outlet_high_warning*self.outlet_setpoint)):
-                        logger.error('Outlet flow out of bounds (%f to %f): %f',
-                            outlet_low_warning*self.outlet_setpoint,
-                            outlet_high_warning*self.outlet_setpoint,
-                            outlet_fr)
+                    if not outlet_monitor_avg:
+                        if ((outlet_fr < outlet_low_warning*self.outlet_setpoint or
+                            outlet_fr > outlet_high_warning*self.outlet_setpoint)):
+                            logger.error('Outlet flow out of bounds (%f to %f): %f',
+                                outlet_low_warning*self.outlet_setpoint,
+                                outlet_high_warning*self.outlet_setpoint,
+                                outlet_fr)
 
-                        self._outlet_oob_error = True
-                        self._outlet_oob_flow = outlet_fr
+                            self._outlet_oob_error = True
+                            self._outlet_oob_flow = outlet_fr
+
+                    else:
+                        mean_fr = np.mean(list(itertools.islice(self.outlet_fr_list, idx,
+                            len(self.sheath_fr_list))))
+
+                        if ((mean_fr < outlet_low_warning*self.outlet_setpoint or
+                            mean_fr > outlet_high_warning*self.outlet_setpoint)):
+                            logger.error('Outlet flow out of bounds (%f to %f): %f',
+                                outlet_low_warning*self.outlet_setpoint,
+                                outlet_high_warning*self.outlet_setpoint,
+                                mean_fr)
+
+                            self._outlet_oob_error = True
+                            self._outlet_oob_flow = mean_fr
 
 
             if (not self._terminate_monitor_flow.is_set()
@@ -3661,19 +3705,23 @@ default_coflow_settings = {
     'device_init'               : [{'name': 'Coflow', 'args': [], 'kwargs': {
         'remote_overflow_ip'        : '164.54.204.75',
         'flow_units'                : 'mL/min',
+        'sheath_pump'
+                                    : {'name': 'test', 'args': ['Longer L100S2', 'COM15'],
+                                        'kwargs': {'pump_addr': 1, 'flow_cal': 0.0512},
+                                        'ctrl_args': {'flow_rate': 1}},
         # 'sheath_pump'               : {'name': 'sheath', 'args': ['VICI M50', 'COM6'],
         #                                 'kwargs': {'flow_cal': '630.4',
         #                                 'backlash_cal': '11.175'},
         #                                 'ctrl_args': {'flow_rate': 1}},
-        'sheath_pump'               : {'name': 'Pump 1', 'args': ['SSI Next Gen', 'COM12'],
-                                        'kwargs': {'flow_rate_scale': 1,
-                                        'flow_rate_offset': 0,'scale_type': 'up'},
-                                        'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.}},
+        # 'sheath_pump'               : {'name': 'Pump 1', 'args': ['SSI Next Gen', 'COM12'],
+        #                                 'kwargs': {'flow_rate_scale': 1,
+        #                                 'flow_rate_offset': 0,'scale_type': 'up'},
+        #                                 'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.}},
         # 'outlet_pump'               : {'name': 'outlet', 'args': ['VICI M50', 'COM4'],
         #                                 'kwargs': {'flow_cal': '628.68',
         #                                 'backlash_cal': '9.962'},
         #                                 'ctrl_args': {'flow_rate': 1}},
-        'outlet_pump'               : {'name': 'outlet', 'args': ['OB1 Pump', 'COM13'],
+        'outlet_pump'               : {'name': 'outlet', 'args': ['OB1 Pump', 'COM14'],
                                         'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
                                         'min_pressure': -1000, 'max_pressure': 1000, 'P': -2, 'I': -0.15,
                                         'D': 0, 'bfs_instr_ID': None, 'comm_lock': None,
@@ -3711,6 +3759,10 @@ default_coflow_settings = {
         # 'outlet_warning_threshold_high' : 1.2,
         'outlet_warning_threshold_low'  : 0.98,
         'outlet_warning_threshold_high' : 1.02,
+        'sheath_monitor_avg'        : True,
+        'outlet_monitor_avg'        : False,
+        'sheath_mon_avg_time'       : 30,
+        'outlet_mon_avg_time'       : 30,
         'sheath_fr_mult'            : 1,
         'outlet_fr_mult'            : 1,
         # 'outlet_fr_mult'            : -1,
@@ -3735,7 +3787,7 @@ default_coflow_settings = {
         'coflow_inc_TSetpoint_pv'   : '18ID:Memmert:CoflowInc:TempSetpoint',
         'hplc_inc_T_pv'             : '18ID:Memmert:HPLCInc:Temp',
         'hplc_inc_TSetpoint_pv'     : '18ID:Memmert:HPLCInc:TempSetpoint',
-        'use_incubator_pvs'         : True,
+        'use_incubator_pvs'         : False,
         }}],
     }
 
