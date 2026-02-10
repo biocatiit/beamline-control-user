@@ -1639,7 +1639,10 @@ class ExpCommThread(threading.Thread):
         # det_exp_time.put(exp_time)
         # det_exp_period.put(exp_period)
 
-        det.set_trigger_mode('ext_enable')
+        if if self._settings['detector'] == '18IDpil1M:_epics':
+            det.set_trigger_mode('ext_trig')
+        else:
+            det.set_trigger_mode('ext_enable')
         det.set_num_frames(num_frames)
         det.set_exp_time(exp_time)
         det.set_exp_period(exp_period)
