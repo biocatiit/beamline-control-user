@@ -1400,6 +1400,7 @@ class ASCommThread(utils.CommManager):
             'load_and_move_to_inject': self._load_and_move_to_inject,
             'clean'                 : self._clean,
             'get_status'            : self._get_status,
+            'stop'                  : self._stop_autosampler,
         }
 
         self._connected_devices = OrderedDict()
@@ -1853,6 +1854,19 @@ class ASCommThread(utils.CommManager):
         self._return_value((name, cmd, val), comm_name)
 
         logger.debug("%s status is %s", name, val)
+
+    def _stop_autosampler(self, name, **kwargs):
+        logger.info("Stopping %s Autosampler", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        device.stop()
+
+        self._return_value((name, cmd, True), comm_name)
+
+        logger.debug("%s stopped", name)
 
     def _additional_abort(self):
         for name in self._connected_devices:
@@ -2434,6 +2448,9 @@ class AutosamplerPanel(utils.DevicePanel):
 
     def _abort(self):
         self.com_thread._abort()
+
+        if self.remote:
+            self._send_cmd(['stop_autosampler', [self.name,], {}], False)
 
     def _on_change_plate_type(self, evt):
         plate_type = self.plate_types.GetStringSelection()

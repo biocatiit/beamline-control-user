@@ -2991,8 +2991,6 @@ class AutoList(utils.ItemList):
         sample_list_unordered = []
 
         for val, row in final_df.iterrows():
-            settings = copy.deepcopy(default_settings)
-
             order_val = row['Order']
 
             if pd.isna(order_val):
@@ -3006,6 +3004,8 @@ class AutoList(utils.ItemList):
                     order = order_val.split(',')
 
             for ov in order:
+                settings = copy.deepcopy(default_settings)
+
                 # General parameters
                 if not pd.isna(row['Notes']):
                     settings['notes'] = row['Notes']
