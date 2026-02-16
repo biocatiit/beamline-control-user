@@ -2160,13 +2160,16 @@ class AutosamplerPanel(utils.DevicePanel):
         self._staff_ctrl_btn.Bind(wx.EVT_BUTTON, self._on_staff_ctrl_btn)
 
 
-        top_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(5),
+        top_sub_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(5),
             hgap=self._FromDIP(5))
-        top_sizer.Add(inj_sizer)
-        top_sizer.Add(needle_sizer)
-        top_sizer.Add(plate_sizer)
-        top_sizer.Add(pump_sizer)
-        top_sizer.Add(self._staff_ctrl_btn)
+        top_sub_sizer.Add(inj_sizer)
+        top_sub_sizer.Add(needle_sizer)
+        top_sub_sizer.Add(plate_sizer)
+        top_sub_sizer.Add(pump_sizer)
+        top_sub_sizer.Add(self._staff_ctrl_btn)
+
+        top_sizer = wx.BoxSizer(wx.VERTICAL)
+        top_sizer.Add(top_sub_sizer, flag=wx.ALL, border=self._FromDIP(5))
 
         adv_win.SetSizer(top_sizer)
 
