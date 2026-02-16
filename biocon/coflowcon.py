@@ -3024,9 +3024,9 @@ class CoflowPanel(utils.DevicePanel):
             metadata['Sample cell temperature [C]:'] = self.cell_temp.GetLabel()
             if self.settings['use_incubator_pvs']:
                 metadata['Coflow incubator temperature [C]:'] = self.coflow_inc_esensor_temp.GetLabel()
-                metadata['Coflow incubator humidity [C]:'] = self.coflow_inc_esensor_humid.GetLabel()
+                metadata['Coflow incubator humidity [%]:'] = self.coflow_inc_esensor_humid.GetLabel()
                 metadata['HPLC incubator temperature [C]:'] = self.hplc_inc_esensor_temp.GetLabel()
-                metadata['HPLC incubator humidity [C]:'] = self.hplc_inc_esensor_humid.GetLabel()
+                metadata['HPLC incubator humidity [%]:'] = self.hplc_inc_esensor_humid.GetLabel()
             try:
                 metadata['Outlet flow rate [{}]:'.format(self.settings['flow_units'])] = round(self._outlet_setpoint,3)
             except Exception:

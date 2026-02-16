@@ -179,6 +179,7 @@ class Autosampler(object):
         self._cmd_thread = threading.Thread(target=self._run_cmds)
         self._cmd_thread.daemon = True
         self._cmd_thread.start()
+        self._cmd_errors = 0
 
     def _run_cmds(self):
         while not self._cmd_stop_event.is_set():
@@ -194,7 +195,26 @@ class Autosampler(object):
             cmds_run = False
 
             if cmd_func is not None:
-                cmd_func(*args, **kwargs)
+                try:
+                    cmd_func(*args, **kwargs)
+                    self._cmd_errors = 0
+                except Exception:
+                    msg = ("Autosampler %s failed to run command '%s' "
+                        "with args: %s and kwargs: %s " %(self.name, command,
+                        ', '.join(['{}'.format(a) for a in args]),
+                        ', '.join(['{}:{}'.format(kw, item) for kw, item in kwargs.items()])))
+                    logger.exception(msg)
+
+                    self._cmd_errors += 1
+                    self.stop()
+                    self._check_abort()
+                    self._active_count = 0
+
+                    if self._cmd_errors <= 2:
+                        self.clean()
+                    else:
+                        self._status = 'Error'
+
                 cmds_run = True
 
             if not cmds_run:
@@ -1320,7 +1340,7 @@ class Autosampler(object):
         return success
 
     def get_status(self):
-        if self._active_count == 0:
+        if self._active_count == 0 and self._status != 'Error':
             self._status = 'Idle'
         elif self._active_count > 0 and self._status == 'Idle':
             self._status = 'Busy'
@@ -2730,6 +2750,10 @@ class AutosamplerPanel(utils.DevicePanel):
                 elif val == 'Idle':
                     for btn in self._ctrl_btns:
                         btn.Enable()
+                elif val == 'Error':
+                    msg = ('The batch mode autosampler has experienced an '
+                        'error. Please contact your beamline scientist.')
+
                 self._current_status = val
 
     def _set_status_commands(self):
