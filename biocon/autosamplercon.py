@@ -2450,7 +2450,7 @@ class AutosamplerPanel(utils.DevicePanel):
         self.com_thread._abort()
 
         if self.remote:
-            self._send_cmd(['stop_autosampler', [self.name,], {}], False)
+            self._send_cmd(['stop', [self.name,], {}], False)
 
     def _on_change_plate_type(self, evt):
         plate_type = self.plate_types.GetStringSelection()
