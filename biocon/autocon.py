@@ -2934,8 +2934,14 @@ class AutoList(utils.ItemList):
                         self._add_item(cmd_settings)
 
     def _on_add_spreadsheet(self, evt):
+        if 'exp' in self.auto_panel.settings['instruments']:
+            exp_panel = wx.FindWindowByName('exposure')
+            datadir = exp_panel.settings['base_data_dir']
+        else:
+            datadir = ''
+
         with wx.FileDialog(self, 'Select a sample spreadsheet',
-            style=wx.FD_OPEN) as dialog:
+            defaultDir=datadir, style=wx.FD_OPEN) as dialog:
 
             if dialog.ShowModal() == wx.ID_OK:
                 file = dialog.GetPath()
@@ -2953,7 +2959,7 @@ class AutoList(utils.ItemList):
 
         if file is not None and fname is not None:
             with wx.NumberEntryDialog(self, 'Enter starting filename number',
-                'Filename Number') as dialog:
+                'Starting number:', 'Filename Number', 1, 1, 100000) as dialog:
 
                 if dialog.ShowModal() == wx.ID_OK:
                     fnum = dialog.GetValue()
@@ -2961,7 +2967,7 @@ class AutoList(utils.ItemList):
                     fnum = None
 
         if file is not None and fname is not None and fnum is not None:
-            self._add_spreadsheet(self, file, fname, fnum)
+            self._add_spreadsheet(file, fname, fnum)
 
     def _add_spreadsheet(self, file, fname, fnum):
         df = pd.read_excel(file)
@@ -2994,7 +3000,10 @@ class AutoList(utils.ItemList):
                 order = [1]
             else:
                 ordered = True
-                order = order_val.split(',')
+                if isinstance(order_val, int):
+                    order = [order_val,]
+                else:
+                    order = order_val.split(',')
 
             for ov in order:
                 # General parameters
@@ -3003,8 +3012,8 @@ class AutoList(utils.ItemList):
                 else:
                     settings['notes'] = ''
 
-                if not pd.isna(row['Concentration (mg/ml)']):
-                    settings['conc'] = row['Concentration (mg/ml)']
+                if not pd.isna(row['Concentration (mg/mL)']):
+                    settings['conc'] = row['Concentration (mg/mL)']
                 else:
                     settings['conc'] = ''
 
@@ -3019,7 +3028,7 @@ class AutoList(utils.ItemList):
                     settings['sample_name'] = ''
 
                 if not pd.isna(row['Is buffer?']):
-                    if row['Is buffer'].lower().startswith('y'):
+                    if row['Is buffer?'].lower().startswith('y'):
                         settings['is_buf'] = True
                     else:
                         settings['is_buf'] = False
@@ -3054,8 +3063,8 @@ class AutoList(utils.ItemList):
 
         sample_list.extend(sample_list_unordered)
 
-        for i, cmd_settings in sample_list:
-            filename = '{}{:04d}'.format(fname, fnum+i)
+        for i, cmd_settings in enumerate(sample_list):
+            filename = '{}_{:04d}'.format(fname, fnum+i)
             cmd_settings['filename'] = filename
 
             valid, err_msg = self._validate_cmd(cmd_settings)

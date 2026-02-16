@@ -2087,7 +2087,7 @@ class AutosamplerPanel(utils.DevicePanel):
         needle_sub_sizer.Add(self.move_needle_out, flag=wx.ALIGN_CENTER_VERTICAL)
 
         needle_sizer = wx.StaticBoxSizer(needle_box, wx.VERTICAL)
-        needle_sizer.Add(needle_sub_sizer)
+        needle_sizer.Add(needle_sub_sizer, flag=wx.ALL, border=self._FromDIP(5))
 
 
         inj_box = wx.StaticBox(adv_win, label='Injection controls')
@@ -2114,7 +2114,7 @@ class AutosamplerPanel(utils.DevicePanel):
         inj_sub_sizer.Add(self.inject_sample, flag=wx.ALIGN_CENTER_VERTICAL)
 
         inj_sizer = wx.StaticBoxSizer(inj_box, wx.VERTICAL)
-        inj_sizer.Add(inj_sub_sizer)
+        inj_sizer.Add(inj_sub_sizer, flag=wx.ALL, border=self._FromDIP(5))
 
 
         pump_box = wx.StaticBox(adv_win, label='Pump controls')
@@ -2137,8 +2137,9 @@ class AutosamplerPanel(utils.DevicePanel):
         pump_sub_sizer.Add(self.dwell_time, flag=wx.ALIGN_CENTER_VERTICAL)
 
         pump_sizer = wx.StaticBoxSizer(pump_box, wx.VERTICAL)
-        pump_sizer.Add(pump_sub_sizer)
-        pump_sizer.Add(self.aspirate_sample, flag=wx.TOP, border=self._FromDIP(5))
+        pump_sizer.Add(pump_sub_sizer, flag=wx.ALL, border=self._FromDIP(5))
+        pump_sizer.Add(self.aspirate_sample, flag=wx.LEFT|wx.RIGHT|wx.BOTTOM,
+            border=self._FromDIP(5))
 
 
         self._staff_ctrl_btn = wx.Button(adv_win, label='Staff Controls')
