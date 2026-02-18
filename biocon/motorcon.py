@@ -1388,6 +1388,8 @@ class EpicsMotor(Motor):
             logger.warning("Failed to change motor %s units, units supplied were invalid: %s",
                 self.name, units)
 
+    def get_pv(self, name):
+        return self.epics_motor.get_pv(name)
 
     def send_cmd(self, cmd, get_response=True):
         pass #Should be implimented in each subclass
