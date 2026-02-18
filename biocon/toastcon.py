@@ -437,7 +437,7 @@ if __name__ == '__main__':
 
     com_thread = None
 
-    settings = default_autosampler_settings
+    settings = default_toaster_settings
     settings['components'] = ['toaster']
 
     settings['com_thread'] = com_thread
