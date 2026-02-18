@@ -3024,9 +3024,9 @@ class CoflowPanel(utils.DevicePanel):
             metadata['Sample cell temperature [C]:'] = self.cell_temp.GetLabel()
             if self.settings['use_incubator_pvs']:
                 metadata['Coflow incubator temperature [C]:'] = self.coflow_inc_esensor_temp.GetLabel()
-                metadata['Coflow incubator humidity [C]:'] = self.coflow_inc_esensor_humid.GetLabel()
+                metadata['Coflow incubator humidity [%]:'] = self.coflow_inc_esensor_humid.GetLabel()
                 metadata['HPLC incubator temperature [C]:'] = self.hplc_inc_esensor_temp.GetLabel()
-                metadata['HPLC incubator humidity [C]:'] = self.hplc_inc_esensor_humid.GetLabel()
+                metadata['HPLC incubator humidity [%]:'] = self.hplc_inc_esensor_humid.GetLabel()
             try:
                 metadata['Outlet flow rate [{}]:'.format(self.settings['flow_units'])] = round(self._outlet_setpoint,3)
             except Exception:
@@ -3721,7 +3721,7 @@ default_coflow_settings = {
         #                                 'kwargs': {'flow_cal': '628.68',
         #                                 'backlash_cal': '9.962'},
         #                                 'ctrl_args': {'flow_rate': 1}},
-        'outlet_pump'               : {'name': 'outlet', 'args': ['OB1 Pump', 'COM14'],
+        'outlet_pump'               : {'name': 'outlet', 'args': ['OB1 Pump', 'COM12'],
                                         'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
                                         'min_pressure': -1000, 'max_pressure': 1000, 'P': -2, 'I': -0.15,
                                         'D': 0, 'bfs_instr_ID': None, 'comm_lock': None,
@@ -3787,7 +3787,7 @@ default_coflow_settings = {
         'coflow_inc_TSetpoint_pv'   : '18ID:Memmert:CoflowInc:TempSetpoint',
         'hplc_inc_T_pv'             : '18ID:Memmert:HPLCInc:Temp',
         'hplc_inc_TSetpoint_pv'     : '18ID:Memmert:HPLCInc:TempSetpoint',
-        'use_incubator_pvs'         : False,
+        'use_incubator_pvs'         : True,
         }}],
     }
 

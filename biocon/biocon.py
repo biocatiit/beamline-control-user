@@ -377,17 +377,17 @@ if __name__ == '__main__':
     # Exposure settings
     exposure_settings = expcon.default_exposure_settings
 
-    # Fast in-air shutters
-    exposure_settings['shutter_speed_open'] = 0.001
-    exposure_settings['shutter_speed_close'] = 0.001
-    exposure_settings['shutter_pad'] = 0.00
-    exposure_settings['shutter_cycle'] = 0.002
+    # # Fast in-air shutters
+    # exposure_settings['shutter_speed_open'] = 0.001
+    # exposure_settings['shutter_speed_close'] = 0.001
+    # exposure_settings['shutter_pad'] = 0.00
+    # exposure_settings['shutter_cycle'] = 0.002
 
-    # # Normal vacuum shutter (uniblitz)
-    # exposure_settings['shutter_speed_open'] = 0.0045
-    # exposure_settings['shutter_speed_close'] = 0.004
-    # exposure_settings['shutter_pad'] = 0.002
-    # exposure_settings['shutter_cycle'] = 0.1
+    # Normal vacuum shutter (uniblitz)
+    exposure_settings['shutter_speed_open'] = 0.0045
+    exposure_settings['shutter_speed_close'] = 0.004
+    exposure_settings['shutter_pad'] = 0.002
+    exposure_settings['shutter_cycle'] = 0.1
 
     # # EIGER2 XE 9M
     # exposure_settings['det_args'] =  {'use_tiff_writer': False,
@@ -416,10 +416,10 @@ if __name__ == '__main__':
         # 'scale': 2.5e6, 'offset': 0, 'dark': True, 'norm_time': True},
         # {'mx_record': 'mcs12', 'channel': 11, 'name': 'Length_Out',
         # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
-        {'mx_record': 'mcs13', 'channel': 12, 'name': 'Force',
-        'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
-        {'mx_record': 'mcs14', 'channel': 13, 'name': 'Length',
-        'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
+        # {'mx_record': 'mcs13', 'channel': 12, 'name': 'Force',
+        # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
+        # {'mx_record': 'mcs14', 'channel': 13, 'name': 'Length',
+        # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
         ]
     exposure_settings['warnings'] = {'shutter' : True, 'col_vac' : {'check': True,
         'thresh': 0.04}, 'guard_vac' : {'check': True, 'thresh': 0.04},
@@ -481,17 +481,22 @@ if __name__ == '__main__':
     # Pipeline Settings
     pipeline_settings = {
         'components'    : ['pipeline'],
+        'output_basedir': '/nas_data/SAXS',
         'server_port'   : '5556',
         'server_ip'     : '164.54.204.142', #EPU
         # 'server_ip'     : '164.54.204.144', #Marvin
-        # 'raw_settings'  : '/nas_data/Pilatus1M/2021_Run1/20210129_Hopkins/setup/calibration/pipeline_SAXS.cfg',
-        'local_basedir' : '/nas_data/Eiger2x',
-        'data_basedir'  : '/nas_data/Eiger2x',
-        # 'local_basedir' : '/nas_data/Pilatus1M',
-        # 'data_basedir'  : '/nas_data/Pilatus1M',
-        'output_basedir': '/nas_data/SAXS',
-        'data_source'   : 'Stream', #File or stream
-        'detector'      : 'Eiger',
+
+        # EIGER settings
+        # 'local_basedir' : '/nas_data/Eiger2x',
+        # 'data_basedir'  : '/nas_data/Eiger2x',
+        # 'data_source'   : 'Stream', #File or stream
+        # 'detector'      : 'Eiger',
+
+        # Pilatus settings
+        'local_basedir' : '/nas_data/Pilatus1M/2026_1M',
+        'data_basedir'  : '/nas_data/Pilatus1M/2026_1M',
+        'data_source'   : 'File', #File or stream
+        'detector'      : 'Pilatus',
         }
 
 
@@ -538,17 +543,17 @@ if __name__ == '__main__':
 
     components = OrderedDict([
         ('exposure', expcon.ExpPanel),
-        # ('coflow', coflowcon.CoflowPanel),
+        ('coflow', coflowcon.CoflowPanel),
         # ('trsaxs_scan', trcon.TRScanPanel),
         # ('trsaxs_flow', trcon.TRFlowPanel),
         # ('scan',    scancon.ScanPanel),
-        # ('metadata', metadata.ParamPanel),
-        # ('pipeline', pipeline_ctrl.PipelineControl),
-        # ('uv', spectrometercon.UVPanel),
-        # ('hplc', biohplccon.HPLCPanel),
-        # ('automator', autocon.AutoPanel),
-        # ('autosampler', autosamplercon.AutosamplerPanel),
-        ('toaster', toastcon.ToasterPanel),
+        ('metadata', metadata.ParamPanel),
+        ('pipeline', pipeline_ctrl.PipelineControl),
+        ('uv', spectrometercon.UVPanel),
+        ('hplc', biohplccon.HPLCPanel),
+        ('automator', autocon.AutoPanel),
+        ('autosampler', autosamplercon.AutosamplerPanel),
+        # ('toaster', toastcon.ToasterPanel),
         ])
 
     settings = {

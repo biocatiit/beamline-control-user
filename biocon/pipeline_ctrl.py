@@ -74,8 +74,6 @@ class PipelineControl(object):
                 name='PipelineCtrlClient')
         self.control_client.start()
 
-        # self.set_raw_settings(self.settings['raw_settings'])
-
         self.current_expeirment = ''
 
     def start_experiment(self, exp_name, exp_type, data_dir, fprefix, n_exps,

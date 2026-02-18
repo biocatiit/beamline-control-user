@@ -4689,11 +4689,11 @@ default_exposure_settings = {
     'nparams_max'           : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
     'exp_period_delta'      : 0.00095,
     'local_dir_root'        : '/nas_data/Pilatus1M',
-    'remote_dir_root'       : '/ramdisk',
+    'remote_dir_root'       : '/nas_data_pilatus',
     # 'detector'              : 'pilatus_mx',
     'detector'              : '18IDpil1M:_epics',
     'det_args'              : {}, #Allows detector specific keyword arguments
-    'add_file_postfix'      : True,
+    'add_file_postfix'      : False,
 
     # 'exp_time_min'          : 0.000000050, #Eiger2 XE 9M
     # 'exp_time_max'          : 3600,
