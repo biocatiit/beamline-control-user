@@ -473,6 +473,234 @@ class IntSpinCtrl(wx.Panel):
         if not self.Scale.IsModified():
             self.ChangeValue(val)
 
+class FloatSpinCtrl(wx.Panel):
+
+    def __init__(self, parent, my_id=-1, initValue=None, min_val=None, max_val=None,
+        button_style = wx.SP_VERTICAL, TextLength=45, never_negative=False,
+        **kwargs):
+
+        wx.Panel.__init__(self, parent, my_id, **kwargs)
+
+        if initValue is None:
+            initValue = '1.00'
+
+        self.defaultScaleDivider = 100
+        self.ScaleDivider = 100
+
+        if platform.system() != 'Windows':
+            self.ScalerButton = wx.SpinButton(self, -1, style = button_style)
+        else:
+            self.ScalerButton = wx.SpinButton(self, -1,
+                size=self._FromDIP((-1, 22)), style=button_style)
+        self.ScalerButton.Bind(wx.EVT_SET_FOCUS, self.OnFocusChange)
+        self.ScalerButton.Bind(wx.EVT_SPIN_UP, self.OnSpinUpScale)
+        self.ScalerButton.Bind(wx.EVT_SPIN_DOWN, self.OnSpinDownScale)
+        self.ScalerButton.SetRange(-99999, 99999)   #Needed for proper function of button on Linux
+
+        self.max = max_val
+        self.min = min_val
+
+        if never_negative:
+            if self.min is None:
+                self.min = 0.0
+            else:
+                self.min = max(self.min, 0.0)
+
+        self._never_negative = never_negative
+
+        if platform.system() != 'Windows':
+            self.Scale = wx.TextCtrl(self, -1, initValue,
+                size=self._FromDIP((TextLength,-1)), style=wx.TE_PROCESS_ENTER,
+                validator=CharValidator('float_te'))
+        else:
+            self.Scale = wx.TextCtrl(self, -1, initValue,
+                size=self._FromDIP((TextLength,22)), style=wx.TE_PROCESS_ENTER,
+                validator=CharValidator('float_te'))
+
+        self.Scale.Bind(wx.EVT_KILL_FOCUS, self.OnFocusChange)
+        self.Scale.Bind(wx.EVT_TEXT_ENTER, self.OnEnter)
+
+        sizer = wx.BoxSizer()
+
+        sizer.Add(self.Scale, 1, wx.RIGHT, border=self._FromDIP(1))
+        sizer.Add(self.ScalerButton, 0)
+
+        self.oldValue = float(initValue)
+
+        self.SetSizer(sizer)
+
+        self.ScalerButton.SetValue(0)
+
+    def _FromDIP(self, size):
+        # This is a hack to provide easy back compatibility with wxpython < 4.1
+        try:
+            return self.FromDIP(size)
+        except Exception:
+            return size
+
+    def CastFloatSpinEvent(self):
+        event = FloatSpinEvent(myEVT_MY_SPIN, self.GetId(), self)
+        event.SetValue( self.Scale.GetValue() )
+        self.GetEventHandler().ProcessEvent(event)
+
+    def OnFocusChange(self, event):
+
+        val = self.Scale.GetValue()
+
+        try:
+             float(val)
+        except ValueError:
+            return
+
+        self.CastFloatSpinEvent()
+
+        event.Skip()
+
+    def OnEnter(self, event):
+        self.OnScaleChange(None)
+        self.Scale.SelectAll()
+        self.CastFloatSpinEvent()
+
+        event.Skip()
+
+    def OnScaleChange(self, event):
+
+        val = self.Scale.GetValue()
+        val = val.replace(',', '.')
+
+        if self.max is not None:
+            if float(val) > self.max:
+                self.Scale.SetValue(str(self.max ))
+        if self.min is not None:
+            if float(val) < self.min:
+                self.Scale.SetValue(str(self.min))
+
+        try:
+            self.num_of_digits = len(val.split('.')[1])
+
+            if self.num_of_digits == 0:
+                self.ScaleDivider = self.defaultScaleDivider
+            else:
+                self.ScaleDivider = math.pow(10, self.num_of_digits)
+
+        except IndexError:
+            self.ScaleDivider = 1.0
+            self.num_of_digits = 0
+
+    def OnSpinUpScale(self, event):
+
+        self.OnScaleChange(None)
+
+        val = self.Scale.GetValue()
+        val = float(val.replace(',', '.'))
+
+        # Reset spinbutton counter. Fixes bug on MAC
+        if self.ScalerButton.GetValue() > 90000:
+            self.ScalerButton.SetValue(0)
+
+        try:
+            newval = self.find_new_val_up(val)
+
+        except ValueError:
+            self.CastFloatSpinEvent()
+            return
+
+        if self.num_of_digits > 0:
+            newval_str = ("%." + str(self.num_of_digits) + "f") %  newval
+        else:
+            newval_str = ("%d") %  newval
+
+        self.Scale.SetValue(newval_str)
+        self.CastFloatSpinEvent()
+
+    def find_new_val_up(self, val):
+
+        if self.max is not None and val > self.max:
+            newval = self.max
+
+        elif self.max is not None and val == self.max:
+            newval = val
+
+        else:
+            newval = val + (1./self.ScaleDivider)
+
+            if self.max is not None and newval > self.max:
+                self.num_of_digits = self.num_of_digits + 1
+                self.ScaleDivider = math.pow(10, self.num_of_digits)
+
+                newval = self.find_new_val_up(val)
+
+        return newval
+
+
+    def find_new_val_down(self, val):
+        if self.min is not None and val < self.min and not self._never_negative:
+            newval = self.min
+
+        elif self.min is not None and val == self.min and not self._never_negative:
+            newval = val
+
+        else:
+            newval = val - (1./self.ScaleDivider)
+
+            if self.min is not None and newval < self.min:
+                self.num_of_digits = self.num_of_digits + 1
+                self.ScaleDivider = math.pow(10, self.num_of_digits)
+
+                newval = self.find_new_val_down(val)
+
+            elif self._never_negative and newval == 0.0:
+                self.num_of_digits = self.num_of_digits + 1
+                self.ScaleDivider = math.pow(10, self.num_of_digits)
+
+                newval = float(val) - (1./self.ScaleDivider)
+
+        return newval
+
+
+    def _showInvalidNumberError(self):
+        wx.CallAfter(wx.MessageBox, 'The entered value is invalid. Please remove non-numeric characters.', 'Invalid Value Error', style = wx.ICON_ERROR)
+
+    def OnSpinDownScale(self, event):
+
+        self.OnScaleChange(None)
+
+        val = self.Scale.GetValue()
+        val = float(val.replace(',', '.'))
+
+        # Reset spinbutton counter. Fixes bug on MAC
+        if self.ScalerButton.GetValue() < -90000:
+            self.ScalerButton.SetValue(0)
+
+        try:
+            newval = self.find_new_val_down(val)
+
+        except ValueError:
+            self.CastFloatSpinEvent()
+            return
+
+        if self.num_of_digits > 0:
+            newval_str = ("%." + str(self.num_of_digits) + "f") %  newval
+        else:
+            newval_str = ("%d") %  newval
+
+        self.Scale.SetValue(str(newval_str))
+        self.CastFloatSpinEvent()
+
+    def GetValue(self):
+        value = self.Scale.GetValue()
+        return value
+
+    def SetValue(self, value):
+        self.Scale.SetValue(str(value))
+
+    def SetRange(self, minmax):
+        self.max = float(minmax[1])
+        self.min = float(minmax[0])
+
+    def GetRange(self):
+        return (self.min, self.max)
+
 class WarningMessage(wx.Frame):
     def __init__(self, parent, msg, title, callback, *args, **kwargs):
         """
