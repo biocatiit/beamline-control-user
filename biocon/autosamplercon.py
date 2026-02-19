@@ -151,7 +151,7 @@ known_well_plates = {
         'row_step'      : 9.00, # mm
         'height'        : 0.5, # bottom of well from chiller base plate
         'plate_height'  : 15.5, # top of plate from chiller base plate
-        }
+        },
 
     'Greiner 96 well cell culture, uClear, chimney well' : {
         'max_volume'    : 340, # uL
@@ -161,7 +161,7 @@ known_well_plates = {
         'row_step'      : 9.00, # mm
         'height'        : 3.5, # bottom of well from chiller base plate
         'plate_height'  : 14.4, # top of plate from chiller base plate
-        }
+        },
 }
 
 class Autosampler(object):
