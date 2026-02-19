@@ -40,6 +40,7 @@ from six import string_types
 try:
     import epics
     import epics.wx
+    from epics.wx.wxlib import EpicsFunction
 except Exception:
     pass
 try:
@@ -69,6 +70,10 @@ class ToastMotorPanel(utils.DevicePanel):
 
         self._init_pvs(settings)
 
+        self._home_abort_evt = threading.Event()
+        self._home_abort_evt.clear()
+        self._home_motor_thread = None
+
         super(ToastMotorPanel, self).__init__(parent, panel_id, settings, *args, **kwargs)
 
     def _init_pvs(self, settings):
@@ -91,12 +96,12 @@ class ToastMotorPanel(utils.DevicePanel):
         self.start_lnk2.put('{} CA'.format(settings['device_data']['kwargs']
             ['motor']['args'][0]))
 
-        self.motor_egu_pv, connected = self._initialize_pv('{}.EGU'.format(
-            settings['device_data']['kwargs']['motor']['args'][0]))
-        self.motor_speed_pv, connected = self._initialize_pv('{}.VELO'.format(
-            settings['device_data']['kwargs']['motor']['args'][0]))
-        self.motor_base_speed_pv, connected = self._initialize_pv('{}.VBAS'.format(
-            settings['device_data']['kwargs']['motor']['args'][0]))
+        self.motor = motorcon.EpicsMotor('toast', settings['device_data']['kwargs']
+            ['motor']['args'][0])
+
+        self.motor_egu_pv = self.motor.get_pv('EGU')
+        self.motor_speed_pv = self.motor.get_pv('VELO')
+        self.motor_base_speed_pv = self.motor.get_pv('VBAS')
         self.motor_accel_pv, connected = self._initialize_pv('{}.ACCS'.format(
             settings['device_data']['kwargs']['motor']['args'][0]))
         self.motor_accelu_pv, connected = self._initialize_pv('{}.ACCU'.format(
@@ -111,6 +116,7 @@ class ToastMotorPanel(utils.DevicePanel):
 
         return pv, connected
 
+    @EpicsFunction
     def _init_device(self, settings):
         #Happens after create layout
         self.motor_accelu_pv.put(1)
@@ -198,10 +204,10 @@ class ToastMotorPanel(utils.DevicePanel):
             self.auto_toast.Disable()
             self.auto_toast.Hide()
 
-        start_button = epics.wx.PVButton(toast_box, self.start_pv, pushValue=1,
-            label='Start')
-        stop_button = epics.wx.PVButton(toast_box, self.stop_pv, pushValue=1,
-        label='Stop')
+        start_button = wx.Button(toast_box, label='Start')
+        stop_button = wx.Button(toast_box, label='Stop')
+        start_button.Bind(wx.EVT_BUTTON, self._on_start)
+        stop_button.Bind(wx.EVT_BUTTON, self._on_stop)
 
         button_sizer = wx.BoxSizer(wx.HORIZONTAL)
         button_sizer.Add(start_button, flag=wx.RIGHT, border=self._FromDIP(5))
@@ -215,9 +221,36 @@ class ToastMotorPanel(utils.DevicePanel):
         toast_sizer.Add(button_sizer, flag=wx.BOTTOM|wx.LEFT|wx.RIGHT|
             wx.ALIGN_CENTER_HORIZONTAL, border=self._FromDIP(5))
 
+
+        home_box = wx.StaticBox(parent, label='{} Homing'.format(
+            self.settings['device_data']['name']))
+        self._home_status = wx.StaticText(home_box, label='No')
+
+        home_status_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        home_status_sizer.Add(wx.StaticText(home_box, label='Homing:'))
+        home_status_sizer.Add(self._home_status, proportion=1, flag=wx.LEFT,
+            border=self._FromDIP(5))
+
+        self._start_home_btn = wx.Button(home_box, label='Home motor')
+        self._start_home_btn.Bind(wx.EVT_BUTTON, self._on_home_motor)
+
+        self._abort_home_btn = wx.Button(home_box, label='Abort homing')
+        self._abort_home_btn.Bind(wx.EVT_BUTTON, self._on_home_abort)
+
+        home_btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        home_btn_sizer.Add(self._start_home_btn)
+        home_btn_sizer.Add(self._abort_home_btn, flag=wx.LEFT, border=self._FromDIP(5))
+
+        home_sizer = wx.StaticBoxSizer(home_box, wx.VERTICAL)
+        home_sizer.Add(home_status_sizer, flag=wx.EXPAND|wx.ALL, border=self._FromDIP(5))
+        home_sizer.Add(home_btn_sizer, flag=wx.ALIGN_CENTER_HORIZONTAL|
+            wx.LEFT|wx.RIGHT|wx.BOTTOM, border=self._FromDIP(5))
+
         top_sizer = wx.BoxSizer(wx.VERTICAL)
         top_sizer.Add(motor_sizer, flag=wx.EXPAND|wx.ALL, border=self._FromDIP(5))
         top_sizer.Add(toast_sizer, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM,
+            border=self._FromDIP(5))
+        top_sizer.Add(home_sizer, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM,
             border=self._FromDIP(5))
 
         self.SetSizer(top_sizer)
@@ -232,6 +265,7 @@ class ToastMotorPanel(utils.DevicePanel):
             self.motor_base_speed_pv.put(speed)
             self.motor_speed_pv.put(speed)
 
+    @EpicsFunction
     def _on_speed_change(self, **kwargs):
         value = kwargs['value']
 
@@ -243,11 +277,24 @@ class ToastMotorPanel(utils.DevicePanel):
         if speed is not None:
             self.speed_ctrl.SafeChangeValue(str(speed))
 
+    def _on_start(self, evt):
+        self.start_toast()
+
+    def _on_stop(self, evt):
+        self.stop_toast()
+
+    def start_toast(self, wait=False):
+        self.start_pv.put(1, wait=wait)
+
+    def stop_toast(self):
+        self.stop_pv.put(1)
+        self.start_pv.put(0)
+
     def auto_start(self):
         auto = self.auto_toast.GetValue()
 
         if auto:
-            self.start_pv.put(1, wait=True)
+            self.start_toast(wait=True)
 
         return True
 
@@ -255,7 +302,129 @@ class ToastMotorPanel(utils.DevicePanel):
         auto = self.auto_toast.GetValue()
 
         if auto:
-            self.stop_pv.put(1)
+            self.stop_toast()
+
+    def _on_home_motor(self, evt):
+        self._start_home_btn.Disable()
+        self._home_status.SetLabel('Yes')
+
+        self._home_abort_evt.clear()
+        self._home_motor_thread = threading.Thread(target=self.home_motor)
+        self._home_motor_thread.daemon = True
+        self._home_motor_thread.start()
+
+    def _on_home_abort(self, evt):
+        self._home_abort_evt.set()
+        self.motor.stop()
+        self._on_home_finish()
+
+    def _on_home_finish(self):
+        self._start_home_btn.Enable()
+        self._home_status.SetLabel('No')
+
+    @EpicsFunction
+    def home_motor(self):
+        home_to = step = self.settings['home_settings']['home_to']
+        final_pos = self.settings['home_settings']['final_pos']
+        home_offset = self.settings['home_settings']['offset']
+
+        if home_to == 'center':
+            plus_lim = self._inner_home_to_limit(1)
+
+            if self._home_abort_evt.is_set():
+                return
+
+            minus_lim = self._inner_home_to_limit(-1)
+
+            if self._home_abort_evt.is_set():
+                return
+
+            if plus_lim is not None and minus_lim is not None:
+                home_pos = (plus_lim+minus_lim)/2
+            else:
+                home_pos = None
+
+        elif home_to == 'plus':
+            home_pos = self._inner_home_to_limit(1)
+
+        elif home_to == 'minus':
+            home_pos = self._inner_home_to_limit(-1)
+
+        else:
+            home_pos = None
+
+        if home_pos is not None:
+
+            if self._home_abort_evt.is_set():
+                return
+
+            home_pos += home_offset
+
+            self.motor.move(home_pos, wait=True)
+
+            if self._home_abort_evt.is_set():
+                return
+
+            self.motor.set_position(final_pos)
+
+        wx.CallAfter(self._on_home_finish)
+
+
+    def _inner_home_to_limit(self, direction):
+        abort = False
+
+        step = self.settings['home_settings']['step']
+        speed = self.settings['home_settings']['speed']
+
+        if direction == 1:
+            on_lim = self.motor.on_high_limit()
+        else:
+            on_lim = self.motor.on_low_limit()
+
+        abort = self._home_abort_evt.is_set()
+
+        if not on_lim and not abort:
+            if direction == 1:
+                jog_dir = 'positive'
+            else:
+                jog_dir = 'negative'
+
+            self.motor.jog(jog_dir, True)
+
+        while not on_lim and not abort:
+            if direction == 1:
+                on_lim = self.motor.on_high_limit()
+            else:
+                on_lim = self.motor.on_low_limit()
+
+            time.sleep(0.05)
+            abort = self._home_abort_evt.is_set()
+
+        self.motor.jog(jog_dir, False)
+
+        move_off = -1*direction*step
+
+        while on_lim and not abort:
+            self.motor.move_relative(move_off)
+
+            time.sleep(0.05)
+            abort = self._home_abort_evt.is_set()
+
+            if direction == 1:
+                on_lim = self.motor.on_high_limit()
+            else:
+                on_lim = self.motor.on_low_limit()
+
+        while self.motor.is_moving():
+            time.sleep(0.05)
+            abort = self._home_abort_evt.is_set()
+
+        if not abort:
+            motor_pos = self.motor.get_position()
+        else:
+            motor_pos = None
+
+        return motor_pos
 
     def _on_close(self):
         """Device specific stuff goes here"""
@@ -393,6 +562,12 @@ default_toaster_settings = {
             'high_pv'           : '18ID:Toast:H:High',
             'low_pv'            : '18ID:Toast:H:Low',
             'start_pv'          : '18ID:Toast:H:Move',
+            'home_settings'     : { 'step'  : 0.1, # limit push off step size, motor EGU units, usually mm
+                                    'speed' : 2.0, # Move to limit speed, motor EGU units, usually mm/s
+                                    'home_to'   : 'center',
+                                    'offset'    : 0, # Offset from nominal home to actual home position, motor EGU units
+                                    'final_pos' : 0, # What to set the home position to
+                                    },
             }},
         {'name': 'Toast V', 'args': [], 'kwargs': {
             'motor'             : {'name': 'toast_v', 'args': ['18ID_DMC_E05:34'],
@@ -437,7 +612,7 @@ if __name__ == '__main__':
 
     com_thread = None
 
-    settings = default_autosampler_settings
+    settings = default_toaster_settings
     settings['components'] = ['toaster']
 
     settings['com_thread'] = com_thread
