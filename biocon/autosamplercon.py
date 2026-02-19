@@ -210,7 +210,7 @@ class Autosampler(object):
                     self._cmd_errors = 0
                 except Exception:
                     msg = ("Autosampler %s failed to run command '%s' "
-                        "with args: %s and kwargs: %s " %(self.name, command,
+                        "with args: %s and kwargs: %s " %(self.name, cmd_func,
                         ', '.join(['{}'.format(a) for a in args]),
                         ', '.join(['{}:{}'.format(kw, item) for kw, item in kwargs.items()])))
                     logger.exception(msg)
