@@ -2494,6 +2494,9 @@ class AutosamplerPanel(utils.DevicePanel):
                 style=wx.OK|wx.ICON_ERROR)
 
     def _on_move_needle_in(self, evt):
+        self._move_needle_in()
+
+    def _move_needle_in(self):
         self._send_cmd(['move_needle_in', [self.name,], {}], False)
 
     def _on_move_needle_out(self, evt):
@@ -2819,6 +2822,8 @@ class AutosamplerPanel(utils.DevicePanel):
             status = 'change_well_plate'
         elif self._current_status == 'Moving to clean':
             status = 'move_to_clean'
+        elif self._current_status == 'Moving needle in':
+            status = 'move_needle_in'
         else:
             status = 'busy'
 
@@ -2873,6 +2878,10 @@ class AutosamplerPanel(utils.DevicePanel):
         elif cmd_name == 'move_to_clean':
             self._move_to_clean()
             state = 'move_to_clean'
+
+        elif cmd_name == 'move_needle_in':
+            self._move_needle_in()
+            state = 'move_needle_in'
 
         elif cmd_name == 'load_and_move_to_inject':
             volume = cmd_kwargs['volume']
