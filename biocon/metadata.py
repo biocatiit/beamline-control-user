@@ -337,6 +337,7 @@ class SAXSPanel(wx.Panel):
             if self.is_buffer.GetStringSelection() == 'True':
                 metadata['Is Buffer:'] = True
                 metadata['Concentration [mg/ml]:'] = ''
+                metadata['Needs Separate Buffer Measurement:'] = False
             else:
                 metadata['Is Buffer:'] = False
                 metadata['Needs Separate Buffer Measurement:'] = self.separate_buffer.GetValue()

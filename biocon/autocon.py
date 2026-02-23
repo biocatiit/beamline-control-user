@@ -3064,7 +3064,7 @@ class AutoList(utils.ItemList):
         sample_list.extend(sample_list_unordered)
 
         for i, cmd_settings in enumerate(sample_list):
-            filename = '{}_{:04d}'.format(fname, fnum+i)
+            filename = '{}{:04d}'.format(fname, fnum+i)
             cmd_settings['filename'] = filename
 
             valid, err_msg = self._validate_cmd(cmd_settings)
