@@ -552,15 +552,18 @@ class FloatSpinCtrl(wx.Panel):
         except ValueError:
             return
 
+        self.Scale.SetModified(False)
+
         self.CastFloatSpinEvent()
 
         event.Skip()
 
     def OnEnter(self, event):
         self.OnScaleChange(None)
-        self.Scale.SelectAll()
-        self.CastFloatSpinEvent()
+        # self.Scale.SelectAll()
 
+        self.Scale.SetModified(False)
+        self.CastFloatSpinEvent()
         event.Skip()
 
     def OnScaleChange(self, event):
@@ -611,6 +614,7 @@ class FloatSpinCtrl(wx.Panel):
             newval_str = ("%d") %  newval
 
         self.Scale.SetValue(newval_str)
+        self.Scale.SetModified(False)
         self.CastFloatSpinEvent()
 
     def find_new_val_up(self, val):
@@ -685,6 +689,7 @@ class FloatSpinCtrl(wx.Panel):
             newval_str = ("%d") %  newval
 
         self.Scale.SetValue(str(newval_str))
+        self.Scale.SetModified(False)
         self.CastFloatSpinEvent()
 
     def GetValue(self):
@@ -693,6 +698,7 @@ class FloatSpinCtrl(wx.Panel):
 
     def SetValue(self, value):
         self.Scale.SetValue(str(value))
+        self.Scale.SetModified(False)
 
     def SetRange(self, minmax):
         self.max = float(minmax[1])
@@ -700,6 +706,14 @@ class FloatSpinCtrl(wx.Panel):
 
     def GetRange(self):
         return (self.min, self.max)
+
+    def SafeSetValue(self, val):
+        if not self.Scale.IsModified():
+            self.SetValue(val)
+
+    def SafeChangeValue(self, val):
+        if not self.Scale.IsModified():
+            self.ChangeValue(val)
 
 class WarningMessage(wx.Frame):
     def __init__(self, parent, msg, title, callback, *args, **kwargs):
