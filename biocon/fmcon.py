@@ -44,22 +44,37 @@ except ModuleNotFoundError:
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_03_00\\python_64')#add the path of the LoadElveflow.py
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_03_00\\DLL32\\Elveflow32DLL') #add the path of the library here
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_03_00\\python_32')#add the path of the LoadElveflow.py
+# elve_version = '3.03.00'
 
-# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\DLL64\\DLL64') #add the path of the library here
-# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\Python_64')#add the path of the LoadElveflow.py
-# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\DLL32\\DLL32') #add the path of the library here
-# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\Python_32')#add the path of the LoadElveflow.py
+sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\DLL64\\DLL64') #add the path of the library here
+sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\Python_64')#add the path of the LoadElveflow.py
+sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\DLL32\\DLL32') #add the path of the library here
+sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\Python_32')#add the path of the LoadElveflow.py
+elve_version = '3.07.02'
 
-sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_08_06\\DLL\\DLL64') #add the path of the library here
-sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_08_06\\DLL\\Python\\Python_64')#add the path of the LoadElveflow.py
-sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_08_06\\DLL\\DLL32') #add the path of the library here
-sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_08_06\\DLL\\Python\\Python_32')#add the path of the LoadElveflow.py
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_03\\DLL64\\DLL64') #add the path of the library here
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_03\\Python_64')#add the path of the LoadElveflow.py
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_03\\DLL32\\DLL32') #add the path of the library here
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_03\\Python_32')#add the path of the LoadElveflow.py
+# elve_version = '3.07.03'
+
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_08_06\\DLL\\DLL64') #add the path of the library here
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_08_06\\DLL\\Python\\Python_64')#add the path of the LoadElveflow.py
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_08_06\\DLL\\DLL32') #add the path of the library here
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_08_06\\DLL\\Python\\Python_32')#add the path of the LoadElveflow.py
+# elve_version = '3.08.06'
 
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_09_04\\DLL\\DLL64') #add the path of the library here
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_09_04\\DLL\\Python\\Python_64')#add the path of the LoadElveflow.py
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_09_04\\DLL\\DLL32') #add the path of the library here
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_09_04\\DLL\\Python\\Python_32')#add the path of the LoadElveflow.py
+# elve_version = '3.09.04'
 
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_10_03\\DLL\\DLL64') #add the path of the library here
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_10_03\\DLL\\Python\\Python_64')#add the path of the LoadElveflow.py
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_10_03\\DLL\\DLL32') #add the path of the library here
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_10_03\\DLL\\Python\\Python_32')#add the path of the LoadElveflow.py
+# elve_version = '3.10.03'
 
 try:
     import Elveflow64 as Elveflow
@@ -207,9 +222,14 @@ class BFS(FlowMeter):
             self.device))
         logger.info(logstr)
 
-        self.connect()
-
         self.remote = False
+
+        version = elve_version.split('.')
+        self.major = int(version[0])
+        self.minor = int(version[1])
+        self.point = int(version[2])
+
+        self.connect()
 
         self.filter = 0.5
 
@@ -220,8 +240,13 @@ class BFS(FlowMeter):
 
             self.instr_ID = ctypes.c_int32()
             with self.comm_lock:
-                error = Elveflow.BFS_Initialization(self.api_device,
-                    ctypes.byref(self.instr_ID))
+                if (self.major > 3 or (self.major == 3 and self.minor >= 10)):
+                    error = Elveflow.BFS_Initialization(self.api_device,
+                        0.5, 1, 1, ctypes.byref(self.instr_ID))
+                    Elveflow.BFS_Set_Remote_Params(self.instr_ID.value, 0.5, 1, 1)
+                else:
+                    error = Elveflow.BFS_Initialization(self.api_device,
+                        ctypes.byref(self.instr_ID))
 
             self._check_error(error)
 
@@ -232,66 +257,103 @@ class BFS(FlowMeter):
     @property
     def flow_rate(self):
         if not self.remote:
-            self.density
+            if (self.major > 3 or (self.major == 3 and self.minor >= 10)):
+                flow = ctypes.c_double(-1)
+                temp = ctypes.c_double(-1)
+                dens = ctypes.c_double(-1)
+                with self.comm_lock:
+                    error = Elveflow.BFS_Get_Remote_Data(self.instr_ID.value,
+                        ctypes.byref(flow), ctypes.byref(temp), ctypes.byref(dens))
+            else:
+                self.density
+                self.temperature
 
-            flow = ctypes.c_double(-1)
-            with self.comm_lock:
-                error = Elveflow.BFS_Get_Flow(self.instr_ID.value,
-                    ctypes.byref(flow))
+                flow = ctypes.c_double(-1)
+                with self.comm_lock:
+                    error = Elveflow.BFS_Get_Flow(self.instr_ID.value,
+                        ctypes.byref(flow))
 
             self._check_error(error)
 
             flow = float(flow.value)
 
+            if (self.major > 3 or (self.major == 3 and self.minor >= 10)):
+                temp = float(temp.value)
+                dens = float(dens.value)
+
         else:
             # self._set_remote_params(True, True)
-            flow, density, temp = self._read_remote()
+            flow, dens, temp = self._read_remote()
 
         flow = flow*self._flow_mult
 
-        logger.debug('Flow rate ({}): {}'.format(self.units, flow))
+        logger.debug('Flow rate (%s): %s', self.units, flow)
 
         return flow
 
     @property
     def density(self):
         if not self.remote:
-            density = ctypes.c_double(-1)
-            with self.comm_lock:
-                error = Elveflow.BFS_Get_Density(self.instr_ID.value,
-                    ctypes.byref(density))
+            if (self.major > 3 or (self.major == 3 and self.minor >= 10)):
+                flow = ctypes.c_double(-1)
+                temp = ctypes.c_double(-1)
+                dens = ctypes.c_double(-1)
+                with self.comm_lock:
+                    error = Elveflow.BFS_Get_Remote_Data(self.instr_ID.value,
+                        ctypes.byref(flow), ctypes.byref(temp), ctypes.byref(dens))
+            else:
+                dens = ctypes.c_double(-1)
+                with self.comm_lock:
+                    error = Elveflow.BFS_Get_Density(self.instr_ID.value,
+                        ctypes.byref(dens))
 
             self._check_error(error)
 
-            density = float(density.value)
+            dens = float(dens.value)
+
+            if (self.major > 3 or (self.major == 3 and self.minor >= 10)):
+                flow = float(flow.value)
+                temp = float(temp.value)
+
+        else:
+            # self._set_remote_params(True, True)
+            flow, dens, temp = self._read_remote()
+
+        logger.debug('Density: %s', dens)
+
+        return dens
+
+    @property
+    def temperature(self):
+        if not self.remote:
+            if (self.major > 3 or (self.major == 3 and self.minor >= 10)):
+                flow = ctypes.c_double(-1)
+                temp = ctypes.c_double(-1)
+                dens = ctypes.c_double(-1)
+                with self.comm_lock:
+                    error = Elveflow.BFS_Get_Remote_Data(self.instr_ID.value,
+                        ctypes.byref(flow), ctypes.byref(temp), ctypes.byref(dens))
+            else:
+                temp = ctypes.c_double(-1)
+                with self.comm_lock:
+                    error = Elveflow.BFS_Get_Temperature(self.instr_ID.value,
+                        ctypes.byref(temp))
+
+            self._check_error(error)
+
+            temp = float(temp.value)
+
+            if (self.major > 3 or (self.major == 3 and self.minor >= 10)):
+                flow = float(flow.value)
+                dens = float(dens.value)
 
         else:
             # self._set_remote_params(True, True)
             flow, density, temp = self._read_remote()
 
-        logger.debug('Density: {}'.format(density))
+        logger.debug('Temperature: %s', temp)
 
-        return density
-
-    @property
-    def temperature(self):
-        if not self.remote:
-            temperature = ctypes.c_double(-1)
-            with self.comm_lock:
-                error = Elveflow.BFS_Get_Temperature(self.instr_ID.value,
-                    ctypes.byref(temperature))
-
-            self._check_error(error)
-
-            temperature = float(temperature.value)
-
-        else:
-            # self._set_remote_params(True, True)
-            flow, density, temperature = self._read_remote()
-
-        logger.debug('Temperature: {}'.format(temperature))
-
-        return temperature
+        return temp
 
     @property
     def filter(self):
@@ -1103,18 +1165,17 @@ if __name__ == '__main__':
     # time.sleep(5)
     # my_fmcon.stop()
 
-    # Coflow flow meters
-    setup_devices = [
-        {'name': 'sheath', 'args' : ['BFS', 'COM5'], 'kwargs': {}},
-        {'name': 'outlet', 'args' : ['BFS', 'COM3'], 'kwargs': {}},
-        ]
-
-    # # TR-SAXS flow meter
+    # # Coflow flow meters
     # setup_devices = [
-    #     {'name': 'laminar_outlet', 'args' : ['BFS', 'COM18'], 'kwargs': {}},
-    #     {'name': 'laminar_outlet', 'args' : ['BFS', 'COM13'], 'kwargs': {}},
-    #     # {'name': 'chaotic_outlet', 'args' : ['BFS', 'COM5'], 'kwargs': {}},
+    #     {'name': 'sheath', 'args' : ['BFS', 'COM5'], 'kwargs': {}},
+    #     {'name': 'outlet', 'args' : ['BFS', 'COM3'], 'kwargs': {}},
     #     ]
+
+    # TR-SAXS flow meter
+    setup_devices = [
+        {'name': 'laminar_outlet', 'args' : ['BFS', 'COM3'], 'kwargs': {}},
+        # {'name': 'chaotic_outlet', 'args' : ['BFS', 'COM15'], 'kwargs': {}},
+        ]
 
     # # Simulated flow meter
     # setup_devices = [

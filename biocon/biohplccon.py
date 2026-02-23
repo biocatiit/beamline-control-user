@@ -5211,18 +5211,21 @@ class HPLCPanel(utils.DevicePanel):
             val = None
 
         if val is not None:
-            cmd = ['set_flow_rate', [self.name, val, flow_path], {}]
-            self._send_cmd(cmd, False)
+            self._set_flow_rate(flow_path, val)
 
-            if flow_path == 1:
-                if str(val) != self._pump1_flow_target:
-                        wx.CallAfter(self._pump1_flow_target_ctrl.SetLabel, str(val))
-                        self._pump1_flow_target = str(val)
+    def _set_flow_rate(self, flow_path, val):
+        cmd = ['set_flow_rate', [self.name, val, flow_path], {}]
+        self._send_cmd(cmd, False)
 
-            elif flow_path == 1:
-                if str(val) != self._pump2_flow_target:
-                        wx.CallAfter(self._pump2_flow_target_ctrl.SetLabel, str(val))
-                        self._pump2_flow_target = str(val)
+        if flow_path == 1:
+            if str(val) != self._pump1_flow_target:
+                    wx.CallAfter(self._pump1_flow_target_ctrl.SetLabel, str(val))
+                    self._pump1_flow_target = str(val)
+
+        elif flow_path == 1:
+            if str(val) != self._pump2_flow_target:
+                    wx.CallAfter(self._pump2_flow_target_ctrl.SetLabel, str(val))
+                    self._pump2_flow_target = str(val)
 
     def _on_set_flow_accel(self, evt):
         evt_obj = evt.GetEventObject()
@@ -5337,6 +5340,26 @@ class HPLCPanel(utils.DevicePanel):
             }
 
         return default_stop_flow_settings
+
+    def get_default_end_exp_settings(self):
+        if '0.0' != self._pump1_flow_target:
+            flow_rate1 = 0.1
+        else:
+            flow_rate1 = 0.
+
+        if '0.0' != self._pump2_flow_target:
+            flow_rate2 = 0.1
+        else:
+            flow_rate2 = 0.
+
+        default_end_exp_settings = {
+            'flow_accel1'   : self.settings['equil_accel'],
+            'flow_accel2'   : self.settings['equil_accel'],
+            'flow_rate1'    : flow_rate1,
+            'flow_rate2'    : flow_rate2,
+            }
+
+        return default_end_exp_settings
 
     def _on_purge(self, evt):
         evt_obj = evt.GetEventObject()
@@ -6826,6 +6849,16 @@ class HPLCPanel(utils.DevicePanel):
                 self._set_flow_accel(flow_path, cmd_kwargs['flow_accel'])
 
             self._stop_flow(flow_path)
+
+            state = 'idle'
+
+        elif cmd_name == 'set_flow_rate':
+            flow_path = cmd_kwargs['flow_path']
+            flow_accel = cmd_kwargs['flow_accel']
+            flow_rate = cmd_kwargs['flow_rate']
+
+            self._set_flow_accel(flow_path, flow_accel)
+            self._set_flow_rate(flow_path, flow_rate)
 
             state = 'idle'
 

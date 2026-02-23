@@ -46,6 +46,7 @@ import spectrometercon
 import biohplccon
 import autocon
 import autosamplercon
+import toastcon
 
 class BioFrame(wx.Frame):
     """
@@ -69,6 +70,7 @@ class BioFrame(wx.Frame):
 
         self._create_layout()
 
+        self.Layout()
         self.Fit()
         self.Raise()
 
@@ -183,6 +185,10 @@ class BioFrame(wx.Frame):
                 'metadata' in component_sizers and 'coflow' in component_sizers):
                     exp_sizer.Add(component_sizers['uv'], border=self._FromDIP(5),
                         flag=wx.EXPAND|wx.ALL)
+
+            if 'toaster' in component_sizers:
+                exp_sizer.Add(component_sizers['toaster'], border=self._FromDIP(5),
+                    flag=wx.EXPAND|wx.ALL)
 
             panel_sizer.Add(exp_sizer, flag=wx.EXPAND)
 
@@ -371,22 +377,22 @@ if __name__ == '__main__':
     # Exposure settings
     exposure_settings = expcon.default_exposure_settings
 
-    # Fast in-air shutters
+    # # Fast in-air shutters
     # exposure_settings['shutter_speed_open'] = 0.001
     # exposure_settings['shutter_speed_close'] = 0.001
-    # exposure_settings['shutter_speed_pad'] = 0.00
-    # exposure_settings['shutter_speed_cycle'] = 0.002
+    # exposure_settings['shutter_pad'] = 0.00
+    # exposure_settings['shutter_cycle'] = 0.002
 
-    # # Normal vacuum shutter (uniblitz)
+    # Normal vacuum shutter (uniblitz)
     exposure_settings['shutter_speed_open'] = 0.0045
     exposure_settings['shutter_speed_close'] = 0.004
-    exposure_settings['shutter_speed_pad'] = 0.002
-    exposure_settings['shutter_speed_cycle'] = 0.1
+    exposure_settings['shutter_pad'] = 0.002
+    exposure_settings['shutter_cycle'] = 0.1
 
-    # EIGER2 XE 9M
-    exposure_settings['det_args'] =  {'use_tiff_writer': False,
-        'use_file_writer': True, 'photon_energy' : 12.0,
-        'images_per_file': 300} #1 image/file for TR, 300 for eq SAXS, 1000 for muscle
+    # # EIGER2 XE 9M
+    # exposure_settings['det_args'] =  {'use_tiff_writer': False,
+    #     'use_file_writer': True, 'photon_energy' : 12.0,
+    #     'images_per_file': 100} #1 image/file for TR, 300 for eq SAXS, 1000 for muscle
 
     # Muscle settings
     exposure_settings['struck_measurement_time'] = '0.001'
@@ -417,9 +423,9 @@ if __name__ == '__main__':
         ]
     exposure_settings['warnings'] = {'shutter' : True, 'col_vac' : {'check': True,
         'thresh': 0.04}, 'guard_vac' : {'check': True, 'thresh': 0.04},
-        'sample_vac': {'check': True, 'thresh': 0.04}, 'sc_vac':
+        'sample_vac': {'check': False, 'thresh': 0.04}, 'sc_vac':
         {'check': True, 'thresh':0.04}}
-    exposure_settings['base_data_dir'] = '/nas_data/Eiger2x/2025_Run3/' #CHANGE ME and pipeline local_basedir
+    exposure_settings['base_data_dir'] = '/nas_data/Pilatus1M/2026_1M/2026_Run1/' #CHANGE ME and pipeline local_basedir
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']
 
 
@@ -475,17 +481,22 @@ if __name__ == '__main__':
     # Pipeline Settings
     pipeline_settings = {
         'components'    : ['pipeline'],
+        'output_basedir': '/nas_data/SAXS',
         'server_port'   : '5556',
         'server_ip'     : '164.54.204.142', #EPU
         # 'server_ip'     : '164.54.204.144', #Marvin
-        # 'raw_settings'  : '/nas_data/Pilatus1M/2021_Run1/20210129_Hopkins/setup/calibration/pipeline_SAXS.cfg',
-        'local_basedir' : '/nas_data/Eiger2x',
-        'data_basedir'  : '/nas_data/Eiger2x',
-        # 'local_basedir' : '/nas_data/Pilatus1M',
-        # 'data_basedir'  : '/nas_data/Pilatus1M',
-        'output_basedir': '/nas_data/SAXS',
-        'data_source'   : 'Stream', #File or stream
-        'detector'      : 'Eiger',
+
+        # EIGER settings
+        # 'local_basedir' : '/nas_data/Eiger2x',
+        # 'data_basedir'  : '/nas_data/Eiger2x',
+        # 'data_source'   : 'Stream', #File or stream
+        # 'detector'      : 'Eiger',
+
+        # Pilatus settings
+        'local_basedir' : '/nas_data/Pilatus1M/2026_1M',
+        'data_basedir'  : '/nas_data/Pilatus1M/2026_1M',
+        'data_source'   : 'File', #File or stream
+        'detector'      : 'Pilatus',
         }
 
 
@@ -524,6 +535,10 @@ if __name__ == '__main__':
     autosampler_settings['device_data'] = autosampler_settings['device_init'][0]
     autosampler_settings['inline_panel'] = True
 
+    ###################################################################
+    # Toaster Settings
+    toaster_settings = toastcon.default_toaster_settings
+
     biocon_settings = {}
 
     components = OrderedDict([
@@ -538,6 +553,7 @@ if __name__ == '__main__':
         ('hplc', biohplccon.HPLCPanel),
         ('automator', autocon.AutoPanel),
         ('autosampler', autosamplercon.AutosamplerPanel),
+        # ('toaster', toastcon.ToasterPanel),
         ])
 
     settings = {
@@ -552,6 +568,7 @@ if __name__ == '__main__':
         'hplc'          : hplc_settings,
         'automator'     : automator_settings,
         'autosampler'   : autosampler_settings,
+        'toaster'       : toaster_settings,
         'components'    : components,
         'biocon'        : biocon_settings,
         }

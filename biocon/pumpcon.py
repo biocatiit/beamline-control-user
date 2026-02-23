@@ -44,20 +44,41 @@ import serial.tools.list_ports as list_ports
 import wx
 from six import string_types
 
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_03_00\\DLL64\\Elveflow64DLL') #add the path of the library here
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_03_00\\python_64')#add the path of the LoadElveflow.py
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_03_00\\DLL32\\Elveflow32DLL') #add the path of the library here
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_03_00\\python_32')#add the path of the LoadElveflow.py
+# elve_version = '3.03.00'
+
 sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\DLL64\\DLL64') #add the path of the library here
-sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\python_64')#add the path of the LoadElveflow.py
+sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\Python_64')#add the path of the LoadElveflow.py
 sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\DLL32\\DLL32') #add the path of the library here
-sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\python_32')#add the path of the LoadElveflow.py
+sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\Python_32')#add the path of the LoadElveflow.py
+elve_version = '3.07.02'
+
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_03\\DLL64\\DLL64') #add the path of the library here
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_03\\Python_64')#add the path of the LoadElveflow.py
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_03\\DLL32\\DLL32') #add the path of the library here
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_03\\Python_32')#add the path of the LoadElveflow.py
+# elve_version = '3.07.03'
 
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_08_06\\DLL\\DLL64') #add the path of the library here
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_08_06\\DLL\\Python\\Python_64')#add the path of the LoadElveflow.py
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_08_06\\DLL\\DLL32') #add the path of the library here
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_08_06\\DLL\\Python\\Python_32')#add the path of the LoadElveflow.py
+# elve_version = '3.08.06'
 
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_09_04\\DLL\\DLL64') #add the path of the library here
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_09_04\\DLL\\Python\\Python_64')#add the path of the LoadElveflow.py
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_09_04\\DLL\\DLL32') #add the path of the library here
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_09_04\\DLL\\Python\\Python_32')#add the path of the LoadElveflow.py
+# elve_version = '3.09.04'
+
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_10_03\\DLL\\DLL64') #add the path of the library here
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_10_03\\DLL\\Python\\Python_64')#add the path of the LoadElveflow.py
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_10_03\\DLL\\DLL32') #add the path of the library here
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_10_03\\DLL\\Python\\Python_32')#add the path of the LoadElveflow.py
+# elve_version = '3.10.03'
 
 try:
     import Elveflow64 as Elveflow
@@ -362,6 +383,57 @@ class PicoPlusSerialComm(SerialComm):
         except Exception:
             logger.error("Failed to write to serial port!")
         logger.debug("Recived '%s' after writing to serial device on port %s", out, self.ser.port)
+
+        return out
+
+class LongerSerialComm(SerialComm):
+    """
+    This class subclases ``SerialComm`` to handle MForce specific
+    errors.
+    """
+
+    def write(self, data, pump_addr, get_response=True):
+        """
+        This warps the Serial.write() function. It encodes the input
+        data if necessary. It can return any expected response from the
+        controller.
+
+        :param data: Data to be written to the serial device.
+        :type data: bytes
+
+        :param term_char: The terminal character expected in a response
+        :type term_char: str
+
+        :returns: The requested response, or an empty string
+        :rtype: str
+        """
+        logger.debug("Sending %r to serial device on port %s", data, self.ser.port)
+
+        out = bytearray()
+        timeout = 1
+        start_time = time.time()
+        try:
+            with self.ser as s:
+                s.write(data)
+                if get_response:
+                    resp_len = 0
+                    while time.time()-start_time<timeout:
+                        if s.in_waiting > 0:
+                            ret = s.read(s.in_waiting)
+                            out += ret
+
+                        if len(out) >= 3 and resp_len == 0:
+                            resp = out.hex(' ')
+                            resp_len = int(resp.split()[2], 16)
+
+                        if len(out) >= resp_len and resp_len != 0:
+                            break
+                        time.sleep(.001)
+        except ValueError:
+            logger.exception("Failed to write %r to serial device on port %s", data, self.ser.port)
+
+        out = out.hex(' ')
+        logger.debug("Recived %r after writing to serial device on port %s", out, self.ser.port)
 
         return out
 
@@ -2617,7 +2689,7 @@ class SSINextGenPump(Pump):
         self.send_cmd('FI{}'.format(rate_str))
 
     def dispense(self, vol, units='mL'):
-        vol = self._convert_volume(vol, units, self._pump_base_units.split('/')[0])
+        vol = self._convert_volume(vol, units, self.units.split('/')[0])
 
         self._dispensing_volume = vol
 
@@ -2737,6 +2809,8 @@ class SSINextGenPump(Pump):
             'Upper pressure limit' : self.upl_fault,
             'Lower pressure limit' : self.lpl_fault, 'Leak': self.leak_fault,
             }
+
+        # print(faults)
 
         return faults
 
@@ -3485,6 +3559,329 @@ class KPHM100Pump(M50Pump):
         else:
             self.send_cmd("VM {}".format(abs(self._flow_rate)))
 
+class LongerL1001S2Pump(Pump):
+    """
+    Darwin microfluidics has some very useful documentation. I found it much
+    more helpful than the pump manual:
+    https://blog.darwin-microfluidics.com/how-to-control-the-longer-l100-1s-2-pump-via-python/
+    https://blog.darwin-microfluidics.com/control-command-string-generator-for-longer-peristaltic-pumps/
+
+    Note that other longer peristatltic pumps have different command sets.
+
+    Flow calibration for the DG-1 10 roller head with 1x1 mm tubing is 0.0569 mL/rev
+    """
+
+    def __init__(self, name, device, pump_addr, comm_lock=None, flow_cal=1):
+        """
+        This makes the initial serial connection, and then sets the MForce
+        controller parameters to the correct values.
+
+        :param device: The device comport as sent to pyserial
+        :type device: str
+
+        :param name: A unique identifier for the pumps
+        :type name: str
+
+        :param flow_cal: The pump-specific flow calibration, in mL/rev.
+        :type flow_cal: float
+
+        """
+        Pump.__init__(self, name, device, comm_lock=comm_lock)
+
+        logstr = ("Initializing pump {} on serial port {}".format(self.name,
+            self.device))
+        logger.info(logstr)
+
+        self._pump_addr = int(pump_addr)
+
+        #Make sure parameters are set right
+
+        self._units = 'mL/min'
+        self._pump_base_units = 'mL/min'
+
+        self._flow_cal = float(flow_cal)
+        self.cal = 1/self._flow_cal
+
+        if self.connected:
+            self.is_moving()
+
+    def connect(self):
+        if not self.connected:
+            with self.comm_lock:
+                self.pump_comm = LongerSerialComm(self.device, baudrate=9600)
+
+            self.connected = True
+
+        return self.connected
+
+    @property
+    def flow_rate(self):
+        rate = self._flow_rate/self.cal
+
+        rate = self._convert_flow_rate(rate, self._pump_base_units, self.units)
+
+        return rate
+
+    @flow_rate.setter
+    def flow_rate(self, rate):
+        logger.info("Setting pump %s flow rate to %f %s", self.name, rate, self.units)
+
+        rate = self._convert_flow_rate(rate, self.units, self._pump_base_units)
+
+        #Maximum continuous flow rate is 100 rpm
+        if abs(rate)*self.cal > 100:
+
+            if rate > 0:
+                rate = 100./self.cal
+            else:
+                rate = -100./self.cal
+            logger.warning("Requested flow rate > 100 rpm, setting pump %s flow rate to 100 rpm", self.name)
+
+        #Minimum flow rate is 0.01 rpm
+        if abs(rate)*self.cal < 0.01 and rate != 0:
+            if rate>0:
+                rate = 0.01/self.cal
+            else:
+                rate = -0.01/self.cal
+
+            logger.warning("Requested flow rate < 0.01 rpm, setting pump %s flow rate to 0.01 rpm", self.name)
+
+        stop_pump = not self.is_moving()
+
+        if rate > 0:
+            self._flow_dir = 1
+            pump_dir = 'CW'
+        else:
+            self._flow_dir = -1
+            pump_dir = 'CCW'
+
+        self._flow_rate = round(rate*self.cal, 2)
+
+        cmd = self.generate_cmd_string('set', stop_pump, pump_dir, self._flow_rate)
+
+        self.send_cmd(cmd)
+
+    def generate_cmd_string(self, cmd, stop_pump=True, pump_dir='CW', pump_speed=1):
+        """
+        pump_speed is in RPM
+        """
+        pump_speed = abs(pump_speed)
+        cmd_hdr = bytearray(b'\xE9')
+
+        cmd_addr = '{:02}'.format(self._pump_addr)
+
+        if cmd == 'set':
+            cmd_len = '06'
+            cmd_start = '57 4A' #WJ in hex
+
+            if pump_speed >= 10:
+                #Resolution of 0.1 for speeds >= 10 rpm
+                speed = int(round(pump_speed,1)*100) #Speed in units of 0.01 RPM
+            else:
+                #Resolution of 0.01 for speeds < 10 rpm
+                speed = int(round(pump_speed,2)*100) #Speed in units of 0.01 RPM
+
+            hex_speed = hex(speed)
+
+            speed_cmd = '{:0>4}'.format(hex_speed[2:]).upper()
+            speed_cmd = '{} {}'.format(speed_cmd[:2], speed_cmd[2:])
+
+            if stop_pump:
+                stop_cmd = '00'
+            else:
+                stop_cmd = '01'
+
+            if pump_dir == 'CW':
+                #clockwise
+                dir_cmd = '00'
+            else:
+                #counter clockwise
+                dir_cmd = '01'
+
+            cmd = '{} {} {} {}'.format(cmd_start, speed_cmd, stop_cmd, dir_cmd)
+
+        elif cmd == 'status':
+            cmd_len = '02'
+            cmd = '52 4A' #RJ in hex
+
+        #calculate checksum
+        pump_binary = int(cmd_addr.replace(' ', ''), 16)
+        len_binary = int(cmd_len.replace(' ', ''), 16)
+
+        cmd_binary = [int(c, 16) for c in cmd.split(' ')]
+
+        check_binary = pump_binary ^ len_binary
+
+        for c in cmd_binary:
+            check_binary ^= c
+
+        cmd_check = '{:02}'.format(hex(check_binary)[2:]).upper()
+
+        # make final command
+        full_cmd =  '{} {} {} {}'.format(cmd_addr, cmd_len, cmd, cmd_check)
+
+        binary_cmd = cmd_hdr + bytearray.fromhex(full_cmd)
+
+        return binary_cmd
+
+    def send_cmd(self, cmd, get_response=True):
+        """
+        Sends a command to the pump.
+
+        :param cmd: The command to send to the pump.
+        :type cmd: str, bytes
+
+        :param get_response: Whether the program should get a response from the pump
+        :type get_response: bool
+        """
+        logger.debug("Sending pump %s cmd %r", self.name, cmd)
+
+        with self.comm_lock:
+            ret = self.pump_comm.write(cmd, get_response)
+
+        if get_response:
+            logger.debug("Pump %s returned %r", self.name, ret)
+
+        return ret
+
+
+    def is_moving(self):
+        cmd = self.generate_cmd_string('status')
+
+        status = self.send_cmd(cmd)
+
+        status = status.split(' ')
+
+        logger.debug(status)
+
+        cmd = bytes.fromhex(''.join(status[3:5])).decode('ascii')
+
+        if cmd == 'RJ':
+            speed = round(int(''.join(status[5:7]), 16)/100., 2)
+            running = int(status[7], 16)
+            direction = int(status[8], 16)
+
+            if direction == 1:
+                self._flow_dir = -1
+            else:
+                self._flow_dir = 1
+
+            self._flow_rate = speed
+
+            if running == 1:
+                status = True
+            else:
+                status = False
+                self._is_dispensing = False
+
+            self._is_flowing = status
+
+            logger.debug("Pump %s moving: %s", self.name, str(self._is_flowing))
+
+            return self._is_flowing
+
+        else:
+            return False
+
+    def start_flow(self):
+        if self._is_flowing:
+            logger.debug("Stopping pump %s current motion before starting continuous flow", self.name)
+            self.stop()
+
+        logger.info("Pump %s starting continuous flow at %f %s", self.name, self.flow_rate, self.units)
+
+        if self._flow_dir == 1:
+            pump_dir = 'CW'
+        else:
+            pump_dir = 'CCW'
+
+        cmd = self.generate_cmd_string('set', False, pump_dir, self._flow_rate)
+
+        self.send_cmd(cmd)
+
+        self._is_flowing = True
+
+        if self._flow_rate > 0:
+            self._flow_dir = 1
+        elif self._flow_rate < 0:
+            self._flow_dir = -1
+
+    def dispense(self, vol, units='uL'):
+        """
+        Dispenses a fixed volume.
+
+        :param vol: Volume to dispense
+        :type vol: float
+
+        :param units: Volume units, defaults to uL, also accepts mL or nL
+        :type units: str
+        """
+        vol = self._convert_volume(vol, units, self.units.split('/')[0])
+
+        self._dispensing_volume = abs(vol)
+
+        self.start_flow()
+
+        dispense_thread = threading.Thread(target=self._run_dispense)
+        dispense_thread.start()
+
+    def aspirate(self, vol, units='uL'):
+        """
+        Aspirates a fixed volume.
+
+        :param vol: Volume to aspirate
+        :type vol: float
+
+        :param units: Volume units, defaults to uL, also accepts mL or nL
+        :type units: str
+        """
+        self.dispense(vol, units)
+
+    def _run_dispense(self):
+        previous_time = time.time()
+        previous_fr = self.flow_rate
+
+        update_time = previous_time
+
+        while self._is_flowing:
+            current_fr = copy.copy(self.flow_rate)
+            current_time = time.time()
+            delta_vol = ((current_fr + previous_fr)/2./60.)*(current_time-previous_time)
+
+            self._dispensing_volume -= abs(delta_vol)
+
+            previous_time = current_time
+            previous_fr = current_fr
+
+            if current_time - update_time > 60:
+                logger.info('Pump %s remaining dispense/aspirate volume is %s uL',
+                    self.name, self._dispensing_volume)
+                update_time = current_time
+
+            if self._dispensing_volume <= 0:
+                self.stop()
+                break
+
+            time.sleep(0.1)
+
+
+        logger.info('Finished dispense/aspirate for pump %s', self.name)
+
+    def stop(self):
+        logger.info("Pump %s stopping all motions", self.name)
+
+        if self._flow_dir == 1:
+            pump_dir = 'CW'
+        else:
+            pump_dir = 'CCW'
+
+        cmd = self.generate_cmd_string('set', True, pump_dir, self._flow_rate)
+
+        self.send_cmd(cmd)
+
+        self._is_flowing = False
+        self._is_dispensing = False
+
 class SoftPump(Pump):
     """
     This class contains the settings and communication for a generic pump.
@@ -3889,6 +4286,7 @@ known_pumps = {
     'OB1'           : OB1,
     'OB1 Pump'      : OB1Pump,
     'KPHM100'       : KPHM100Pump,
+    'Longer L100S2' : LongerL1001S2Pump,
     'Soft'          : SoftPump,
     'Soft Syringe'  : SoftSyringePump,
     }
@@ -5153,7 +5551,7 @@ class PumpPanel(utils.DevicePanel):
         print(self.settings)
 
         if (self.pump_type == 'VICI M50' or self.pump_type == 'KPHM100'
-            or self.pump_type == 'Soft'):
+            or self.pump_type == 'Longer L100S2' or self.pump_type == 'Soft'):
             self.pump_mode = 'continuous'
 
         elif (self.pump_type == 'PHD 4400' or self.pump_type == 'NE 500'
@@ -5927,6 +6325,8 @@ if __name__ == '__main__':
 
     # my_pump = SSINextGenPump('COM15', 'test')
 
+    # my_pump = LongerL1001S2Pump('test', 'COM9', 1)
+
     comm_lock = threading.Lock()
 
     # my_pump = PHD4400Pump('COM4', 'H1', '1', 23.5, 30, 30, '30 mL', comm_lock)
@@ -5977,9 +6377,9 @@ if __name__ == '__main__':
     # pmp_cmd_q.append(stop_cmd)
     # my_pumpcon.stop()
 
-    # Coflow pumps
+    # # Coflow pumps
     # setup_devices = [
-    #     {'name': 'sheath', 'args': ['VICI M50', 'COM4'],
+    #     {'name': 'sheath', 'args': ['VICI M50', 'COM6'],
     #         'kwargs': {'flow_cal': '627.72', 'backlash_cal': '9.814'},
     #         'ctrl_args': {'flow_rate': 1}},
     #     {'name': 'outlet', 'args': ['VICI M50', 'COM5'],
@@ -6016,7 +6416,7 @@ if __name__ == '__main__':
     #     {'name': 'sheath', 'args': ['VICI M50', 'COM6'],
     #         'kwargs': {'flow_cal': '627.72', 'backlash_cal': '9.814'},
     #         'ctrl_args': {'flow_rate': 1}},
-    #     {'name': 'outlet', 'args': ['OB1 Pump', 'COM15'],
+    #     {'name': 'outlet', 'args': ['OB1 Pump', 'COM14'],
     #         'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
     #         'min_pressure': -1000, 'max_pressure': 1000, 'P': -2, 'I': -0.15,
     #         'D': 0, 'bfs_instr_ID': bfs.instr_ID, 'comm_lock': ob1_comm_lock,
@@ -6066,15 +6466,19 @@ if __name__ == '__main__':
 
     # Teledyne SSI Reaxus pumps with scaling
     # setup_devices = [
-    #     {'name': 'Pump 4', 'args': ['SSI Next Gen', 'COM14'],
+    #     {'name': 'Pump 1: sheath', 'args': ['SSI Next Gen', 'COM18'],
+    #         'kwargs': {'flow_rate_scale': 1,
+    #         'flow_rate_offset': 0,'scale_type': 'up'},
+    #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
+    #     {'name': 'Pump 4: sucrose sheath', 'args': ['SSI Next Gen', 'COM9'],
     #         'kwargs': {'flow_rate_scale': 1.0583,
     #         'flow_rate_offset': -33.462/1000,'scale_type': 'up'},
     #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-    #     {'name': 'Pump 3', 'args': ['SSI Next Gen', 'COM17'],
+    #     {'name': 'Pump 3: kenics B', 'args': ['SSI Next Gen', 'COM10'],
     #         'kwargs': {'flow_rate_scale': 1.0135,
     #         'flow_rate_offset': 5.1251/1000,'scale_type': 'up'},
     #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-    #     {'name': 'Pump 2', 'args': ['SSI Next Gen', 'COM18'],
+    #     {'name': 'Pump 2: kenics A', 'args': ['SSI Next Gen', 'COM11'],
     #         'kwargs': {'flow_rate_scale': 1.0497,
     #         'flow_rate_offset': -34.853/1000,'scale_type': 'up'},
     #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
@@ -6082,15 +6486,15 @@ if __name__ == '__main__':
 
     # # Teledyne SSI Reaxus pumps without scaling
     # setup_devices = [
-    #     {'name': 'Pump 4', 'args': ['SSI Next Gen', 'COM19'],
+    #     {'name': 'Pump 4', 'args': ['SSI Next Gen', 'COM16'],
     #         'kwargs': {'flow_rate_scale': 1,
     #         'flow_rate_offset': 0,'scale_type': 'up'},
     #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-    #     {'name': 'Pump 3', 'args': ['SSI Next Gen', 'COM14'],
+    #     {'name': 'Pump 3', 'args': ['SSI Next Gen', 'COM9'],
     #         'kwargs': {'flow_rate_scale': 1,
     #         'flow_rate_offset': 0,'scale_type': 'up'},
     #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-    #     {'name': 'Pump 2', 'args': ['SSI Next Gen', 'COM18'],
+    #     {'name': 'Pump 2', 'args': ['SSI Next Gen', 'COM11'],
     #         'kwargs': {'flow_rate_scale': 1,
     #         'flow_rate_offset': 0,'scale_type': 'up'},
     #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
@@ -6104,32 +6508,32 @@ if __name__ == '__main__':
     #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
     #     ]
 
-    # # TR-SAXS Pico Plus pumps
+    # # # TR-SAXS Pico Plus pumps
     # setup_devices = [
-    #     {'name': 'Buffer', 'args': ['Pico Plus', 'COM11'],
+    #     {'name': 'Buffer', 'args': ['Pico Plus', 'COM12'],
     #         'kwargs': {'syringe_id': '3 mL, Medline P.C.',
     #         'pump_address': '00', 'dual_syringe': 'False'},
     #         'ctrl_args': {'flow_rate' : '1', 'refill_rate' : '1'}},
-    #     {'name': 'Sample', 'args': ['Pico Plus', 'COM9'],
+    #     {'name': 'Sample', 'args': ['Pico Plus', 'COM13'],
     #         'kwargs': {'syringe_id': '1 mL, Medline P.C.',
     #          'pump_address': '00', 'dual_syringe': 'False'},
     #         'ctrl_args': {'flow_rate' : '1', 'refill_rate' : '1'}},
-    #     {'name': 'Sheath', 'args': ['Pico Plus', 'COM7'],
+    #     {'name': 'Sheath', 'args': ['Pico Plus', 'COM14'],
     #         'kwargs': {'syringe_id': '1 mL, Medline P.C.',
     #          'pump_address': '00', 'dual_syringe': 'False'},
     #         'ctrl_args': {'flow_rate' : '1', 'refill_rate' : '1'}},
     #     ]
 
-    # Batch mode Hamilton PSD6 pump
-    setup_devices = [
-        {'name': 'sample', 'args': ['Hamilton PSD6', 'COM9'],
-            'kwargs': {'syringe_id': '0.1 mL, Hamilton Glass',
-            'pump_address': '1', 'dual_syringe': 'False',
-            'diameter': 1.46, 'max_volume': 0.1,
-            'max_rate': 1, 'comm_lock': threading.RLock(),},
-            'ctrl_args': {'flow_rate' : 100,
-            'refill_rate' : 100, 'units': 'uL/min'}},
-        ]
+    # # Batch mode Hamilton PSD6 pump
+    # setup_devices = [
+    #     {'name': 'sample', 'args': ['Hamilton PSD6', 'COM9'],
+    #         'kwargs': {'syringe_id': '0.1 mL, Hamilton Glass',
+    #         'pump_address': '1', 'dual_syringe': 'False',
+    #         'diameter': 1.46, 'max_volume': 0.1,
+    #         'max_rate': 1, 'comm_lock': threading.RLock(),},
+    #         'ctrl_args': {'flow_rate' : 100,
+    #         'refill_rate' : 100, 'units': 'uL/min'}},
+    #     ]
 
     # # Simulated pumps
     # setup_devices = [
@@ -6145,6 +6549,13 @@ if __name__ == '__main__':
     #     {'name': 'sheath', 'args': ['Soft', None], 'kwargs': {}},
     #     {'name': 'outlet', 'args': ['Soft', None], 'kwargs': {}},
     #     ]
+
+    # Longer pumps
+    setup_devices = [
+        {'name': 'test', 'args': ['Longer L100S2', 'COM15'],
+            'kwargs': {'pump_addr': 1, 'flow_cal': 0.0512},
+            'ctrl_args': {'flow_rate': 1}},
+        ]
 
     # Local
     com_thread = PumpCommThread('PumpComm')

@@ -151,7 +151,17 @@ known_well_plates = {
         'row_step'      : 9.00, # mm
         'height'        : 0.5, # bottom of well from chiller base plate
         'plate_height'  : 15.5, # top of plate from chiller base plate
-        }
+        },
+
+    'Greiner 96 well cell culture, uClear, chimney well' : {
+        'max_volume'    : 340, # uL
+        'num_columns'   : 12,
+        'num_rows'      : 8,
+        'col_step'      : 9.00, # mm
+        'row_step'      : 9.00, # mm
+        'height'        : 3.5, # bottom of well from chiller base plate
+        'plate_height'  : 14.4, # top of plate from chiller base plate
+        },
 }
 
 class Autosampler(object):
@@ -179,6 +189,7 @@ class Autosampler(object):
         self._cmd_thread = threading.Thread(target=self._run_cmds)
         self._cmd_thread.daemon = True
         self._cmd_thread.start()
+        self._cmd_errors = 0
 
     def _run_cmds(self):
         while not self._cmd_stop_event.is_set():
@@ -194,7 +205,26 @@ class Autosampler(object):
             cmds_run = False
 
             if cmd_func is not None:
-                cmd_func(*args, **kwargs)
+                try:
+                    cmd_func(*args, **kwargs)
+                    self._cmd_errors = 0
+                except Exception:
+                    msg = ("Autosampler %s failed to run command '%s' "
+                        "with args: %s and kwargs: %s " %(self.name, cmd_func,
+                        ', '.join(['{}'.format(a) for a in args]),
+                        ', '.join(['{}:{}'.format(kw, item) for kw, item in kwargs.items()])))
+                    logger.exception(msg)
+
+                    self._cmd_errors += 1
+                    self.stop()
+                    self._check_abort()
+                    self._active_count = 0
+
+                    if self._cmd_errors <= 2:
+                        self.clean()
+                    else:
+                        self._status = 'Error'
+
                 cmds_run = True
 
             if not cmds_run:
@@ -1320,7 +1350,7 @@ class Autosampler(object):
         return success
 
     def get_status(self):
-        if self._active_count == 0:
+        if self._active_count == 0 and self._status != 'Error':
             self._status = 'Idle'
         elif self._active_count > 0 and self._status == 'Idle':
             self._status = 'Busy'
@@ -1380,6 +1410,7 @@ class ASCommThread(utils.CommManager):
             'load_and_move_to_inject': self._load_and_move_to_inject,
             'clean'                 : self._clean,
             'get_status'            : self._get_status,
+            'stop'                  : self._stop_autosampler,
         }
 
         self._connected_devices = OrderedDict()
@@ -1834,6 +1865,19 @@ class ASCommThread(utils.CommManager):
 
         logger.debug("%s status is %s", name, val)
 
+    def _stop_autosampler(self, name, **kwargs):
+        logger.info("Stopping %s Autosampler", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        device.stop()
+
+        self._return_value((name, cmd, True), comm_name)
+
+        logger.debug("%s stopped", name)
+
     def _additional_abort(self):
         for name in self._connected_devices:
             device = self._connected_devices[name]
@@ -2067,7 +2111,7 @@ class AutosamplerPanel(utils.DevicePanel):
         needle_sub_sizer.Add(self.move_needle_out, flag=wx.ALIGN_CENTER_VERTICAL)
 
         needle_sizer = wx.StaticBoxSizer(needle_box, wx.VERTICAL)
-        needle_sizer.Add(needle_sub_sizer)
+        needle_sizer.Add(needle_sub_sizer, flag=wx.ALL, border=self._FromDIP(5))
 
 
         inj_box = wx.StaticBox(adv_win, label='Injection controls')
@@ -2094,7 +2138,7 @@ class AutosamplerPanel(utils.DevicePanel):
         inj_sub_sizer.Add(self.inject_sample, flag=wx.ALIGN_CENTER_VERTICAL)
 
         inj_sizer = wx.StaticBoxSizer(inj_box, wx.VERTICAL)
-        inj_sizer.Add(inj_sub_sizer)
+        inj_sizer.Add(inj_sub_sizer, flag=wx.ALL, border=self._FromDIP(5))
 
 
         pump_box = wx.StaticBox(adv_win, label='Pump controls')
@@ -2117,21 +2161,25 @@ class AutosamplerPanel(utils.DevicePanel):
         pump_sub_sizer.Add(self.dwell_time, flag=wx.ALIGN_CENTER_VERTICAL)
 
         pump_sizer = wx.StaticBoxSizer(pump_box, wx.VERTICAL)
-        pump_sizer.Add(pump_sub_sizer)
-        pump_sizer.Add(self.aspirate_sample, flag=wx.TOP, border=self._FromDIP(5))
+        pump_sizer.Add(pump_sub_sizer, flag=wx.ALL, border=self._FromDIP(5))
+        pump_sizer.Add(self.aspirate_sample, flag=wx.LEFT|wx.RIGHT|wx.BOTTOM,
+            border=self._FromDIP(5))
 
 
         self._staff_ctrl_btn = wx.Button(adv_win, label='Staff Controls')
         self._staff_ctrl_btn.Bind(wx.EVT_BUTTON, self._on_staff_ctrl_btn)
 
 
-        top_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(5),
+        top_sub_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(5),
             hgap=self._FromDIP(5))
-        top_sizer.Add(inj_sizer)
-        top_sizer.Add(needle_sizer)
-        top_sizer.Add(plate_sizer)
-        top_sizer.Add(pump_sizer)
-        top_sizer.Add(self._staff_ctrl_btn)
+        top_sub_sizer.Add(inj_sizer)
+        top_sub_sizer.Add(needle_sizer)
+        top_sub_sizer.Add(plate_sizer)
+        top_sub_sizer.Add(pump_sizer)
+        top_sub_sizer.Add(self._staff_ctrl_btn)
+
+        top_sizer = wx.BoxSizer(wx.VERTICAL)
+        top_sizer.Add(top_sub_sizer, flag=wx.ALL, border=self._FromDIP(5))
 
         adv_win.SetSizer(top_sizer)
 
@@ -2412,7 +2460,10 @@ class AutosamplerPanel(utils.DevicePanel):
         self._abort()
 
     def _abort(self):
-        self.com_thread.abort()
+        self.com_thread._abort()
+
+        if self.remote:
+            self._send_cmd(['stop', [self.name,], {}], False)
 
     def _on_change_plate_type(self, evt):
         plate_type = self.plate_types.GetStringSelection()
@@ -2443,6 +2494,9 @@ class AutosamplerPanel(utils.DevicePanel):
                 style=wx.OK|wx.ICON_ERROR)
 
     def _on_move_needle_in(self, evt):
+        self._move_needle_in()
+
+    def _move_needle_in(self):
         self._send_cmd(['move_needle_in', [self.name,], {}], False)
 
     def _on_move_needle_out(self, evt):
@@ -2730,6 +2784,10 @@ class AutosamplerPanel(utils.DevicePanel):
                 elif val == 'Idle':
                     for btn in self._ctrl_btns:
                         btn.Enable()
+                elif val == 'Error':
+                    msg = ('The batch mode autosampler has experienced an '
+                        'error. Please contact your beamline scientist.')
+
                 self._current_status = val
 
     def _set_status_commands(self):
@@ -2764,6 +2822,8 @@ class AutosamplerPanel(utils.DevicePanel):
             status = 'change_well_plate'
         elif self._current_status == 'Moving to clean':
             status = 'move_to_clean'
+        elif self._current_status == 'Moving needle in':
+            status = 'move_needle_in'
         else:
             status = 'busy'
 
@@ -2818,6 +2878,10 @@ class AutosamplerPanel(utils.DevicePanel):
         elif cmd_name == 'move_to_clean':
             self._move_to_clean()
             state = 'move_to_clean'
+
+        elif cmd_name == 'move_needle_in':
+            self._move_needle_in()
+            state = 'move_needle_in'
 
         elif cmd_name == 'load_and_move_to_inject':
             volume = cmd_kwargs['volume']
@@ -3146,9 +3210,9 @@ default_autosampler_settings = {
     # 'motor_acceleration'    : {'x': 500, 'y': 500, 'z': 500},
     'home_settings'         : {'plate_x': {'dir': -1, 'step': 0.1, 'pos': 0},
                                 'plate_z': {'dir': 1, 'step': 0.1, 'pos': 0},
-                                'needle_y': {'dir': -1, 'step': 0.01, 'pos': -2.20}}, #Direction 1/-1 for positive/negative. step is step size off limit, pos is what to set the home position as.
-    'base_position'         : {'plate_x': 270.45, 'plate_z': -81.1, 'needle_y': 111.6}, # A1 well position, needle height at chiller plate top
-    'clean_offsets'         : {'plate_x': 99.9, 'plate_z': -21.2, 'needle_y': -10}, # Relative to base position
+                                'needle_y': {'dir': -1, 'step': 0.01, 'pos': -2.70}}, #Direction 1/-1 for positive/negative. step is step size off limit, pos is what to set the home position as.
+    'base_position'         : {'plate_x': 270.95, 'plate_z': -76.6, 'needle_y': 111.7}, # A1 well position, needle height at chiller plate top
+    'clean_offsets'         : {'plate_x': 99.7, 'plate_z': -21.4, 'needle_y': -10}, # Relative to base position
     'needle_out_offset'     : 5, # mm
     'needle_in_position'    : 0,
     'plate_out_position'    : {'plate_x': -31, 'plate_z': 0}, # Relative

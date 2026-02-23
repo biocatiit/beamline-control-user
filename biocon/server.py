@@ -427,7 +427,7 @@ class ControlServer(threading.Thread):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('exp_type', help='Experiment type for server',
-        type=str, choices=['coflow', 'coflow_nouv', 'trsaxs_chaotic', 'trsaxs_laminar',
+        type=str, choices=['coflow', 'uv', 'trsaxs_chaotic', 'trsaxs_laminar',
         'hplc', 'autosampler'])
 
     args = parser.parse_args()
@@ -461,30 +461,29 @@ if __name__ == '__main__':
 
     print('Log directory: {}'.format(info_dir))
 
-    port1 = '5556'
-    port2 = '5557'
-    port3 = '5558'
-    port4 = '5559'
+    port1 = '5556' #Coflow or hplc or TR pump
+    port2 = '5557' #Autosampler or TR fm
+    port3 = '5558' #UV or TR valve or UV
 
     if exp_type.startswith('coflow'):
         # Coflow
         logger.info('Starting coflow server')
 
-        if 'nouv' in exp_type:
-            has_uv = False
-            logger.info('No UV connected')
-        else:
-            has_uv = True
+        # if 'nouv' in exp_type:
+        #     has_uv = False
+        #     logger.info('No UV connected')
+        # else:
+        #     has_uv = True
 
         ip = '164.54.204.53'
         # ip = '164.54.204.192'
         # ip = '164.54.204.24'
 
-        spectrometer_settings = spectrometercon.default_spectrometer_settings
-        spectrometer_settings['remote'] = False
-        spectrometer_settings['device_communication'] = 'local'
-        spectrometer_settings['inline_panel'] = False
-        spectrometer_settings['plot_refresh_t'] = 1
+        # spectrometer_settings = spectrometercon.default_spectrometer_settings
+        # spectrometer_settings['remote'] = False
+        # spectrometer_settings['device_communication'] = 'local'
+        # spectrometer_settings['inline_panel'] = False
+        # spectrometer_settings['plot_refresh_t'] = 1
 
         coflow_settings = coflowcon.default_coflow_settings
 
@@ -494,6 +493,17 @@ if __name__ == '__main__':
         coflow_settings['device_init'][0]['kwargs']['outlet_pump']['kwargs']['comm_lock'] = ob1_comm_lock
         coflow_settings['device_init'][0]['kwargs']['outlet_fm']['kwargs']['comm_lock'] = outlet_fm_comm_lock
         coflow_settings['components'] = ['coflow',]
+
+    elif exp_type == 'uv':
+        logger.info('Starting UV server')
+
+        ip = '164.54.204.53'
+
+        spectrometer_settings = spectrometercon.default_spectrometer_settings
+        spectrometer_settings['remote'] = False
+        spectrometer_settings['device_communication'] = 'local'
+        spectrometer_settings['inline_panel'] = False
+        spectrometer_settings['plot_refresh_t'] = 1
 
     elif exp_type.startswith('trsaxs'):
         # TR SAXS
@@ -507,27 +517,27 @@ if __name__ == '__main__':
 
             # Teledyne SSI Reaxus pumps with scaling
             setup_pumps = [
-                {'name': 'Buffer 2', 'args': ['SSI Next Gen', 'COM14'],
-                    'kwargs': {'flow_rate_scale': 1.0583,
-                    'flow_rate_offset': -33.462/1000,'scale_type': 'up'},
+                {'name': 'Buffer 2', 'args': ['SSI Next Gen', 'COM10'],
+                    'kwargs': {'flow_rate_scale': 1.045,
+                    'flow_rate_offset': -48.462/1000,'scale_type': 'up'},
                     'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-                {'name': 'Sample', 'args': ['SSI Next Gen', 'COM17'],
-                    'kwargs': {'flow_rate_scale': 1.0135,
-                    'flow_rate_offset': 5.1251/1000,'scale_type': 'up'},
+                {'name': 'Sample', 'args': ['SSI Next Gen', 'COM9'],
+                    'kwargs': {'flow_rate_scale': 1.02,
+                    'flow_rate_offset': 0.1251/1000,'scale_type': 'up'},
                     'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-                {'name': 'Buffer 1', 'args': ['SSI Next Gen', 'COM18'],
-                    'kwargs': {'flow_rate_scale': 1.0497,
-                    'flow_rate_offset': -34.853/1000,'scale_type': 'up'},
+                {'name': 'Buffer 1', 'args': ['SSI Next Gen', 'COM7'],
+                    'kwargs': {'flow_rate_scale': 1.03,
+                    'flow_rate_offset': -19.853/1000,'scale_type': 'up'},
                     'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
                  ]
 
             setup_valves = [
-                # {'name': 'Injection', 'args': ['Rheodyne', 'COM6'],
+                # {'name': 'Injection', 'args': ['Rheodyne', 'COM16'],
                 #     'kwargs': {'positions' : 2}},
-                {'name': 'Injection', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo14'],
+                {'name': 'Injection 1', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo15'],
                     'kwargs': {'positions' : 2}},
-                # {'name': 'Injection 2', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo14'],
-                #     'kwargs': {'positions' : 2}},
+                {'name': 'Injection 2', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo15'],
+                    'kwargs': {'positions' : 2}},
                 ]
 
             setup_fms = [
@@ -582,34 +592,34 @@ if __name__ == '__main__':
         elif exp_type == 'trsaxs_laminar':
             # Laminar flow
             setup_pumps = [
-                {'name': 'Sheath', 'args': ['Pico Plus', 'COM7'],
-                    'kwargs': {'syringe_id': '1 mL, Medline P.C.',
+                {'name': 'Buffer', 'args': ['Pico Plus', 'COM11'],
+                    'kwargs': {'syringe_id': '3 mL, Medline P.C.',
                     'pump_address': '00', 'dual_syringe': 'False'},
-                    'ctrl_args': {'flow_rate' : '0.002', 'refill_rate' : '1.0'}},
-                {'name': 'Sample', 'args': ['Pico Plus', 'COM9'],
+                    'ctrl_args': {'flow_rate' : '0.0655', 'refill_rate' : '3'}},
+                {'name': 'Sample', 'args': ['Pico Plus', 'COM12'],
                     'kwargs': {'syringe_id': '1 mL, Medline P.C.',
                     'pump_address': '00', 'dual_syringe': 'False'},
                     'ctrl_args': {'flow_rate' : '0.009', 'refill_rate' : '1.0'}},
-                 {'name': 'Buffer', 'args': ['Pico Plus', 'COM11'],
-                    'kwargs': {'syringe_id': '3 mL, Medline P.C.',
+                {'name': 'Sheath', 'args': ['Pico Plus', 'COM14'],
+                    'kwargs': {'syringe_id': '1 mL, Medline P.C.',
                     'pump_address': '00', 'dual_syringe': 'False'},
-                    'ctrl_args': {'flow_rate' : '0.068', 'refill_rate' : '3'}},
+                    'ctrl_args': {'flow_rate' : '0.005', 'refill_rate' : '1.0'}},
                 ]
 
             setup_valves = [
-                {'name': 'Injection', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo14'],
-                    'kwargs': {'positions' : 2}},
-                # {'name': 'Injection', 'args': ['Rheodyne', 'COM6'],
+                # {'name': 'Injection', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo14'],
                 #     'kwargs': {'positions' : 2}},
-                {'name': 'Sheath 1', 'args': ['Rheodyne', 'COM21'],
+                {'name': 'Injection', 'args': ['Rheodyne', 'COM16'],
+                    'kwargs': {'positions' : 2}},
+                {'name': 'Buffer 1', 'args': ['Rheodyne', 'COM21'],
                     'kwargs': {'positions' : 6}},
-                {'name': 'Sheath 2', 'args': ['Rheodyne', 'COM8'],
+                {'name': 'Buffer 2', 'args': ['Rheodyne', 'COM8'],
                     'kwargs': {'positions' : 6}},
-                {'name': 'Sample', 'args': ['Rheodyne', 'COM3'],
+                {'name': 'Sample', 'args': ['Rheodyne', 'COM4'],
                     'kwargs': {'positions' : 6}},
-                {'name': 'Buffer 1', 'args': ['Rheodyne', 'COM10'],
+                {'name': 'Sheath 1', 'args': ['Rheodyne', 'COM6'],
                     'kwargs': {'positions' : 6}},
-                {'name': 'Buffer 2', 'args': ['Rheodyne', 'COM4'],
+                {'name': 'Sheath 2', 'args': ['Rheodyne', 'COM3'],
                     'kwargs': {'positions' : 6}},
                 ]
 
@@ -694,20 +704,19 @@ if __name__ == '__main__':
             title='Coflow Control')
         coflow_frame.Show()
 
-        if has_uv:
-            # Coflow only
-            control_server_uv = ControlServer(ip, port4, name='UVControlServer',
-                start_uv=True)
-            control_server_uv.start()
-            control_server_uv.ready_event.wait()
+    elif exp_type == 'uv':
+        control_server_uv = ControlServer(ip, port3, name='UVControlServer',
+            start_uv=True)
+        control_server_uv.start()
+        control_server_uv.ready_event.wait()
 
-            uv_comm_thread = control_server_uv.get_comm_thread('uv')
+        uv_comm_thread = control_server_uv.get_comm_thread('uv')
 
-            spectrometer_settings['com_thread'] = uv_comm_thread
+        spectrometer_settings['com_thread'] = uv_comm_thread
 
-            uv_frame = spectrometercon.UVFrame('UVFrame', spectrometer_settings,
-                parent=None, title='UV Spectrometer Control')
-            uv_frame.Show()
+        uv_frame = spectrometercon.UVFrame('UVFrame', spectrometer_settings,
+            parent=None, title='UV Spectrometer Control')
+        uv_frame.Show()
 
 
     elif exp_type.startswith('trsaxs'):
@@ -805,9 +814,9 @@ if __name__ == '__main__':
             control_server_coflow.stop()
             control_server_coflow.join(5)
 
-            if has_uv:
-                control_server_uv.stop()
-                control_server_uv.join(5)
+        elif exp_type == 'uv':
+            control_server_uv.stop()
+            control_server_uv.join(5)
 
         elif exp_type.startswith('trsaxs'):
             control_server_pump.stop()

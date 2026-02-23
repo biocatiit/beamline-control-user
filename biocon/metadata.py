@@ -217,7 +217,7 @@ class SAXSPanel(wx.Panel):
 
 
         mixers = ['Chaotic S-bend (90 ms)', 'Chaotic S-bend (1 s)',
-            'Chaotic S-bend (2 ms)', 'Laminar']
+            'Chaotic S-bend (2 ms)', 'Laminar', 'Other']
         self.mixer_type = wx.Choice(ctrl_parent, choices=mixers)
 
         self.tr_sizer = wx.FlexGridSizer(cols=2, vgap=5, hgap=5)
@@ -337,6 +337,7 @@ class SAXSPanel(wx.Panel):
             if self.is_buffer.GetStringSelection() == 'True':
                 metadata['Is Buffer:'] = True
                 metadata['Concentration [mg/ml]:'] = ''
+                metadata['Needs Separate Buffer Measurement:'] = False
             else:
                 metadata['Is Buffer:'] = False
                 metadata['Needs Separate Buffer Measurement:'] = self.separate_buffer.GetValue()
