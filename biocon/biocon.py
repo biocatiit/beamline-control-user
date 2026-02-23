@@ -549,7 +549,7 @@ if __name__ == '__main__':
         # ('scan',    scancon.ScanPanel),
         ('metadata', metadata.ParamPanel),
         ('pipeline', pipeline_ctrl.PipelineControl),
-        # ('uv', spectrometercon.UVPanel),
+        ('uv', spectrometercon.UVPanel),
         ('hplc', biohplccon.HPLCPanel),
         ('automator', autocon.AutoPanel),
         ('autosampler', autosamplercon.AutosamplerPanel),

@@ -649,6 +649,8 @@ class AutoCommand(object):
                 self.status = 'wait'
             elif any([val == 'run' for val in self.auto_id_status]):
                 self.status = 'run'
+            elif any([val == 'queue' for val in self.auto_id_status]):
+                self.status = 'run'
             elif (state != 'run' and
                 not all([val == 'done' for val in self.auto_id_status])):
                 self.status = 'pause'
@@ -1181,8 +1183,8 @@ class EndOfExperimentCommand(AutoCommand):
         flow1_fr = cmd_info['flow_rate1']
         flow1_accel = cmd_info['flow_accel1']
         set_flow2 = cmd_info['set_flow2']
-        flow2_fr = cmd_info['flow2_fr']
-        flow2_accel = cmd_info['flow2_accel']
+        flow2_fr = cmd_info['flow_rate2']
+        flow2_accel = cmd_info['flow_accel2']
         stop_coflow = cmd_info['stop_coflow']
         cell_in_hellmanex = cmd_info['cell_in_hellmanex']
         move_needle_to_clean = cmd_info['move_needle_to_clean']
@@ -1191,7 +1193,7 @@ class EndOfExperimentCommand(AutoCommand):
         # Set up command wait to start and end
         start_wait_id = self.automator.get_wait_id()
         start_wait_cmd = 'wait_sync_{}'.format(start_wait_id)
-        start_conds = [['exp', [start_wait_cmd,]],]
+        start_conds = []
 
         end_wait_id = self.automator.get_wait_id()
         end_wait_cmd = 'wait_sync_{}'.format(end_wait_id)
@@ -1284,16 +1286,15 @@ class CleanCellCommand(AutoCommand):
     def _initialize_cmd(self, cmd_info):
 
         # Get command settings
-        equil_coflow = cmd_info['equil_coflow']
-        restart_coflow = cmd_info['restart_coflow']
+        equil_coflow = cmd_info['coflow_equil']
+        restart_coflow = cmd_info['coflow_restart']
         coflow_buf_pos = cmd_info['coflow_buf_pos']
         coflow_rate = cmd_info['coflow_rate']
 
         # Set up command wait to start, after clean and end
         start_wait_id = self.automator.get_wait_id()
         start_wait_cmd = 'wait_sync_{}'.format(start_wait_id)
-        start_conds = [['exp', [start_wait_cmd,]], ['coflow', [start_wait_cmd,]],
-            ['autosampler', [start_wait_cmd,]]]
+        start_conds = [['coflow', [start_wait_cmd,]],['autosampler', [start_wait_cmd,]]]
 
         clean_wait_id = self.automator.get_wait_id()
         clean_wait_cmd = 'wait_sync_{}'.format(clean_wait_id)
@@ -1771,6 +1772,7 @@ class AutoSettings(scrolled.ScrolledPanel):
         for item in self.cmd_type_list:
             cmd_key = item[0]
             default_settings = copy.copy(item[1])
+            self.ctrl_ids[cmd_key] = {}
 
             for key in default_settings:
                 self.ctrl_ids[cmd_key][key] = wx.NewIdRef()
@@ -1835,7 +1837,7 @@ class AutoSettings(scrolled.ScrolledPanel):
                 panel_rets = panel_func(top_level, parent,
                     self.ctrl_ids[cmd_key], 'vert', num_flow_paths, read_only=True)
 
-            if isinstance(panel_rets, list):
+            if isinstance(panel_rets, list) or isinstance(panel_rets, tuple):
                 item_panel = panel_rets[0]
             else:
                 item_panel = panel_rets
@@ -4040,8 +4042,8 @@ class AutoList(utils.ItemList):
                 errors.append('Pump 1 flow rate must be a number')
 
             if isinstance(cmd_settings['flow_rate1'], float):
-                if cmd_settings['flow_rate1'] <= 0:
-                    errors.append('Pump 1 flow rate must >0')
+                if cmd_settings['flow_rate1'] < 0:
+                    errors.append('Pump 1 flow rate must >=0')
 
         if cmd_settings['set_flow2']:
             try:
@@ -4059,8 +4061,8 @@ class AutoList(utils.ItemList):
                 errors.append('Pump 2 flow rate must be a number')
 
             if isinstance(cmd_settings['flow_rate2'], float):
-                if cmd_settings['flow_rate2'] <= 0:
-                    errors.append('Pump 2 flow rate must >0')
+                if cmd_settings['flow_rate2'] < 0:
+                    errors.append('Pump 2 flow rate must >=0')
 
         if len(errors) > 0:
             valid = False
@@ -4519,7 +4521,7 @@ class AutoListItem(utils.ListItem):
                 self.stop_coflow_ctrl, nc_label, self.needle_clean_ctrl,
                 ch_label, self.cell_hellmanex_ctrl])
 
-        elif self.item_type == 'end_exp':
+        elif self.item_type == 'clean_cell':
 
             ce_label = wx.StaticText(item_parent, label='Equilibrate coflow:')
             cr_label = wx.StaticText(item_parent, label='Restart coflow:')
@@ -4627,7 +4629,7 @@ class AutoListItem(utils.ListItem):
 
         elif self.item_type == 'clean_cell':
             self.coflow_equil_ctrl.SetLabel(str(self.item_info['coflow_equil']))
-            self.cofow_restart_ctrl.SetLabel(str(self.item_info['coflow_restart']))
+            self.coflow_restart_ctrl.SetLabel(str(self.item_info['coflow_restart']))
 
         elif self.item_type == 'exposure':
             name = self.item_info['filename']

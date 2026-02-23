@@ -5211,9 +5211,9 @@ class HPLCPanel(utils.DevicePanel):
             val = None
 
         if val is not None:
-            self._set_flow(val, flow_path)
+            self._set_flow_rate(flow_path, val)
 
-    def _set_flow(self, val, flow_path):
+    def _set_flow_rate(self, flow_path, val):
         cmd = ['set_flow_rate', [self.name, val, flow_path], {}]
         self._send_cmd(cmd, False)
 
@@ -6859,6 +6859,8 @@ class HPLCPanel(utils.DevicePanel):
 
             self._set_flow_accel(flow_path, flow_accel)
             self._set_flow_rate(flow_path, flow_rate)
+
+            state = 'idle'
 
         elif cmd_name == 'abort':
             state = 'idle'
