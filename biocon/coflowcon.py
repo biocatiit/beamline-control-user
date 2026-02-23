@@ -3706,7 +3706,7 @@ default_coflow_settings = {
         'remote_overflow_ip'        : '164.54.204.75',
         'flow_units'                : 'mL/min',
         'sheath_pump'
-                                    : {'name': 'test', 'args': ['Longer L100S2', 'COM15'],
+                                    : {'name': 'sheath', 'args': ['Longer L100S2', 'COM15'],
                                         'kwargs': {'pump_addr': 1, 'flow_cal': 0.0512},
                                         'ctrl_args': {'flow_rate': 1}},
         # 'sheath_pump'               : {'name': 'sheath', 'args': ['VICI M50', 'COM6'],
