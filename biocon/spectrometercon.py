@@ -299,6 +299,7 @@ class Spectrometer(object):
 
         self._do_analog_out = True
         self._analog_out_v_max = 10.
+        self._analog_out_v_offset = -9.5
         self._analog_out_au_max = 10000.
         self._analog_out_wavelengths = {}
 
@@ -679,11 +680,21 @@ class Spectrometer(object):
                 if wav > 0:
                     abs_val = spectrum.get_absorbance(wav)
 
-                    output_val = (min(1., abs(abs_val/self._analog_out_au_max))
-                        *self._analog_out_v_max)
+                    # Old
+                    # output_val = (min(1., abs(abs_val/self._analog_out_au_max))
+                    #     *self._analog_out_v_max)
 
-                    if abs_val < 0:
-                        output_val *= -1
+                    # if abs_val < 0:
+                    #     output_val *= -1
+
+                    output_val = (abs_val*(self._analog_out_v_max/self._analog_out_au_max)
+                        + self._analog_out_v_offset)
+
+                    if output_val > self._analog_out_v_max:
+                        output_val = self._analog_out_v_max
+
+                    elif output_val < -1*self._analog_out_v_max:
+                        output_val = -1*self._analog_out_v_max
 
                     self._set_analog_output(output, output_val)
 
@@ -1169,6 +1180,7 @@ class Spectrometer(object):
         ao_params = {
             'do_analog_out': self._do_analog_out,
             'analog_out_v_max': self._analog_out_v_max,
+            'analog_out_v_offset': self._analog_out_v_offset,
             'analog_out_au_max': self._analog_out_au_max,
             'analog_out_wavelengths': self._analog_out_wavelengths,
             }
@@ -1183,6 +1195,9 @@ class Spectrometer(object):
 
         if 'ao_v_max' in kwargs:
             self._analog_out_v_max = kwargs['ao_v_max']
+
+        if 'ao_v_off' in kwargs:
+            self._analog_out_v_offset = kwargs['ao_v_off']
 
         if 'ao_au_max' in kwargs:
             self._analog_out_au_max = kwargs['ao_au_max']
@@ -2259,6 +2274,7 @@ class UVCommThread(utils.CommManager):
             'drift_win' : drift_win,
             'ao_on'     : ao_params['do_analog_out'],
             'ao_v_max'  : ao_params['analog_out_v_max'],
+            'ao_v_offset': ao_params['analog_out_v_offset'],
             'ao_au_max' : ao_params['analog_out_au_max'],
             'ao_wavs'   : ao_params['analog_out_wavelengths'],
             'live_update': live_update,
@@ -2559,6 +2575,7 @@ class UVPanel(utils.DevicePanel):
         self._current_wav_range = None
         self._current_ao_on = None
         self._current_ao_v_max = None
+        self._current_ao_v_offset = None
         self._current_ao_au_max = None
         self._current_ao_wav = {'out1': None, 'out2': None}
 
@@ -3690,10 +3707,12 @@ class UVPanel(utils.DevicePanel):
         if self.inline:
             do_ao = self.settings['do_ao']
             ao_v_max = self.settings['analog_out_v_max']
+            ao_v_offset = self.settings['analog_out_v_offset']
             ao_au_max = self.settings['analog_out_au_max']
             ao_wav = self.settings['analog_out_wav']
             params = {'do_ao': do_ao, 'ao_v_max': ao_v_max,
-                'ao_au_max' : ao_au_max, 'ao_wav': ao_wav}
+                'ao_v_offset': ao_v_offset, 'ao_au_max' : ao_au_max,
+                'ao_wav': ao_wav}
         else:
             do_ao = self.do_ao.GetValue()
             params = {'do_ao': do_ao}
@@ -3726,7 +3745,14 @@ class UVPanel(utils.DevicePanel):
             except Exception:
                 ao_v_max = 0
 
+            try:
+                ao_v_offset = self.settings['analog_out_v_offset']
+                params['ao_v_offset'] = ao_v_offset
+            except Exception:
+                ao_v_offset = 0
+
         if (do_ao != self._current_ao_on or ao_v_max != self._current_ao_v_max
+            or ao_v_offset != self._current_ao_v_offset
             or ao_au_max != self._current_ao_au_max
             or ao_wav != self._current_ao_wav):
                 cmd = ['set_ao_params', [self.name,], params]
@@ -3737,6 +3763,9 @@ class UVPanel(utils.DevicePanel):
 
         if ao_v_max != self._current_ao_v_max:
             self._current_ao_v_max = ao_v_max
+
+        if ao_v_offset != self._current_ao_v_offset:
+            self._current_ao_v_offset = ao_v_offset
 
         if ao_au_max != self._current_ao_au_max:
             self._current_ao_au_max = ao_au_max
@@ -3874,6 +3903,7 @@ class UVPanel(utils.DevicePanel):
             drift_win = val['drift_win']
             ao_on = val['ao_on']
             ao_v_max = val['ao_v_max']
+            ao_v_offset = val['ao_v_offset']
             ao_au_max = val['ao_au_max']
             ao_wav = val['ao_wavs']
             live_update = val['live_update']
@@ -3917,6 +3947,7 @@ class UVPanel(utils.DevicePanel):
             self._current_drift_win = drift_win
             self._current_ao_on = ao_on
             self._current_ao_v_max = ao_v_max
+            self._current_ao_v_offset = ao_v_offset
             self._current_ao_au_max = ao_au_max
             self._current_ao_wav = ao_wav
 
@@ -4913,6 +4944,7 @@ default_spectrometer_settings = {
         'int_t_scale'           : 2,
         'wavelength_range'      : [225, 838.39],
         'analog_out_v_max'      : 10.,
+        'analog_out_v_offset'   : -9.5,
         'analog_out_au_max'     : 10000, #mAu
         'analog_out_wav'        : {'out1': 280, 'out2': 260},
         'do_ao'                 : True,
