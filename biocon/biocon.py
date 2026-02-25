@@ -27,8 +27,6 @@ import logging.handlers as handlers
 import sys
 import os
 from collections import OrderedDict
-from decimal import Decimal as D
-import multiprocessing
 
 if __name__ != '__main__':
     logger = logging.getLogger(__name__)
@@ -40,13 +38,13 @@ import expcon
 import coflowcon
 import trcon
 import metadata
-import scancon
 import pipeline_ctrl
 import spectrometercon
 import biohplccon
 import autocon
 import autosamplercon
 import toastcon
+import monotunecon
 
 class BioFrame(wx.Frame):
     """
@@ -95,6 +93,12 @@ class BioFrame(wx.Frame):
 
             self.component_panels['exposure'].set_pipeline_ctrl(
                 self.component_controls['pipeline'])
+
+        if ('exposure' in self.component_panels
+            and 'mono_auto_tune' in self.component_controls):
+
+            self.component_panels['exposure'].set_mono_auto_tune_ctrl(
+                self.component_controls['mono_auto_tune'])
 
     def _create_standard_layout(self):
         top_panel = wx.Panel(self)
@@ -340,6 +344,10 @@ class BioFrame(wx.Frame):
                 logger.info('Setting up pipeline')
                 ctrl = self.settings['components'][key](self.settings[key])
                 self.component_controls[key] = ctrl
+            elif key == 'mono_auto_tune':
+                logger.info('Setting up mono auto tune')
+                ctrl = self.settings['components'][key](self.settings[key])
+                self.component_controls[key] = ctrl
             else:
                 pass
 
@@ -539,6 +547,10 @@ if __name__ == '__main__':
     # Toaster Settings
     toaster_settings = toastcon.default_toaster_settings
 
+    ###################################################################
+    # Mono Auto Tune Settings
+    mono_auto_tune_settings = monotunecon.default_mono_tune_settings
+
     biocon_settings = {}
 
     components = OrderedDict([
@@ -554,6 +566,7 @@ if __name__ == '__main__':
         ('automator', autocon.AutoPanel),
         ('autosampler', autosamplercon.AutosamplerPanel),
         # ('toaster', toastcon.ToasterPanel),
+        # ('mono_auto_tune', monotunecon.MonoAutoTune)
         ])
 
     settings = {
@@ -569,6 +582,7 @@ if __name__ == '__main__':
         'automator'     : automator_settings,
         'autosampler'   : autosampler_settings,
         'toaster'       : toaster_settings,
+        'mono_auto_tune': mono_auto_tune_settings,
         'components'    : components,
         'biocon'        : biocon_settings,
         }

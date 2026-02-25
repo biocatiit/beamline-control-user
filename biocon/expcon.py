@@ -3173,6 +3173,8 @@ class ExpPanel(wx.Panel):
         self.pipeline_ctrl = None
         self.pipeline_timer = None
 
+        self.mono_auto_tune_ctrl = None
+
     def _initialize_pv(self, pv_name):
         pv = epics.get_pv(pv_name)
         connected = pv.wait_for_connection(5)
@@ -3320,6 +3322,8 @@ class ExpPanel(wx.Panel):
         if not cont:
             self._preparing_exposure = False
             return
+
+        self._mono_auto_tune()
 
         self._pipeline_start_exp()
 
@@ -3557,6 +3561,10 @@ class ExpPanel(wx.Panel):
             else:
                 self.pipeline_ctrl.start_experiment(fprefix, exp_type, local_data_dir,
                     fprefix, num_frames)
+
+    def _mono_auto_tune(self):
+        if self.mono_auto_tune_ctrl is not None:
+            self.mono_auto_tune_ctrl.optimize_intensity()
 
     def _show_warning_dialog(self, msg):
         if self.warning_dialog is None:
@@ -4380,6 +4388,9 @@ class ExpPanel(wx.Panel):
 
         else:
             self.pipeline_warning_shown = False
+
+    def set_mono_auto_tune_ctrl(self, tune_ctrl):
+        self.mono_auto_tune_ctrl = tune_ctrl
 
     def _monitor_a_shutter_status(self):
         if (self.fe_shutter_pv is not None and self.c_beam_ready_pv is not None and
