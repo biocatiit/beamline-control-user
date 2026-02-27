@@ -18,7 +18,6 @@
 #
 #    You should have received a copy of the GNU General Public License
 #    along with this software.  If not, see <http://www.gnu.org/licenses/>.
-from __future__ import absolute_import, division, print_function, unicode_literals
 from builtins import object, range, map
 from io import open
 
@@ -35,9 +34,6 @@ if __name__ != '__main__':
 
 import wx
 import wx.lib.mixins.listctrl
-import serial
-import serial.tools.list_ports as list_ports
-from six import string_types
 
 import utils
 import valvecon
@@ -1377,7 +1373,7 @@ class AgilentHPLCStandard(AgilentHPLC):
                     flow_accel2 = 0
                     previous_flow2 = 0
                     previous_time2 = time.time()
-                    update_time2 = previous_time1
+                    update_time2 = previous_time2
 
 
             if monitoring_flow1:
@@ -2522,8 +2518,8 @@ class AgilentHPLCStandard(AgilentHPLC):
         already submitted).
         """
         if self._submitting_sample:
-            self._submit_queue.clear()
             self._abort_submit.set()
+            self._submit_queue.clear()
             logger.info('HPLC %s aborted sample submission', self.name)
 
     def stop_all(self):
@@ -2598,20 +2594,20 @@ class AgilentHPLCStandard(AgilentHPLC):
 
         self._terminate_monitor_purge.set()
         self._monitor_purge_evt.set()
-        self._monitor_purge_thread.join()
+        self._monitor_purge_thread.join(timeout=5)
 
         self._abort_submit.set()
         self._terminate_monitor_submit.set()
-        self._monitor_submit_evt.set()
+        self._monitor_submit_evt.set(timeout=5)
         self._monitor_submit_thread.join()
 
         self._terminate_monitor_equil.set()
         self._monitor_equil_evt.set()
-        self._monitor_equil_thread.join()
+        self._monitor_equil_thread.join(timeout=5)
 
         self._terminate_monitor_switch_buffer_bottle.set()
         self._monitor_switch_buffer_bottle_evt.set()
-        self._monitor_switch_buffer_bottle_thread.join()
+        self._monitor_switch_buffer_bottle_thread.join(timeout=5)
 
         self.disconnect()
 
@@ -2722,7 +2718,7 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
         if self._active_flow_path == 1:
             pump_id = self._pump1_id
         elif self._active_flow_path == 2:
-            pump_id = self._pump1_id
+            pump_id = self._pump2_id
 
         self._method_total_time = self.get_pump_stop_time(pump_id=pump_id,
             update_method=False)
@@ -5222,7 +5218,7 @@ class HPLCPanel(utils.DevicePanel):
                     wx.CallAfter(self._pump1_flow_target_ctrl.SetLabel, str(val))
                     self._pump1_flow_target = str(val)
 
-        elif flow_path == 1:
+        elif flow_path == 2:
             if str(val) != self._pump2_flow_target:
                     wx.CallAfter(self._pump2_flow_target_ctrl.SetLabel, str(val))
                     self._pump2_flow_target = str(val)

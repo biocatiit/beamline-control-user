@@ -118,6 +118,8 @@ class Automator(threading.Thread):
 
             if not status_change:
                 time.sleep(0.5)
+            else:
+                time.sleep(0.001)
 
         if self._stop_event.is_set():
             self._stop_event.clear()
@@ -162,12 +164,13 @@ class Automator(threading.Thread):
                 cmd_args = []
                 cmd_kwargs = {'inst_name': name}
 
-                state, success = cmd_func(cmd_name, cmd_args, cmd_kwargs)
+                # Don't know why I did this. Leaving it here until testing
+                # state, success = cmd_func(cmd_name, cmd_args, cmd_kwargs)
 
                 try:
                     state, success = cmd_func(cmd_name, cmd_args, cmd_kwargs)
                 except Exception:
-                    logger.error('Automator: {} failed to get status')
+                    logger.exception('Automator: %s failed to get status', name)
                     success = False
                     state = None
 
@@ -258,7 +261,9 @@ class Automator(threading.Thread):
                             wait_done = False
 
                         if wait_done:
-                            self.check_response_queue.clear()
+                            while len(self.check_response_queue) >0:
+                                self.check_response_queue.pop()
+
                             cmd_id = controls['run_id']
 
                             state = self.get_automator_state()
@@ -267,7 +272,7 @@ class Automator(threading.Thread):
 
                             while True:
                                 if len(self.check_response_queue) > 0:
-                                    resp = self.check_response_queue[0]
+                                    resp = self.check_response_queue.popleft()
                                     break
                                 time.sleep(0.1)
 
@@ -309,7 +314,7 @@ class Automator(threading.Thread):
                     try:
                         ex_state, success = cmd_func(cmd_name, cmd_args, cmd_kwargs)
                     except Exception:
-                        logger.error(('Automator: {} failed to run cmd {} with '
+                        logger.exception(('Automator: {} failed to run cmd {} with '
                             'args {} and kwargs {}').format(name, cmd_name,
                             cmd_args, cmd_kwargs))
                         success = False
@@ -482,7 +487,7 @@ class Automator(threading.Thread):
         automator
         """
         with self._auto_con_lock:
-            self._auto_conds[name]['status'] = status_dict
+            self._auto_cons[name]['status'] = status_dict
 
     def add_on_run_cmd_callback(self, callback_func):
         self._on_run_cmd_callbacks.append(callback_func)
@@ -1430,7 +1435,7 @@ class AutoPanel(wx.Panel):
 
     def on_exit(self):
         self.automator.stop()
-        self.automator.join()
+        self.automator.join(timeout=5)
         self.status_panel.status_timer.Stop()
 
 class AutoStatusPanel(wx.Panel):
@@ -1442,7 +1447,7 @@ class AutoStatusPanel(wx.Panel):
         self._create_layout()
         self._init_values()
 
-        self.status_timer = wx.Timer()
+        self.status_timer = wx.Timer(self)
         self.status_timer.Bind(wx.EVT_TIMER, self._on_status_timer)
         self.status_timer.Start(5000)
 
@@ -1701,52 +1706,89 @@ class AutoStatusPanel(wx.Panel):
             hplc_callback = self.settings['instruments']['hplc']['automator_callback']
             num_paths = self.settings['instruments']['hplc']['num_paths']
 
-            status, success = hplc_callback('full_status', [], {})
+            try:
+                status, success = hplc_callback('full_status', [], {})
+            except Exception:
+                logger.exception('Error getting HPLC status')
+                success = False
 
-            self.hplc_flow_path.SetLabel(status['flow_path'])
-            self.hplc_state.SetLabel(status['state'])
-            self.hplc_runtime.SetLabel(status['runtime'])
-            self.pump1_state.SetLabel(status['pump1_state'])
-            self.pump1_fr.SetLabel(status['pump1_fr'])
-            self.pump1_pressure.SetLabel(status['pump1_pressure'])
+            if success:
+                self.hplc_flow_path.SetLabel(status['flow_path'])
+                self.hplc_state.SetLabel(status['state'])
+                self.hplc_runtime.SetLabel(status['runtime'])
+                self.pump1_state.SetLabel(status['pump1_state'])
+                self.pump1_fr.SetLabel(status['pump1_fr'])
+                self.pump1_pressure.SetLabel(status['pump1_pressure'])
 
-            if num_paths == 2:
-                self.pump2_state.SetLabel(status['pump2_state'])
-                self.pump2_fr.SetLabel(status['pump2_fr'])
-                self.pump2_pressure.SetLabel(status['pump2_pressure'])
+                if num_paths == 2:
+                    self.pump2_state.SetLabel(status['pump2_state'])
+                    self.pump2_fr.SetLabel(status['pump2_fr'])
+                    self.pump2_pressure.SetLabel(status['pump2_pressure'])
 
 
         if 'exp' in self.settings['instruments']:
             exp_callback = self.settings['instruments']['exp']['automator_callback']
-            status, success = exp_callback('full_status', [], {})
 
-            self.exp_status.SetLabel(status['status'])
-            self.exp_runtime.SetLabel(status['runtime'])
+            try:
+                status, success = exp_callback('full_status', [], {})
+            except Exception:
+                logger.exception('Error getting exposure status')
+                success = False
 
-            if 'coflow' in self.settings['instruments']:
-                coflow_callback = self.settings['instruments']['coflow']['automator_callback']
+            if success:
+                self.exp_status.SetLabel(status['status'])
+                self.exp_runtime.SetLabel(status['runtime'])
+
+        if 'coflow' in self.settings['instruments']:
+            coflow_callback = self.settings['instruments']['coflow']['automator_callback']
+
+            try:
                 status, success = coflow_callback('full_status', [], {})
+            except Exception:
+                logger.exception('Error getting coflow status')
+                success = False
 
+            if success:
                 self.coflow_status.SetLabel(status['status'])
                 self.coflow_fr.SetLabel(status['fr'])
 
         if 'autosampler' in self.settings['instruments']:
             autosampler_callback = self.settings['instruments']['autosampler']['automator_callback']
 
-            status, success = autosampler_callback('full_status', [], {})
-            self.as_status.SetLabel(status)
+            try:
+                status, success = autosampler_callback('full_status', [], {})
+            except Exception:
+                logger.exception('Error getting autosampler status')
+                success = False
+
+            if success:
+                self.as_status.SetLabel(status)
 
     def _on_stop_exp(self, evt):
         exp_callback = self.settings['instruments']['exp']['automator_callback']
-        status, success = exp_callback('abort', [], {})
+        try:
+            status, success = exp_callback('abort', [], {})
+        except Exception:
+            logger.exception('Error stopping exposure')
+            success = False
 
     def _on_stop_coflow(self, evt):
         coflow_callback = self.settings['instruments']['coflow']['automator_callback']
-        status, success = coflow_callback('stop', [], {})
+
+        try:
+            status, success = coflow_callback('stop', [], {})
+        except Exception:
+            logger.exception('Error stopping coflow')
+            success = False
 
     def _on_stop_as(self, evt):
         autosampler_callback = self.settings['instruments']['autosampler']['automator_callback']
-        status, success = autosampler_callback('abort', [], {})
+
+        try:
+            status, success = autosampler_callback('abort', [], {})
+        except Exception:
+            logger.exception('Error stopping autosampler')
+            success = False
 
 
 class AutoSettings(scrolled.ScrolledPanel):
@@ -3863,7 +3905,7 @@ class AutoList(utils.ItemList):
                 for err in stop_errors:
                     err_msg = err_msg + '\n- ' + err
 
-        elif cmd_settings['item_type'] == 'end_exp':
+        elif cmd_settings['item_type'] == 'clean_cell':
 
             cmd_settings, stop_valid, stop_errors = self._validate_clean_cell_params(
                 cmd_settings)
@@ -4863,8 +4905,8 @@ class EquilibrateDialog(AutoCmdDialog):
     """
     Allows addition/editing of the buffer info in the buffer list
     """
-    def __init__(self, default_settings, *args, **kwargs):
-        AutoCmdDialog.__init__(self, default_settings, *args, **kwargs)
+    def __init__(self, parent, default_settings, *args, **kwargs):
+        AutoCmdDialog.__init__(self, parent, default_settings, *args, **kwargs)
 
     def _create_layout(self):
         parent = self
@@ -4889,8 +4931,8 @@ class SwitchDialog(AutoCmdDialog):
     """
     Allows addition/editing of the buffer info in the buffer list
     """
-    def __init__(self, default_settings, *args, **kwargs):
-        AutoCmdDialog.__init__(self, default_settings, *args, **kwargs)
+    def __init__(self, parent, default_settings, *args, **kwargs):
+        AutoCmdDialog.__init__(self, parent, default_settings, *args, **kwargs)
 
     def _create_layout(self):
         parent = self
@@ -4915,8 +4957,8 @@ class StopFlowDialog(AutoCmdDialog):
     """
     Allows addition/editing of the buffer info in the buffer list
     """
-    def __init__(self, default_settings, *args, **kwargs):
-        AutoCmdDialog.__init__(self, default_settings, *args, **kwargs)
+    def __init__(self, parent, default_settings, *args, **kwargs):
+        AutoCmdDialog.__init__(self, parent, default_settings, *args, **kwargs)
 
     def _create_layout(self):
         parent = self
@@ -4941,8 +4983,8 @@ class EndExpDialog(AutoCmdDialog):
     """
     Allows addition/editing of the buffer info in the buffer list
     """
-    def __init__(self, default_settings, *args, **kwargs):
-        AutoCmdDialog.__init__(self, default_settings, *args, **kwargs)
+    def __init__(self, parent, default_settings, *args, **kwargs):
+        AutoCmdDialog.__init__(self, parent, default_settings, *args, **kwargs)
 
     def _create_layout(self):
         parent = self
@@ -4967,8 +5009,8 @@ class CleanCellDialog(AutoCmdDialog):
     """
     Allows addition/editing of the buffer info in the buffer list
     """
-    def __init__(self, default_settings, *args, **kwargs):
-        AutoCmdDialog.__init__(self, default_settings, *args, **kwargs)
+    def __init__(self, parent, default_settings, *args, **kwargs):
+        AutoCmdDialog.__init__(self, parent, default_settings, *args, **kwargs)
 
     def _create_layout(self):
         parent = self
@@ -4993,8 +5035,8 @@ class ExposureCmdDialog(AutoCmdDialog):
     """
     Allows addition/editing of the buffer info in the buffer list
     """
-    def __init__(self, default_settings, *args, **kwargs):
-        AutoCmdDialog.__init__(self, default_settings, *args, **kwargs)
+    def __init__(self, parent, default_settings, *args, **kwargs):
+        AutoCmdDialog.__init__(self, parent, default_settings, *args, **kwargs)
 
     def _create_layout(self):
         parent = self
@@ -5320,7 +5362,7 @@ if __name__ == '__main__':
 
     if automator is not None:
         automator.stop()
-        automator.join()
+        automator.join(timeout=5)
 
     # if com_thread is not None:
     #     com_thread.stop()

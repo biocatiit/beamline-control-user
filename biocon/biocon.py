@@ -18,7 +18,6 @@
 #
 #    You should have received a copy of the GNU General Public License
 #    along with this software.  If not, see <http://www.gnu.org/licenses/>.
-from __future__ import absolute_import, division, print_function, unicode_literals
 from builtins import object, range, map
 from io import open
 
@@ -225,7 +224,7 @@ class BioFrame(wx.Frame):
 
         # Make automator sizer at the end, because automator settings need the callbacks
         # from the other panels
-        logger.info('Setting up autmator panel')
+        logger.info('Setting up automator panel')
         key = 'automator'
 
         inst_settings = {}
@@ -358,10 +357,17 @@ class BioFrame(wx.Frame):
         logger.debug('Closing the BioFrame')
 
         for panel in self.component_panels.values():
-            panel.on_exit()
+            try:
+                panel.on_exit()
+            except Exception:
+                logger.exception('Error on closing')
 
         for ctrl in self.component_controls.values():
-            ctrl.stop()
+            try:
+                ctrl.stop()
+            except Exception:
+                logger.exception('Error on closing')
+
 
         self.Destroy()
 
@@ -588,10 +594,11 @@ if __name__ == '__main__':
         }
 
 
+    keys = list(settings['components'].keys())
+    keys.append('biocon')
+
     for key in settings:
         if key != 'components' and key != 'biocon':
-            keys = list(settings['components'].keys())
-            keys.append('biocon')
             settings[key]['components'] = keys
 
     app = wx.App()
@@ -599,11 +606,10 @@ if __name__ == '__main__':
     standard_paths = wx.StandardPaths.Get() #Can't do this until you start the wx app
     info_dir = standard_paths.GetUserLocalDataDir()
 
-    if not os.path.exists(info_dir):
-        os.mkdir(info_dir)
+    os.makedirs(info_dir, exist_ok=True)
 
-    h2 = handlers.RotatingFileHandler(os.path.join(info_dir, 'biocon.log'), maxBytes=10e6, backupCount=5, delay=True)
-    h2.setLevel(logging.INFO)
+    h2 = handlers.RotatingFileHandler(os.path.join(info_dir, 'biocon.log'),
+        maxBytes=int(10e6), backupCount=5, delay=True)
     h2.setLevel(logging.DEBUG)
     formatter2 = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
     h2.setFormatter(formatter2)
