@@ -18,7 +18,6 @@
 #
 #    You should have received a copy of the GNU General Public License
 #    along with this software.  If not, see <http://www.gnu.org/licenses/>.
-from __future__ import absolute_import, division, print_function, unicode_literals
 from builtins import object, range, map
 from io import open
 import six
@@ -112,7 +111,7 @@ class ExpCommThread(threading.Thread):
 
         if self._settings['detector'].lower().split('_')[-1] == 'mx':
             logger.info('Getting mx detector')
-            record_name = self._settings['detector'].rstrip('_mx')
+            record_name = self._settings['detector'].removesuffix('_mx')
 
             data_dir_root = copy.deepcopy(self._settings['base_data_dir']).replace(
                 self._settings['local_dir_root'], self._settings['remote_dir_root'], 1)
@@ -140,7 +139,7 @@ class ExpCommThread(threading.Thread):
 
         elif self._settings['detector'].lower().split('_')[-1] == 'epics':
             logger.debug('Getting epics detector')
-            record_name = self._settings['detector'].rstrip('_epics')
+            record_name = self._settings['detector'].removesuffix('_epics')
             det_args = self._settings['det_args']
 
             if 'eig' in record_name.lower():
@@ -222,7 +221,10 @@ class ExpCommThread(threading.Thread):
         while True:
             if len(self.command_queue) > 0:
                 logger.debug("Getting new command")
-                command, args, kwargs = self.command_queue.popleft()
+                try:
+                    command, args, kwargs = self.command_queue.popleft()
+                except Exception:
+                    command = None
             else:
                 command = None
 
@@ -480,7 +482,8 @@ class ExpCommThread(threading.Thread):
             det.set_num_frames(tot_frames)
             det.set_filename(new_fname)
             det.arm()
-        elif self._settings['detector'] == '18IDpil1M:_epics' or self._settings['dectector'] == 'pilatus_mx':
+        elif (self._settings['detector'] == '18IDpil1M:_epics'
+            or self._settings['detector'] == 'pilatus_mx'):
             det.set_num_frames(num_frames)
 
         # struck_mode_pv.caput(1, timeout=5)
@@ -711,7 +714,10 @@ class ExpCommThread(threading.Thread):
             time.sleep(0.001)
 
         motor_con.stop()
-        motor_con.join()
+        try:
+            motor_con.join(timeout=5)
+        except Exception:
+            pass
 
         self._exp_event.clear()
 
@@ -744,7 +750,8 @@ class ExpCommThread(threading.Thread):
         struck.start()
         ab_burst.arm()
 
-        if self._settings['detector'] == '18IDpil1M:_epics' or self._settings['dectector'] == 'pilatus_mx':
+        if (self._settings['detector'] == '18IDpil1M:_epics'
+            or self._settings['detector'] == 'pilatus_mx'):
             det.set_filename(new_fname)
             det.arm()
 
@@ -904,7 +911,8 @@ class ExpCommThread(threading.Thread):
 
         if self._settings['detector'] == '18ID:EIG2:_epics':
             f_list = ['{}_data_{:06d}.h5'.format(fprefix, f_start+i) for i in range(num_frames)]
-        elif self._settings['detector'] == '18IDpil1M:_epics' or self._settings['dectector'] == 'pilatus_mx':
+        elif (self._settings['detector'] == '18IDpil1M:_epics'
+            or self._settings['detector'] == 'pilatus_mx'):
             f_list = ['{}_{:06d}.tif'.format(fprefix, f_start+i) for i in range(num_frames)]
 
         timeout = False
@@ -914,7 +922,8 @@ class ExpCommThread(threading.Thread):
 
             if self._settings['detector'] == '18ID:EIG2:_epics':
                 new_name = '{}_{:04d}_data_{:06d}.h5'.format(fprefix, int(current_run), i+1)
-            elif self._settings['detector'] == '18IDpil1M:_epics' or self._settings['dectector'] == 'pilatus_mx':
+            elif (self._settings['detector'] == '18IDpil1M:_epics'
+                or self._settings['detector'] == 'pilatus_mx'):
                 new_name = '{}_{:04d}_{:06d}.tif'.format(fprefix, int(current_run), i+1)
 
             full_new = os.path.join(data_dir, new_name)
@@ -926,9 +935,8 @@ class ExpCommThread(threading.Thread):
                 if time.time() - start > 10:
                     timeout = True
                     break
-                    logger.debug('Timeouot waiting for %s', full_path)
-                else:
-                    time.sleep(0.1)
+                    logger.debug('Timeout waiting for %s', full_path)
+                time.sleep(0.1)
 
                 if self._abort_event.is_set():
                     timeout = True
@@ -2421,7 +2429,7 @@ class ExpCommThread(threading.Thread):
         header = self._get_header(metadata, log_vals)
 
         if extra_vals is not None:
-            header.rstrip('\n')
+            header = header.rstrip('\n')
             for ev in extra_vals:
                 header = header + '\t{}'.format(ev[0])
             header = header + '\n'
@@ -2449,6 +2457,7 @@ class ExpCommThread(threading.Thread):
         # logger.debug(avg_index)
 
         zpad = 6 #CHANGE ME?
+        pil_file = False
 
         with open(log_file, 'w') as f, open(log_summary_file, 'w') as f_sum:
             f.write(header)
@@ -2850,16 +2859,36 @@ class ExpCommThread(threading.Thread):
 
         self._abort_event.set()
         self._exp_event.clear()
-        self.command_queue.clear()
-        self.return_queue.clear()
+
+        try:
+            while len(self.command_queue) > 0:
+                self.command_queue.pop()
+        except Exception:
+            pass
+
+        try:
+            while len(self.return_queue) > 0:
+                self.return_queue.pop()
+        except Exception:
+            pass
 
     def _abort(self):
         """
         Clears the ``command_queue`` and the ``return_queue``.
         """
         logger.info("Aborting exposure control thread %s current and future commands", self.name)
-        self.command_queue.clear()
-        self.return_queue.clear()
+
+        try:
+            while len(self.command_queue) > 0:
+                self.command_queue.pop()
+        except Exception:
+            pass
+
+        try:
+            while len(self.return_queue) > 0:
+                self.return_queue.pop()
+        except Exception:
+            pass
 
         self._abort_event.clear()
         logger.debug("Exposure control thread %s aborted", self.name)
@@ -3117,6 +3146,8 @@ class ExpPanel(wx.Panel):
         return top_sizer
 
     def _initialize(self):
+        self._pv_callbacks = []
+
         bc_pv, connected = self._initialize_pv(self.settings['beam_current_pv'])
         if connected:
             self.beam_current_pv = bc_pv
@@ -3222,7 +3253,8 @@ class ExpPanel(wx.Panel):
                 self.shutter_permit_pv = None
 
             if self.shutter_permit_pv is not None:
-                self.shutter_permit_pv.add_callback(self._open_a_shutter)
+                cbid = self.shutter_permit_pv.add_callback(self._open_a_shutter)
+                self._pv_callbacks.append([self.shutter_permit_pv, cbid])
 
             fe_shutter_open_pv, connected = self._initialize_pv(self.settings['fe_shutter_open_pv'])
             if connected:
@@ -3560,7 +3592,10 @@ class ExpPanel(wx.Panel):
         val = None
 
         if len(self.exp_ret_q) > 0:
-            status, val = self.exp_ret_q.popleft()
+            try:
+                status, val = self.exp_ret_q.popleft()
+            except Exception:
+                pass
 
             if status == 'scan':
                 wx.CallAfter(self.set_scan_number, val)
@@ -3917,7 +3952,7 @@ class ExpPanel(wx.Panel):
 
         if isinstance(num_frames, int):
             if num_frames < 1 or num_frames > self.settings['nframes_max']:
-                errors.append('Number of frames (between 1 and {}'.format(
+                errors.append('Number of frames (between 1 and {})'.format(
                     self.settings['nframes_max']))
 
         if isinstance(exp_time, float):
@@ -4132,10 +4167,12 @@ class ExpPanel(wx.Panel):
             img_check_step = 1
 
         img_nums = range(1, num_frames+1, img_check_step)
-        img_files = [os.path.join(data_dir, '{}_{:04d}.tif'.format(fprefix, img_num))
+        img_files = [os.path.join(data_dir, '{}_{:06d}.tif'.format(fprefix, img_num))
+            for img_num in img_nums]
+        img_files2 = [os.path.join(data_dir, '{}_{:06d}.h5'.format(fprefix, img_num))
             for img_num in img_nums]
 
-        check_files = [log_file]+img_files
+        check_files = [log_file]+img_files+img_files2
 
         cont = True
 
@@ -4364,14 +4401,6 @@ class ExpPanel(wx.Panel):
 
                     metadata['Flight tube vacuum [mtorr]:'] = vac
 
-            if self.sc_vac_pv is not None:
-                vac = self.sc_vac_pv.get(timeout=2)
-
-                if vac is not None:
-                    vac = round(vac*1000, 1)
-
-                    metadata['Flight tube vacuum [mtorr]:'] = vac
-
             if self.a_hutch_T_pv is not None:
                 env = self.a_hutch_T_pv.get(timeout=2)
 
@@ -4455,7 +4484,7 @@ class ExpPanel(wx.Panel):
         if 'filename' in exp_settings:
             self.filename.ChangeValue(str(exp_settings['filename']))
         if 'run_num' in exp_settings:
-            self.run_num.ChangeValue(str(exp_settings['run_num']))
+            self.run_num.SetLabel(str(exp_settings['run_num']))
         if 'wait_for_trig' in exp_settings:
             self.wait_for_trig.SetValue(exp_settings['wait_for_trig'])
 
@@ -4498,40 +4527,43 @@ class ExpPanel(wx.Panel):
                     time.sleep(0.5)
 
     def _open_a_shutter(self, **kwargs):
-        fes_val = self.fe_shutter_pv.get(timeout=2)
+        try:
+            fes_val = self.fe_shutter_pv.get(timeout=2)
 
-        if fes_val is not None:
-            if fes_val == 0:
-                fes = False
-            else:
-                fes = True
-
-        if not fes:
-            c_ready_val = self.c_beam_ready_pv.get(timeout=2)
-            a_ready_val = self.a_beam_ready_pv.get(timeout=2)
-            shutter_permit_val = self.shutter_permit_pv.get(timeout=2)
-
-            if c_ready_val is not None:
-                if c_ready_val == 0:
-                    c_ready = False
+            if fes_val is not None:
+                if fes_val == 0:
+                    fes = False
                 else:
-                    c_ready = True
+                    fes = True
 
-            if a_ready_val is not None:
-                if a_ready_val == 0:
-                    a_ready = False
-                else:
-                    a_ready = True
+            if not fes:
+                c_ready_val = self.c_beam_ready_pv.get(timeout=2)
+                a_ready_val = self.a_beam_ready_pv.get(timeout=2)
+                shutter_permit_val = self.shutter_permit_pv.get(timeout=2)
 
-            if shutter_permit_val is not None:
-                if shutter_permit_val == 0:
-                    shutter_permit = False
-                else:
-                    shutter_permit = True
+                if c_ready_val is not None:
+                    if c_ready_val == 0:
+                        c_ready = False
+                    else:
+                        c_ready = True
 
-            if c_ready and a_ready and shutter_permit:
-                logger.info('Opening A shutter')
-                self.fe_shutter_open_pv.put(1, timeout=2)
+                if a_ready_val is not None:
+                    if a_ready_val == 0:
+                        a_ready = False
+                    else:
+                        a_ready = True
+
+                if shutter_permit_val is not None:
+                    if shutter_permit_val == 0:
+                        shutter_permit = False
+                    else:
+                        shutter_permit = True
+
+                if c_ready and a_ready and shutter_permit:
+                    logger.info('Opening A shutter')
+                    self.fe_shutter_open_pv.put(1, timeout=2)
+        except Exception:
+            logger.exception('Failed to reopen A shutter.')
 
     def automator_callback(self, cmd_name, cmd_args, cmd_kwargs):
         success = True
@@ -4720,11 +4752,11 @@ class ExpPanel(wx.Panel):
             pass #For testing, when there is no exp_con
 
         if self.settings['reopen_a_shutter']:
-            if self.shutter_permit_pv is not None:
-                self.shutter_permit_pv.remove_callback()
-
             self._monitor_a_shutter_abort.set()
             self._monitor_a_shutter_thread.join(10)
+
+        for pv, cbid in self._pv_callbacks:
+            pv.remove_callback(cbid)
 
 
 class ExpFrame(wx.Frame):

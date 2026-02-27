@@ -488,7 +488,7 @@ if __name__ == '__main__':
         coflow_settings = coflowcon.default_coflow_settings
 
         ob1_comm_lock = threading.RLock()
-        outlet_fm_comm_lock = threading.Lock()
+        outlet_fm_comm_lock = threading.RLock()
         coflow_settings['device_communication'] = 'local'
         coflow_settings['device_init'][0]['kwargs']['outlet_pump']['kwargs']['comm_lock'] = ob1_comm_lock
         coflow_settings['device_init'][0]['kwargs']['outlet_fm']['kwargs']['comm_lock'] = outlet_fm_comm_lock

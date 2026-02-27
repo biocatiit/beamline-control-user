@@ -18,7 +18,6 @@
 #
 #    You should have received a copy of the GNU General Public License
 #    along with this software.  If not, see <http://www.gnu.org/licenses/>.
-from __future__ import absolute_import, division, print_function, unicode_literals
 from builtins import object, range, map
 from io import open
 
@@ -35,10 +34,6 @@ if __name__ != '__main__':
     logger = logging.getLogger(__name__)
 
 import wx
-try:
-    import serial.tools.list_ports as list_ports
-except ModuleNotFoundError:
-    pass
 
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_03_00\\DLL64\\Elveflow64DLL') #add the path of the library here
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_03_00\\python_64')#add the path of the LoadElveflow.py
@@ -91,9 +86,9 @@ class FlowMeter(object):
     """
     This class contains the settings and communication for a generic flow meter.
     It is intended to be subclassed by other flow meter classes, which contain
-    specific information for communicating with a given pump. A flow meter object
-    can be wrapped in a thread for using a GUI, implimented in :py:class:`PumpCommThread`
-    or it can be used directly from the command line. The :py:class:`M5Pump`
+    specific information for communicating with a given flow meter. A flow meter object
+    can be wrapped in a thread for using a GUI, implimented in :py:class:`FMCommThread`
+    or it can be used directly from the command line. The :py:class:`BFS`
     documentation contains an example.
     """
 
@@ -101,7 +96,7 @@ class FlowMeter(object):
         """
         :param str device: The device comport
 
-        :param str name: A unique identifier for the pump
+        :param str name: A unique identifier for the flow meter
 
         :param str base_unis: Units reported by the flow meter. Should be one
             of: nL/s, nL/min, uL/s, uL/min, mL/s, mL/min
@@ -117,7 +112,7 @@ class FlowMeter(object):
         self.connected = False
 
         if comm_lock is None:
-            self.comm_lock = threading.Lock()
+            self.comm_lock = threading.RLock()
         else:
             self.comm_lock = comm_lock
 
@@ -137,9 +132,6 @@ class FlowMeter(object):
     def flow_rate(self):
         """
         Gets flow rate in units specified by ``FlowMeter.units``.
-        Can be set while the pump is moving, and it will update the flow rate
-        appropriately.
-
         :type: float
         """
         pass #Should be implimented in each subclass
@@ -147,45 +139,46 @@ class FlowMeter(object):
     @property
     def units(self):
         """
-        Sets and returns the pump flow rate units. This can be set to:
+        Sets and returns the flow meter flow rate units. This can be set to:
         nL/s, nL/min, uL/s, uL/min, mL/s, mL/min. Changing units keeps the
         flow rate constant, i.e. if the flow rate was set to 100 uL/min, and
         the units are changed to mL/min, the flow rate is set to 0.1 mL/min.
 
         :type: str
         """
-        return self._units
+        with self.comm_lock:
+            return self._units
 
     @units.setter
     def units(self, units):
-        old_units = copy.copy(self._units)
-        self._units = units
+        with self.comm_lock:
+            old_units = copy.copy(self._units)
 
-        if units in ['nL/s', 'nL/min', 'uL/s', 'uL/min', 'mL/s', 'mL/min']:
-            self._units = units
-            base_vu, base_tu = self._base_units.split('/')
-            new_vu, new_tu = self._units.split('/')
-            if base_vu != new_vu:
-                if (base_vu == 'nL' and new_vu == 'uL') or (base_vu == 'uL' and new_vu == 'mL'):
-                    self._flow_mult = 1./1000.
-                elif base_vu == 'nL' and new_vu == 'mL':
-                    self._flow_mult = 1./1000000.
-                elif (base_vu == 'mL' and new_vu == 'uL') or (base_vu == 'uL' and new_vu == 'nL'):
-                    self._flow_mult = 1000.
-                elif base_vu == 'mL' and new_vu == 'nL':
-                    self._flow_mult = 1000000.
-            else:
-                self._flow_mult = 1.
-
-            if base_tu != new_tu:
-                if base_tu == 'min':
-                    self._flow_mult = self._flow_mult/60.
+            if units in ['nL/s', 'nL/min', 'uL/s', 'uL/min', 'mL/s', 'mL/min']:
+                self._units = units
+                base_vu, base_tu = self._base_units.split('/')
+                new_vu, new_tu = self._units.split('/')
+                if base_vu != new_vu:
+                    if (base_vu == 'nL' and new_vu == 'uL') or (base_vu == 'uL' and new_vu == 'mL'):
+                        self._flow_mult = 1./1000.
+                    elif base_vu == 'nL' and new_vu == 'mL':
+                        self._flow_mult = 1./1000000.
+                    elif (base_vu == 'mL' and new_vu == 'uL') or (base_vu == 'uL' and new_vu == 'nL'):
+                        self._flow_mult = 1000.
+                    elif base_vu == 'mL' and new_vu == 'nL':
+                        self._flow_mult = 1000000.
                 else:
-                    self._flow_mult = self._flow_mult*60.
+                    self._flow_mult = 1.
 
-            logger.info("Changed flow meter %s units from %s to %s", self.name, old_units, units)
-        else:
-            logger.warning("Failed to change flow meter %s units, units supplied were invalid: %s", self.name, units)
+                if base_tu != new_tu:
+                    if base_tu == 'min':
+                        self._flow_mult = self._flow_mult/60.
+                    else:
+                        self._flow_mult = self._flow_mult*60.
+
+                logger.info("Changed flow meter %s units from %s to %s", self.name, old_units, units)
+            else:
+                logger.warning("Failed to change flow meter %s units, units supplied were invalid: %s", self.name, units)
 
     def stop(self):
         pass
@@ -199,7 +192,7 @@ class BFS(FlowMeter):
     a Elveflow Bronkhurst FLow Sensor (BFS), communicating via the Elveflow SDK.
     Below is an example that starts communication and prints the flow rate. ::
 
-        >>> my_bfs = BFS("ASRL8::INSTR".encode('ascii'), 'BFS1')
+        >>> my_bfs = BFS('BFS1', "ASRL8::INSTR".encode('ascii'))
         >>> print(my_bfs.flow_rate)
     """
 
@@ -208,9 +201,9 @@ class BFS(FlowMeter):
         This makes the initial serial connection, and then sets the MForce
         controller parameters to the correct values.
 
-        :param str device: The device comport as sent to pyserial
+        :param str name: A unique identifier for the flow meter
 
-        :param str name: A unique identifier for the pump
+        :param str device: The device comport as sent to pyserial
 
         :param float bfs_filter: Smoothing factor for measurement. 1 = minimum
             filter, 0.00001 = maximum filter. Defaults to 0.5
@@ -235,7 +228,7 @@ class BFS(FlowMeter):
 
     def connect(self):
         if not self.connected:
-            com = self.device.lstrip('COM')
+            com = self.device.removeprefix('COM')
             self.api_device = "ASRL{}::INSTR".format(com).encode('ascii')
 
             self.instr_ID = ctypes.c_int32()
@@ -256,34 +249,33 @@ class BFS(FlowMeter):
 
     @property
     def flow_rate(self):
-        if not self.remote:
-            if (self.major > 3 or (self.major == 3 and self.minor >= 10)):
-                flow = ctypes.c_double(-1)
-                temp = ctypes.c_double(-1)
-                dens = ctypes.c_double(-1)
-                with self.comm_lock:
+        with self.comm_lock:
+            if not self.remote:
+                if (self.major > 3 or (self.major == 3 and self.minor >= 10)):
+                    flow = ctypes.c_double(-1)
+                    temp = ctypes.c_double(-1)
+                    dens = ctypes.c_double(-1)
                     error = Elveflow.BFS_Get_Remote_Data(self.instr_ID.value,
                         ctypes.byref(flow), ctypes.byref(temp), ctypes.byref(dens))
-            else:
-                self.density
-                self.temperature
+                else:
+                    self.density
+                    self.temperature
 
-                flow = ctypes.c_double(-1)
-                with self.comm_lock:
+                    flow = ctypes.c_double(-1)
                     error = Elveflow.BFS_Get_Flow(self.instr_ID.value,
                         ctypes.byref(flow))
 
-            self._check_error(error)
+                self._check_error(error)
 
-            flow = float(flow.value)
+                flow = float(flow.value)
 
-            if (self.major > 3 or (self.major == 3 and self.minor >= 10)):
-                temp = float(temp.value)
-                dens = float(dens.value)
+                if (self.major > 3 or (self.major == 3 and self.minor >= 10)):
+                    temp = float(temp.value)
+                    dens = float(dens.value)
 
-        else:
-            # self._set_remote_params(True, True)
-            flow, dens, temp = self._read_remote()
+            else:
+                # self._set_remote_params(True, True)
+                flow, dens, temp = self._read_remote()
 
         flow = flow*self._flow_mult
 
@@ -293,31 +285,30 @@ class BFS(FlowMeter):
 
     @property
     def density(self):
-        if not self.remote:
-            if (self.major > 3 or (self.major == 3 and self.minor >= 10)):
-                flow = ctypes.c_double(-1)
-                temp = ctypes.c_double(-1)
-                dens = ctypes.c_double(-1)
-                with self.comm_lock:
+        with self.comm_lock:
+            if not self.remote:
+                if (self.major > 3 or (self.major == 3 and self.minor >= 10)):
+                    flow = ctypes.c_double(-1)
+                    temp = ctypes.c_double(-1)
+                    dens = ctypes.c_double(-1)
                     error = Elveflow.BFS_Get_Remote_Data(self.instr_ID.value,
                         ctypes.byref(flow), ctypes.byref(temp), ctypes.byref(dens))
-            else:
-                dens = ctypes.c_double(-1)
-                with self.comm_lock:
+                else:
+                    dens = ctypes.c_double(-1)
                     error = Elveflow.BFS_Get_Density(self.instr_ID.value,
                         ctypes.byref(dens))
 
-            self._check_error(error)
+                self._check_error(error)
 
-            dens = float(dens.value)
+                dens = float(dens.value)
 
-            if (self.major > 3 or (self.major == 3 and self.minor >= 10)):
-                flow = float(flow.value)
-                temp = float(temp.value)
+                if (self.major > 3 or (self.major == 3 and self.minor >= 10)):
+                    flow = float(flow.value)
+                    temp = float(temp.value)
 
-        else:
-            # self._set_remote_params(True, True)
-            flow, dens, temp = self._read_remote()
+            else:
+                # self._set_remote_params(True, True)
+                flow, dens, temp = self._read_remote()
 
         logger.debug('Density: %s', dens)
 
@@ -325,31 +316,30 @@ class BFS(FlowMeter):
 
     @property
     def temperature(self):
-        if not self.remote:
-            if (self.major > 3 or (self.major == 3 and self.minor >= 10)):
-                flow = ctypes.c_double(-1)
-                temp = ctypes.c_double(-1)
-                dens = ctypes.c_double(-1)
-                with self.comm_lock:
+        with self.comm_lock:
+            if not self.remote:
+                if (self.major > 3 or (self.major == 3 and self.minor >= 10)):
+                    flow = ctypes.c_double(-1)
+                    temp = ctypes.c_double(-1)
+                    dens = ctypes.c_double(-1)
                     error = Elveflow.BFS_Get_Remote_Data(self.instr_ID.value,
                         ctypes.byref(flow), ctypes.byref(temp), ctypes.byref(dens))
-            else:
-                temp = ctypes.c_double(-1)
-                with self.comm_lock:
+                else:
+                    temp = ctypes.c_double(-1)
                     error = Elveflow.BFS_Get_Temperature(self.instr_ID.value,
                         ctypes.byref(temp))
 
-            self._check_error(error)
+                self._check_error(error)
 
-            temp = float(temp.value)
+                temp = float(temp.value)
 
-            if (self.major > 3 or (self.major == 3 and self.minor >= 10)):
-                flow = float(flow.value)
-                dens = float(dens.value)
+                if (self.major > 3 or (self.major == 3 and self.minor >= 10)):
+                    flow = float(flow.value)
+                    dens = float(dens.value)
 
-        else:
-            # self._set_remote_params(True, True)
-            flow, density, temp = self._read_remote()
+            else:
+                # self._set_remote_params(True, True)
+                flow, density, temp = self._read_remote()
 
         logger.debug('Temperature: %s', temp)
 
@@ -357,39 +347,37 @@ class BFS(FlowMeter):
 
     @property
     def filter(self):
-        return self._filter
+        with self.comm_lock:
+            return self._filter
 
     @filter.setter
     def filter(self, bfs_filter):
-        self._filter = bfs_filter
-
-        if not self.remote:
-            cfilter = ctypes.c_double(self._filter) #convert to c_double
-            with self.comm_lock:
+        with self.comm_lock:
+            self._filter = bfs_filter
+            if not self.remote:
+                cfilter = ctypes.c_double(self._filter) #convert to c_double
                 error = Elveflow.BFS_Set_Filter(self.instr_ID.value, cfilter)
 
-            self._check_error(error)
+                self._check_error(error)
 
-        else:
-            self._set_remote_params(True, True)
+            else:
+                self._set_remote_params(True, True)
 
     def start_remote(self):
         with self.comm_lock:
             error = Elveflow.BFS_Start_Remote_Measurement(self.instr_ID.value)
+            self.remote = True
 
         self._set_remote_params(True, True)
 
         self._check_error(error)
 
-        self.remote = True
-
     def stop_remote(self):
         with self.comm_lock:
             error = Elveflow.BFS_Stop_Remote_Measurement(self.instr_ID.value)
+            self.remote = False
 
         self._check_error(error)
-
-        self.remote = False
 
     def _read_remote(self):
         data_sens=ctypes.c_double()
@@ -422,8 +410,9 @@ class BFS(FlowMeter):
         else:
             m_density = ctypes.c_int32(0)
 
-        Elveflow.BFS_Set_Remote_Params(self.instr_ID.value, filt, m_temp,
-            m_density)
+        with self.comm_lock:
+            Elveflow.BFS_Set_Remote_Params(self.instr_ID.value, filt, m_temp,
+                m_density)
 
 
     def _check_error(self, error):
@@ -436,6 +425,10 @@ class BFS(FlowMeter):
 
     def stop(self):
         with self.comm_lock:
+            if self.remote:
+                Elveflow.BFS_Stop_Remote_Measurement(self.instr_ID.value)
+                self.remote = False
+
             Elveflow.BFS_Destructor(self.instr_ID.value)
 
 
@@ -443,17 +436,17 @@ class SoftFlowMeter(FlowMeter):
     """
     This class contains the settings and communication for a generic flow meter.
     It is intended to be subclassed by other flow meter classes, which contain
-    specific information for communicating with a given pump. A flow meter object
-    can be wrapped in a thread for using a GUI, implimented in :py:class:`PumpCommThread`
-    or it can be used directly from the command line. The :py:class:`M5Pump`
+    specific information for communicating with a given flow meter. A flow meter object
+    can be wrapped in a thread for using a GUI, implimented in :py:class:`FMCommThread`
+    or it can be used directly from the command line. The :py:class:`BFS`
     documentation contains an example.
     """
 
     def __init__(self, name, device=None):
         """
-        :param str device: The device comport
+        :param str name: A unique identifier for the flow meter
 
-        :param str name: A unique identifier for the pump
+        :param str device: The device comport
 
         :param str base_unis: Units reported by the flow meter. Should be one
             of: nL/s, nL/min, uL/s, uL/min, mL/s, mL/min
@@ -471,17 +464,16 @@ class SoftFlowMeter(FlowMeter):
     def flow_rate(self):
         """
         Gets flow rate in units specified by ``FlowMeter.units``.
-        Can be set while the pump is moving, and it will update the flow rate
-        appropriately.
 
         :type: float
         """
-        return self._flow_rate
+        with self.comm_lock:
+            return self._flow_rate*self._flow_mult
 
     @flow_rate.setter
     def flow_rate(self, rate):
         with self.comm_lock:
-            self._flow_rate = rate
+            self._flow_rate = rate/self._flow_mult
 
 class FlowMeterCommThread(utils.CommManager):
     """
@@ -516,6 +508,7 @@ class FlowMeterCommThread(utils.CommManager):
             'get_settings'                  : self._get_settings,
             'get_bfs_instr_id'              : self._get_bfs_instr_id,
             'start_remote'                  : self._start_remote,
+            'stop_remote'                  : self._stop_remote,
             }
 
         self._connected_devices = OrderedDict()
@@ -796,7 +789,7 @@ class FlowMeterCommThread(utils.CommManager):
         cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
-        val = device.instr_ID
+        val = device.instr_ID.value
 
         self._return_value((name, cmd, val), comm_name)
 
@@ -817,6 +810,23 @@ class FlowMeterCommThread(utils.CommManager):
 
         self._return_value((name, cmd, True), comm_name)
 
+    def _stop_remote(self, name, **kwargs):
+        """
+        This method gets the filter setting for a flow meter.
+
+        :param str name: The unique identifier for a flow meter that was used
+            in the :py:func:`_connect_fm` method.
+        """
+        logger.debug("Stoping remote mode for %s", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        device.stop_remote()
+
+        self._return_value((name, cmd, True), comm_name)
+
 class FlowMeterPanel(utils.DevicePanel):
     """
     This flow meter panel supports standard settings, including connection settings,
@@ -826,14 +836,14 @@ class FlowMeterPanel(utils.DevicePanel):
     it only supports the :py:class:`BFS`, but it should be easy to extend for
     other flow meters. The only things that should have to be changed are
     are adding in flow meter-specific readouts, modeled after how the
-    ``bfs_pump_sizer`` is constructed in the :py:func:`_create_layout` function,
+    ``bfs_fm_sizer`` is constructed in the :py:func:`_create_layout` function,
     and then add in type switching in the :py:func:`_on_type` function.
     """
     def __init__(self, parent, panel_id, settings, *args,
         **kwargs):
         """
         Initializes the custom thread. Important parameters here are the
-        list of known commands ``_commands`` and known pumps ``known_fms``.
+        list of known commands ``_commands`` and known flow meters ``known_fms``.
 
         :param wx.Window parent: Parent class for the panel.
 
@@ -843,6 +853,12 @@ class FlowMeterPanel(utils.DevicePanel):
 
         super(FlowMeterPanel, self).__init__(parent, panel_id, settings,
             *args, **kwargs)
+
+        self._cur_density = None
+        self._cur_flow = None
+        self._cur_temp = None
+        self._cur_filter = None
+        self._cur_units = None
 
     def _create_layout(self):
         """Creates the layout for the panel."""
@@ -970,6 +986,7 @@ class FlowMeterPanel(utils.DevicePanel):
             self.gen_results_sizer.Hide(self.temperature_label, recursive=True)
             self.gen_results_sizer.Hide(self.bfs_temperature, recursive=True)
             self.gen_results_sizer.Hide(self.temperature_units, recursive=True)
+            self.Layout()
 
         connect_cmd = ['connect', args, kwargs]
 
@@ -981,18 +998,21 @@ class FlowMeterPanel(utils.DevicePanel):
 
             if ret is not None:
                 self.bfs_density.SetLabel(str(ret))
+                self._cur_density = ret
 
             temperature_cmd = ['get_temperature', [self.name,], {}]
             ret = self._send_cmd(temperature_cmd, True)
 
             if ret is not None:
                 self.bfs_temperature.SetLabel(str(ret))
+                self._cur_temp = ret
 
             filter_cmd = ['get_filter', [self.name,], {}]
             ret = self._send_cmd(filter_cmd, True)
 
             if ret is not None:
                 self.bfs_filter.SafeChangeValue(str(ret))
+                self._cur_filter = ret
 
             d_and_t_cmd = ['get_density_and_temperature', [self.name,], {}]
             self._update_status_cmd(d_and_t_cmd, 1)
@@ -1025,18 +1045,22 @@ class FlowMeterPanel(utils.DevicePanel):
 
         self.flow_units_lbl.SetLabel(units)
 
+        self._cur_units = units
+
         units_cmd = ['set_units', [self.name, units], {}]
         self._send_cmd(units_cmd, get_response=False)
 
         logger.debug('Changed the flow meter units to %s and %s for flow meter %s', vol_unit, t_unit, self.name)
 
     def _set_gui_units(self, units):
-        if units != self.flow_units_lbl.GetLabel():
+        if units != self._cur_units:
             vol_u, t_u = units.split('/')
 
-            self.vol_unit_ctrl.SetStringSelection(vol_u)
-            self.time_unit_ctrl.SetStringSelection(t_u)
-            self.flow_units_lbl.SetLabel(units)
+            wx.CallAfter(self.vol_unit_ctrl.SetStringSelection, vol_u)
+            wx.CallAfter(self.time_unit_ctrl.SetStringSelection, t_u)
+            wx.CallAfter(self.flow_units_lbl.SetLabel, units)
+
+            self._cur_units = units
 
     def _on_filter(self, obj, val):
         try:
@@ -1054,15 +1078,16 @@ class FlowMeterPanel(utils.DevicePanel):
         :param str status: The status to display.
         """
         logger.debug('Setting flow meter %s status to %s', self.name, status)
-        self.status.SetLabel(status)
+        wx.CallAfter(self.status.SetLabel, status)
 
     def _set_status(self, cmd, val):
         if cmd == 'get_flow_rate':
             if val is not None:
                 val = str(round(val,3))
 
-                if val != self.flow_rate.GetLabel():
-                    self.flow_rate.SetLabel(val)
+                if val != self._cur_flow:
+                    wx.CallAfter(self.flow_rate.SetLabel, val)
+                    self._cur_flow = val
 
         elif cmd == 'get_density_and_temperature':
             if val is not None:
@@ -1070,29 +1095,34 @@ class FlowMeterPanel(utils.DevicePanel):
                 val_d = str(round(val_d,3))
                 val_t = str(round(val_t,3))
 
-                if val_d != self.bfs_density.GetLabel():
-                    self.bfs_density.SetLabel(val_d)
+                if val_d != self._cur_density:
+                    wx.CallAfter(self.bfs_density.SetLabel, val_d)
+                    self._cur_density = val_d
 
-                if val_t != self.bfs_temperature.GetLabel():
-                    self.bfs_temperature.SetLabel(val_t)
+                if val_t != self._cur_temp:
+                    wx.CallAfter(self.bfs_temperature.SetLabel, val_t)
+                    self._cur_temp = val_t
 
         elif cmd == 'get_density':
             if val is not None:
                 val = str(round(val,3))
 
-                if val != self.bfs_density.GetLabel():
-                    self.bfs_density.SetLabel(val)
+                if val != self._cur_density:
+                    wx.CallAfter(self.bfs_density.SetLabel, val)
+                    self._cur_density = val
 
         elif cmd == 'get_temperature':
             if val is not None:
                 val = str(round(val,3))
 
-                if val != self.bfs_temperature.GetLabel():
-                    self.bfs_temperature.SetLabel(val)
+                if val != self._cur_temp:
+                    wx.CallAfter(self.bfs_temperature.SetLabel, val)
+                    self._cur_temp = val
 
         elif cmd == 'get_filter':
-            if str(val) != self.bfs_filter.GetValue():
-                self.bfs_filter.SafeChangeValue(str(val))
+            if str(val) != self._cur_filter:
+                wx.CallAfter(self.bfs_filter.SafeChangeValue, str(val))
+                self._cur_filter = str(val)
 
         elif cmd == 'get_units':
             self._set_gui_units(val)
@@ -1104,8 +1134,9 @@ class FlowMeterPanel(utils.DevicePanel):
             self._set_gui_units(units)
 
             if filt is not None:
-                if str(filt) != self.bfs_filter.GetValue():
-                    self.bfs_filter.SafeChangeValue(str(filt))
+                if str(filt) != self._cur_filter:
+                    wx.CallAfter(self.bfs_filter.SafeChangeValue, str(filt))
+                    self._cur_filter = str(filt)
 
 
 class FlowMeterFrame(utils.DeviceFrame):
