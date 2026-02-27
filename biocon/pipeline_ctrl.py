@@ -18,10 +18,6 @@
 #
 #    You should have received a copy of the GNU General Public License
 #    along with this software.  If not, see <http://www.gnu.org/licenses/>.
-from __future__ import absolute_import, division, print_function, unicode_literals
-from builtins import object, range, map
-from io import open
-
 import threading
 import time
 from collections import deque, OrderedDict
@@ -91,7 +87,7 @@ class PipelineControl(object):
         """
         self.current_expeirment = exp_name
 
-        if (self.settings['detector'].lower() == 'eiger' 
+        if (self.settings['detector'].lower() == 'eiger'
             and self.settings['data_source'].lower() == 'file'):
             fprefix = '{}_data_'.format(fprefix)
 
@@ -107,7 +103,7 @@ class PipelineControl(object):
         elif exp_type == 'Batch':
             cmd_kwargs = {'num_sample_exps': n_sample_exps,
             'num_buffer_exps': n_exps, 'sample_prefix': sample_prefix,
-            'buffer_prefix': fprefix} 
+            'buffer_prefix': fprefix}
 
         elif exp_type == 'TR':
             cmd_kwargs = {'num_exps': n_exps}
@@ -115,14 +111,14 @@ class PipelineControl(object):
         elif exp_type == 'Other':
             cmd_kwargs = {'num_exps': n_exps}
 
-        pipeline_data_dir = data_dir.replace(self.settings['local_basedir'], 
+        pipeline_data_dir = data_dir.replace(self.settings['local_basedir'],
                 self.settings['data_basedir'], 1)
 
         output_dir = os.path.split(data_dir)[0]
-        pipeline_output_dir = output_dir.replace(self.settings['local_basedir'], 
+        pipeline_output_dir = output_dir.replace(self.settings['local_basedir'],
                 self.settings['output_basedir'], 1)
 
-        cmd = ('start_experiment', [exp_name, exp_type, pipeline_data_dir, fprefix, 
+        cmd = ('start_experiment', [exp_name, exp_type, pipeline_data_dir, fprefix,
             pipeline_output_dir], cmd_kwargs)
 
         client_cmd = {'command': cmd, 'response': False}
@@ -133,7 +129,7 @@ class PipelineControl(object):
         Stop experiment
         exp_name - The experiment name to stop data collection for in the pipeline
         """
-        cmd = ('stop_experiment', [exp_name,])
+        cmd = ('stop_experiment', [exp_name,], {})
         client_cmd = {'command': cmd, 'response': False}
         self.cmd_q.append(client_cmd)
 
@@ -270,7 +266,7 @@ class ControlClient(threading.Thread):
                 answer = ''
 
             if answer == '':
-                raise zmq.ZMQError(msg="Could not get a response from the server")
+                raise RuntimeError("Could not get a response from the server")
             else:
                 self.connect_error = 0
 
@@ -288,7 +284,7 @@ class ControlClient(threading.Thread):
             logger.error(msg)
             self.connect_error += 1
             self._ping()
-            if not self.timeout_event.set():
+            if not self.timeout_event.is_set():
                 self.answer_queue.append(None)
 
             self.missed_cmds.append(command)

@@ -18,10 +18,6 @@
 #
 #    You should have received a copy of the GNU General Public License
 #    along with this software.  If not, see <http://www.gnu.org/licenses/>.
-from __future__ import absolute_import, division, print_function, unicode_literals
-from builtins import object, range, map
-from io import open
-
 import traceback
 import threading
 import time
@@ -820,7 +816,7 @@ class NewportXPSMotor(Motor):
 
             min_pos = min_pos*self._scale - self._offset[index]
             max_pos = max_pos*self._scale - self._offset[index]
-            step = step*self._scale - self._offset[index]
+            step = step*self._scale
             enable = ret[4]
             logger.info('Got user %s position compare settings: min: %f, max: %f, step: %f, enable: %i',
                 positioner, min_pos, max_pos, step, enable)
@@ -844,7 +840,7 @@ class NewportXPSMotor(Motor):
         error, ret = self.xps.PositionerPositionCompareSet(self.sockets['general'],
             positioner, (min_position-self._offset[index])/self._scale,
             (max_position-self._offset[index])/self._scale,
-            (position_step-self._offset[index])/self._scale)
+            (position_step)/self._scale)
 
         if error != 0:
             self.get_error('general', self.sockets['general'], error, ret)
@@ -856,7 +852,7 @@ class NewportXPSMotor(Motor):
             logger.info('Set %s user position compare settings: min: %f, max: %f, step: %f',
                 positioner, (min_position-self._offset[index])/self._scale,
                 (max_position-self._offset[index])/self._scale,
-                (position_step-self._offset[index])/self._scale)
+                (position_step)/self._scale)
 
         return success
 
@@ -1452,6 +1448,7 @@ class EpicsMotor(Motor):
     def set_acceleration(self, acceleration):
         speed = self.get_velocity()
         accel_time = speed/acceleration
+        self.epics_motor.put('acceleration', accel_time)
         return accel_time
 
     def jog(self, direction, start):
@@ -1828,7 +1825,7 @@ class MotorCommThread(threading.Thread):
         """
         logger.info("Checking if motor %s is moving", name)
         motor = self._connected_motors[name]
-        is_moving = motor.positioner_is_moving()
+        is_moving = motor.positioner_is_moving(positioner)
         self.answer_queue.append(is_moving)
         logger.debug("Motor %s is moving: %s", name, str(is_moving))
 
@@ -2226,7 +2223,7 @@ class MotorCommThread(threading.Thread):
         logger.info("Starting motor %s positioner %s position compare", \
             name, positioner)
         motor = self._connected_motors[name]
-        success = motor.start_position_compare(positioner, index)
+        success = motor.start_position_compare(positioner)
         self.answer_queue.append(success)
         logger.debug("Started motor %s positioner %s position compare", \
             name, positioner)
@@ -2246,7 +2243,7 @@ class MotorCommThread(threading.Thread):
         logger.info("Stopping motor %s positioner %s position compare", \
             name, positioner)
         motor = self._connected_motors[name]
-        success = motor.stop_position_compare(positioner, index)
+        success = motor.stop_position_compare(positioner)
         self.answer_queue.append(success)
         logger.debug("Stopped motor %s positioner %s position compare", \
             name, positioner)
@@ -2266,7 +2263,7 @@ class MotorCommThread(threading.Thread):
         logger.info("Getting motor %s positioner %s position compare pulse \
          settings", name, positioner)
         motor = self._connected_motors[name]
-        pulse_width, encoder_settle_time = motor.get_position_compare_pulse(positioner, index)
+        pulse_width, encoder_settle_time = motor.get_position_compare_pulse(positioner)
         self.answer_queue.append((pulse_width, encoder_settle_time))
         logger.debug("Got motor %s positioner %s position compare pulse \
             settings", name, positioner)
@@ -2287,7 +2284,7 @@ class MotorCommThread(threading.Thread):
         logger.info("Setting motor %s positioner %s position compare pulse \
             settings", name, positioner)
         motor = self._connected_motors[name]
-        success = motor.set_position_compare(positioner, index, pulse_width,
+        success = motor.set_position_compare_pulse(positioner, pulse_width,
             encoder_settle_time)
         self.answer_queue.append(success)
         logger.debug("Set motor %s positioner %s position compare pulse \
@@ -2734,7 +2731,7 @@ class MotorPanel(wx.Panel):
 
         if self.type_ctrl.GetStringSelection() != 'Newport XPS':
             self.settings_sizer.Hide(self.newport_xps_sizer, recursive=True)
-        if self.type_ctrl.GetStringSelection != 'Zaber':
+        if self.type_ctrl.GetStringSelection() != 'Zaber':
             self.settings_sizer.Hide(self.zaber_sizer, recursive=True)
 
         if self.np_group_type.GetStringSelection() == 'Single':
@@ -2986,7 +2983,7 @@ class MotorPanel(wx.Panel):
 
         except ValueError:
             msg = ('Move failed, position must be a number.')
-            wx.CallAfter(wx.MessageBox, 'Move failed', msg)
+            wx.CallAfter(wx.MessageBox, msg, 'Move failed')
 
     def move_rel(self, mtr, index, pos, move_positive):
         try:
@@ -3007,7 +3004,7 @@ class MotorPanel(wx.Panel):
 
         except ValueError:
             msg = ('Move failed, position must be a number.')
-            wx.CallAfter(wx.MessageBox, 'Move failed', msg)
+            wx.CallAfter(wx.MessageBox, msg, 'Move failed')
 
     def group_move_abs(self, group, positions):
         try:
@@ -3020,7 +3017,7 @@ class MotorPanel(wx.Panel):
 
         except ValueError:
             msg = ('Group move failed, both positions must be a number.')
-            wx.CallAfter(wx.MessageBox, 'Group move failed', msg)
+            wx.CallAfter(wx.MessageBox, msg, 'Group move failed')
 
     def set_position(self, mtr, index, pos):
         try:
@@ -3039,7 +3036,7 @@ class MotorPanel(wx.Panel):
 
         except ValueError:
             msg = ('Set position failed, position must be a number.')
-            wx.CallAfter(wx.MessageBox, 'Set position failed', msg)
+            wx.CallAfter(wx.MessageBox, msg, 'Set position failed')
 
     def set_low_limit(self, mtr, index, limit):
         try:
@@ -3052,7 +3049,7 @@ class MotorPanel(wx.Panel):
 
         except ValueError:
             msg = ('Setting limit failed, limit must be a number.')
-            wx.CallAfter(wx.MessageBox, 'Setting limit failed', msg)
+            wx.CallAfter(wx.MessageBox, msg, 'Setting limit failed')
 
     def set_high_limit(self, mtr, index, limit):
         try:
@@ -3065,7 +3062,7 @@ class MotorPanel(wx.Panel):
 
         except ValueError:
             msg = ('Setting limit failed, limit must be a number.')
-            wx.CallAfter(wx.MessageBox, 'Setting limit failed', msg)
+            wx.CallAfter(wx.MessageBox, msg, 'Setting limit failed')
 
     def set_v(self, mtr, index, velocity):
         try:
@@ -3078,7 +3075,7 @@ class MotorPanel(wx.Panel):
 
         except ValueError:
             msg = ('Setting velocity failed, velocity must be a number.')
-            wx.CallAfter(wx.MessageBox, 'Setting velocity failed', msg)
+            wx.CallAfter(wx.MessageBox, msg, 'Setting velocity failed')
 
     def set_a(self, mtr, index, acceleration):
         try:
@@ -3091,7 +3088,7 @@ class MotorPanel(wx.Panel):
 
         except ValueError:
             msg = ('Setting acceleration failed, acceleration must be a number.')
-            wx.CallAfter(wx.MessageBox, 'Setting acceleration failed', msg)
+            wx.CallAfter(wx.MessageBox, msg, 'Setting acceleration failed')
 
     def home(self, mtr):
         if self.motor_params['type'] == 'Newport_XPS':
@@ -3402,27 +3399,27 @@ class MotorPanel(wx.Panel):
                             or cmd == 'move_positioner_relative'
                             or cmd == 'move_absolute' or cmd == 'move_relative'):
                             msg = ('Move failed, check motor status.')
-                            wx.CallAfter(wx.MessageBox, 'Move failed', msg)
+                            wx.CallAfter(wx.MessageBox, msg, 'Move failed')
 
                         elif cmd == 'set_positioner_position' or cmd == 'set_position':
                             msg = ('Set position failed, check motor status.')
-                            wx.CallAfter(wx.MessageBox, 'Set position failed', msg)
+                            wx.CallAfter(wx.MessageBox, msg, 'Set position failed')
 
                         elif (cmd == 'set_low_limit' or cmd == 'set_high_limit'):
                             msg = ('Setting limit failed, check motor status.')
-                            wx.CallAfter(wx.MessageBox, 'Setting limit failed', msg)
+                            wx.CallAfter(wx.MessageBox, msg, 'Setting limit failed')
 
                         elif cmd == 'set_velocity':
                             msg = ('Setting velocity failed, check motor status.')
-                            wx.CallAfter(wx.MessageBox, 'Setting velocity failed', msg)
+                            wx.CallAfter(wx.MessageBox, msg, 'Setting velocity failed')
 
                         elif cmd == 'set_acceleration':
                             msg = ('Setting acceleration failed, check motor status.')
-                            wx.CallAfter(wx.MessageBox, 'Setting acceleration failed', msg)
+                            wx.CallAfter(wx.MessageBox, msg, 'Setting acceleration failed')
 
                         elif cmd == 'home_positioner' or cmd == 'home':
                             msg = ('Homing failed, check motor status.')
-                            wx.CallAfter(wx.MessageBox, 'Homing failed', msg)
+                            wx.CallAfter(wx.MessageBox, msg, 'Homing failed')
 
                 self.answer_event.clear()
             else:
@@ -3439,7 +3436,7 @@ class MotorPanel(wx.Panel):
                     wx.CallAfter(self.pos.SetLabel, str(mtr1_position))
 
                     if self.motor_params['num_axes'] == 2:
-                        mtr2_position = self.motor.get_positioner_position(self.motor_params['mtr2'], 0)
+                        mtr2_position = self.motor.get_positioner_position(self.motor_params['mtr2'], 1)
                         wx.CallAfter(self.pos2.SetLabel, str(mtr2_position))
 
                     status, descrip = self.motor.get_group_status()
@@ -3849,7 +3846,7 @@ class EpicsMXMotorPanel(wx.Panel):
                     pos = pos*self.scale + self.offset
 
                     msg = msg1 + ' {} '.format(pos) + msg2 + 'limit.'
-                    wx.MessageBox(msg, 'Error moving motor')
+                    wx.CallAfter(wx.MessageBox, msg, 'Error moving motor')
         else:
             msg = 'Position has to be numeric.'
             wx.CallAfter(wx.MessageBox, msg, 'Error moving motor')

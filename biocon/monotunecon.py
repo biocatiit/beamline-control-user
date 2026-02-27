@@ -18,8 +18,6 @@
 #
 #    You should have received a copy of the GNU General Public License
 #    along with this software.  If not, see <http://www.gnu.org/licenses/>.
-from builtins import object, range, map
-from io import open
 
 import time
 import logging
@@ -62,7 +60,7 @@ class MonoAutoTune(object):
         self.ct_val_pv, connected = self._initialize_pv('{}'.format(
             self.settings['device_data']['kwargs']['ct_val']))
 
-        self.i0_shutter_pv = self._initialize_pv('{}'.format(
+        self.i0_shutter_pv, connected = self._initialize_pv('{}'.format(
             self.settings['exp_slow_shtr1']))
 
     def _initialize_pv(self, pv_name):
@@ -83,13 +81,20 @@ class MonoAutoTune(object):
         self.high_lim = self.ao_high_lim_pv.get()
 
     def _measure_intensity(self):
-        self.ct_start_pv.put()
+        self.ct_start_pv.put(1, wait=True)
+
+        start = time.monotonic()
 
         while not self.ct_start_pv.get() == 1:
             time.sleep(0.01)
+            if time.monotonic() - start > 10:
+                break
 
+        start = time.monotonic()
         while self.ct_start_pv.get() == 1:
             time.sleep(0.01)
+            if time.monotonic() - start > 10:
+                break
 
         val = self.ct_val_pv.get(use_monitor=False)
 
@@ -119,11 +124,16 @@ class MonoAutoTune(object):
         while step > self.step_min:
             step = max(self.step_min, step/self.step_scale)
 
+            if step == self.step_min:
+                final = True
+            else:
+                final = False
+
             if search_dir == 'up':
-                i_best, v_best, improved = self._search_up(step, i_best, v_best)
+                i_best, v_best, improved = self._search_up(step, i_best, v_best, final)
                 search_dir = 'down'
             else:
-                i_best, v_best, improved = self._search_down(step, i_best, v_best)
+                i_best, v_best, improved = self._search_down(step, i_best, v_best, final)
                 search_dir = 'up'
 
         self.i0_shutter_pv.put(1)
@@ -131,12 +141,13 @@ class MonoAutoTune(object):
         logger.info('Finished optimizing I0 intensity. Final: %s cts/s at %s V',
             i_best/self.settings['optimize_ct_time'], v_best)
 
-    def _search_up(self, step, i_start, v_start):
+    def _search_up(self, step, i_start, v_start, final=False):
         i_new = np.inf
         i_prev = copy.copy(i_start)
         v_new = v_start
 
         while i_new > i_prev and v_new != self.high_lim:
+            v_prev = copy.copy(v_new)
             v_new += step
 
             if v_new > self.high_lim:
@@ -152,21 +163,27 @@ class MonoAutoTune(object):
 
         if v_new == v_start + step:
             improved = False
-            i_best = i_start
-            v_best = v_start
+            i_ret = i_start
+            v_ret = v_start
         else:
             improved = True
-            i_best = i_new
-            v_best = v_new
+            i_ret = i_new
+            v_ret = v_new
 
-        return i_best, v_best, improved
+        if final:
+            self.ao_pv.put(v_prev)
+            i_ret = i_prev
+            v_ret = v_prev
 
-    def _search_down(self, step, i_start, v_start):
+        return i_ret, v_ret, improved
+
+    def _search_down(self, step, i_start, v_start, final=False):
         i_new = np.inf
         i_prev = copy.copy(i_start)
         v_new = v_start
 
         while i_new > i_prev and v_new != self.low_lim:
+            v_prev = copy.copy(v_new)
             v_new -= step
 
             if v_new < self.low_lim:
@@ -182,14 +199,19 @@ class MonoAutoTune(object):
 
         if v_new == v_start - step:
             improved = False
-            i_best = i_start
-            v_best = v_start
+            i_ret = i_start
+            v_ret = v_start
         else:
             improved = True
-            i_best = i_new
-            v_best = v_new
+            i_ret = i_new
+            v_ret = v_new
 
-        return v_best, i_best, improved
+        if final:
+            self.ao_pv.put(v_prev)
+            i_ret = i_prev
+            v_ret = v_prev
+
+        return i_ret, v_ret, improved
 
 
 #Settings

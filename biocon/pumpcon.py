@@ -18,10 +18,6 @@
 #
 #    You should have received a copy of the GNU General Public License
 #    along with this software.  If not, see <http://www.gnu.org/licenses/>.
-from __future__ import absolute_import, division, print_function, unicode_literals
-from builtins import object, range, map
-from io import open
-
 import traceback
 import threading
 import time
@@ -127,10 +123,10 @@ class SerialComm(object):
                 self.ser.close()
 
     def __repr__(self):
-        return self.ser
+        return str(self.ser)
 
     def __str__(self):
-        return print(self.ser)
+        return str(self.ser)
 
     def read(self, size=1):
         """
@@ -209,7 +205,7 @@ class SerialComm(object):
             logger.exception("Failed to write '%s' to serial device on port %s",
                 data, self.ser.port)
 
-        logger.debug("Recived '%r' after writing to serial device on port %s",
+        logger.debug("Received '%r' after writing to serial device on port %s",
             out, self.ser.port)
 
         return out
@@ -261,7 +257,7 @@ class MForceSerialComm(SerialComm):
         except ValueError:
             logger.exception("Failed to write %r to serial device on port %s", data, self.ser.port)
 
-        logger.debug("Recived %r after writing to serial device on port %s", out, self.ser.port)
+        logger.debug("Received %r after writing to serial device on port %s", out, self.ser.port)
 
         return out
 
@@ -316,7 +312,7 @@ class PHD4400SerialComm(SerialComm):
             logger.exception("Failed to write '%s' to serial device on port %s", data, self.ser.port)
         except Exception:
             logger.error("Failed to write to serial port!")
-        logger.debug("Recived '%s' after writing to serial device on port %s", out, self.ser.port)
+        logger.debug("Received '%s' after writing to serial device on port %s", out, self.ser.port)
 
         return out
 
@@ -382,7 +378,7 @@ class PicoPlusSerialComm(SerialComm):
             logger.exception("Failed to write '%s' to serial device on port %s", data, self.ser.port)
         except Exception:
             logger.error("Failed to write to serial port!")
-        logger.debug("Recived '%s' after writing to serial device on port %s", out, self.ser.port)
+        logger.debug("Received '%s' after writing to serial device on port %s", out, self.ser.port)
 
         return out
 
@@ -433,7 +429,7 @@ class LongerSerialComm(SerialComm):
             logger.exception("Failed to write %r to serial device on port %s", data, self.ser.port)
 
         out = out.hex(' ')
-        logger.debug("Recived %r after writing to serial device on port %s", out, self.ser.port)
+        logger.debug("Received %r after writing to serial device on port %s", out, self.ser.port)
 
         return out
 
@@ -1685,8 +1681,7 @@ class NE500Pump(SyringePump):
         elif abs(val) >= 100 and abs(val) < 1000:
             val = round(val, 1)
         else:
-            round(val, 0)
-            val = int(val)
+            val = int(round(val, 0))
 
         return val
 
@@ -2019,7 +2014,7 @@ class HamiltonPSD6Pump(SyringePump):
         self._inner_set_velocity(self._refill_rate)
 
     def _inner_set_velocity(self, rate):
-        step_rate = self._calc_flow_rate(self._flow_rate)
+        step_rate = self._calc_flow_rate(rate)
         self.send_cmd("V{}".format(step_rate))
 
     def _calc_flow_rate(self, rate):
@@ -2503,7 +2498,7 @@ class SSINextGenPump(Pump):
 
                     if time.time() - start > self.timeout:
                         break
-                        logger.error('TImed out waiting for pump %s to start', self.name)
+                        logger.error('Timed out waiting for pump %s to start', self.name)
 
             self._flow_dir = 1
             ramp_thread = threading.Thread(target=self._ramp_flow, args=(self.flow_rate,
@@ -2521,7 +2516,7 @@ class SSINextGenPump(Pump):
 
                     if time.time() - start > self.timeout:
                         break
-                        logger.error('TImed out waiting for pump %s to start', self.name)
+                        logger.error('Timed out waiting for pump %s to start', self.name)
 
                     self._flow_dir = 1
 
@@ -6082,8 +6077,6 @@ class PumpPanel(utils.DevicePanel):
 
             if success and self.pump_mode == 'syringe':
                 try:
-                    rr = float(self.refill_rate_ctrl.GetValue())
-
                     rr = float(self.refill_rate_ctrl.GetValue())
 
                     set_rr_cmd = ['set_refill_rate', [self.name, rr*mult], {}]
