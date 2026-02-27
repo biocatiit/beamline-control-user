@@ -154,6 +154,7 @@ class CoflowControl(object):
 
             if self.settings['use_overflow_control']:
                 self.overflow_connected = True
+                self.overflow_conn_errs = 0
                 self.session = requests.Session()
 
             if (not self.timeout_event.is_set()
@@ -367,7 +368,7 @@ class CoflowControl(object):
         sheath_args.insert(0, self.sheath_valve_name)
         sheath_connect_cmd = ['connect', sheath_args, sheath_kwargs]
 
-        logger.info('Initializing coflow valves on statrtup')
+        logger.info('Initializing coflow valves on startup')
 
         self.valve_sheath_init = self._send_valvecmd(sheath_connect_cmd,
             response=True)
@@ -377,19 +378,31 @@ class CoflowControl(object):
 
         if self.valve_sheath_init:
             self._update_sheath_valve_position()
-            logger.info('Valve initializiation successful.')
+            logger.info('Valve initialization successful.')
 
     def start_overflow(self):
         logger.info('Turning on overflow pump')
         ip = self.settings['remote_overflow_ip']
         params = {'c':'1','s':'1', 'u':'user'}
-        self.session.get('http://{}/?'.format(ip), params=params, timeout=5)
+        try:
+            self.session.get('http://{}/?'.format(ip), params=params, timeout=5)
+        except Exception:
+            self.overflow_conn_errs += 1
+            if self.overflow_connected and self.overflow_conn_errs > 5:
+                self.overflow_connected = False
+
 
     def stop_overflow(self):
         logger.info('Turning off overflow pump')
         ip = self.settings['remote_overflow_ip']
         params = {'c':'1','s':'0', 'u':'user'}
-        self.session.get('http://{}/?'.format(ip), params=params, timeout=5)
+
+        try:
+            self.session.get('http://{}/?'.format(ip), params=params, timeout=5)
+        except Exception:
+            self.overflow_conn_errs += 1
+            if self.overflow_connected and self.overflow_conn_errs > 5:
+                self.overflow_connected = False
 
     def check_overflow_status(self):
         ip = self.settings['remote_overflow_ip']
@@ -400,12 +413,13 @@ class CoflowControl(object):
         try:
             r = self.session.get('http://{}/?'.format(ip), params=params, timeout=1)
             self.overflow_connected = True
+            self.overflow_conn_errs = 0
 
         except Exception:
-            if self.overflow_connected:
-                err = True
-
+            self.overflow_conn_errs += 1
+            if self.overflow_connected and self.overflow_conn_errs > 5:
                 self.overflow_connected = False
+                err = True
 
             r = None
 
@@ -434,29 +448,7 @@ class CoflowControl(object):
             base_units = self.settings['flow_units']
             units = 'mL/min'
 
-            if units in ['nL/s', 'nL/min', 'uL/s', 'uL/min', 'mL/s', 'mL/min']:
-                base_vu, base_tu = base_units.split('/')
-                new_vu, new_tu = units.split('/')
-                if base_vu != new_vu:
-                    if (base_vu == 'nL' and new_vu == 'uL') or (base_vu == 'uL' and new_vu == 'mL'):
-                        flow_mult = 1./1000.
-                    elif base_vu == 'nL' and new_vu == 'mL':
-                        flow_mult = 1./1000000.
-                    elif (base_vu == 'mL' and new_vu == 'uL') or (base_vu == 'uL' and new_vu == 'nL'):
-                        flow_mult = 1000.
-                    elif base_vu == 'mL' and new_vu == 'nL':
-                        flow_mult = 1000000.
-                else:
-                    flow_mult = 1.
-
-                if base_tu != new_tu:
-                    if base_tu == 'min':
-                        flow_mult = flow_mult/60.
-                    else:
-                        flow_mult = flow_mult*60.
-
-            lc_flow_rate = lc_flow_rate*flow_mult
-            logger.debug('Flow rate mult: %f', flow_mult)
+            lc_flow_rate = pumpcon.convert_flow_rate(lc_flow_rate, units, base_units)
             logger.debug('Flow rate is %f %s', lc_flow_rate, units)
 
             if lc_flow_rate < 0.1 or lc_flow_rate > 2:
@@ -722,12 +714,12 @@ class CoflowControl(object):
 
                 self.start_flow()
 
-                start_time = time.time()
+                start_time = time.monotonic()
 
                 sheath_fr = self.sheath_setpoint
                 run_time = 60*(volume/sheath_fr)
 
-                elapsed_time = time.time() - start_time
+                elapsed_time = time.monotonic() - start_time
                 while  elapsed_time < run_time:
                     if self._abort_change_buffer.is_set():
                         break
@@ -736,7 +728,7 @@ class CoflowControl(object):
 
                     time.sleep(0.1)
 
-                    elapsed_time = time.time() - start_time
+                    elapsed_time = time.monotonic() - start_time
 
                 if self._abort_change_buffer.is_set():
                     self.stop_flow()
@@ -771,7 +763,7 @@ class CoflowControl(object):
             self._monitor_flow_timer_evt.wait()
 
             if not self._abort_flow_timer.is_set():
-                start_time = time.time()
+                start_time = time.monotonic()
                 run_time = copy.copy(self._remaining_flow_time)
                 elapsed_time = 0
 
@@ -783,7 +775,7 @@ class CoflowControl(object):
 
                     time.sleep(0.1)
 
-                    elapsed_time = time.time() - start_time
+                    elapsed_time = time.monotonic() - start_time
 
             if not self._abort_flow_timer.is_set():
                 logger.info('Flow timer ended')
@@ -875,15 +867,14 @@ class CoflowControl(object):
 
         sheath_monitor_avg = self.settings['sheath_monitor_avg']
         outlet_monitor_avg = self.settings['outlet_monitor_avg']
-        sheath_mon_avg_time = self.settings['sheath_mon_avg_time']
-        outlet_mon_avg_time = self.settings['outlet_mon_avg_time']
+        flow_mon_avg_time = self.settings['flow_mon_avg_time']
 
         s1_type = None
         o1_type = None
         s2_type = None
         o2_type = None
 
-        start_time = time.time()
+        start_time = time.monotonic()
         cycle_time = 0
         long_cycle_time = 0
         log_time = 0
@@ -899,7 +890,7 @@ class CoflowControl(object):
                     if self._terminate_monitor_flow.is_set():
                         break
 
-            if (time.time() - cycle_time > 0.25 and
+            if (time.monotonic() - cycle_time > 0.25 and
                 not self._terminate_monitor_flow.is_set()):
                 if not self._terminate_monitor_flow.is_set():
                     sheath_density, s1_type = self._update_sheath_density()
@@ -922,7 +913,7 @@ class CoflowControl(object):
                         self.sheath_t_list.append(sheath_t)
                         self.outlet_t_list.append(outlet_t)
 
-                        cycle_time = time.time()
+                        cycle_time = time.monotonic()
 
                         cur_aux_time = cycle_time-start_time
 
@@ -954,7 +945,7 @@ class CoflowControl(object):
                     self.sheath_fr_list.append(sheath_fr)
                     self.outlet_fr_list.append(outlet_fr)
 
-                    cur_fr_time = time.time()-start_time
+                    cur_fr_time = time.monotonic()-start_time
 
                     self.fr_time_list.append(cur_fr_time)
 
@@ -964,11 +955,16 @@ class CoflowControl(object):
 
                 if self.monitor:
                     if sheath_monitor_avg or outlet_monitor_avg:
-                        max_pts = int(sheath_mon_avg_time/0.25 + 4)
+                        max_pts = int(flow_mon_avg_time/0.25 + 4)
+                        start = max(0, len(self.fr_time_list)-max_pts)
                         pts = np.array(list(itertools.islice(self.fr_time_list,
-                            len(self.fr_time_list)-max_pts, len(self.fr_time_list))))
-                        idx = np.argmin(np.abs(pts-(cur_fr_time-sheath_mon_avg_time)))
-                        idx += len(self.fr_time_list)-max_pts
+                            start, len(self.fr_time_list))))
+
+                        if pts.size > 0:
+                            idx = np.argmin(np.abs(pts-(cur_fr_time-flow_mon_avg_time)))
+                            idx += start
+                        else:
+                            idx = None
 
                     if not sheath_monitor_avg:
                         if ((sheath_fr < sheath_low_warning*self.sheath_setpoint or
@@ -981,7 +977,7 @@ class CoflowControl(object):
                             self._sheath_oob_error = True
                             self._sheath_oob_flow = sheath_fr
 
-                    else:
+                    elif idx is not None:
                         mean_fr = np.mean(list(itertools.islice(self.sheath_fr_list, idx,
                             len(self.sheath_fr_list))))
 
@@ -1007,9 +1003,9 @@ class CoflowControl(object):
                             self._outlet_oob_error = True
                             self._outlet_oob_flow = outlet_fr
 
-                    else:
+                    elif idx is not None:
                         mean_fr = np.mean(list(itertools.islice(self.outlet_fr_list, idx,
-                            len(self.sheath_fr_list))))
+                            len(self.outlet_fr_list))))
 
                         if ((mean_fr < outlet_low_warning*self.outlet_setpoint or
                             mean_fr > outlet_high_warning*self.outlet_setpoint)):
@@ -1023,7 +1019,7 @@ class CoflowControl(object):
 
 
             if (not self._terminate_monitor_flow.is_set()
-                and time.time() - log_time > 300 and self.coflow_on):
+                and time.monotonic() - log_time > 300 and self.coflow_on):
                 logger.info('Sheath flow rate: %f', sheath_fr)
                 logger.info('Outlet flow rate: %f', outlet_fr)
                 logger.info('Sheath density: %f', sheath_density)
@@ -1031,12 +1027,12 @@ class CoflowControl(object):
                 logger.info('Sheath temperature: %f', sheath_t)
                 logger.info('Outlet temperature: %f', outlet_t)
 
-                log_time = time.time()
+                log_time = time.monotonic()
 
-            if time.time() - long_cycle_time > 5:
+            if time.monotonic() - long_cycle_time > 5:
                 self._update_sheath_valve_position()
 
-                long_cycle_time = time.time()
+                long_cycle_time = time.monotonic()
 
         logger.info('Stopping continuous logging of flow rates')
 
@@ -1222,19 +1218,45 @@ class CoflowControl(object):
         self.coflow_valve_con.stop()
 
         if not self.timeout_event.is_set():
-            self.coflow_pump_con.join(5)
-            self.coflow_fm_con.join(5)
-            self.coflow_valve_con.join(5)
+            try:
+                self.coflow_pump_con.join(5)
+            except Exception:
+                pass
+
+            try:
+                self.coflow_fm_con.join(5)
+            except Exception:
+                pass
+
+            try:
+                self.coflow_valve_con.join(5)
+            except Exception:
+                pass
 
         self._terminate_monitor_change_buffer.set()
         self._abort_change_buffer.set()
         self._monitor_change_buffer_evt.set()
-        self._monitor_change_buffer_thread.join(5)
+
+        try:
+            self._monitor_change_buffer_thread.join(5)
+        except Exception:
+            pass
 
         self._terminate_monitor_flow_timer.set()
         self._abort_flow_timer.set()
         self._monitor_flow_timer_evt.set()
-        self._monitor_flow_timer_thread.join(5)
+
+        try:
+            self._monitor_flow_timer_thread.join(5)
+        except Exception:
+            pass
+
+        self._terminate_monitor_flow.set()
+
+        try:
+            self._monitor_flow_thread.join(5)
+        except Exception:
+            pass
 
 
 class CoflowCommThread(utils.CommManager):
@@ -2312,7 +2334,7 @@ class CoflowPanel(utils.DevicePanel):
         status_sizer.Add(status_grid_sizer)
 
         if self.settings['use_incubator_pvs']:
-            status_sizer.Add(esensor_sizer, flag=wx.TOP, border=self.FromDIP(5))
+            status_sizer.Add(esensor_sizer, flag=wx.TOP, border=self._FromDIP(5))
 
         coflow_buffer_sizer = self._create_buffer_ctrls(status_panel)
 
@@ -2430,7 +2452,7 @@ class CoflowPanel(utils.DevicePanel):
         }
 
         valve_frame = valvecon.ValveFrame('ValveFrame', valve_settings, parent=self,
-            title='Pump Control')
+            title='Valve Control')
         valve_frame.Show()
 
     def _on_show_motors(self, evt):
@@ -2840,29 +2862,7 @@ class CoflowPanel(utils.DevicePanel):
             base_units = self.settings['flow_units']
             units = 'mL/min'
 
-            if units in ['nL/s', 'nL/min', 'uL/s', 'uL/min', 'mL/s', 'mL/min']:
-                base_vu, base_tu = base_units.split('/')
-                new_vu, new_tu = units.split('/')
-                if base_vu != new_vu:
-                    if (base_vu == 'nL' and new_vu == 'uL') or (base_vu == 'uL' and new_vu == 'mL'):
-                        flow_mult = 1./1000.
-                    elif base_vu == 'nL' and new_vu == 'mL':
-                        flow_mult = 1./1000000.
-                    elif (base_vu == 'mL' and new_vu == 'uL') or (base_vu == 'uL' and new_vu == 'nL'):
-                        flow_mult = 1000.
-                    elif base_vu == 'mL' and new_vu == 'nL':
-                        flow_mult = 1000000.
-                else:
-                    flow_mult = 1.
-
-                if base_tu != new_tu:
-                    if base_tu == 'min':
-                        flow_mult = flow_mult/60.
-                    else:
-                        flow_mult = flow_mult*60.
-
-            lc_flow_rate = lc_flow_rate*flow_mult
-            logger.debug('Flow rate mult: %f', flow_mult)
+            lc_flow_rate = pumpcon.convert_flow_rate(lc_flow_rate, units, base_units)
             logger.debug('Flow rate is %f %s', lc_flow_rate, units)
 
             if lc_flow_rate < 0.1 or lc_flow_rate > 2:
@@ -2949,7 +2949,7 @@ class CoflowPanel(utils.DevicePanel):
             self.sheath_t_list.clear()
             self.outlet_t_list.clear()
             self.aux_time_list.clear()
-            self.start_time = time.time()
+            self.start_time = time.monotonic()
 
     def air_detected(self, loc):
         action = self.air_alarm_action.GetStringSelection()
@@ -3761,8 +3761,7 @@ default_coflow_settings = {
         'outlet_warning_threshold_high' : 1.02,
         'sheath_monitor_avg'        : True,
         'outlet_monitor_avg'        : False,
-        'sheath_mon_avg_time'       : 30,
-        'outlet_mon_avg_time'       : 30,
+        'flow_mon_avg_time'         : 30,
         'sheath_fr_mult'            : 1,
         'outlet_fr_mult'            : 1,
         # 'outlet_fr_mult'            : -1,

@@ -18,7 +18,6 @@
 #
 #    You should have received a copy of the GNU General Public License
 #    along with this software.  If not, see <http://www.gnu.org/licenses/>.
-from __future__ import absolute_import, division, print_function, unicode_literals
 from builtins import object, range, map
 from io import open
 
@@ -88,10 +87,10 @@ class ControlClient(threading.Thread):
 
         new_connection = True
 
-        # Clear backlog of incomming messages on startup
+        # Clear backlog of incoming messages on startup
         start = time.time()
         while time.time()-start < 1:
-            if self.socket.poll(10) > 0:
+            if self.socket.poll(20) > 0:
                 resp = self.socket.recv_pyobj()
 
                 res_type, response = resp
@@ -105,14 +104,9 @@ class ControlClient(threading.Thread):
             action_taken = False
 
             try:
-                if not self.socket.closed:
-                    if time.time() - self.last_ping > self.heartbeat*self.hb_scale:
-                        self.last_ping = time.time()
-                        self._ping(new_connection)
-                else:
-                    if time.time() - self.last_ping > self.heartbeat*self.hb_scale:
-                        self.last_ping = time.time()
-                        self._ping(new_connection)
+                if time.time() - self.last_ping > self.heartbeat*self.hb_scale:
+                    self.last_ping = time.time()
+                    self._ping(new_connection)
 
                 if new_connection:
                     new_connection = False
@@ -149,7 +143,7 @@ class ControlClient(threading.Thread):
                 action_taken = action_taken or got_status
 
                 if not action_taken:
-                    time.sleep(0.01)
+                    time.sleep(0.1)
 
             except Exception:
                 logger.error('Error in client thread:\n{}'.format(traceback.format_exc()))
@@ -198,10 +192,10 @@ class ControlClient(threading.Thread):
                 "error." %(device, device_cmd[0],
                 ', '.join(['{}'.format(a) for a in device_cmd[1]]),
                 ', '.join(['{}:{}'.format(kw, item) for kw, item in device_cmd[2].items()])))
-            logger.error(msg)
+            logger.exception(msg)
             self.connect_error += 1
             self._ping()
-            if not self.timeout_event.set():
+            if not self.timeout_event.is_set():
                 self.answer_queue.append(None)
 
             self.missed_cmds.append(command)
@@ -213,8 +207,7 @@ class ControlClient(threading.Thread):
                 "with args: %s and kwargs: %s. Exception follows:" %(device, device_cmd[0],
                 ', '.join(['{}'.format(a) for a in device_cmd[1]]),
                 ', '.join(['{}:{}'.format(kw, item) for kw, item in device_cmd[2].items()])))
-            logger.error(msg)
-            logger.error(traceback.print_exc())
+            logger.exception(msg)
             self.connect_error += 1
 
         if self.connect_error >= 5:
@@ -229,7 +222,7 @@ class ControlClient(threading.Thread):
         answer = ''
 
         while time.time()-start_time < timeout:
-            if self.socket.poll(10) > 0:
+            if self.socket.poll(20) > 0:
                 resp = self.socket.recv_pyobj()
                 # logger.debug('Received message: %s', resp)
                 res_type, response = resp
@@ -250,7 +243,7 @@ class ControlClient(threading.Thread):
         got_response = False
 
         while True:
-            if self.socket.poll(10) > 0:
+            if self.socket.poll(20) > 0:
                 resp = self.socket.recv_pyobj()
                 # logger.debug('Received status message: %s', resp)
                 res_type, response = resp

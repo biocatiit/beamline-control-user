@@ -18,7 +18,6 @@
 #
 #    You should have received a copy of the GNU General Public License
 #    along with this software.  If not, see <http://www.gnu.org/licenses/>.
-from __future__ import absolute_import, division, print_function, unicode_literals
 from builtins import object, range, map
 from io import open
 
@@ -123,8 +122,11 @@ class MXDetector(Detector):
 
     def set_data_dir(self, data_dir):
         self.det_datadir.put(data_dir)
+        start = time.monotonic()
         while self.det_datadir.get().rstrip('/') != data_dir.rstrip('/'):
-            time.sleep(0.001)
+            time.sleep(0.01)
+            if time.monotonic() - start > 10:
+                raise Exception('Unable to set detector data dir')
 
     def set_exp_period(self, exp_period):
         self.det_exp_period.put(exp_period)
@@ -193,7 +195,8 @@ class AD_EigerCamera(Device):
              "TIFF1:FilePath", "TIFF1:FilePath_RBV", "TIFF1:FileTemplate",
              "cam1:TimeRemaining_RBV",
              "cam1:TriggerMode", "cam1:TriggerMode_RBV", "cam1:TriggerSoftware",
-             "cam1:Trigger", 'cam1:ManualTrigger', 'cam1:ManualTrigger_RBV',)
+             "cam1:Trigger", 'cam1:ManualTrigger', 'cam1:ManualTrigger_RBV',
+             "cam1:FilePath", "TIFF1:FileNumber")
 
 
     _nonpvs = ('_prefix', '_pvs', '_delim')
@@ -299,7 +302,7 @@ class EPICSEigerDetector(object):
     def set_num_frames(self, num_frames):
         trig_mode = self.det.get('cam1:TriggerMode_RBV', as_string=True)
 
-        logger.debug('trig_mode')
+        logger.debug(trig_mode)
 
         if trig_mode == 'Internal Series' or trig_mode == 'External Series':
             self.det.put('cam1:NumImages', num_frames, wait=True, timeout=1)
@@ -338,7 +341,7 @@ class EPICSEigerDetector(object):
         # self.det.put("cam1:Acquire", 0, wait=True, timeout=1)
         self.det.put('cam1:Acquire', 0, timeout=1)
         # For some reason this is much faster without the wait=True, in terms of EPICS response
-        # So going with that for now. Maybe it's a bug that's been fixed in mroe
+        # So going with that for now. Maybe it's a bug that's been fixed in more
         # Recent versions of pyepics? I should try when I convert to python 3.
 
 
@@ -363,7 +366,7 @@ class AD_PilatusCamera(Device):
              "cam1:SizeX", "cam1:SizeX_RBV", "cam1:SizeY", "cam1:SizeY_RBV",
              "cam1:TimeRemaining_RBV",
              "cam1:TriggerMode", "cam1:TriggerMode_RBV",
-             "cam1:FilePath",
+             "cam1:FilePath", "cam1:FileName"
              )
 
 
@@ -446,7 +449,7 @@ class EPICSPilatusDetector(object):
         # self.det.put("cam1:Acquire", 0, wait=True, timeout=1)
         self.det.put('cam1:Acquire', 0, timeout=1)
         # For some reason this is much faster without the wait=True, in terms of EPICS response
-        # So going with that for now. Maybe it's a bug that's been fixed in mroe
+        # So going with that for now. Maybe it's a bug that's been fixed in more
         # Recent versions of pyepics? I should try when I convert to python 3.
 
 class AD_MarCCDCamera(Device):
@@ -507,7 +510,7 @@ class Scan(Device):
              'PAUS', 'CPT', 'DDLY', 'FAZE', 'ATIME', 'ACQM', 'ACQT')
 
     pos_attrs = ('PV', 'SP', 'EP', 'SI', 'CP', 'WD', 'PA', 'AR', 'SM')
-    trig_attrs = ('PV', 'NV')
+    trig_attrs = ('PV', 'NV', 'CD')
 
     _alias = {'device':      'P1PV',
               'start':       'P1SP',
@@ -569,7 +572,7 @@ class Scan(Device):
         """Reset scan, clearing positioners, detectors, triggers"""
         self.put('NPTS', 0)
         self.put('ACQM', 0)
-        self.put('ACQM', 0)
+        self.put('ACQT', 0)
         self.put('ATIME', 0.1)
         self.detector_delay(0)
 
@@ -863,7 +866,11 @@ class EPICSMarCCDDetector(object):
         """
         """
         self.det = AD_MarCCDCamera(pv_prefix)
-        self.scan = Scan(scan_pv)
+
+        if scan_pv:
+            self.scan = Scan(scan_pv)
+        else:
+            self.scan = None
 
     # def __repr__(self):
     #     return '{}({}, {})'.format(self.__class__.__name__, self.name, self.device)
@@ -878,12 +885,7 @@ class EPICSMarCCDDetector(object):
         self.det.put("cam1:Acquire", 1, wait=True, timeout=1)
 
     def get_status(self):
-        # This probably isn't right
         status = self.det.get("cam1:DetectorState_RBV")
-
-        if status == 10:
-            status = 0
-
         return status
 
     def get_data_dir(self):
@@ -990,7 +992,7 @@ class Scaler(Device):
     def count(self, ctime=None, wait=False):
         "set count, with optional counttime"
         if ctime is not None:
-            self.CountTime(ctime)
+            self.count_time(ctime)
         self.put('CNT', 1, wait=wait)
         poll()
 
