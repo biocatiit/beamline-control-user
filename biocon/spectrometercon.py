@@ -144,6 +144,12 @@ class SpectraData(object):
 
     def drift_correct(self, ref_spectrum, window):
         logger.debug('SpectraData: Drift correcting spectrum')
+
+        if (not isinstance(window, (list, tuple)) or len(window) != 2 or
+            window[0] is None or window[1] is None or window[0] >= window[1]):
+            logger.debug("Skipping drift correction: invalid window=%s", window)
+            return
+
         bkg = ref_spectrum.get_spectrum()
 
         wstart = window[0]
@@ -169,9 +175,16 @@ class SpectraData(object):
     def calc_abs(self):
         logger.debug('SpectraData: Calculating absorbance')
 
-        self.abs_spectrum = -np.log10(self.trans_spectrum)*1000
 
-        self._calculate_all_abs_single_wavelength()
+        if self.trans_spectrum is not None:
+            ts = np.clip(self.trans_spectrum, 1e-12, np.inf)
+
+            if not np.allclose(ts, self.trans_spectrum):
+                logger.debug("Transmission <= 0 detected; clipped for log10.")
+
+            self.abs_spectrum = -np.log10(ts) * 1000.0
+
+            self._calculate_all_abs_single_wavelength()
 
     def _calculate_all_abs_single_wavelength(self):
         for wvl in self._absorbance_wavelengths:
@@ -587,8 +600,10 @@ class Spectrometer(object):
 
         if self._dark_spectrum is not None:
             dark_spec = self.get_dark()
+        else:
+            dark_spec = None
 
-        if (self._dark_spectrum is None or
+        if (dark_spec is None or
             (datetime.datetime.now() - dark_spec.get_timestamp()
             > datetime.timedelta(seconds=dark_time))):
             self.collect_dark()
@@ -706,14 +721,14 @@ class Spectrometer(object):
         while not self._live_update_stop.is_set():
             self._live_update_paused.set()
             self._live_update_evt.wait()
-            if time.time() - start_time > self._live_update_period:
+            if time.monotonic() - start_time > self._live_update_period:
                 self._live_update_paused.clear()
                 try:
                     self.collect_spectrum(drift_correct=False)
                 except Exception:
                     # traceback.print_exc()
                     pass
-                start_time = time.time()
+                start_time = time.monotonic()
 
             else:
                 time.sleep(0.1)
@@ -819,7 +834,7 @@ class Spectrometer(object):
 
             if wait_for_trig:
                 while not self._get_ext_trig_in():
-                    pass
+                    time.sleep(0.001)
 
             self._taking_series = True
 
@@ -864,7 +879,7 @@ class Spectrometer(object):
 
                     try:
                         return_q.put_nowait(spectrum)
-                    except:
+                    except AttributeError:
                         return_q.append(spectrum)
 
                 tot_spectrum += 1
@@ -888,7 +903,7 @@ class Spectrometer(object):
                                 )
                 for wav in absorbance:
                     header += 'Abs_{}_nm_(mAu),'.format(wav)
-                header.rstrip(',')
+                header = header.rstrip(',')
 
                 if out_data.size > 0:
                     try:
@@ -1055,7 +1070,7 @@ class Spectrometer(object):
             history = self._history
 
         now = (datetime.datetime.now(datetime.timezone.utc) - datetime.datetime(1970,1,1,
-            tzinfo=datetime.timezon.utc)).total_seconds()
+            tzinfo=datetime.timezone.utc)).total_seconds()
 
         index = -1
         while (abs(index) <= len(history['timestamps'])
@@ -1265,7 +1280,7 @@ class Spectrometer(object):
         self._calculate_all_abs_single_wavelength()
 
     def get_wavelength_range(self):
-        logger.debug('Sepctrometer %s: Getting wavelength range', self.name)
+        logger.debug('Spectrometer %s: Getting wavelength range', self.name)
         return self._wavelength_range
 
     def get_autosave_parameters(self):
@@ -1277,7 +1292,6 @@ class Spectrometer(object):
     def abort_collection(self):
         logger.info('Spectrometer %s: Aborting collection', self.name)
         self._series_abort_event.set()
-        self.abort_collection()
 
 class StellarnetUVVis(Spectrometer):
     """
@@ -1721,7 +1735,7 @@ class UVCommThread(utils.CommManager):
 
         self._return_value((name, cmd, True), comm_name)
 
-        logger.debug("Device %s integraiton time set", name)
+        logger.debug("Device %s integration time set", name)
 
     def _set_scan_avg(self, name, val, **kwargs):
         logger.debug("Setting device %s scan averages to %s", name, val)
@@ -2221,7 +2235,7 @@ class UVCommThread(utils.CommManager):
 
         self._return_value((name, cmd, True), comm_name)
 
-        logger.debug("Device %s aborted colelction", name)
+        logger.debug("Device %s aborted collection", name)
 
     def _get_spec_settings(self, name, **kwargs):
         logger.debug('Getting device %s settings', name)
@@ -2564,7 +2578,6 @@ class UVPanel(utils.DevicePanel):
         self._series_count = 0
         self._series_total = 0
 
-        self._history_length = None
         self._current_int_time = None
         self._current_scan_avg = None
         self._current_smooth = None
@@ -3165,7 +3178,7 @@ class UVPanel(utils.DevicePanel):
 
         if args[1] != 'StellarNet' and not self.inline:
             self.settings_sizer.Hide(self.xtiming_label)
-            self.setitngs_sizer.Hide(self.xtiming)
+            self.settings_sizer.Hide(self.xtiming)
             self.parent.Layout()
             self.parent.Refresh()
 
@@ -3194,7 +3207,7 @@ class UVPanel(utils.DevicePanel):
             self.auto_dark.SetValue(self.settings['auto_dark'])
             self.auto_dark_period.SetValue('{}'.format(self.settings['auto_dark_t']))
             self.dark_avgs.SetValue('{}'.format(self.settings['dark_avgs']))
-            self.ref_avgs.SetValue('{}'.format(self.settings['dark_avgs']))
+            self.ref_avgs.SetValue('{}'.format(self.settings['ref_avgs']))
             self.int_time.SetValue('{}'.format(self.settings['max_int_t']))
 
             self._history_length = self.settings['history_t']
@@ -3214,7 +3227,7 @@ class UVPanel(utils.DevicePanel):
             except Exception:
                 pass
             try:
-                self.ref_avgs.SetValue('{}'.format(self.settings['dark_avgs']))
+                self.ref_avgs.SetValue('{}'.format(self.settings['ref_avgs']))
             except Exception:
                 pass
             try:
@@ -3367,7 +3380,9 @@ class UVPanel(utils.DevicePanel):
     def _open_ls_shutter(self, shutter_open):
         ls_cmd = ['set_ls_shutter', [self.name, shutter_open], {}]
         self._send_cmd(ls_cmd, get_response=False)
-        time.sleep(0.1)
+        wx.CallLater(100, self._refresh_shutter_status)
+
+    def _refresh_shutter_status(self):
         ls_status_cmd = ['get_ls_shutter', [self.name,], {}]
         resp = self._send_cmd(ls_status_cmd, True)
 
@@ -3393,7 +3408,9 @@ class UVPanel(utils.DevicePanel):
     def _ls_uv_lamp_power(self, lamp_state):
         ls_uv_cmd = ['set_uv_lamp', [self.name, lamp_state], {}]
         self._send_cmd(ls_uv_cmd, get_response=True)
-        time.sleep(1)
+        wx.CallLater(1000, self._refresh_ls_uv_lamp_status)
+
+    def _refresh_ls_uv_lamp_status(self):
         ls_status_cmd = ['get_uv_lamp', [self.name,], {}]
         resp = self._send_cmd(ls_status_cmd, True)
 
@@ -3419,7 +3436,9 @@ class UVPanel(utils.DevicePanel):
     def _ls_vis_lamp_power(self, lamp_state):
         ls_uv_cmd = ['set_vis_lamp', [self.name, lamp_state], {}]
         self._send_cmd(ls_uv_cmd, get_response=True)
-        time.sleep(1)
+        wx.CallLater(1000, self._refresh_vis_lamp_status)
+
+    def _refresh_vis_lamp_status(self):
         ls_status_cmd = ['get_vis_lamp', [self.name,], {}]
         resp = self._send_cmd(ls_status_cmd, True)
 
@@ -3462,7 +3481,7 @@ class UVPanel(utils.DevicePanel):
                 if spec_type == 'Absorbance':
                     spec_type = 'abs'
                 elif spec_type == 'Transmission':
-                    spec_type == 'trans'
+                    spec_type = 'trans'
                 else:
                     spec_type = 'raw'
 
@@ -3561,7 +3580,7 @@ class UVPanel(utils.DevicePanel):
             if spec_type == 'Absorbance':
                 spec_type = 'abs'
             elif spec_type == 'Transmission':
-                spec_type == 'trans'
+                spec_type = 'trans'
             else:
                 spec_type = 'raw'
 
@@ -3691,15 +3710,18 @@ class UVPanel(utils.DevicePanel):
             self._current_abs_win = abs_window
 
     def _set_drift_params(self):
+        set_window = True
+
         if self.inline:
             drift_window = self.settings['drift_window']
         else:
             try:
                 drift_window = self.settings['drift_window']
             except Exception:
-                drift_window = [-1, -1]
+                drift_window = [None, None]
+                set_window = False
 
-        if self._current_drift_win != drift_window:
+        if set_window and self._current_drift_win != drift_window:
             cmd = ['set_drift_window', [self.name, drift_window],{}]
             self._send_cmd(cmd, get_response=False)
 
@@ -3817,7 +3839,7 @@ class UVPanel(utils.DevicePanel):
                 save_trans = False
                 save_abs = True
 
-            elif autosave_choice == 'R & T':
+            elif autosave_choice == 'T & R':
                 save_raw = True
                 save_trans = True
                 save_abs = False
@@ -4272,8 +4294,9 @@ class UVPanel(utils.DevicePanel):
 
     def _on_show_uv_plot(self, evt):
         if self.uvplot_frame is None:
-            self.uvplot_frame = UVPlotFrame(self.settings['plot_refresh_t'], self,
-                title='UV Plot', size=self._FromDIP((500, 500)))
+            self.uvplot_frame = UVPlotFrame(self._get_plot_data_callback,
+                self.settings['plot_refresh_t'], self, title='UV Plot',
+                size=self._FromDIP((500, 500)))
 
             self.uv_plot = self.uvplot_frame.uv_plot
 
@@ -4339,6 +4362,10 @@ class UVPanel(utils.DevicePanel):
         #     self._live_update_thread.join()
 
     def on_exit(self):
+        try:
+            self.uv_plot.close()
+        except Exception:
+            pass
         self.close()
 
 
@@ -4378,7 +4405,6 @@ class UVPlot(wx.Panel):
         self.refresh_timer = wx.Timer()
         self.refresh_timer.Bind(wx.EVT_TIMER, self._on_refresh_timer)
         self.refresh_timer.Start(int(self._refresh_time*1000))
-
 
     def _FromDIP(self, size):
         # This is a hack to provide easy back compatibility with wxpython < 4.1
@@ -4509,12 +4535,12 @@ class UVPlot(wx.Panel):
     def _on_refresh_timer(self, evt):
         # a = time.time()
         if self._needs_refresh:
-            if (time.time() - self._last_refresh > self._refresh_time
+            if (time.monotonic() - self._last_refresh > self._refresh_time
                 and not self._updating_plot):
                 self._updating_plot = True
                 self.update_plot_data()
                 wx.CallAfter(self.plot_data)
-                self._last_refresh = time.time()
+                self._last_refresh = time.monotonic()
                 # self._needs_refresh = False
         # print(time.time()-a)
 
@@ -4871,19 +4897,24 @@ class UVPlot(wx.Panel):
         else:
             self.toolbar.set_status('')
 
+    def close(self, evt):
+        """Stops all current pump motions and then closes the frame."""
+        logger.debug('Closing the UVPlot')
+        self.refresh_timer.Stop()
+
 class UVPlotFrame(wx.Frame):
-    def __init__(self, plot_refresh_t=1, *args, **kwargs):
+    def __init__(self, data_callback, plot_refresh_t=1, *args, **kwargs):
         super(UVPlotFrame, self).__init__(*args, **kwargs)
 
-        self._create_layout(plot_refresh_t)
+        self._create_layout(data_callback, plot_refresh_t)
 
         self.Bind(wx.EVT_CLOSE, self._on_exit)
 
         self.Raise()
         self.Show()
 
-    def _create_layout(self, plot_refresh_t):
-        self.uv_plot = UVPlot(plot_refresh_t, self)
+    def _create_layout(self, data_callback, plot_refresh_t):
+        self.uv_plot = UVPlot(data_callback, plot_refresh_t, self)
 
         sizer = wx.BoxSizer(wx.HORIZONTAL)
         sizer.Add(self.uv_plot, 1, flag=wx.EXPAND)
@@ -4891,6 +4922,7 @@ class UVPlotFrame(wx.Frame):
         self.SetSizer(sizer)
 
     def _on_exit(self, evt):
+        self.uv_plot.on_close()
         self.GetParent().on_uv_frame_close()
         self.Destroy()
 

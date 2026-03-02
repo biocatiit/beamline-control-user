@@ -279,7 +279,7 @@ class ControlServer(threading.Thread):
                                 answer = ''
 
                         elif device.endswith('status'):
-                            cmd_device = device.rstrip('_status')
+                            cmd_device = device.removesuffix('_status')
                             status_cmd = device_cmd[0]
                             status_period = device_cmd[1]
                             add = device_cmd[2]
@@ -294,7 +294,9 @@ class ControlServer(threading.Thread):
                         else:
                             if get_response:
                                 answer_q = self._device_control[device]['answer_q']
-                                answer_q.clear()
+
+                                while len(answer_q) > 0:
+                                    answer_q.pop()
 
                             logger.debug("For device %s, processing cmd '%s' with args: %s and kwargs: %s ",
                                 device, device_cmd[0], ', '.join(['{}'.format(a) for a in device_cmd[1]]),
@@ -351,7 +353,6 @@ class ControlServer(threading.Thread):
                             ', '.join(['{}'.format(a) for a in device_cmd[1]]),
                             ', '.join(['{}:{}'.format(kw, item) for kw, item in device_cmd[2].items()])))
                         logger.exception(msg)
-                        logger.exception(traceback.print_exc())
 
                 for device, device_ctrl in self._device_control.items():
                     if 'status_q' in device_ctrl:
@@ -363,7 +364,8 @@ class ControlServer(threading.Thread):
                                 temp.append(status_q.pop())
 
                             temp = temp[::-1]
-                            status_q.clear()
+                            while len(status_q) > 0:
+                                status_q.pop()
 
                             for a in temp:
                                 status_q.append(a)
@@ -452,7 +454,7 @@ if __name__ == '__main__':
         os.mkdir(info_dir)
 
     h2 = handlers.RotatingFileHandler(os.path.join(info_dir, 'biocon_server_{}.log'.format(exp_type)),
-        maxBytes=100e6, backupCount=20, delay=True)
+        maxBytes=int(100e6), backupCount=20, delay=True)
     h2.setLevel(logging.DEBUG)
     formatter2 = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
     h2.setFormatter(formatter2)
@@ -789,7 +791,7 @@ if __name__ == '__main__':
         hplc_frame.Show()
 
     elif exp_type == 'autosampler':
-        control_server_as = ControlServer(ip, port2, name='AuotsamplerControlServer',
+        control_server_as = ControlServer(ip, port2, name='AutosamplerControlServer',
             start_autosampler=True)
         control_server_as.start()
         control_server_as.ready_event.wait()

@@ -1451,6 +1451,9 @@ class EpicsMotor(Motor):
         self.epics_motor.put('acceleration', accel_time)
         return accel_time
 
+    def set_jog_speed(self, val):
+        self.epics_motor.put('jog_speed', val)
+
     def jog(self, direction, start):
         if start:
             val = 1
