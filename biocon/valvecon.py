@@ -118,8 +118,8 @@ class SerialComm(object):
             with self.ser as s:
                 s.write(data)
                 if get_response:
-                    start_time = time.time()
-                    while not out.endswith(term_char) and time.time()-start_time <timeout:
+                    start_time = time.monotonic()
+                    while not out.endswith(term_char) and time.monotonic()-start_time <timeout:
                         if s.in_waiting > 0:
                             ret = s.read(s.in_waiting)
                             out += ret.decode('ascii', errors='replace')

@@ -308,11 +308,11 @@ class ControlServer(threading.Thread):
                             if get_response:
                                 answer_q = self._device_control[device]['answer_q']
 
-                                start_time = time.time()
+                                start_time = time.monotonic()
                                 got_answer = False
 
                                 while not got_answer:
-                                    if time.time()-start_time > 5:
+                                    if time.monotonic()-start_time > 5:
                                         break
 
                                     if len(answer_q) != 0:

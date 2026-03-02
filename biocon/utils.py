@@ -884,11 +884,11 @@ class CommManager(threading.Thread):
                     if self._stop_event.is_set():
                         break
 
-                    if time.time() - last_t > period:
+                    if time.monotonic() - last_t > period:
                         kwargs['comm_name'] = 'status'
                         kwargs['cmd'] = cmd
                         self._run_command(cmd, args, kwargs)
-                        self._status_cmds[status_cmd]['last_run'] = time.time()
+                        self._status_cmds[status_cmd]['last_run'] = time.monotonic()
 
                         cmds_run = True
 
@@ -1762,10 +1762,10 @@ class BufferMonitor(object):
                 if self._active_buffer_position is not None:
                     if self._previous_flow_rate is None:
                         self._previous_flow_rate = self._get_buffer_flow_rate()
-                        previous_time = time.time()
+                        previous_time = time.monotonic()
 
                     current_flow = self._get_buffer_flow_rate()
-                    current_time = time.time()
+                    current_time = time.monotonic()
 
                     delta_vol = (((current_flow + self._previous_flow_rate)/2./60.)
                         *(current_time-previous_time))

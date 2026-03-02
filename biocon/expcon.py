@@ -418,7 +418,7 @@ class ExpCommThread(threading.Thread):
         motor_cmd_q.append(('move_absolute', ('TR_motor', (x_start, y_start)), {}))
 
         logger.debug('Waiting for detector to finish')
-        start = time.time()
+        start = time.monotonic()
         timeout = False
         while det.get_status() !=0 and not timeout:
             time.sleep(0.001)
@@ -428,7 +428,7 @@ class ExpCommThread(threading.Thread):
                 break
 
             # Is this long enough? Should it be based off of the scan/return time?
-            if time.time() - start > 5:
+            if time.monotonic() - start > 5:
                 timeout = True
                 logger.error('Timeout while waiting for detector to finish!')
 
@@ -623,11 +623,11 @@ class ExpCommThread(threading.Thread):
                 mtr_positions = gridpoints
 
             for current_run in range(1,num_runs+1):
-                start = time.time()
+                start = time.monotonic()
                 timeout = False
                 while not motor.is_moving() and not timeout:
                     time.sleep(0.001) #Waits for motion to start
-                    if time.time()-start>0.1:
+                    if time.monotonic()-start>0.1:
                         timeout = True
 
                 while motor.is_moving():
@@ -698,11 +698,11 @@ class ExpCommThread(threading.Thread):
 
 
 
-        start = time.time()
+        start = time.monotonic()
         timeout = False
         while not motor.is_moving() and not timeout:
             time.sleep(0.001) #Waits for motion to start
-            if time.time()-start>0.5:
+            if time.monotonic()-start>0.5:
                 timeout = True
 
         while motor.is_moving():
@@ -755,7 +755,7 @@ class ExpCommThread(threading.Thread):
             det.set_filename(new_fname)
             det.arm()
 
-        start = time.time()
+        start = time.monotonic()
         timeout = False
         x, y = motor.position
 
@@ -765,7 +765,7 @@ class ExpCommThread(threading.Thread):
         if x != x_start and y != y_start:
             while not motor.is_moving() and not timeout:
                 time.sleep(0.001) #Waits for motion to start
-                if time.time()-start>0.1:
+                if time.monotonic()-start>0.1:
                     timeout = True
 
         while motor.is_moving():
@@ -821,11 +821,11 @@ class ExpCommThread(threading.Thread):
 
         self._exp_event.set()
 
-        start = time.time()
+        start = time.monotonic()
         timeout = False
         while not motor.is_moving() and not timeout:
             time.sleep(0.001) #Waits for motion to start
-            if time.time()-start>0.5:
+            if time.monotonic()-start>0.5:
                 timeout = True
 
         while motor.is_moving():
@@ -929,10 +929,10 @@ class ExpCommThread(threading.Thread):
             full_new = os.path.join(data_dir, new_name)
 
             if not os.path.exists(full_path):
-                start = time.time()
+                start = time.monotonic()
 
             while not os.path.exists(full_path):
-                if time.time() - start > 10:
+                if time.monotonic() - start > 10:
                     timeout = True
                     break
                     logger.debug('Timeout waiting for %s', full_path)
@@ -1444,7 +1444,7 @@ class ExpCommThread(threading.Thread):
                 self.wait_for_trigger(wait_for_trig, cur_trig, exp_time, ab_burst,
                     ab_burst_2, det, struck, dio_out6, dio_out9, dio_out10)
 
-                start_time = time.time()
+                start_time = time.monotonic()
 
                 if position == mtr_positions[0]:
                     initial_start_time = start_time
@@ -1510,7 +1510,7 @@ class ExpCommThread(threading.Thread):
                 if aborted:
                     break
 
-                while time.time() - start_time < num_frames*exp_period:
+                while time.monotonic() - start_time < num_frames*exp_period:
                     if self._abort_event.is_set() and not aborted:
                         self.fast_mode_abort_cleanup(det, struck, ab_burst, ab_burst_2,
                             dio_out9, dio_out6, exp_time)
@@ -1948,7 +1948,7 @@ class ExpCommThread(threading.Thread):
 
         timeouts = 0
 
-        header_readout_time = time.time()
+        header_readout_time = time.monotonic()
 
         while True:
             #Struck is_busy doesn't work in thread! So have to go elsewhere
@@ -1968,7 +1968,7 @@ class ExpCommThread(threading.Thread):
                 aborted = True
                 break
 
-            if exp_type != 'muscle' and time.time()-header_readout_time > exp_time:
+            if exp_type != 'muscle' and time.monotonic()-header_readout_time > exp_time:
                 current_meas = struck.get_last_measurement_number()
 
                 if current_meas != last_meas and current_meas != -1:
@@ -1986,7 +1986,7 @@ class ExpCommThread(threading.Thread):
 
                     last_meas = current_meas
 
-                    header_readout_time = time.time()
+                    header_readout_time = time.monotonic()
 
             time.sleep(0.1)
 
@@ -3550,7 +3550,7 @@ class ExpPanel(wx.Panel):
 
     def _on_tr_timer(self, evt):
         if self.exp_event.is_set():
-            tr = self.total_time - (time.time() - self.initial_time)
+            tr = self.total_time - (time.monotonic() - self.initial_time)
 
             if tr < 0:
                 tr = 0
@@ -3563,7 +3563,7 @@ class ExpPanel(wx.Panel):
             self._check_exp_status()
 
         if self.exp_event.is_set():
-            self.initial_time = time.time()
+            self.initial_time = time.monotonic()
             wx.CallAfter(self.tr_timer.Start, 1000)
             wx.CallAfter(self.set_status, 'Exposing')
 
@@ -3859,8 +3859,9 @@ class ExpPanel(wx.Panel):
     def _check_dark(self, exp_time):
         if self._last_dark_exp_time != exp_time:
             do_dark = True
-        elif time.time() - self._last_dark_time > self.settings['dark_interval']:
+        elif time.monotonic() - self._last_dark_time > self.settings['dark_interval']:
             do_dark = True
+            self._last_dark_time = time.monotonic()
         else:
             do_dark = False
 
@@ -4519,9 +4520,9 @@ class ExpPanel(wx.Panel):
 
                 self._open_a_shutter()
 
-                a = time.time()
+                a = time.monotonic()
 
-                while time.time() - a < 300:
+                while time.monotonic() - a < 300:
                     if self._monitor_a_shutter_abort.is_set():
                         break
                     time.sleep(0.5)

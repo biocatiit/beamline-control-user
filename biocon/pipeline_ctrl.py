@@ -200,8 +200,8 @@ class ControlClient(threading.Thread):
         while True:
             try:
                 if not self.socket.closed:
-                    if time.time() - self.last_ping > self.heartbeat:
-                        self.last_ping = time.time()
+                    if time.monotonic() - self.last_ping > self.heartbeat:
+                        self.last_ping = time.monotonic()
                         self._ping()
                 else:
                     if self.socket.closed:
@@ -256,8 +256,8 @@ class ControlClient(threading.Thread):
         try:
             self.socket.send_json(command)
 
-            start_time = time.time()
-            while self.socket.poll(10) == 0 and time.time()-start_time < 5:
+            start_time = time.monotonic()
+            while self.socket.poll(10) == 0 and time.monotonic()-start_time < 5:
                 pass
 
             if self.socket.poll(10) > 0:
@@ -317,8 +317,8 @@ class ControlClient(threading.Thread):
             while connect_tries < 5:
                 self.socket.send_json(cmd)
 
-                start_time = time.time()
-                while self.socket.poll(10) == 0 and time.time()-start_time < 1:
+                start_time = time.monotonic()
+                while self.socket.poll(10) == 0 and time.monotonic()-start_time < 1:
                     pass
 
                 if self.socket.poll(10) > 0:
@@ -348,8 +348,8 @@ class ControlClient(threading.Thread):
             while connect_tries < 5:
                 self.socket.send_json(cmd)
 
-                start_time = time.time()
-                while self.socket.poll(10) == 0 and time.time()-start_time < 0.1:
+                start_time = time.monotonic()
+                while self.socket.poll(10) == 0 and time.monotonic()-start_time < 0.1:
                     pass
 
                 if self.socket.poll(10) > 0:

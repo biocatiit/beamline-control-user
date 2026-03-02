@@ -3370,8 +3370,8 @@ class MotorPanel(wx.Panel):
             self.motor_cmd_q.append(('add_motor', (self.motor, self.name), kwargs))
 
     def _get_response(self):
-        start_time = time.time()
-        while len(self.answer_q) == 0 and time.time()-start_time < 5:
+        start_time = time.monotonic()
+        while len(self.answer_q) == 0 and time.monotonic()-start_time < 5:
             time.sleep(0.01)
 
         if len(self.answer_q) > 0:
@@ -3431,9 +3431,9 @@ class MotorPanel(wx.Panel):
     def _update_status(self):
         interval = 0.1
 
-        start_time = time.time()
+        start_time = time.monotonic()
         while True and not self.monitor_event.is_set():
-            if time.time() - start_time > interval:
+            if time.monotonic() - start_time > interval:
                 if self.motor_params['type'] == 'Newport_XPS':
                     mtr1_position = self.motor.get_positioner_position(self.motor_params['mtr1'], 0)
                     wx.CallAfter(self.pos.SetLabel, str(mtr1_position))
@@ -3459,7 +3459,7 @@ class MotorPanel(wx.Panel):
                     else:
                         wx.CallAfter(self.moving.SetLabel, 'False')
 
-                start_time = time.time()
+                start_time = time.monotonic()
             else:
                 time.sleep(.01)
 
