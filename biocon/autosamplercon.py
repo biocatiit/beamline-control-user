@@ -18,10 +18,6 @@
 #
 #    You should have received a copy of the GNU General Public License
 #    along with this software.  If not, see <http://www.gnu.org/licenses/>.
-from __future__ import absolute_import, division, print_function, unicode_literals
-from builtins import object, range, map
-from io import open
-
 import threading
 import time
 from collections import deque, OrderedDict
@@ -207,7 +203,10 @@ class Autosampler(object):
     def _run_cmds(self):
         while not self._cmd_stop_event.is_set():
             if len(self._cmd_queue) > 0:
-                cmd_func, args, kwargs = self._cmd_queue.popleft()
+                try:
+                    cmd_func, args, kwargs = self._cmd_queue.popleft()
+                except Exception:
+                    pass
 
             else:
                 cmd_func = None
@@ -418,7 +417,7 @@ class Autosampler(object):
         if not abort:
             if motor == 'all':
                 plate_x_pos = position[0]
-                plate_y_pos = position[1]
+                plate_z_pos = position[1]
                 needle_y_pos = position[2]
 
                 coflow_y_pos = self.coflow_y_motor.position
@@ -429,7 +428,7 @@ class Autosampler(object):
                 needle_y_pos += offset
 
                 self.plate_x_motor.move_absolute(plate_x_pos)
-                self.plate_z_motor.move_absolute(plate_y_pos)
+                self.plate_z_motor.move_absolute(plate_z_pos)
                 self.needle_y_motor.move_absolute(needle_y_pos)
                 self._sleep(0.05)
 
@@ -1200,9 +1199,9 @@ class Autosampler(object):
             if abort:
                 break
 
-        start_time = time.time()
+        start_time = time.monotonic()
 
-        while time.time() - start_time < end_delay:
+        while time.monotonic() - start_time < end_delay:
             abort = self._sleep(0.02)
             if abort:
                 break
@@ -1369,11 +1368,11 @@ class Autosampler(object):
         return self._status
 
     def _sleep(self, sleep_time):
-        start = time.time()
+        start = time.monotonic()
 
         abort = False
 
-        while time.time() - start < sleep_time:
+        while time.monotonic() - start < sleep_time:
             time.sleep(0.01)
             abort = self._check_abort()
             if abort:

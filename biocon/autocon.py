@@ -119,7 +119,7 @@ class Automator(threading.Thread):
             if not status_change:
                 time.sleep(0.5)
             else:
-                time.sleep(0.001)
+                time.sleep(0.005)
 
         if self._stop_event.is_set():
             self._stop_event.clear()
@@ -192,7 +192,7 @@ class Automator(threading.Thread):
                     t_wait = status['t_wait']
                     t_start = status['t_start']
 
-                    if time.time() - t_start > t_wait:
+                    if time.monotonic() - t_start > t_wait:
                         wait_done = True
                     else:
                         wait_done = False
@@ -345,7 +345,7 @@ class Automator(threading.Thread):
                     status['state'] = cmd_name
 
                     if status['condition'] == 'time':
-                        status['t_start'] = time.time()
+                        status['t_start'] = time.monotonic()
 
                     controls['status'] = status
 
@@ -631,7 +631,7 @@ class AutoCommand(object):
         if aid in self.auto_ids:
             if state == 'run' and len(self._check_cmd_callbacks) > 0:
                 for cb_func in self._check_cmd_callbacks:
-                    cb_func(self.cmd_info)
+                    wx.CallAfter(cb_func, self.cmd_info)
             elif state == 'run' and len(self._check_cmd_callbacks) == 0:
                 self.automator.check_response_queue.append(True)
             else:
@@ -816,7 +816,7 @@ class BatchSampleCommand(AutoCommand):
             self._add_automator_cmd('coflow', 'stop', [], {})
             self._add_automator_cmd('coflow', finish_wait_cmd2, [],
                 {'condition': 'status', 'inst_conds': finish_conds2})
-            self._add_automator_cmd('automator', finish_wait_cmd2, [],
+            self._add_automator_cmd('autosampler', finish_wait_cmd2, [],
                 {'condition': 'status', 'inst_conds': finish_conds2})
             self._add_automator_cmd('exp', finish_wait_cmd2, [],
                 {'condition': 'status', 'inst_conds': finish_conds2})
@@ -1473,6 +1473,7 @@ class AutoStatusPanel(wx.Panel):
             self.automator_state.SetLabel('Paused')
 
         self.automator.add_on_state_change_callback(self._on_state_change)
+        self.Bind(wx.EVT_WINDOW_DESTROY, self._on_destroy)
 
     def _create_layout(self):
 
@@ -1789,6 +1790,19 @@ class AutoStatusPanel(wx.Panel):
         except Exception:
             logger.exception('Error stopping autosampler')
             success = False
+
+
+    def _on_destroy(self, evt):
+        try:
+            self.status_timer.Stop()
+        except Exception:
+            pass
+        try:
+            self.automator.remove_on_state_change_callback(self._on_state_change)
+        except Exception:
+            pass
+        evt.Skip()
+
 
 
 class AutoSettings(scrolled.ScrolledPanel):
@@ -2327,7 +2341,7 @@ def make_sec_saxs_info_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
         }
 
     coflow_adv_settings = {
-        'stop_cloflow'  : ['Stop coflow after exposure',
+        'stop_coflow'  : ['Stop coflow after exposure',
                             ctrl_ids['stop_coflow'], 'bool'],
         'coflow_fr'     : ['Coflow flow rate [mL/min]:',
                             ctrl_ids['coflow_fr'], 'float'],
@@ -2508,7 +2522,7 @@ def make_batch_saxs_info_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
         }
 
     coflow_adv_settings = {
-        'stop_cloflow'  : ['Stop coflow after exposure',
+        'stop_coflow'  : ['Stop coflow after exposure',
                             ctrl_ids['stop_coflow'], 'bool'],
         'coflow_fr'     : ['Coflow flow rate [mL/min]:',
                             ctrl_ids['coflow_fr'], 'float'],
@@ -3008,6 +3022,8 @@ class AutoListPanel(wx.Panel):
         self.automator.add_on_error_cmd_callback(self._on_automator_error_callback)
         self.automator.add_on_abort_callback(self._on_automator_abort_callback)
 
+        self.Bind(wx.EVT_WINDOW_DESTROY, self._on_destroy)
+
         self.cmd_set = {
             'sec_sample'    : SecSampleCommand,
             'batch_sample'  : BatchSampleCommand,
@@ -3072,13 +3088,34 @@ class AutoListPanel(wx.Panel):
             self.automator.set_automator_state('run')
 
     def _on_move_item_callback(self, aid, cmd_name, dist):
-        self.automator.reorder_cmd(cmd_name, aid, dist)
+        state = self.automator.get_automator_state()
+        if state == 'run':
+            self.automator.set_automator_state('pause')
+        try:
+            self.automator.reorder_cmd(cmd_name, aid, dist)
+        finally:
+            if state == 'run':
+                self.automator.set_automator_state('run')
+
 
     def _on_automator_error_callback(self, aid, cmd_name, inst_name):
         pass # Do something with the errors here
 
     def _on_automator_abort_callback(self, aid, name):
         wx.CallAfter(self.auto_list.abort_item, aid)
+
+
+    def _on_destroy(self, evt):
+        try:
+            self.automator.remove_on_error_cmd_callback(self._on_automator_error_callback)
+        except Exception:
+            pass
+        try:
+            self.automator.remove_on_abort_callback(self._on_automator_abort_callback)
+        except Exception:
+            pass
+        evt.Skip()
+
 
 class AutoList(utils.ItemList):
     def __init__(self, on_add_item_callback, on_remove_item_callback,
@@ -3781,7 +3818,7 @@ class AutoList(utils.ItemList):
                     for err in coflow_errors:
                         err_msg = err_msg + '\n- ' + err
 
-                if not batch_valid > 0:
+                if not batch_valid:
                     err_msg += '\n\nLoad and injection settings:'
                     for err in batch_errors:
                         err_msg = err_msg + '\n- ' + err
@@ -3853,7 +3890,7 @@ class AutoList(utils.ItemList):
                     for err in coflow_errors:
                         err_msg = err_msg + '\n- ' + err
 
-                if not hplc_valid > 0:
+                if not hplc_valid:
                     err_msg += '\n\nInjection settings:'
                     for err in hplc_errors:
                         err_msg = err_msg + '\n- ' + err
@@ -4190,7 +4227,7 @@ class AutoList(utils.ItemList):
 
         data_dir = cmd_info['data_dir']
         filename = cmd_info['filename']
-        run_num = exp_panel.run_number
+        run_num = str(exp_panel.run_number)
         num_frames = int(cmd_info['num_frames'])
 
         fprefix = filename+run_num
@@ -4720,6 +4757,9 @@ class AutoListItem(utils.ListItem):
             self.status_ctrl.SetLabel('Done')
         elif self.status == 'pause' and label != 'Paused':
             self.status_ctrl.SetLabel('Paused')
+        elif self.status == 'abort' and label != 'Aborted':
+            self.status_ctrl.SetLabel('Aborted')
+
 
     def set_selected(self, selected):
         self._selected = selected
@@ -4729,7 +4769,8 @@ class AutoListItem(utils.ListItem):
             self.SetBackgroundColour(self.highlight_list_bkg_color)
 
             for text_item in self.text_list:
-                text_item.SetForegroundColour(self.general_text_color)
+                text_item.SetForegroundColour(self.highlight_text_color)
+                text_item.SetBackgroundColour(self.highlight_list_bkg_color)
 
             self.item_list.item_selected(self)
 
@@ -4737,6 +4778,7 @@ class AutoListItem(utils.ListItem):
             self.SetBackgroundColour(self.list_bkg_color)
             for text_item in self.text_list:
                 text_item.SetForegroundColour(self.general_text_color)
+                text_item.SetBackgroundColour(self.list_bkg_color)
 
         self.Refresh()
 

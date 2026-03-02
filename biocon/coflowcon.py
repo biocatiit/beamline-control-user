@@ -18,10 +18,6 @@
 #
 #    You should have received a copy of the GNU General Public License
 #    along with this software.  If not, see <http://www.gnu.org/licenses/>.
-from __future__ import absolute_import, division, print_function, unicode_literals
-from builtins import object, range, map
-from io import open
-
 import threading
 import time
 from collections import deque, OrderedDict
@@ -2546,7 +2542,7 @@ class CoflowPanel(utils.DevicePanel):
         #Start flow timer
         self.doing_buffer_change = True
         self._start_flow_timer(bc_tr, start_ft_monitor=False)
-        self._set_start_flow_button_status()
+        wx.CallAfter(self._set_start_flow_button_status)
 
     def _on_put_in_water(self, evt):
         logger.info('Putting coflow cell into water')
@@ -2730,7 +2726,7 @@ class CoflowPanel(utils.DevicePanel):
                 self._start_flow()
 
     def _start_flow(self, start_monitor=True):
-        self._set_start_flow_button_status()
+        wx.CallAfter(self._set_start_flow_button_status)
 
         start_flow_cmd = ['start_flow', [self.name,], {}]
         self._send_cmd(start_flow_cmd, get_response=False)
@@ -2777,10 +2773,10 @@ class CoflowPanel(utils.DevicePanel):
                 stop_coflow = False
 
         if stop_coflow:
-            self._set_stop_flow_button_status()
-            self.monitor_timer.Stop()
-            self.set_status_label('Coflow off')
-            self.stop_flow_timer()
+            wx.CallAfter(self._set_stop_flow_button_status)
+            wx.CallAfter(self.monitor_timer.Stop)
+            wx.CallAfter(self.set_status_label, 'Coflow off')
+            wx.CallAfter(self.stop_flow_timer)
 
             stop_flow_monitor_cmd = ['stop_flow_monitor', [self.name,], {}]
             self._send_cmd(stop_flow_monitor_cmd, get_response=False)
@@ -2804,7 +2800,7 @@ class CoflowPanel(utils.DevicePanel):
 
     def _change_flow_rate(self, flow_rate, start_monitor=False):
         if start_monitor:
-            self.monitor_timer.Stop()
+            wx.CallAfter(self.monitor_timer.Stop)
             stop_flow_monitor_cmd = ['stop_flow_monitor', [self.name,], {}]
             self._send_cmd(stop_flow_monitor_cmd, get_response=False)
 
@@ -3192,7 +3188,7 @@ class CoflowPanel(utils.DevicePanel):
 
         elif cmd_name == 'start':
             flow_rate = float(cmd_kwargs['flow_rate'])
-            self._change_flow_rate(flow_rate, True)
+            self._change_flow_rate(flow_rate, False)
             self._start_flow()
             state = self._get_automator_state()
             wx.CallAfter(self.flow_rate.ChangeValue, str(flow_rate))

@@ -4716,7 +4716,7 @@ class ExpPanel(wx.Panel):
                 os.makedirs(exp_values['local_data_dir'])
 
 
-            self.start_exp(True, False, exp_values, metadata, False)
+            wx.CallAfter(self.start_exp, True, False, exp_values, metadata, False)
 
             state = 'exposing'
 

@@ -992,10 +992,10 @@ class AgilentHPLCStandard(AgilentHPLC):
                     if not self._abort_equil1.is_set():
                         self.set_hplc_flow_rate(equil_rate1, 1)
                         previous_flow1 = self.get_hplc_flow_rate(1)
-                        previous_time1 = time.time()
+                        previous_time1 = time.monotonic()
                     else:
                         previous_flow1 = 0
-                        previous_time1 = time.time()
+                        previous_time1 = time.monotonic()
 
             if monitor_purge2:
                 if not self._purge2_ongoing.is_set():
@@ -1005,15 +1005,15 @@ class AgilentHPLCStandard(AgilentHPLC):
                     if not self._abort_equil2.is_set():
                         self.set_hplc_flow_rate(equil_rate2, 2)
                         previous_flow2 = self.get_hplc_flow_rate(2)
-                        previous_time2 = time.time()
+                        previous_time2 = time.monotonic()
                     else:
                         previous_flow2 = 0
-                        previous_time2 = time.time()
+                        previous_time2 = time.monotonic()
 
 
             if run_flow1:
                 current_flow1 = self.get_hplc_flow_rate(1)
-                current_time1 = time.time()
+                current_time1 = time.monotonic()
                 delta_vol1 = (((current_flow1 + previous_flow1)/2./60.)
                     *(current_time1-previous_time1))
 
@@ -1038,7 +1038,7 @@ class AgilentHPLCStandard(AgilentHPLC):
 
             if run_flow2:
                 current_flow2 = self.get_hplc_flow_rate(2)
-                current_time2 = time.time()
+                current_time2 = time.monotonic()
                 delta_vol2 = (((current_flow2 + previous_flow2)/2./60.)
                     *(current_time2-previous_time2))
 
@@ -1317,7 +1317,7 @@ class AgilentHPLCStandard(AgilentHPLC):
 
                     flow_accel1 = self.get_hplc_flow_accel(1)
                     previous_flow1 = self.get_hplc_flow_rate(1)
-                    previous_time1 = time.time()
+                    previous_time1 = time.monotonic()
                     update_time1 = previous_time1
 
                     self.set_hplc_flow_rate(self._target_purge_flow1, 1)
@@ -1331,7 +1331,7 @@ class AgilentHPLCStandard(AgilentHPLC):
                     monitoring_flow1 = True
                     flow_accel1 = 0
                     previous_flow1 = 0
-                    previous_time1 = time.time()
+                    previous_time1 = time.monotonic()
                     update_time1 = previous_time1
 
             if stopping_initial_flow2:
@@ -1358,7 +1358,7 @@ class AgilentHPLCStandard(AgilentHPLC):
 
                     flow_accel2 = self.get_hplc_flow_accel(2)
                     previous_flow2 = self.get_hplc_flow_rate(2)
-                    previous_time2 = time.time()
+                    previous_time2 = time.monotonic()
                     update_time2 = previous_time2
 
                     self.set_hplc_flow_rate(self._target_purge_flow2, 2)
@@ -1372,13 +1372,13 @@ class AgilentHPLCStandard(AgilentHPLC):
                     monitoring_flow2 = True
                     flow_accel2 = 0
                     previous_flow2 = 0
-                    previous_time2 = time.time()
+                    previous_time2 = time.monotonic()
                     update_time2 = previous_time2
 
 
             if monitoring_flow1:
                 current_flow1 = self.get_hplc_flow_rate(1)
-                current_time1 = time.time()
+                current_time1 = time.monotonic()
                 delta_vol1 = (((current_flow1 + previous_flow1)/2./60.)
                     *(current_time1-previous_time1))
 
@@ -1409,7 +1409,7 @@ class AgilentHPLCStandard(AgilentHPLC):
 
             if monitoring_flow2:
                 current_flow2 = self.get_hplc_flow_rate(2)
-                current_time2 = time.time()
+                current_time2 = time.monotonic()
                 delta_vol2 = (((current_flow2 + previous_flow2)/2./60.)
                     *(current_time2-previous_time2))
 
@@ -1441,7 +1441,7 @@ class AgilentHPLCStandard(AgilentHPLC):
 
             if stopping_flow1:
                 current_flow1 = self.get_hplc_flow_rate(1)
-                current_time1 = time.time()
+                current_time1 = time.monotonic()
 
                 purge_not_started1 = True
 
@@ -1481,7 +1481,7 @@ class AgilentHPLCStandard(AgilentHPLC):
 
             if stopping_flow2:
                 current_flow2 = self.get_hplc_flow_rate(2)
-                current_time2 = time.time()
+                current_time2 = time.monotonic()
 
                 purge_not_started2 = True
 
@@ -2415,9 +2415,9 @@ class AgilentHPLCStandard(AgilentHPLC):
                         break
                     time.sleep(0.1)
 
-                start = time.time()
+                start = time.monotonic()
 
-                while time.time() - start < settle_time:
+                while time.monotonic() - start < settle_time:
                     if self._abort_submit.is_set():
                         break
                     time.sleep(0.1)
