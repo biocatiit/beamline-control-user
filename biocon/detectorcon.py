@@ -18,9 +18,6 @@
 #
 #    You should have received a copy of the GNU General Public License
 #    along with this software.  If not, see <http://www.gnu.org/licenses/>.
-from builtins import object, range, map
-from io import open
-
 import copy
 import time
 import logging

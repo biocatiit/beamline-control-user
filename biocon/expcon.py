@@ -18,10 +18,6 @@
 #
 #    You should have received a copy of the GNU General Public License
 #    along with this software.  If not, see <http://www.gnu.org/licenses/>.
-from builtins import object, range, map
-from io import open
-import six
-
 import threading
 import time
 from collections import OrderedDict, deque
@@ -34,11 +30,7 @@ from decimal import Decimal as D
 import datetime
 import copy
 import shutil
-
-if six.PY2:
-    import subprocess32 as subprocess
-else:
-    import subprocess
+import subprocess
 
 if __name__ != '__main__':
     logger = logging.getLogger(__name__)
@@ -3578,8 +3570,7 @@ class ExpPanel(wx.Panel):
                         self._pipeline_start_exp(int(val))
 
                         if 'uv' in self.settings['components']:
-                            uv_panel = wx.FindWindowByName('uv')
-                            uv_values, uv_valid = uv_panel.on_exposure_start(self, int(val))
+                            wx.CallAfter(self._start_uv_in_scan, val)
 
                 time.sleep(0.01)
 
@@ -3609,6 +3600,10 @@ class ExpPanel(wx.Panel):
                 wx.CallAfter(self.soft_trig.Disable)
 
         return status, val
+
+    def _start_uv_in_scan(self, val):
+        uv_panel = wx.FindWindowByName('uv')
+        uv_values, uv_valid = uv_panel.on_exposure_start(self, int(val))
 
     def _pipeline_start_exp(self, scan_num=1):
         if self.pipeline_ctrl is not None:
@@ -4183,7 +4178,6 @@ class ExpPanel(wx.Panel):
                 break
 
         return cont
-
 
     def _get_metadata(self, metadata_vals=None, verbose=True):
 

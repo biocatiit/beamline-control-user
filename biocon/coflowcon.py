@@ -3183,7 +3183,7 @@ class CoflowPanel(utils.DevicePanel):
 
         elif cmd_name == 'abort':
             if self.doing_buffer_change:
-                self.stop_flow(False)
+                wx.CallAfter(self.stop_flow, False)
             state = 'idle'
 
         elif cmd_name == 'start':
@@ -3194,7 +3194,7 @@ class CoflowPanel(utils.DevicePanel):
             wx.CallAfter(self.flow_rate.ChangeValue, str(flow_rate))
 
         elif cmd_name == 'stop':
-            self.stop_flow(False)
+            wx.CallAfter(self.stop_flow, False)
             state = 'idle'
 
         elif cmd_name == 'change_flow':
