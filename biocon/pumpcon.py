@@ -18,10 +18,6 @@
 #
 #    You should have received a copy of the GNU General Public License
 #    along with this software.  If not, see <http://www.gnu.org/licenses/>.
-from __future__ import absolute_import, division, print_function, unicode_literals
-from builtins import object, range, map
-from io import open
-
 import traceback
 import threading
 import time
@@ -40,9 +36,7 @@ if __name__ != '__main__':
     logger = logging.getLogger(__name__)
 
 import serial
-import serial.tools.list_ports as list_ports
 import wx
-from six import string_types
 
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_03_00\\DLL64\\Elveflow64DLL') #add the path of the library here
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_03_00\\python_64')#add the path of the LoadElveflow.py
@@ -127,10 +121,10 @@ class SerialComm(object):
                 self.ser.close()
 
     def __repr__(self):
-        return self.ser
+        return str(self.ser)
 
     def __str__(self):
-        return print(self.ser)
+        return str(self.ser)
 
     def read(self, size=1):
         """
@@ -189,7 +183,7 @@ class SerialComm(object):
         """
         logger.debug("Sending '%s' to serial device on port %s", data,
             self.ser.port)
-        if isinstance(data, string_types):
+        if isinstance(data, str):
             if not data.endswith(send_term_char):
                 data += send_term_char
             data = data.encode()
@@ -204,12 +198,12 @@ class SerialComm(object):
                             ret = s.read(s.in_waiting)
                             out += ret.decode('ascii')
 
-                        time.sleep(.001)
+                        time.sleep(.005)
         except ValueError:
             logger.exception("Failed to write '%s' to serial device on port %s",
                 data, self.ser.port)
 
-        logger.debug("Recived '%r' after writing to serial device on port %s",
+        logger.debug("Received '%r' after writing to serial device on port %s",
             out, self.ser.port)
 
         return out
@@ -243,12 +237,12 @@ class MForceSerialComm(SerialComm):
 
         out = ''
         timeout = 1
-        start_time = time.time()
+        start_time = time.monotonic()
         try:
             with self.ser as s:
                 s.write(data)
                 if get_response:
-                    while not out.strip().endswith(term_char) and time.time()-start_time<timeout:
+                    while not out.strip().endswith(term_char) and time.monotonic()-start_time<timeout:
                         if s.in_waiting > 0:
                             ret = s.read(s.in_waiting)
                             out += ret.decode('ascii')
@@ -257,11 +251,11 @@ class MForceSerialComm(SerialComm):
                             s.write('PR ER\r\n'.encode())
                             out = ''
 
-                        time.sleep(.001)
+                        time.sleep(.005)
         except ValueError:
             logger.exception("Failed to write %r to serial device on port %s", data, self.ser.port)
 
-        logger.debug("Recived %r after writing to serial device on port %s", out, self.ser.port)
+        logger.debug("Received %r after writing to serial device on port %s", out, self.ser.port)
 
         return out
 
@@ -288,7 +282,7 @@ class PHD4400SerialComm(SerialComm):
         :rtype: str
         """
         logger.debug("Sending '%s' to serial device on port %s", data, self.ser.port)
-        if isinstance(data, string_types):
+        if isinstance(data, str):
             if not data.endswith(send_term_char):
                 data += send_term_char
             data = data.encode()
@@ -311,12 +305,12 @@ class PHD4400SerialComm(SerialComm):
                                     got_resp = True
                                     break
 
-                        time.sleep(.001)
+                        time.sleep(.005)
         except ValueError:
             logger.exception("Failed to write '%s' to serial device on port %s", data, self.ser.port)
         except Exception:
             logger.error("Failed to write to serial port!")
-        logger.debug("Recived '%s' after writing to serial device on port %s", out, self.ser.port)
+        logger.debug("Received '%s' after writing to serial device on port %s", out, self.ser.port)
 
         return out
 
@@ -343,7 +337,7 @@ class PicoPlusSerialComm(SerialComm):
         :rtype: str
         """
         logger.debug("Sending '%s' to serial device on port %s", data, self.ser.port)
-        if isinstance(data, string_types):
+        if isinstance(data, str):
             if not data.endswith(send_term_char):
                 data += send_term_char
             data = data.encode()
@@ -354,7 +348,7 @@ class PicoPlusSerialComm(SerialComm):
         alt_possible_term = ['\n{:02d}{}'.format(pump_address, char) for char in term_chars]
         try:
             with self.ser as s:
-                start_time = time.time()
+                start_time = time.monotonic()
                 s.write(data)
                 if get_response:
                     got_resp = False
@@ -373,16 +367,16 @@ class PicoPlusSerialComm(SerialComm):
                                     got_resp = True
                                     break
 
-                        if time.time() - start_time > timeout:
+                        if time.monotonic() - start_time > timeout:
                             logger.error('Timed out waiting for a response on port %s', self.ser.port)
                             break
 
-                        time.sleep(.001)
+                        time.sleep(.005)
         except ValueError:
             logger.exception("Failed to write '%s' to serial device on port %s", data, self.ser.port)
         except Exception:
             logger.error("Failed to write to serial port!")
-        logger.debug("Recived '%s' after writing to serial device on port %s", out, self.ser.port)
+        logger.debug("Received '%s' after writing to serial device on port %s", out, self.ser.port)
 
         return out
 
@@ -392,7 +386,7 @@ class LongerSerialComm(SerialComm):
     errors.
     """
 
-    def write(self, data, pump_addr, get_response=True):
+    def write(self, data, get_response=True):
         """
         This warps the Serial.write() function. It encodes the input
         data if necessary. It can return any expected response from the
@@ -411,13 +405,13 @@ class LongerSerialComm(SerialComm):
 
         out = bytearray()
         timeout = 1
-        start_time = time.time()
+        start_time = time.monotonic()
         try:
             with self.ser as s:
                 s.write(data)
                 if get_response:
                     resp_len = 0
-                    while time.time()-start_time<timeout:
+                    while time.monotonic()-start_time<timeout:
                         if s.in_waiting > 0:
                             ret = s.read(s.in_waiting)
                             out += ret
@@ -428,16 +422,17 @@ class LongerSerialComm(SerialComm):
 
                         if len(out) >= resp_len and resp_len != 0:
                             break
-                        time.sleep(.001)
+                        time.sleep(.005)
         except ValueError:
             logger.exception("Failed to write %r to serial device on port %s", data, self.ser.port)
 
         out = out.hex(' ')
-        logger.debug("Recived %r after writing to serial device on port %s", out, self.ser.port)
+        logger.debug("Received %r after writing to serial device on port %s", out, self.ser.port)
 
         return out
 
 def convert_volume(volume, u1, u2):
+    # Converts from u1 to u2
     if u1.lower() in ['nl', 'ul', 'ml'] and u2.lower() in ['nl', 'ul', 'ml']:
         if u1.lower() != u2.lower():
             if ((u1.lower() == 'nl' and u2.lower() == 'ul')
@@ -454,6 +449,7 @@ def convert_volume(volume, u1, u2):
     return volume
 
 def convert_time(time, u1, u2):
+    # Converts from u1 to u2
     if u1.lower() in ['s', 'min'] and u2.lower() in ['s', 'min']:
         if u1.lower() != u2.lower():
             if u1.lower() == 'min':
@@ -464,6 +460,7 @@ def convert_time(time, u1, u2):
     return time
 
 def convert_flow_rate(fr, u1, u2):
+    # Converts from u1 to u2
     v_u1, t_u1 = u1.split('/')
     v_u2, t_u2 = u2.split('/')
 
@@ -473,6 +470,7 @@ def convert_flow_rate(fr, u1, u2):
     return fr
 
 def convert_flow_accel(accel, u1, u2):
+    # Converts from u1 to u2
     v_u1, t_u1 = u1.split('/')
     v_u2, t_u2 = u2.split('/')
 
@@ -1570,7 +1568,8 @@ class NE500Pump(SyringePump):
         """
         self._pump_address = pump_address
 
-        SyringePump.__init__(self, name, device, comm_lock=comm_lock)
+        SyringePump.__init__(self, name, device, diameter, max_volume,
+            max_rate, syringe_id, dual_syringe, comm_lock=comm_lock)
 
         logstr = ("Initializing NE500 pump {} on serial port {}".format(name, device))
         logger.info(logstr)
@@ -1601,7 +1600,7 @@ class NE500Pump(SyringePump):
                 get_response=get_response, send_term_char='\r', term_char='\x03')
 
         if get_response:
-            ret = ret.lstrip('\x02').rstrip('\x03').lstrip(self._pump_address)
+            ret = ret.removeprefix('\x02').removesuffix('\x03').removeprefix(self._pump_address)
 
             status = ret[0]
             ret = ret[1:]
@@ -1643,9 +1642,9 @@ class NE500Pump(SyringePump):
         ret, status = self.send_cmd("DIS")
 
         if self._flow_dir > 0:
-            vol = ret.split('W')[0].lstrip('I').rstrip('W')
+            vol = ret.split('W')[0].removeprefix('I').removesuffix('W')
         else:
-            vol = ret.split('W')[1].lstrip('I').rstrip('W')[:-2]
+            vol = ret.split('W')[1].removeprefix('I').removesuffix('W')[:-2]
 
         vol = float(vol)
 
@@ -1685,8 +1684,7 @@ class NE500Pump(SyringePump):
         elif abs(val) >= 100 and abs(val) < 1000:
             val = round(val, 1)
         else:
-            round(val, 0)
-            val = int(val)
+            val = int(round(val, 0))
 
         return val
 
@@ -1852,7 +1850,7 @@ class HamiltonPSD6Pump(SyringePump):
 
         if get_response:
             # print('%r' % ret)
-            ret = ret.lstrip('/').rstrip('\x03\r\n').lstrip(self._pump_address)
+            ret = ret.removeprefix('/').removesuffix('\x03\r\n').removeprefix(self._pump_address)
 
             status = ret[1]
             if len(ret)>2:
@@ -2019,7 +2017,7 @@ class HamiltonPSD6Pump(SyringePump):
         self._inner_set_velocity(self._refill_rate)
 
     def _inner_set_velocity(self, rate):
-        step_rate = self._calc_flow_rate(self._flow_rate)
+        step_rate = self._calc_flow_rate(rate)
         self.send_cmd("V{}".format(step_rate))
 
     def _calc_flow_rate(self, rate):
@@ -2319,7 +2317,7 @@ class SSINextGenPump(Pump):
             if self._ramping_flow:
                 self._accel_stop.set()
             while self._ramping_flow:
-                time.sleep(0.001)
+                time.sleep(0.01)
 
             self.get_status()
             current_flow = copy.copy(self._flow_rate)
@@ -2390,7 +2388,7 @@ class SSINextGenPump(Pump):
         if self._ramping_flow:
             self._accel_change.set()
             while self._accel_change.is_set():
-                time.sleep(0.001)
+                time.sleep(0.01)
 
     @property
     def max_pressure(self):
@@ -2496,14 +2494,14 @@ class SSINextGenPump(Pump):
             self.flow_rate = 0
             self.send_cmd("RU")
 
-            start = time.time()
+            start = time.monotonic()
             if wait:
                 while not self.is_moving():
                     time.sleep(0.01)
 
-                    if time.time() - start > self.timeout:
+                    if time.monotonic() - start > self.timeout:
                         break
-                        logger.error('TImed out waiting for pump %s to start', self.name)
+                        logger.error('Timed out waiting for pump %s to start', self.name)
 
             self._flow_dir = 1
             ramp_thread = threading.Thread(target=self._ramp_flow, args=(self.flow_rate,
@@ -2514,14 +2512,14 @@ class SSINextGenPump(Pump):
             logger.debug('pump is moving')
             self.send_cmd("RU")
 
-            start = time.time()
+            start = time.monotonic()
             if wait:
                 while not self.is_moving():
                     time.sleep(0.01)
 
-                    if time.time() - start > self.timeout:
+                    if time.monotonic() - start > self.timeout:
                         break
-                        logger.error('TImed out waiting for pump %s to start', self.name)
+                        logger.error('Timed out waiting for pump %s to start', self.name)
 
                     self._flow_dir = 1
 
@@ -2532,16 +2530,18 @@ class SSINextGenPump(Pump):
 
         self.send_cmd("RU")
 
-        start = time.time()
+        start = time.monotonic()
         if wait:
             while not self._is_flowing:
                 self.get_status()
 
-                if time.time() - start > self.timeout:
+                if time.monotonic() - start > self.timeout:
                     break
                     logger.error('Timed out waiting for pump %s to start', self.name)
 
                 self._flow_dir = 1
+
+                time.sleep(0.01)
 
     def stop(self, wait=True):
         logger.info("Pump %s stopping all motions", self.name)
@@ -2559,17 +2559,19 @@ class SSINextGenPump(Pump):
         else:
             self.send_cmd("ST")
 
-            start = time.time()
+            start = time.monotonic()
             if wait:
                 while self._is_flowing:
                     self.get_status()
 
-                    if time.time() - start > self.timeout:
+                    if time.monotonic() - start > self.timeout:
                         break
                         logger.error('Timed out waiting for pump %s to stop', self.name)
 
                     self.flow_rate = 0
                     self._flow_dir = 0
+
+                    time.sleep(0.01)
 
     def abort(self):
         self.send_cmd("ST")
@@ -2595,7 +2597,7 @@ class SSINextGenPump(Pump):
         self._ramping_flow = True
 
         while self._accel_stop.is_set():
-            time.sleep(0.001)
+            time.sleep(0.01)
 
         if target_flow_rate > current_flow_rate:
             mult = 1
@@ -2604,8 +2606,8 @@ class SSINextGenPump(Pump):
 
         starting_flow_rate = copy.copy(current_flow_rate)
 
-        start_time = time.time()
-        prev_time = time.time()
+        start_time = time.monotonic()
+        prev_time = time.monotonic()
 
         if self._flow_rate_acceleration == 0:
             self._send_flow_rate_cmd(target_flow_rate)
@@ -2618,10 +2620,10 @@ class SSINextGenPump(Pump):
 
                 if self._accel_change.is_set():
                     starting_flow_rate = current_flow_rate
-                    start_time = time.time()
+                    start_time = time.monotonic()
                     self._accel_change.clear()
 
-                current_time = time.time()
+                current_time = time.monotonic()
 
                 time_since_start = current_time - start_time
                 time_since_prev = current_time - prev_time
@@ -2699,14 +2701,14 @@ class SSINextGenPump(Pump):
         dispense_thread.start()
 
     def _run_dispense(self):
-        previous_time = time.time()
+        previous_time = time.monotonic()
         previous_fr = self._flow_rate
 
         update_time = previous_time
 
         while self._is_flowing:
             current_fr = copy.copy(self._flow_rate)
-            current_time = time.time()
+            current_time = time.monotonic()
             delta_vol = ((current_fr + previous_fr)/2./60.)*(current_time-previous_time)
 
             self._dispensing_volume -= delta_vol
@@ -2774,7 +2776,7 @@ class SSINextGenPump(Pump):
         # print(ret)
 
         if ret.startswith('OK') and ret.endswith('/'):
-            vals = ret.rstrip('/').split(',')
+            vals = ret.removesuffix('/').split(',')
 
             if vals[1] == '0':
                 self.motor_stall_fault = False
@@ -3158,14 +3160,14 @@ class OB1Pump(Pump):
         dispense_thread.start()
 
     def _run_dispense(self):
-        previous_time = time.time()
+        previous_time = time.monotonic()
         previous_fr = self.flow_rate
 
         update_time = previous_time
 
         while self._is_flowing:
             current_fr = copy.copy(self.flow_rate)
-            current_time = time.time()
+            current_time = time.monotonic()
             delta_vol = ((current_fr + previous_fr)/2./60.)*(current_time-previous_time)
 
             self._dispensing_volume -= abs(delta_vol)
@@ -3260,11 +3262,11 @@ class OB1Pump(Pump):
                 break
 
             if self._pid_on_evt.is_set():
-                start_t = time.time()
+                start_t = time.monotonic()
 
                 fr, dens, temp = self.get_fm_values()
 
-                delta_t = time.time() - start_t
+                delta_t = time.monotonic() - start_t
 
                 if dens > 700 and (prev_dens/dens < 1.05 and prev_dens/dens > 0.95):
                     pressure = self._PID(fr)
@@ -3272,7 +3274,7 @@ class OB1Pump(Pump):
 
                 prev_dens = dens
 
-                while time.time() - start_t < self._pid_sample_time - delta_t:
+                while time.monotonic() - start_t < self._pid_sample_time - delta_t:
                     time.sleep(0.01)
 
             else:
@@ -3838,14 +3840,14 @@ class LongerL1001S2Pump(Pump):
         self.dispense(vol, units)
 
     def _run_dispense(self):
-        previous_time = time.time()
+        previous_time = time.monotonic()
         previous_fr = self.flow_rate
 
         update_time = previous_time
 
         while self._is_flowing:
             current_fr = copy.copy(self.flow_rate)
-            current_time = time.time()
+            current_time = time.monotonic()
             delta_vol = ((current_fr + previous_fr)/2./60.)*(current_time-previous_time)
 
             self._dispensing_volume -= abs(delta_vol)
@@ -3992,28 +3994,28 @@ class SoftPump(Pump):
         pass #Should be implimented in each subclass
 
     def _sim_flow(self):
-        previous_time = time.time()
+        previous_time = time.monotonic()
 
         while self.connected:
             flow_rate = self._flow_rate
 
             if self._is_dispensing:
-                delta_vol = flow_rate*(time.time()-previous_time)
-                previous_time = time.time()
+                delta_vol = flow_rate*(time.monotonic()-previous_time)
+                previous_time = time.monotonic()
                 self._dispensing_volume = self._dispensing_volume - delta_vol
 
                 if self._dispensing_volume <= 0:
                     self.stop()
 
             elif self._is_aspirating:
-                delta_vol = flow_rate*(time.time()-previous_time)
-                previous_time = time.time()
+                delta_vol = flow_rate*(time.monotonic()-previous_time)
+                previous_time = time.monotonic()
                 self._aspirating_volume = self._aspirating_volume - delta_vol
 
                 if self._aspirating_volume <= 0:
                     self.stop()
             else:
-                previous_time = time.time()
+                previous_time = time.monotonic()
 
             time.sleep(0.1)
 
@@ -4227,14 +4229,14 @@ class SoftSyringePump(SyringePump):
             self._flow_dir = -1
 
     def _sim_flow(self):
-        previous_time = time.time()
+        previous_time = time.monotonic()
 
         while self.connected:
             if self._is_dispensing:
                 flow_rate = self._flow_rate
 
-                delta_vol = flow_rate*(time.time()-previous_time)
-                previous_time = time.time()
+                delta_vol = flow_rate*(time.monotonic()-previous_time)
+                previous_time = time.monotonic()
                 self._dispensing_volume = self._dispensing_volume - delta_vol
 
                 if self._dispensing_volume <= 0:
@@ -4245,8 +4247,8 @@ class SoftSyringePump(SyringePump):
             elif self._is_aspirating:
                 flow_rate = self._refill_rate
 
-                delta_vol = flow_rate*(time.time()-previous_time)
-                previous_time = time.time()
+                delta_vol = flow_rate*(time.monotonic()-previous_time)
+                previous_time = time.monotonic()
                 self._aspirating_volume = self._aspirating_volume - delta_vol
 
                 if self._aspirating_volume <= 0:
@@ -4255,7 +4257,7 @@ class SoftSyringePump(SyringePump):
                 self._volume = self._volume + delta_vol
 
             else:
-                previous_time = time.time()
+                previous_time = time.monotonic()
 
             time.sleep(0.1)
 
@@ -5131,7 +5133,7 @@ class PumpCommThread(utils.CommManager):
         cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
-        ret = device.send_cmd(cmd, get_response, **kwargs)
+        ret = device.send_cmd(val, get_response, **kwargs)
 
         self._return_value((name, cmd, ret), comm_name)
 
@@ -5455,7 +5457,7 @@ class PumpPanel(utils.DevicePanel):
             size=self._FromDIP((60, -1)), validator=utils.CharValidator('float_te'))
         self.min_pressure_units_lbl = wx.StaticText(self, label='psi')
         self.pressure_units = wx.Choice(self, choices=['psi', 'MPa', 'bar'])
-        self.pressure_units.SetSelection(1)
+        self.pressure_units.SetSelection(0)
         self.pressure_units.Bind(wx.EVT_CHOICE, self._on_pressure_units)
 
 
@@ -5547,8 +5549,8 @@ class PumpPanel(utils.DevicePanel):
 
         self.status_sizer.Hide(self.ssi_status_sizer, recursive=True)
 
-        print(self.pump_type)
-        print(self.settings)
+        logger.debug(self.pump_type)
+        logger.debug(self.settings)
 
         if (self.pump_type == 'VICI M50' or self.pump_type == 'KPHM100'
             or self.pump_type == 'Longer L100S2' or self.pump_type == 'Soft'):
@@ -5848,6 +5850,8 @@ class PumpPanel(utils.DevicePanel):
 
         logger.debug('Changed the pump mode to %s for pump %s', mode, self.name)
 
+        self.Layout()
+
     def _on_run(self, evt):
         """Called when flow is started or stopped in the GUI."""
         if self.connected:
@@ -5982,12 +5986,15 @@ class PumpPanel(utils.DevicePanel):
         I = self.feedback_i.GetValue()
         D = self.feedback_d.GetValue()
 
-        P = float(P)
-        I = float(I)
-        D = float(D)
+        try:
+            P = float(P)
+            I = float(I)
+            D = float(D)
 
-        cmd = ['set_pid', [self.name, P, I, D], {}]
-        self._send_cmd(cmd, get_response=False)
+            cmd = ['set_pid', [self.name, P, I, D], {}]
+            self._send_cmd(cmd, get_response=False)
+        except Exception:
+            pass
 
     def _set_pressure_units_gui(self, units):
         self.pressure_units_lbl.SetLabel(units)
@@ -6020,6 +6027,10 @@ class PumpPanel(utils.DevicePanel):
 
         self._set_flowaccel()
 
+        fr = None
+        rr = None
+        success = True
+
         pump_dir = self.direction_ctrl.GetStringSelection().lower()
         if self.pump_mode == 'continuous':
             if pump_dir == 'dispense':
@@ -6030,7 +6041,7 @@ class PumpPanel(utils.DevicePanel):
             mult = 1
 
         if self.pump_type == 'NE 500':
-            if pump_dir == 'Dispense':
+            if pump_dir == 'dispense':
                 try:
                     fr = float(self.flow_rate_ctrl.GetValue())
 
@@ -6084,8 +6095,6 @@ class PumpPanel(utils.DevicePanel):
                 try:
                     rr = float(self.refill_rate_ctrl.GetValue())
 
-                    rr = float(self.refill_rate_ctrl.GetValue())
-
                     set_rr_cmd = ['set_refill_rate', [self.name, rr*mult], {}]
                     ret = self._send_cmd(set_rr_cmd, get_response=True)
 
@@ -6100,13 +6109,19 @@ class PumpPanel(utils.DevicePanel):
                     success = False
 
         if success:
-            logger.debug('Set pump %s flow rate to %s', self.name, str(fr))
+            if fr is not None:
+                logger.debug('Set pump %s flow rate to %s', self.name, str(fr))
+            if rr is not None:
+                logger.debug('Set pump %s flow rate to %s', self.name, str(rr))
         else:
             logger.debug('Failed to set pump %s flow rate and/or refill rate', self.name)
 
         return success
 
     def _set_flowaccel(self):
+        fr = None
+        success = True
+
         if self.pump_type == 'SSI Next Gen':
             try:
                 fr = float(self.flow_accel_ctrl.GetValue())
@@ -6125,10 +6140,11 @@ class PumpPanel(utils.DevicePanel):
                 wx.MessageBox(msg, "Error setting flow rate acceleration")
                 success = False
 
-            if success:
+        if success:
+            if fr is not None:
                 logger.debug('Set pump %s flow accelration to %s', self.name, str(fr))
-            else:
-                logger.debug('Failed to set pump %s flow rate acceleration', self.name)
+        else:
+            logger.debug('Failed to set pump %s flow rate acceleration', self.name)
 
     def _set_status(self, cmd, val):
         if cmd == 'get_full_status':
@@ -6145,9 +6161,9 @@ class PumpPanel(utils.DevicePanel):
                 refill_rate = 0
 
             if is_moving is not None and is_moving and not self._current_move_status:
-                self.run_button.SetLabel('Stop')
+                wx.CallAfter(self.run_button.SetLabel, 'Stop')
                 if self.pump_type != 'Hamilton PSD6':
-                    self.fr_button.Show()
+                    wx.CallAfter(self.fr_button.Show)
 
                 if self.pump_mode == 'continuous':
                     if self.mode_ctrl.GetStringSelection() == 'Fixed volume':
@@ -6168,9 +6184,9 @@ class PumpPanel(utils.DevicePanel):
                 self._current_move_status = val
 
             elif is_moving is not None and not is_moving and self._current_move_status:
-                self.run_button.SetLabel('Start')
+                wx.CallAfter(self.run_button.SetLabel, 'Start')
                 if self.pump_type != 'Hamilton PSD6':
-                    self.fr_button.Hide()
+                    wx.CallAfter(self.fr_button.Hide)
 
                 self._set_status_label('Done')
 
@@ -6182,7 +6198,7 @@ class PumpPanel(utils.DevicePanel):
 
             if volume is not None and volume != self._current_volume:
                 self._set_status_volume(volume)
-                self.syringe_vol_gauge.SetValue(int(round(float(volume)*1000)))
+                wx.CallAfter(self.syringe_vol_gauge.SetValue, int(round(float(volume)*1000)))
                 self._current_volume = volume
 
 
@@ -6221,7 +6237,7 @@ class PumpPanel(utils.DevicePanel):
                 self._current_flow_dir = flow_dir
 
             if pressure is not None and pressure != self._current_pressure:
-                self.pressure.SetLabel(str(pressure))
+                wx.CallAfter(self.pressure.SetLabel, str(pressure))
                 self._current_pressure = pressure
 
             if valve_pos is not None and valve_pos != self._current_valve_position:

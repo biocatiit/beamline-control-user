@@ -18,16 +18,10 @@
 #
 #    You should have received a copy of the GNU General Public License
 #    along with this software.  If not, see <http://www.gnu.org/licenses/>.
-from __future__ import absolute_import, division, print_function, unicode_literals
-from builtins import object, range, map
-from io import open
-
 import logging
 import string
 import os
 import sys
-import six
-from six.moves import StringIO as bytesio
 import platform
 import threading
 from collections import deque, OrderedDict
@@ -43,10 +37,6 @@ import wx.lib.mixins.listctrl
 from wx.lib.stattext import GenStaticText as StaticText
 from matplotlib.backends.backend_wxagg import NavigationToolbar2WxAgg
 import numpy as np
-try:
-    import serial.tools.list_ports as list_ports
-except ModuleNotFoundError:
-    pass
 
 import client
 
@@ -240,20 +230,13 @@ class CustomPlotToolbar(NavigationToolbar2WxAgg):
 FTP_ENCODING = 'latin-1'
 
 def bytes2str(s):
-    return str(s)
-
-
-if six.PY3:
-    from io import BytesIO as bytesio
-
-    def bytes2str(s):
-        'byte to string conversion'
-        if isinstance(s, str):
-            return s
-        elif isinstance(s, bytes):
-            return str(s, FTP_ENCODING)
-        else:
-            return str(s)
+    'byte to string conversion'
+    if isinstance(s, str):
+        return s
+    elif isinstance(s, bytes):
+        return str(s, FTP_ENCODING)
+    else:
+        return str(s)
 
 class FloatSpinEvent(wx.PyCommandEvent):
 
@@ -700,6 +683,9 @@ class FloatSpinCtrl(wx.Panel):
         self.Scale.SetValue(str(value))
         self.Scale.SetModified(False)
 
+    def ChangeValue(self, value):
+        self.Scale.ChangeValue(str(value))
+
     def SetRange(self, minmax):
         self.max = float(minmax[1])
         self.min = float(minmax[0])
@@ -898,11 +884,11 @@ class CommManager(threading.Thread):
                     if self._stop_event.is_set():
                         break
 
-                    if time.time() - last_t > period:
+                    if time.monotonic() - last_t > period:
                         kwargs['comm_name'] = 'status'
                         kwargs['cmd'] = cmd
                         self._run_command(cmd, args, kwargs)
-                        self._status_cmds[status_cmd]['last_run'] = time.time()
+                        self._status_cmds[status_cmd]['last_run'] = time.monotonic()
 
                         cmds_run = True
 
@@ -977,8 +963,10 @@ class CommManager(threading.Thread):
     def remove_status_cmd(self, cmd):
         logger.debug('Removing status command: %s', cmd)
 
+        cmd_key = '{}_{}'.format(cmd[0], cmd[1][0])
+
         with self._queue_lock:
-            self._status_cmds.pop(cmd[0], None)
+            self._status_cmds.pop(cmd_key, None)
 
         logger.debug('Removed status command')
 
@@ -1036,6 +1024,7 @@ class CommManager(threading.Thread):
         cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices.pop(name, None)
+
         if device is not None:
             device.disconnect()
 
@@ -1241,7 +1230,10 @@ class DevicePanel(wx.Panel):
 
             with self._clear_return:
                 while len(self.return_q) > 0:
-                    self.return_q.pop()
+                    try:
+                        self.return_q.pop()
+                    except Exception:
+                        break
 
     def _set_status(self, cmd, val):
         pass # Overwrite this
@@ -1254,9 +1246,7 @@ class DevicePanel(wx.Panel):
                 self.com_thread.remove_communication(self.name)
         else:
             self.com_thread.stop()
-
-            if not self.com_timeout_event.is_set():
-                self.com_thread.join(5)
+            self.com_thread.join(5)
 
         self._stop_status.set()
         self._status_thread.join()
@@ -1434,37 +1424,6 @@ class DeviceFrame(wx.Frame):
         self.Layout()
         self.Fit()
 
-    def _on_add_device(self, evt):
-        """
-        Called when the Add Devices button is used. Adds a new device
-        to the control panel.
-
-        .. note:: device names must be distinct.
-        """
-        if not self.devices:
-            self.sizer.Remove(0)
-
-        dlg = wx.TextEntryDialog(self, "Enter device name:", "Create new device")
-        if dlg.ShowModal() == wx.ID_OK:
-            name = dlg.GetValue()
-            for device in self.devices:
-                if name == device.name:
-                    msg = "device names must be distinct. Please choose a different name."
-                    wx.MessageBox(msg, "Failed to add device")
-                    logger.debug('Attempted to add a device with the same name (%s) as another pump.', name)
-                    return
-
-            new_device = self.device_panel(self, wx.ID_ANY, name, self.ports, self.cmd_q,
-                self.return_q, name)
-            logger.info('Added new device %s to the device control panel.', name)
-            self.sizer.Add(new_device)
-            self.devices.append(new_device)
-
-            self.Layout()
-            self.Fit()
-
-        return
-
     def _on_exit(self, evt):
         """
         Removes communication to the device. You still need to close the device
@@ -1640,7 +1599,8 @@ class ItemList(wx.Panel):
 
         item.Destroy()
 
-        self.resize_list()
+        if resize:
+            self.resize_list()
 
     def get_items(self):
         return self.all_items
@@ -1721,12 +1681,14 @@ class ListItem(wx.Panel):
             self.SetBackgroundColour(self.highlight_list_bkg_color)
 
             for text_item in self.text_list:
-                text_item.SetForegroundColour(self.general_text_color)
+                text_item.SetForegroundColour(self.highlight_text_color)
+                text_item.SetBackgroundColour(self.highlight_list_bkg_color)
 
         else:
             self.SetBackgroundColour(self.list_bkg_color)
             for text_item in self.text_list:
                 text_item.SetForegroundColour(self.general_text_color)
+                text_item.SetBackgroundColour(self.list_bkg_color)
 
         self.Refresh()
 
@@ -1800,16 +1762,17 @@ class BufferMonitor(object):
                 if self._active_buffer_position is not None:
                     if self._previous_flow_rate is None:
                         self._previous_flow_rate = self._get_buffer_flow_rate()
-                        previous_time = time.time()
+                        previous_time = time.monotonic()
 
                     current_flow = self._get_buffer_flow_rate()
-                    current_time = time.time()
+                    current_time = time.monotonic()
 
                     delta_vol = (((current_flow + self._previous_flow_rate)/2./60.)
                         *(current_time-previous_time))
 
                     if self._active_buffer_position in self._buffers:
-                        self._buffers[self._active_buffer_position]['vol'] -= delta_vol
+                        new_vol = max(0, self._buffers[self._active_buffer_position]['vol'] - delta_vol)
+                        self._buffers[self._active_buffer_position]['vol'] = new_vol
 
                     self._previous_flow_rate = current_flow
                     previous_time = current_time
@@ -2049,7 +2012,7 @@ def load_DIP_bitmap(filepath, bitmap_type, bundle=True):
             filepaths = [filepath,]
             for i in range(1,10):
                 img_name = '{}@{}x{}'.format(img_prefix, i, ext)
-                if os.path.exists('{}@{}x{}'.format(img_prefix, i, ext)):
+                if os.path.exists(img_name):
                     filepaths.append(img_name)
 
             # print(filepaths)

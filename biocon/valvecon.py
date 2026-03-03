@@ -18,16 +18,11 @@
 #
 #    You should have received a copy of the GNU General Public License
 #    along with this software.  If not, see <http://www.gnu.org/licenses/>.
-from __future__ import absolute_import, division, print_function, unicode_literals
-from builtins import object, range, map
-from io import open
-
 import threading
 import time
-from collections import OrderedDict, deque
+from collections import OrderedDict
 import logging
 import sys
-import ctypes
 import copy
 import traceback
 from concurrent.futures import ThreadPoolExecutor
@@ -37,8 +32,7 @@ if __name__ != '__main__':
 
 import wx
 import serial
-import serial.tools.list_ports as list_ports
-from six import string_types
+
 try:
     import epics
 except Exception:
@@ -77,12 +71,6 @@ class SerialComm(object):
             if self.ser is not None:
                 self.ser.close()
 
-    def __repr__(self):
-        return self.ser
-
-    def __str__(self):
-        return print(self.ser)
-
     def read(self, size=1):
         """
         This wraps the Serial.read() function for reading in a specified
@@ -100,23 +88,7 @@ class SerialComm(object):
         logger.debug("Read %i bytes from serial device on port %s", size, self.ser.port)
         logger.debug("Serial device on port %s returned %s", self.ser.port, ret.decode())
 
-        return ret.decode()
-
-    def read_all(self):
-        """
-        This wraps the Serial.read() function, and returns all of the
-        waiting bytes.
-
-        :returns: The ascii (decoded) value of the ``Serial.read()``
-        :rtype: str
-        """
-        with self.ser as s:
-            ret = s.read(s.in_waiting())
-
-        logger.debug("Read all waiting bytes from serial device on port %s", self.ser.port)
-        logger.debug("Serial device on port %s returned %s", self.ser.port, ret.decode())
-
-        return ret.decode()
+        return ret.decode(errors='replace')
 
     def write(self, data, get_response=False, send_term_char = '\r\n',
         term_char='>', timeout=0.25):
@@ -135,7 +107,7 @@ class SerialComm(object):
         :rtype: str
         """
         logger.debug("Sending '%s' to serial device on port %s", data, self.ser.port)
-        if isinstance(data, string_types):
+        if isinstance(data, str):
             if not data.endswith(send_term_char):
                 data += send_term_char
             data = data.encode()
@@ -146,13 +118,16 @@ class SerialComm(object):
             with self.ser as s:
                 s.write(data)
                 if get_response:
-                    start_time = time.time()
-                    while not out.endswith(term_char) and time.time()-start_time <timeout:
+                    start_time = time.monotonic()
+                    while not out.endswith(term_char) and time.monotonic()-start_time <timeout:
                         if s.in_waiting > 0:
                             ret = s.read(s.in_waiting)
-                            out += ret.decode('ascii')
+                            out += ret.decode('ascii', errors='replace')
 
-                        time.sleep(.001)
+                        time.sleep(.005)
+
+            out = out.removesuffix(term_char)
+
         except ValueError:
             logger.exception("Failed to write '%s' to serial device on port %s", data, self.ser.port)
 
@@ -291,7 +266,7 @@ class RheodyneValve(Valve):
             success = False
 
         if success:
-            if int(status) < 12:
+            if int(status) < self._positions:
                 logger.debug("Valve %s position %s", self.name, status)
                 position = status
             else:
@@ -440,10 +415,20 @@ class RheodyneValveTTL(Valve):
     def set_position(self, position):
         position = int(position)
 
-        pv_val = self._position_trans[position]
-        self.valve_pv.put(pv_val, wait=True)
+        if position > self._positions:
+            logger.error('Cannot set valve to position %i, maximum position is %i',
+                position, self._positions)
+            success = False
+        elif position < 1:
+            logger.error('Cannot set valve to position %i, minimum position is 1',
+                position)
+            success = False
+        else:
+            pv_val = self._position_trans[position]
+            self.valve_pv.put(pv_val, wait=True)
+            success = True
 
-        return True
+        return success
 
 class CheminertValve(Valve):
     """
@@ -546,7 +531,7 @@ class CheminertValve(Valve):
         if '' != ret:
             success = True
         else:
-            success = True
+            success = False
 
         return ret, success
 
@@ -606,7 +591,8 @@ class MultiValve(Valve):
             valve_status = [f.result() for f in futures]
 
         status = ''
-        for stat in valve_status:
+        for i, vn in enumerate(self._valves.keys()):
+            stat = valve_status[i]
             if stat is not None and stat != '':
                 status += '{} status: {}, '.format(vn, stat)
 
@@ -622,7 +608,8 @@ class MultiValve(Valve):
             valve_errs = [f.result() for f in futures]
 
         error = ''
-        for err in valve_errs:
+        for i, vn in enumerate(self._valves.keys()):
+            err = valve_errs[i]
             if err is not None and err != '':
                 error += '{} error: {}, '.format(vn, err)
 
@@ -815,7 +802,7 @@ class ValveCommThread(utils.CommManager):
 
         device = self._connected_devices[name]
         status = device.get_status(**kwargs)
-        logger.debug("Valve %s status: %f", name, status)
+        logger.debug("Valve %s status: %s", name, status)
 
         self._return_value((name, cmd, status), comm_name)
 

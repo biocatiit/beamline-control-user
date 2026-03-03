@@ -18,25 +18,16 @@
 #
 #    You should have received a copy of the GNU General Public License
 #    along with this software.  If not, see <http://www.gnu.org/licenses/>.
-from __future__ import absolute_import, division, print_function, unicode_literals
-from builtins import object, range, map
-from io import open
-
 import threading
 import time
-from collections import deque, OrderedDict
 import logging
 import sys
 import copy
-import platform
 
 if __name__ != '__main__':
     logger = logging.getLogger(__name__)
 
-import numpy as np
 import wx
-# import zaber.serial as zaber
-from six import string_types
 try:
     import epics
     import epics.wx
@@ -316,6 +307,7 @@ class ToastMotorPanel(utils.DevicePanel):
     def _on_home_abort(self, evt):
         self._home_abort_evt.set()
         self.motor.stop()
+        self._home_motor_thread.join(5)
         self._on_home_finish()
 
     def _on_home_finish(self):
@@ -324,9 +316,9 @@ class ToastMotorPanel(utils.DevicePanel):
 
     @EpicsFunction
     def home_motor(self):
-        home_to = step = self.settings['home_settings']['home_to']
-        final_pos = self.settings['home_settings']['final_pos']
-        home_offset = self.settings['home_settings']['offset']
+        home_to = self.settings['device_data']['kwargs']['home_settings']['home_to']
+        final_pos = self.settings['device_data']['kwargs']['home_settings']['final_pos']
+        home_offset = self.settings['device_data']['kwargs']['home_settings']['offset']
 
         if home_to == 'center':
             plus_lim = self._inner_home_to_limit(1)
@@ -373,8 +365,10 @@ class ToastMotorPanel(utils.DevicePanel):
     def _inner_home_to_limit(self, direction):
         abort = False
 
-        step = self.settings['home_settings']['step']
-        speed = self.settings['home_settings']['speed']
+        step = self.settings['device_data']['kwargs']['home_settings']['step']
+        speed = self.settings['device_data']['kwargs']['home_settings']['speed']
+
+        self.motor.set_jog_speed(speed)
 
         if direction == 1:
             on_lim = self.motor.on_high_limit()
@@ -428,6 +422,14 @@ class ToastMotorPanel(utils.DevicePanel):
 
     def _on_close(self):
         """Device specific stuff goes here"""
+        self.stop_toast()
+        self._home_abort_evt.set()
+        self.motor.stop()
+        try:
+            self._home_motor_thread.join(5)
+        except Exception:
+            pass
+
         for pv, cbid in self._callbacks:
             pv.remove_callback(cbid)
 
@@ -497,9 +499,8 @@ class ToasterPanel(wx.Panel):
             except Exception:
                 pass
 
-        logger.info('Initializing %s devices on startup', str(len(self.setup_devices)))
-
         if self.setup_devices is not None:
+            logger.info('Initializing %s devices on startup', str(len(self.setup_devices)))
             for device in self.setup_devices:
                 dev_settings = {}
                 for key, val in self.settings.items():

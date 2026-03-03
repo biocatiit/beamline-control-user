@@ -18,7 +18,6 @@
 #
 #    You should have received a copy of the GNU General Public License
 #    along with this software.  If not, see <http://www.gnu.org/licenses/>.
-from __future__ import absolute_import, division, print_function, unicode_literals
 from builtins import object, range, map
 from io import open
 
@@ -27,8 +26,6 @@ import logging.handlers as handlers
 import sys
 import os
 from collections import OrderedDict
-from decimal import Decimal as D
-import multiprocessing
 
 if __name__ != '__main__':
     logger = logging.getLogger(__name__)
@@ -40,13 +37,13 @@ import expcon
 import coflowcon
 import trcon
 import metadata
-import scancon
 import pipeline_ctrl
 import spectrometercon
 import biohplccon
 import autocon
 import autosamplercon
 import toastcon
+import monotunecon
 
 class BioFrame(wx.Frame):
     """
@@ -95,6 +92,12 @@ class BioFrame(wx.Frame):
 
             self.component_panels['exposure'].set_pipeline_ctrl(
                 self.component_controls['pipeline'])
+
+        if ('exposure' in self.component_panels
+            and 'mono_auto_tune' in self.component_controls):
+
+            self.component_panels['exposure'].set_mono_auto_tune_ctrl(
+                self.component_controls['mono_auto_tune'])
 
     def _create_standard_layout(self):
         top_panel = wx.Panel(self)
@@ -221,7 +224,7 @@ class BioFrame(wx.Frame):
 
         # Make automator sizer at the end, because automator settings need the callbacks
         # from the other panels
-        logger.info('Setting up autmator panel')
+        logger.info('Setting up automator panel')
         key = 'automator'
 
         inst_settings = {}
@@ -340,6 +343,10 @@ class BioFrame(wx.Frame):
                 logger.info('Setting up pipeline')
                 ctrl = self.settings['components'][key](self.settings[key])
                 self.component_controls[key] = ctrl
+            elif key == 'mono_auto_tune':
+                logger.info('Setting up mono auto tune')
+                ctrl = self.settings['components'][key](self.settings[key])
+                self.component_controls[key] = ctrl
             else:
                 pass
 
@@ -350,10 +357,17 @@ class BioFrame(wx.Frame):
         logger.debug('Closing the BioFrame')
 
         for panel in self.component_panels.values():
-            panel.on_exit()
+            try:
+                panel.on_exit()
+            except Exception:
+                logger.exception('Error on closing')
 
         for ctrl in self.component_controls.values():
-            ctrl.stop()
+            try:
+                ctrl.stop()
+            except Exception:
+                logger.exception('Error on closing')
+
 
         self.Destroy()
 
@@ -539,6 +553,10 @@ if __name__ == '__main__':
     # Toaster Settings
     toaster_settings = toastcon.default_toaster_settings
 
+    ###################################################################
+    # Mono Auto Tune Settings
+    mono_auto_tune_settings = monotunecon.default_mono_tune_settings
+
     biocon_settings = {}
 
     components = OrderedDict([
@@ -554,6 +572,7 @@ if __name__ == '__main__':
         # ('automator', autocon.AutoPanel),
         # ('autosampler', autosamplercon.AutosamplerPanel),
         # ('toaster', toastcon.ToasterPanel),
+        # ('mono_auto_tune', monotunecon.MonoAutoTune)
         ])
 
     settings = {
@@ -569,15 +588,17 @@ if __name__ == '__main__':
         'automator'     : automator_settings,
         'autosampler'   : autosampler_settings,
         'toaster'       : toaster_settings,
+        'mono_auto_tune': mono_auto_tune_settings,
         'components'    : components,
         'biocon'        : biocon_settings,
         }
 
 
+    keys = list(settings['components'].keys())
+    keys.append('biocon')
+
     for key in settings:
         if key != 'components' and key != 'biocon':
-            keys = list(settings['components'].keys())
-            keys.append('biocon')
             settings[key]['components'] = keys
 
     app = wx.App()
@@ -585,11 +606,10 @@ if __name__ == '__main__':
     standard_paths = wx.StandardPaths.Get() #Can't do this until you start the wx app
     info_dir = standard_paths.GetUserLocalDataDir()
 
-    if not os.path.exists(info_dir):
-        os.mkdir(info_dir)
+    os.makedirs(info_dir, exist_ok=True)
 
-    h2 = handlers.RotatingFileHandler(os.path.join(info_dir, 'biocon.log'), maxBytes=10e6, backupCount=5, delay=True)
-    h2.setLevel(logging.INFO)
+    h2 = handlers.RotatingFileHandler(os.path.join(info_dir, 'biocon.log'),
+        maxBytes=int(10e6), backupCount=5, delay=True)
     h2.setLevel(logging.DEBUG)
     formatter2 = logging.Formatter('%(asctime)s - %(name)s - %(threadName)s - %(levelname)s - %(message)s')
     h2.setFormatter(formatter2)

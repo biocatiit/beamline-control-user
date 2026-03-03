@@ -20,10 +20,6 @@
 #    You should have received a copy of the GNU General Public License
 #    along with this software.  If not, see <http://www.gnu.org/licenses/>.
 
-from __future__ import absolute_import, division, print_function, unicode_literals
-from builtins import object, range, map
-from io import open
-
 import logging
 import sys
 from collections import OrderedDict
@@ -78,6 +74,8 @@ class ParamPanel(wx.Panel):
             self.top_sizer.Show(self.muscle_panel, recursive=True)
 
         self.metadata_type = metadata_type
+
+        self.Layout()
 
     def _create_layout(self):
 
@@ -213,7 +211,7 @@ class SAXSPanel(wx.Panel):
         self.batch_sizer.Add(wx.StaticText(ctrl_parent, label='Is buffer:'),
             pos=(0,0), flag=wx.ALIGN_CENTER_VERTICAL)
         self.batch_sizer.Add(self.is_buffer, pos=(0,1), flag=wx.ALIGN_CENTER_VERTICAL)
-        self.batch_sizer.Add(self.separate_buffer, pos=(1,0), span=(0, 2))
+        self.batch_sizer.Add(self.separate_buffer, pos=(1,0), span=(1, 2))
 
 
         mixers = ['Chaotic S-bend (90 ms)', 'Chaotic S-bend (1 s)',

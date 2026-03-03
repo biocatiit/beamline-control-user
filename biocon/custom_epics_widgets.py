@@ -20,14 +20,13 @@
 #    You should have received a copy of the GNU General Public License
 #    along with this software.  If not, see <http://www.gnu.org/licenses/>.
 
-from __future__ import absolute_import, division, print_function, unicode_literals
 from builtins import object, range, map
 from io import open
 
 import wx
 import six
 
-import epics, epics.wx, epics.wx.wxlib, epics.wx.wxlib
+import epics, epics.wx, epics.wx.wxlib
 
 import utils
 
@@ -111,7 +110,7 @@ class PVTextLabeled(epics.wx.PVText):
                 value = round(float(value), self.sig_fig)
 
                 if self.sig_fig == 0:
-                    value = int(value)
+                    value = int(round(float(value)))
 
             new_label = "%s%s" % (value, self.units)
 
@@ -269,7 +268,7 @@ class PVTextMonitor(epics.wx.PVText):
                 value = round(float(value), self.sig_fig)
 
                 if self.sig_fig == 0:
-                    value = int(value)
+                    value = int(round(float(value)))
 
             new_label = "%s%s" % (value, self.units)
 
@@ -300,7 +299,8 @@ class PVTextMonitor(epics.wx.PVText):
         self.monitor_value = kwargs['value']
 
         try:
-            if (abs(float(self.GetLabel()) - float(self.monitor_value))
+
+            if (abs(float(self.GetLabel().split(' ')[0]) - float(self.monitor_value))
                 > self.monitor_threshold):
                 self.OverrideForegroundColour('red')
             else:
@@ -313,7 +313,7 @@ class PVTextMonitor(epics.wx.PVText):
         self.monitor_value = kwargs['value']
 
         try:
-            if (abs(float(self.GetLabel()) - float(self.monitor_value))
+            if (abs(float(self.GetLabel().split(' ')[0]) - float(self.monitor_value))
                 > self.monitor_threshold):
                 self.OverrideForegroundColour('red')
             else:
