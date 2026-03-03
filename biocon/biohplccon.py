@@ -18,9 +18,6 @@
 #
 #    You should have received a copy of the GNU General Public License
 #    along with this software.  If not, see <http://www.gnu.org/licenses/>.
-from builtins import object, range, map
-from io import open
-
 import threading
 import time
 from collections import OrderedDict, deque
@@ -289,8 +286,13 @@ class AgilentHPLCStandard(AgilentHPLC):
         position = None
         retry = 5
         while position is None and retry > 0:
-            position = valve.get_position()
-            retry -= 1
+            try:
+                position = valve.get_position()
+            except Exception:
+                pass
+            if position is None:
+                retry -= 1
+                time.sleep(0.1)
 
         return position
 
@@ -2400,27 +2402,33 @@ class AgilentHPLCStandard(AgilentHPLC):
                 and self._terminate_monitor_submit.is_set()):
                 break
 
-            submit_args = self._submit_queue.popleft()
-            name = submit_args['name']
-            sequence_vals = submit_args['sequence_vals']
-            result_path = submit_args['result_path']
-            flow_rate = round(submit_args['flow_rate'], 3)
-            wait_for_flow_ramp = submit_args['wait_for_flow_ramp']
-            settle_time = submit_args['settle_time']
+            try:
+                submit_args = self._submit_queue.popleft()
+            except Exception:
+                self._abort_submit.set()
+                submit_args = None
 
-            if wait_for_flow_ramp:
-                while (round(self.get_hplc_flow_rate(self._active_flow_path), 3)
-                    != flow_rate):
-                    if self._abort_submit.is_set():
-                        break
-                    time.sleep(0.1)
+            if submit_args is not None:
+                name = submit_args['name']
+                sequence_vals = submit_args['sequence_vals']
+                result_path = submit_args['result_path']
+                flow_rate = round(submit_args['flow_rate'], 3)
+                wait_for_flow_ramp = submit_args['wait_for_flow_ramp']
+                settle_time = submit_args['settle_time']
 
-                start = time.monotonic()
+                if wait_for_flow_ramp:
+                    while (round(self.get_hplc_flow_rate(self._active_flow_path), 3)
+                        != flow_rate):
+                        if self._abort_submit.is_set():
+                            break
+                        time.sleep(0.1)
 
-                while time.monotonic() - start < settle_time:
-                    if self._abort_submit.is_set():
-                        break
-                    time.sleep(0.1)
+                    start = time.monotonic()
+
+                    while time.monotonic() - start < settle_time:
+                        if self._abort_submit.is_set():
+                            break
+                        time.sleep(0.1)
 
             if not self._abort_submit.is_set():
                 self.submit_sequence(name, [sequence_vals], result_path, name)
@@ -2458,7 +2466,7 @@ class AgilentHPLCStandard(AgilentHPLC):
                 if self._purging_flow1:
                     self.stop_purge(1)
 
-        if flow_path == 2:
+        elif flow_path == 2:
             if self._equil_flow2:
                 self._remaining_equil2_vol = 0
                 self._abort_equil2.set()
@@ -2481,7 +2489,7 @@ class AgilentHPLCStandard(AgilentHPLC):
             if self._purging_flow1:
                 self._remaining_purge1_vol = 0
 
-        if flow_path == 2:
+        elif flow_path == 2:
             if self._purging_flow2:
                 self._remaining_purge2_vol = 0
 
@@ -2508,7 +2516,7 @@ class AgilentHPLCStandard(AgilentHPLC):
             if self._switching_buffer_bottle1:
                 self._abort_switch_buffer_bottle1.set()
 
-        if flow_path == 2:
+        elif flow_path == 2:
             if self._switching_buffer_bottle2:
                 self._abort_switch_buffer_bottle2.set()
 
@@ -2554,6 +2562,8 @@ class AgilentHPLCStandard(AgilentHPLC):
         while not pump1_stopped:
             if float(self.get_hplc_flow_rate(1)) == 0:
                 pump1_stopped = True
+            else:
+                time.sleep(0.05)
 
         self.set_hplc_flow_accel(flow_accel1, 1)
 
@@ -2579,6 +2589,8 @@ class AgilentHPLCStandard(AgilentHPLC):
         while not pump1_stopped:
             if float(self.get_hplc_flow_rate(1)) == 0:
                 pump1_stopped = True
+            else:
+                time.sleep(0.05)
 
         self.set_hplc_flow_accel(flow_accel1, 1)
 
@@ -2598,8 +2610,8 @@ class AgilentHPLCStandard(AgilentHPLC):
 
         self._abort_submit.set()
         self._terminate_monitor_submit.set()
-        self._monitor_submit_evt.set(timeout=5)
-        self._monitor_submit_thread.join()
+        self._monitor_submit_evt.set()
+        self._monitor_submit_thread.join(timeout=5)
 
         self._terminate_monitor_equil.set()
         self._monitor_equil_evt.set()
@@ -3251,6 +3263,9 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
             if float(self.get_hplc_flow_rate(2)) == 0:
                 pump2_stopped = True
 
+            if not pump1_stopped or not pump2_stopped:
+                time.sleep(0.05)
+
         self.set_hplc_flow_accel(flow_accel1, 1)
         self.set_hplc_flow_accel(flow_accel2, 2)
 
@@ -3272,10 +3287,12 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
 
         self.set_hplc_flow_accel(100, 2)
 
-        pump1_stopped = False
-        while not pump1_stopped:
+        pump2_stopped = False
+        while not pump2_stopped:
             if float(self.get_hplc_flow_rate(2)) == 0:
-                pump1_stopped = True
+                pump2_stopped = True
+            else:
+                time.sleep(0.05)
 
         self.set_hplc_flow_accel(flow_accel2, 2)
 
