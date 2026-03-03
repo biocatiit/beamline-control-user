@@ -441,11 +441,11 @@ class CoflowControl(object):
             logger.error('Flow rate is not a number')
 
         if is_number:
-            base_units = self.settings['flow_units']
-            units = 'mL/min'
+            # base_units = self.settings['flow_units']
+            # units = 'mL/min'
 
-            lc_flow_rate = pumpcon.convert_flow_rate(lc_flow_rate, units, base_units)
-            logger.debug('Flow rate is %f %s', lc_flow_rate, units)
+            # lc_flow_rate = pumpcon.convert_flow_rate(lc_flow_rate, units, base_units)
+            # logger.debug('Flow rate is %f %s', lc_flow_rate, base_units)
 
             if lc_flow_rate < 0.1 or lc_flow_rate > 2:
                 is_extreme = True
@@ -1254,6 +1254,9 @@ class CoflowControl(object):
         except Exception:
             pass
 
+        if self.settings['use_overflow_control']:
+            self.session.close()
+
 
 class CoflowCommThread(utils.CommManager):
 
@@ -1335,7 +1338,7 @@ class CoflowCommThread(utils.CommManager):
 
     def _start_flow_monitor(self, name, **kwargs):
 
-        logger.debug("%s starting flow", name)
+        logger.debug("%s starting flow monitor", name)
 
         comm_name = kwargs.pop('comm_name', None)
         cmd = kwargs.pop('cmd', None)
@@ -1345,11 +1348,11 @@ class CoflowCommThread(utils.CommManager):
 
         self._return_value((name, cmd, True), comm_name)
 
-        logger.debug("%s flow started", name)
+        logger.debug("%s flow monitor started", name)
 
     def _stop_flow_monitor(self, name, **kwargs):
 
-        logger.debug("%s stopping flow", name)
+        logger.debug("%s stopping flow monitor", name)
 
         comm_name = kwargs.pop('comm_name', None)
         cmd = kwargs.pop('cmd', None)
@@ -1359,7 +1362,7 @@ class CoflowCommThread(utils.CommManager):
 
         self._return_value((name, cmd, True), comm_name)
 
-        logger.debug("%s flow stopped", name)
+        logger.debug("%s flow monitor stopped", name)
 
     def _change_flow_rate(self, name, val, **kwargs):
 
@@ -1421,7 +1424,7 @@ class CoflowCommThread(utils.CommManager):
 
     def _stop_overflow(self, name, **kwargs):
 
-        logger.debug("%s starting overflow pump", name)
+        logger.debug("%s stopping overflow pump", name)
 
         comm_name = kwargs.pop('comm_name', None)
         cmd = kwargs.pop('cmd', None)
@@ -1433,7 +1436,7 @@ class CoflowCommThread(utils.CommManager):
         status = device.check_overflow_status()
         self._return_value((name, cmd, status), 'status')
 
-        logger.debug("%s overflow pump started", name)
+        logger.debug("%s overflow pump stopped", name)
 
     def _start_flow_timer(self, name, val, **kwargs):
 

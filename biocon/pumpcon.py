@@ -432,6 +432,7 @@ class LongerSerialComm(SerialComm):
         return out
 
 def convert_volume(volume, u1, u2):
+    # Converts from u1 to u2
     if u1.lower() in ['nl', 'ul', 'ml'] and u2.lower() in ['nl', 'ul', 'ml']:
         if u1.lower() != u2.lower():
             if ((u1.lower() == 'nl' and u2.lower() == 'ul')
@@ -448,6 +449,7 @@ def convert_volume(volume, u1, u2):
     return volume
 
 def convert_time(time, u1, u2):
+    # Converts from u1 to u2
     if u1.lower() in ['s', 'min'] and u2.lower() in ['s', 'min']:
         if u1.lower() != u2.lower():
             if u1.lower() == 'min':
@@ -458,6 +460,7 @@ def convert_time(time, u1, u2):
     return time
 
 def convert_flow_rate(fr, u1, u2):
+    # Converts from u1 to u2
     v_u1, t_u1 = u1.split('/')
     v_u2, t_u2 = u2.split('/')
 
@@ -467,6 +470,7 @@ def convert_flow_rate(fr, u1, u2):
     return fr
 
 def convert_flow_accel(accel, u1, u2):
+    # Converts from u1 to u2
     v_u1, t_u1 = u1.split('/')
     v_u2, t_u2 = u2.split('/')
 
