@@ -81,14 +81,8 @@ class MonoAutoTune(object):
         self.high_lim = self.ao_high_lim_pv.get()
 
     def _measure_intensity(self):
+        logger.debug('Measuring intensity')
         self.ct_start_pv.put(1, wait=True)
-
-        start = time.monotonic()
-
-        while not self.ct_start_pv.get() == 1:
-            time.sleep(0.01)
-            if time.monotonic() - start > 10:
-                break
 
         start = time.monotonic()
         while self.ct_start_pv.get() == 1:
@@ -97,6 +91,7 @@ class MonoAutoTune(object):
                 break
 
         val = self.ct_val_pv.get(use_monitor=False)
+        # logger.debug(val)
 
         return val
 
@@ -111,18 +106,29 @@ class MonoAutoTune(object):
         logger.info('Starting optimizing I0 intensity. Initial: %s cts/s at %s V',
             i_start/self.settings['optimize_ct_time'], v_start)
 
+        logger.debug("Initial step %s V", self.step_start)
+
         i_best, v_best, improved = self._search_up(self.step_start, i_start, v_start)
+
+        logger.debug('Search improved: %s, V new: %s V, I0 new: %s ct/s',
+                improved, v_best, i_best/self.settings['optimize_ct_time'])
 
         if not improved:
             i_best, v_best, improved = self._search_down(self.step_start, i_start, v_start)
             search_dir = 'up'
+            logger.debug('Search improved: %s, V new: %s V, I0 new: %s ct/s',
+                improved, v_best, i_best/self.settings['optimize_ct_time'])
         else:
             search_dir = 'down'
+
+        logger.debug('Initial search direction: %s', search_dir)
 
         step = self.step_start
 
         while step > self.step_min:
             step = max(self.step_min, step/self.step_scale)
+
+            logger.debug('Step %s V', step)
 
             if step == self.step_min:
                 final = True
@@ -136,6 +142,9 @@ class MonoAutoTune(object):
                 i_best, v_best, improved = self._search_down(step, i_best, v_best, final)
                 search_dir = 'up'
 
+            logger.debug('Search improved: %s, V new: %s V, I0 new: %s ct/s',
+                improved, v_best, i_best/self.settings['optimize_ct_time'])
+
         self.i0_shutter_pv.put(1)
 
         logger.info('Finished optimizing I0 intensity. Final: %s cts/s at %s V',
@@ -145,6 +154,9 @@ class MonoAutoTune(object):
         i_new = np.inf
         i_prev = copy.copy(i_start)
         v_new = v_start
+
+        logger.debug('Searching up')
+        # logger.debug(i_prev)
 
         while i_new > i_prev and v_new != self.high_lim:
             v_prev = copy.copy(v_new)
@@ -161,6 +173,10 @@ class MonoAutoTune(object):
 
             i_new = self._measure_intensity()
 
+            # logger.debug(i_new)
+            # logger.debug(i_prev)
+            # logger.debug(v_new)
+
         if v_new == v_start + step:
             improved = False
             i_ret = i_start
@@ -175,12 +191,19 @@ class MonoAutoTune(object):
             i_ret = i_prev
             v_ret = v_prev
 
+        # logger.debug(i_ret)
+        # logger.debug(v_ret)
+        # logger.debug(improved)
+
         return i_ret, v_ret, improved
 
     def _search_down(self, step, i_start, v_start, final=False):
         i_new = np.inf
         i_prev = copy.copy(i_start)
         v_new = v_start
+
+        logger.debug('Searching down')
+        # logger.debug(i_prev)
 
         while i_new > i_prev and v_new != self.low_lim:
             v_prev = copy.copy(v_new)
@@ -197,6 +220,10 @@ class MonoAutoTune(object):
 
             i_new = self._measure_intensity()
 
+            # logger.debug(i_new)
+            # logger.debug(i_prev)
+            # logger.debug(v_new)
+
         if v_new == v_start - step:
             improved = False
             i_ret = i_start
@@ -210,6 +237,10 @@ class MonoAutoTune(object):
             self.ao_pv.put(v_prev)
             i_ret = i_prev
             v_ret = v_prev
+
+        # logger.debug(i_ret)
+        # logger.debug(v_ret)
+        # logger.debug(improved)
 
         return i_ret, v_ret, improved
 
@@ -225,9 +256,9 @@ default_mono_tune_settings = {
             }
         },
         ], # Compatibility with the standard format
-    'optimize_step'         : 0.1, #Initial optimize step value in V
-    'optimize_min_step'     : 0.01, #Minimum optimize step size in V
-    'optimize_step_scale'   : 2, #Scaling factor for reducing step size in search
+    'optimize_step'         : 0.05, #Initial optimize step value in V
+    'optimize_min_step'     : 0.005, #Minimum optimize step size in V
+    'optimize_step_scale'   : 3.1, #Scaling factor for reducing step size in search
     'optimize_ct_time'      : 0.05, #Joerger count time or optimize
     'fe_shutter'            : 'PA:18ID:STA_A_FES_OPEN_PL',
     'd_shutter'             : 'PA:18ID:STA_D_SDS_OPEN_PL',
@@ -251,7 +282,7 @@ if __name__ == '__main__':
     logger.setLevel(logging.DEBUG)
     h1 = logging.StreamHandler(sys.stdout)
     h1.setLevel(logging.INFO)
-    # h1.setLevel(logging.DEBUG)
+    h1.setLevel(logging.DEBUG)
     # h1.setLevel(logging.ERROR)
 
     # formatter = logging.Formatter('%(asctime)s - %(message)s')
@@ -268,6 +299,7 @@ if __name__ == '__main__':
     # logger.addHandler(h1)
 
     settings = default_mono_tune_settings
+    settings['device_data'] = settings['device_init'][0]
     settings['components'] = ['mono_auto_tune']
 
 
