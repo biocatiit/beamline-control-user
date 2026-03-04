@@ -3678,7 +3678,9 @@ class ExpPanel(wx.Panel):
                     fprefix, num_frames)
 
     def _mono_auto_tune(self):
-        if self.mono_auto_tune_ctrl is not None:
+        fes, ds = self._get_hutch_shutter_status()
+
+        if self.mono_auto_tune_ctrl is not None and fes and ds:
             self.mono_auto_tune_ctrl.optimize_intensity()
 
     def _show_warning_dialog(self, msg):
@@ -3725,27 +3727,7 @@ class ExpPanel(wx.Panel):
         msg = ''
 
         if self.settings['warnings']['shutter']:
-            if self.fe_shutter_pv is not None:
-                fes_val = self.fe_shutter_pv.get(timeout=2)
-
-                if fes_val is not None:
-                    if fes_val == 0:
-                        fes = False
-                    else:
-                        fes = True
-            else:
-                fes = True
-
-            if self.d_shutter_pv is not None:
-                ds_val = self.d_shutter_pv.get(timeout=2)
-
-                if ds_val is not None:
-                    if ds_val == 0:
-                        ds = False
-                    else:
-                        ds = True
-            else:
-                ds = True
+            fes, ds = self._get_hutch_shutter_status()
 
             if not fes and not ds:
                 msg = ('Both the Front End shutter and the D Hutch '
@@ -3777,6 +3759,31 @@ class ExpPanel(wx.Panel):
                         logger.info('D Hutch shutter is closed.')
 
         return cont, msg
+
+    def _get_hutch_shutter_status(self):
+        if self.fe_shutter_pv is not None:
+            fes_val = self.fe_shutter_pv.get(timeout=2)
+
+            if fes_val is not None:
+                if fes_val == 0:
+                    fes = False
+                else:
+                    fes = True
+        else:
+            fes = True
+
+        if self.d_shutter_pv is not None:
+            ds_val = self.d_shutter_pv.get(timeout=2)
+
+            if ds_val is not None:
+                if ds_val == 0:
+                    ds = False
+                else:
+                    ds = True
+        else:
+            ds = True
+
+        return fes, ds
 
     def _check_vacuum(self, verbose=True):
         cont = True
