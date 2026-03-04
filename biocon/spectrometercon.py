@@ -4087,7 +4087,7 @@ class UVPanel(utils.DevicePanel):
             # if not self.inline and self._restart_live_update:
             #     self._live_update_evt.set()
 
-        elif cmd == 'get_last_n' and self.auto_update.GetValue():
+        elif cmd == 'get_last_n' and not self.inline and self.auto_update.GetValue():
             specta = val
 
             for spectrum in val:
