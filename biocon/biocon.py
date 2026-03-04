@@ -295,7 +295,7 @@ class BioFrame(wx.Frame):
 
         for key in self.settings['components']:
 
-            if key != 'pipeline' and key != 'automator':
+            if key != 'pipeline' and key != 'automator' and key != 'mono_auto_tune':
                 logger.info('Setting up %s panel', key)
                 if key == 'trsaxs_scan':
                     label = 'TRSAXS Scan'
@@ -572,7 +572,7 @@ if __name__ == '__main__':
         # ('automator', autocon.AutoPanel),
         # ('autosampler', autosamplercon.AutosamplerPanel),
         # ('toaster', toastcon.ToasterPanel),
-        # ('mono_auto_tune', monotunecon.MonoAutoTune)
+        ('mono_auto_tune', monotunecon.MonoAutoTune)
         ])
 
     settings = {

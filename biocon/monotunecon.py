@@ -36,9 +36,12 @@ except Exception:
 
 class MonoAutoTune(object):
     def __init__(self, settings):
+        if 'device_data' not in settings:
+            settings['device_data'] = settings['device_init'][0]
+
         self.settings = settings
 
-        self._callbacks = []
+        self._pv_callbacks = []
 
         self._init_pvs()
 
@@ -243,6 +246,10 @@ class MonoAutoTune(object):
         # logger.debug(improved)
 
         return i_ret, v_ret, improved
+
+    def stop(self):
+        for pv, cbid in self._pv_callbacks:
+            pv.remove_callback(cbid)
 
 
 #Settings
