@@ -789,7 +789,7 @@ class FlowMeterCommThread(utils.CommManager):
         cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
-        val = device.instr_ID.value
+        val = device.instr_ID
 
         self._return_value((name, cmd, val), comm_name)
 

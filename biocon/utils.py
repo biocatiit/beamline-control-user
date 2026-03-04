@@ -554,6 +554,11 @@ class FloatSpinCtrl(wx.Panel):
         val = self.Scale.GetValue()
         val = val.replace(',', '.')
 
+        try:
+            float(val)
+        except ValueError:
+            return
+
         if self.max is not None:
             if float(val) > self.max:
                 self.Scale.SetValue(str(self.max ))

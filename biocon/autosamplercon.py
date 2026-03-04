@@ -1903,7 +1903,7 @@ def make_well_plate_layout(top_level, parent, well_bmp, on_well_button):
     row_idx = -1
     col_idx = 0
     wells = ['{}{}'.format(row, col) for row in row_labels for col in col_labels]
-    well_ids_96 = {well :wx.NewIdRef().GetId() for well in wells}
+    well_ids_96 = {well :wx.NewIdRef() for well in wells}
     reverse_well_ids_96 = {wid: well for (well, wid) in well_ids_96.items()}
 
     well_box = wx.StaticBox(parent, label='Well Plate')
@@ -2800,8 +2800,8 @@ class AutosamplerPanel(utils.DevicePanel):
                     msg = ('The batch mode autosampler has experienced an '
                         'error. Please contact your beamline scientist.')
 
-                wx.CallAfter(wx.MessageBox, msg, 'Autosampler Error',
-                    style=wx.OK|wx.ICON_ERROR)
+                    wx.CallAfter(wx.MessageBox, msg, 'Autosampler Error',
+                        style=wx.OK|wx.ICON_ERROR)
 
 
                 self._current_status = val
@@ -3227,12 +3227,12 @@ default_autosampler_settings = {
     'home_settings'         : {'plate_x': {'dir': -1, 'step': 0.1, 'pos': 0},
                                 'plate_z': {'dir': 1, 'step': 0.1, 'pos': 0},
                                 'needle_y': {'dir': -1, 'step': 0.01, 'pos': -2.70}}, #Direction 1/-1 for positive/negative. step is step size off limit, pos is what to set the home position as.
-    'base_position'         : {'plate_x': 270.95, 'plate_z': -76.6, 'needle_y': 111.7}, # A1 well position, needle height at chiller plate top
+    'base_position'         : {'plate_x': 271.35, 'plate_z': -80.5, 'needle_y': 115.6}, # A1 well position, needle height at chiller plate top
     'clean_offsets'         : {'plate_x': 99.7, 'plate_z': -21.4, 'needle_y': -10}, # Relative to base position
     'needle_out_offset'     : 5, # mm
-    'needle_in_position'    : 0,
+    'needle_in_position'    : 3,
     'plate_out_position'    : {'plate_x': -31, 'plate_z': 0}, # Relative
-    'plate_load_position'   : {'plate_x': 0, 'plate_z': -75.9}, # Absolute
+    'plate_load_position'   : {'plate_x': 0, 'plate_z': -80.5}, # Absolute
     'coflow_y_ref_position' : 0, # Position for coflow y motor when base position was set
     'plate_type'            : 'Thermo-Fast 96 well PCR',
     # 'plate_type'            : 'Abgene 96 well deepwell storage',
