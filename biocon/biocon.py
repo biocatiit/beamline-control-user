@@ -391,17 +391,17 @@ if __name__ == '__main__':
     # Exposure settings
     exposure_settings = expcon.default_exposure_settings
 
-    # Fast in-air shutters
-    exposure_settings['shutter_speed_open'] = 0.001
-    exposure_settings['shutter_speed_close'] = 0.001
-    exposure_settings['shutter_pad'] = 0.00
-    exposure_settings['shutter_cycle'] = 0.002
+    # # Fast in-air shutters
+    # exposure_settings['shutter_speed_open'] = 0.001
+    # exposure_settings['shutter_speed_close'] = 0.001
+    # exposure_settings['shutter_pad'] = 0.00
+    # exposure_settings['shutter_cycle'] = 0.002
 
-    # # Normal vacuum shutter (uniblitz)
-    # exposure_settings['shutter_speed_open'] = 0.0045
-    # exposure_settings['shutter_speed_close'] = 0.004
-    # exposure_settings['shutter_pad'] = 0.002
-    # exposure_settings['shutter_cycle'] = 0.1
+    # Normal vacuum shutter (uniblitz)
+    exposure_settings['shutter_speed_open'] = 0.0045
+    exposure_settings['shutter_speed_close'] = 0.004
+    exposure_settings['shutter_pad'] = 0.002
+    exposure_settings['shutter_cycle'] = 0.1
 
     # # EIGER2 XE 9M
     # exposure_settings['det_args'] =  {'use_tiff_writer': False,
@@ -486,8 +486,8 @@ if __name__ == '__main__':
                                 'preparation'   : 'Intact',
                                 'notes'         : '',
                                 },
-        # 'metadata_type'     : 'auto',
-        'metadata_type'     : 'muscle',
+        'metadata_type'     : 'auto',
+        # 'metadata_type'     : 'muscle',
         }
 
 
@@ -565,7 +565,7 @@ if __name__ == '__main__':
         # ('trsaxs_scan', trcon.TRScanPanel),
         # ('trsaxs_flow', trcon.TRFlowPanel),
         # ('scan',    scancon.ScanPanel),
-        ('metadata', metadata.ParamPanel),
+        # ('metadata', metadata.ParamPanel),
         # ('pipeline', pipeline_ctrl.PipelineControl),
         # ('uv', spectrometercon.UVPanel),
         # ('hplc', biohplccon.HPLCPanel),
