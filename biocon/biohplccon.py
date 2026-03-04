@@ -25,6 +25,7 @@ import logging
 import sys
 import copy
 import os
+import traceback
 
 if __name__ != '__main__':
     logger = logging.getLogger(__name__)
@@ -289,6 +290,7 @@ class AgilentHPLCStandard(AgilentHPLC):
             try:
                 position = valve.get_position()
             except Exception:
+                # traceback.print_exc()
                 pass
             if position is None:
                 retry -= 1
