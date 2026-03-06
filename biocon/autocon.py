@@ -1447,7 +1447,7 @@ class AutoStatusPanel(wx.Panel):
         self._create_layout()
         self._init_values()
 
-        self.status_timer = wx.Timer(self)
+        self.status_timer = wx.Timer()
         self.status_timer.Bind(wx.EVT_TIMER, self._on_status_timer)
         self.status_timer.Start(5000)
 
