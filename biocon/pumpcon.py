@@ -6569,7 +6569,7 @@ if __name__ == '__main__':
     # Longer pumps
     setup_devices = [
         {'name': 'test', 'args': ['Longer L100S2', 'COM15'],
-            'kwargs': {'pump_addr': 1, 'flow_cal': 0.0512},
+            'kwargs': {'pump_addr': 1, 'flow_cal': 0.0421},
             'ctrl_args': {'flow_rate': 1}},
         ]
 

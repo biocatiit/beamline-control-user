@@ -987,6 +987,8 @@ class CoflowControl(object):
                             self._sheath_oob_error = True
                             self._sheath_oob_flow = mean_fr
 
+                        # print(mean_fr)
+
 
                     if not outlet_monitor_avg:
                         if ((outlet_fr < outlet_low_warning*self.outlet_setpoint or
@@ -3706,7 +3708,7 @@ default_coflow_settings = {
         'flow_units'                : 'mL/min',
         'sheath_pump'
                                     : {'name': 'sheath', 'args': ['Longer L100S2', 'COM15'],
-                                        'kwargs': {'pump_addr': 1, 'flow_cal': 0.0512},
+                                        'kwargs': {'pump_addr': 1, 'flow_cal': 0.0407},
                                         'ctrl_args': {'flow_rate': 1}},
         # 'sheath_pump'               : {'name': 'sheath', 'args': ['VICI M50', 'COM6'],
         #                                 'kwargs': {'flow_cal': '630.4',
@@ -3751,9 +3753,9 @@ default_coflow_settings = {
         'needle_motor'              : {'name': 'needle', 'args': ['18ID_DMC_E05:35'],
                                         'kwargs': {}},
         'sheath_ratio'              : 0.3,
-        'sheath_excess'             : 1.5,
-        'sheath_warning_threshold_low'  : 0.8,
-        'sheath_warning_threshold_high' : 1.2,
+        'sheath_excess'             : 1.75,
+        'sheath_warning_threshold_low'  : 0.9,
+        'sheath_warning_threshold_high' : 1.1,
         # 'outlet_warning_threshold_low'  : 0.8,
         # 'outlet_warning_threshold_high' : 1.2,
         'outlet_warning_threshold_low'  : 0.98,
