@@ -3769,6 +3769,8 @@ class ExpPanel(wx.Panel):
                     fes = False
                 else:
                     fes = True
+            else:
+                fes = False
         else:
             fes = True
 
@@ -3780,6 +3782,8 @@ class ExpPanel(wx.Panel):
                     ds = False
                 else:
                     ds = True
+            else:
+                ds = False
         else:
             ds = True
 
