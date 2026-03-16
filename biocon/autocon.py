@@ -3687,11 +3687,16 @@ class AutoList(utils.ItemList):
                     default_settings['conc'] = default_metadata['Concentration [mg/ml]:']
                     default_settings['buf'] = default_metadata['Buffer:']
                     default_settings['sample_name'] = default_metadata['Sample:']
-                    default_settings['column'] = default_metadata['Column:']
+
                     default_settings['exp_type'] = default_metadata['Experiment type:']
                     default_settings['inj_vol'] = default_metadata['Loaded volume [uL]:']
                     try:
                         default_settings['temp'] = default_metadata['Temperature [C]:']
+                    except Exception:
+                        pass
+
+                    try:
+                        default_settings['column'] = default_metadata['Column:']
                     except Exception:
                         pass
 
