@@ -351,6 +351,11 @@ class SAXSPanel(wx.Panel):
         elif exp_type == 'Other':
             metadata['Temperature [C]:'] = self.temperature.GetValue()
 
+        elif exp_type == 'AF4-MALS-SAXS':
+            metadata['Channel:'] = self.af4_channel_choice.GetStringSelection()
+            metadata['Membrane:'] = self.af4_membrane_choice.GetStringSelection()
+            metadata['Spacer height [um]:'] = self.af4_spacer_choice.GetStringSelection()
+
         metadata['Notes:'] = self.notes.GetValue()
 
         return metadata
@@ -383,6 +388,15 @@ class SAXSPanel(wx.Panel):
 
         if 'Notes:' in new_metadata:
             self.notes.SetValue(new_metadata['Notes:'])
+
+        if 'Channel:' in new_metadata:
+            self.af4_channel_choice.SetStringSelection(new_metadata['Channel:'])
+
+        if 'Membrane:' in new_metadata:
+            self.af4_channel_choice.SetStringSelection(new_metadata['Membrane:'])
+
+        if 'Spacer height [um]:' in new_metadata:
+            self.af4_channel_choice.SetStringSelection(new_metadata['Spacer height [um]:'])
 
 class MusclePanel(wx.Panel):
     def __init__(self, settings, *args, **kwargs):
