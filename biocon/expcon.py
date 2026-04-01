@@ -3420,12 +3420,6 @@ class ExpPanel(wx.Panel):
             self._preparing_exposure = False
             return
 
-        # Do this twice as some settings get set in _check components and you
-        # want the right metdata, but check components starts some things,
-        # so you don't want to run that if the metadata is otherwise invalid
-        metadata, metadata_valid = self._get_metadata(metadata_vals, False)
-        exp_values['metadata'] = metadata
-
         cont = True
 
         if (('trsaxs_scan' in self.settings['components'] and exp_only) or
@@ -3443,6 +3437,18 @@ class ExpPanel(wx.Panel):
             return
 
         self._mono_auto_tune()
+
+        if 'trsaxs_scan' in self.settings['components'] and not exp_only:
+            trsaxs_panel = wx.FindWindowByName('trsaxs_scan')
+            trsaxs_panel.run_and_wait_for_centering()
+            trsaxs_values, trsaxs_scan_valid = trsaxs_panel.get_scan_values()
+            comp_settings['trsaxs_scan'] = trsaxs_values
+
+        # Do this twice as some settings get set in _check components and you
+        # want the right metdata, but check components starts some things,
+        # so you don't want to run that if the metadata is otherwise invalid
+        metadata, metadata_valid = self._get_metadata(metadata_vals, False)
+        exp_values['metadata'] = metadata
 
         self._pipeline_start_exp()
 
@@ -4070,9 +4076,9 @@ class ExpPanel(wx.Panel):
         if 'trsaxs_scan' in self.settings['components'] and not exp_only:
             trsaxs_panel = wx.FindWindowByName('trsaxs_scan')
             trsaxs_values, trsaxs_scan_valid = trsaxs_panel.get_scan_values()
-            if trsaxs_scan_valid:
-                trsaxs_panel.run_and_wait_for_centering()
-                trsaxs_values, trsaxs_scan_valid = trsaxs_panel.get_scan_values()
+            # if trsaxs_scan_valid:
+            #     trsaxs_panel.run_and_wait_for_centering()
+            #     trsaxs_values, trsaxs_scan_valid = trsaxs_panel.get_scan_values()
             comp_settings['trsaxs_scan'] = trsaxs_values
         else:
             trsaxs_scan_valid = True
