@@ -4703,6 +4703,10 @@ class ExpPanel(wx.Panel):
                 metadata['Delay injection after trigger [s]:'] = cmd_kwargs['start_delay']
                 metadata['Delay after injection end [s]:'] = cmd_kwargs['end_delay']
                 metadata['Trigger on inject:'] = cmd_kwargs['trigger']
+            elif exp_type == 'AF4-MALS-SAXS':
+                metadata['Channel:'] = cmd_kwargs['channel']
+                metadata['Membrane:'] = cmd_kwargs['membrane']
+                metadata['Spacer height [um]:'] = cmd_kwargs['spacer']
 
             metadata['Notes:'] = notes
 

@@ -3657,11 +3657,15 @@ class LongerL1001S2Pump(Pump):
             self._flow_dir = -1
             pump_dir = 'CCW'
 
-        self._flow_rate = round(rate*self.cal, 2)
+        rate = rate*self.cal
+
+        if abs(rate) >= 10:
+            self._flow_rate = round(rate, 1)
+        else:
+            self._flow_rate = round(rate, 2)
 
         cmd = self.generate_cmd_string('set', stop_pump, pump_dir, self._flow_rate)
-
-        self.send_cmd(cmd)
+        ret = self.send_cmd(cmd)
 
     def generate_cmd_string(self, cmd, stop_pump=True, pump_dir='CW', pump_speed=1):
         """
@@ -3717,7 +3721,7 @@ class LongerL1001S2Pump(Pump):
         for c in cmd_binary:
             check_binary ^= c
 
-        cmd_check = '{:02}'.format(hex(check_binary)[2:]).upper()
+        cmd_check = '{:0>2}'.format(hex(check_binary)[2:]).upper()
 
         # make final command
         full_cmd =  '{} {} {} {}'.format(cmd_addr, cmd_len, cmd, cmd_check)
@@ -3760,6 +3764,10 @@ class LongerL1001S2Pump(Pump):
 
         if cmd == 'RJ':
             speed = round(int(''.join(status[5:7]), 16)/100., 2)
+
+            if abs(speed) >= 10:
+                speed = round(speed, 1)
+
             running = int(status[7], 16)
             direction = int(status[8], 16)
 
@@ -6200,8 +6208,6 @@ class PumpPanel(utils.DevicePanel):
                 self._set_status_volume(volume)
                 wx.CallAfter(self.syringe_vol_gauge.SetValue, int(round(float(volume)*1000)))
                 self._current_volume = volume
-
-
 
             if flow_rate is not None and round(flow_rate, 4) != float(self.flow_readback.GetLabel()):
                 self._current_flow_rate = flow_rate

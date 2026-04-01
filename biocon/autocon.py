@@ -823,6 +823,63 @@ class BatchSampleCommand(AutoCommand):
 
         self._post_initialize_cmd()
 
+class AF4SampleCommand(AutoCommand):
+    """
+    A command for running a batch sample and collecting SAXS data
+    """
+    def __init__(self, *args, **kwargs):
+        AutoCommand.__init__(self, *args, **kwargs)
+
+    def _initialize_cmd(self, cmd_info):
+        sample_wait_id = self.automator.get_wait_id()
+        sample_wait_cmd = 'wait_sync_{}'.format(sample_wait_id)
+        sample_conds = [['exp', [sample_wait_cmd,]], ['coflow', [sample_wait_cmd,]],]
+
+        finish_wait_id = self.automator.get_wait_id()
+        finish_wait_cmd = 'wait_sync_{}'.format(finish_wait_id)
+        finish_conds = [['exp', [finish_wait_cmd,]], ['coflow', [finish_wait_cmd,]],]
+
+        finish_wait_id2 = self.automator.get_wait_id()
+        finish_wait_cmd2 = 'wait_sync_{}'.format(finish_wait_id2)
+        finish_conds2 = [['exp', [finish_wait_cmd2,]], ['coflow', [finish_wait_cmd2,]],]
+
+        check_wait_id = self.automator.get_wait_id()
+        check_wait_cmd = 'wait_check_{}'.format(check_wait_id)
+        check_conds = [['exp', [check_wait_cmd,]],['coflow', [check_wait_cmd,]],]
+
+        self._add_automator_cmd('exp', sample_wait_cmd, [], {'condition': 'status',
+            'inst_conds': sample_conds})
+        self._add_automator_cmd('exp', check_wait_cmd, [], {'condition': 'check',
+            'inst_conds': check_conds})
+        self._add_automator_cmd('exp', 'expose', [], cmd_info)
+        self._add_automator_cmd('exp', finish_wait_cmd, [], {'condition': 'status',
+            'inst_conds': finish_conds})
+
+
+        self._add_automator_cmd('coflow', sample_wait_cmd, [],
+            {'condition': 'status', 'inst_conds': sample_conds})
+        self._add_automator_cmd('coflow', check_wait_cmd, [], {'condition': 'check',
+            'inst_conds': check_conds})
+
+        if cmd_info['start_coflow']:
+            self._add_automator_cmd('coflow', 'start', [],
+                {'flow_rate': cmd_info['coflow_fr']})
+        else:
+            self._add_automator_cmd('coflow', 'change_flow', [],
+                {'flow_rate': cmd_info['coflow_fr']})
+
+        self._add_automator_cmd('coflow', finish_wait_cmd, [],
+            {'condition': 'status', 'inst_conds': finish_conds})
+
+        if cmd_info['stop_coflow']:
+            self._add_automator_cmd('coflow', 'stop', [], {})
+            self._add_automator_cmd('coflow', finish_wait_cmd2, [],
+                {'condition': 'status', 'inst_conds': finish_conds2})
+            self._add_automator_cmd('exp', finish_wait_cmd2, [],
+                {'condition': 'status', 'inst_conds': finish_conds2})
+
+        self._post_initialize_cmd()
+
 
 class SecSampleCommand(AutoCommand):
     """
@@ -1447,7 +1504,7 @@ class AutoStatusPanel(wx.Panel):
         self._create_layout()
         self._init_values()
 
-        self.status_timer = wx.Timer(self)
+        self.status_timer = wx.Timer()
         self.status_timer.Bind(wx.EVT_TIMER, self._on_status_timer)
         self.status_timer.Start(5000)
 
@@ -1815,6 +1872,7 @@ class AutoSettings(scrolled.ScrolledPanel):
             #[id_key, default_settings, make_info_panel_func],
             ['sec_sample', default_sec_saxs_settings, make_sec_saxs_info_panel],
             ['batch_sample', default_batch_saxs_settings, make_batch_saxs_info_panel],
+            ['af4_sample', default_af4_saxs_settings, make_af4_saxs_info_panel],
             ['exposure', default_standalone_exp_settings, make_standalone_exp_panel],
             ['equilibrate', default_equilibrate_settings, make_equilibrate_info_panel],
             ['switch_pumps', default_switch_pump_settings, make_switch_info_panel],
@@ -2029,6 +2087,35 @@ default_batch_saxs_settings = {
     'coflow_fr'     : 0.,
 }
 
+default_af4_saxs_settings = {
+    # General parameters
+    'item_type'     : 'af4_sample',
+    'notes'         : '',
+    'conc'          : '',
+    'buf'           : '',
+    'inst'          : 'exp',
+    'sample_name'   : '',
+    'channel'       : 'Short',
+    'membrane'      : 'Cellulose, 10 kDa cutoff',
+    'spacer'        : '400',
+    'inj_vol'       : '',
+
+    # Exposure parameters
+    'num_frames'    : 0,
+    'exp_time'      : 0.,
+    'exp_period'    : 0.,
+    'data_dir'      : '',
+    'filename'      : '',
+    'wait_for_trig' : True,
+    'num_trig'      : 0,
+    #Not used, for completeness
+    'struck_measurement_time' : 0.,
+
+    #Coflow parameters
+    'start_coflow'  : True,
+    'stop_coflow'   : False,
+    'coflow_fr'     : 0.,
+}
 
 default_standalone_exp_settings = {
     # General parameters
@@ -2042,6 +2129,11 @@ default_standalone_exp_settings = {
     'temp'          : '20',
     'inj_vol'       : '',
     'exp_type'      : 'SEC-SAXS',
+    'channel'       : 'Short',
+    'membrane'      : 'Cellulose, 10 kDa cutoff',
+    'spacer'        : '400',
+    'is_buf'        : False,
+    'separate_buf'  : False,
 
     # Exposure parameters
     'num_frames'    : 0,
@@ -2570,29 +2662,27 @@ def make_batch_saxs_info_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
 
     return cmd_sizer, sample_well, well_ids_96, reverse_well_ids_96
 
-def make_standalone_exp_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
-    read_only=False):
+def make_af4_saxs_info_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
+    well_bmp, well_callback, read_only=False):
     ################ Metadata #################
-    column_choices = ['Superdex 200 10/300 Increase', 'Superdex 75 10/300 Increase',
-        'Superose 6 10/300 Increase', 'Superdex 200 5/150 Increase',
-        'Superdex 75 5/150 Increase', 'Superose 6 5/150 Increase',
-        'Superdex 200 10/300', 'Superdex 75 10/300', 'Superose 6 10/300',
-        'Superdex 200 5/150', 'Superdex 75 5/150', 'Superose 6 5/150',
-        'Wyatt 010S5', 'Wyatt 015S5', 'Wyatt 030S5', 'Capto HiRes Q 5/50',
-        'Capto HiRes S 5/50', 'Other']
 
-    exp_choices = ['AF4-MALS-SAXS', 'Batch mode SAXS', 'IEC-SAXS',
-        'SEC-SAXS', 'SEC-MALS-SAXS', 'TR-SAXS', 'Other']
+    channel_choices = ['Short', 'Long', 'Dispersion Inlet']
+
+    membrane_choices = ['PES, 5 kDa cutoff', 'PES, 10 kDa cutoff',
+        'PES, 30 kDa cutoff', 'Cellulose, 2 kDa cutoff',
+        'Cellulose, 5 kDa cutoff', 'Cellulose, 10 kDa cutoff',
+        'Cellulose, 30 kDa cutoff']
+
+    spacer_choices = ['275', '400', '525']
 
     metadata_settings = {
-        'exp_type'      : ['Experiment type:', ctrl_ids['exp_type'],
-                            'choice', exp_choices],
         'sample_name'   : ['Sample:', ctrl_ids['sample_name'], 'text'],
         'buf'           : ['Buffer:', ctrl_ids['buf'], 'text'],
         'inj_vol'       : ['Injection volume [uL]:', ctrl_ids['inj_vol'], 'float'],
-        'temp'          : ['Temperature [C]:', ctrl_ids['temp'], 'float'],
         'conc'          : ['Concentration [mg/ml]:', ctrl_ids['conc'], 'float'],
-        'column'        : ['Column:', ctrl_ids['column'], 'choice', column_choices],
+        'channel'       : ['Channel:', ctrl_ids['channel'], 'choice', channel_choices],
+        'membrane'      : ['Membrane:', ctrl_ids['membrane'], 'choice', membrane_choices],
+        'spacer'        : ['Spacer:', ctrl_ids['spacer'], 'choice', spacer_choices],
         }
 
     metadata_box = wx.StaticBox(parent, label='Metadata')
@@ -2614,6 +2704,177 @@ def make_standalone_exp_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
     metadata_sizer = wx.StaticBoxSizer(metadata_box, wx.VERTICAL)
     metadata_sizer.Add(md_sizer1, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
         border=top_level._FromDIP(5))
+    metadata_sizer.Add(md_sizer2, proportion=1, flag=wx.EXPAND|wx.ALL,
+        border=top_level._FromDIP(5))
+
+
+    ################ Exposure #################
+    exp_settings = {
+        'filename'      : ['File prefix:', ctrl_ids['filename'], 'text'],
+        'exp_time'      : ['Exposure time [s]:', ctrl_ids['exp_time'], 'float'],
+        'exp_period'    : ['Exposure period [s]:', ctrl_ids['exp_period'], 'float'],
+        'num_frames'    : ['Number of frames:', ctrl_ids['num_frames'], 'int'],
+        }
+
+    exp_adv_settings = {
+        'wait_for_trig' : ['Wait for external trigger', ctrl_ids['wait_for_trig'], 'bool'],
+        'num_trig'      : ['Number of triggers:', ctrl_ids['num_trig'], 'int'],
+        }
+
+    exp_box = wx.StaticBox(parent, label='Exposure Settings')
+
+    exp_adv_pane = wx.CollapsiblePane(exp_box, label="Advanced Settings")
+    exp_adv_pane.Bind(wx.EVT_COLLAPSIBLEPANE_CHANGED, top_level.on_collapse)
+    exp_adv_win = exp_adv_pane.GetPane()
+
+    exp_sizer1 = create_info_sizer(exp_settings, top_level, exp_box, read_only)
+    exp_sizer2 = create_info_sizer(exp_adv_settings, top_level, exp_adv_win,
+        read_only)
+
+    exp_adv_win.SetSizer(exp_sizer2)
+    exp_adv_pane.Collapse()
+
+    exp_sizer = wx.StaticBoxSizer(exp_box, wx.VERTICAL)
+    exp_sizer.Add(exp_sizer1, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
+        border=top_level._FromDIP(5))
+    exp_sizer.Add(exp_adv_pane, flag=wx.EXPAND|wx.ALL, border=top_level._FromDIP(5))
+
+
+    ################ Coflow #################
+    coflow_settings = {
+        'coflow_from_fr': ['Set coflow flow from injection flow rate',
+                            ctrl_ids['coflow_from_fr'], 'bool'],
+        'start_coflow'  : ['Start coflow automatically',
+                            ctrl_ids['start_coflow'], 'bool'],
+        'coflow_fr'     : ['Coflow flow rate [mL/min]:',
+                            ctrl_ids['coflow_fr'], 'float'],
+        }
+
+    coflow_adv_settings = {
+        'stop_coflow'  : ['Stop coflow after exposure',
+                            ctrl_ids['stop_coflow'], 'bool'],
+        }
+
+    coflow_box = wx.StaticBox(parent, label='Coflow Settings')
+
+    coflow_adv_pane = wx.CollapsiblePane(coflow_box, label="Advanced Settings")
+    coflow_adv_pane.Bind(wx.EVT_COLLAPSIBLEPANE_CHANGED, top_level.on_collapse)
+    coflow_adv_win = coflow_adv_pane.GetPane()
+
+    coflow_sizer1 = create_info_sizer(coflow_settings, top_level, coflow_box,
+        read_only)
+    coflow_sizer2 = create_info_sizer(coflow_adv_settings, top_level,
+        coflow_adv_win, read_only)
+
+    coflow_adv_win.SetSizer(coflow_sizer2)
+    coflow_adv_pane.Collapse()
+
+    coflow_sizer = wx.StaticBoxSizer(coflow_box, wx.VERTICAL)
+    coflow_sizer.Add(coflow_sizer1, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
+        border=top_level._FromDIP(5))
+    coflow_sizer.Add(coflow_adv_pane, flag=wx.EXPAND|wx.ALL, border=top_level._FromDIP(5))
+
+    exp_coflow_sizer = wx.BoxSizer(wx.VERTICAL)
+    exp_coflow_sizer.Add(exp_sizer, flag=wx.EXPAND)
+    exp_coflow_sizer.Add(coflow_sizer, flag=wx.TOP|wx.EXPAND, border=top_level._FromDIP(5))
+
+    if cmd_sizer_dir == 'horiz':
+        cmd_sizer=wx.BoxSizer(wx.HORIZONTAL)
+        cmd_sizer.Add(metadata_sizer, proportion=1, flag=wx.RIGHT|wx.EXPAND,
+            border=top_level._FromDIP(5))
+        cmd_sizer.Add(exp_coflow_sizer, flag=wx.EXPAND,
+            border=top_level._FromDIP(5))
+    else:
+        cmd_sizer=wx.BoxSizer(wx.VERTICAL)
+        cmd_sizer.Add(metadata_sizer, flag=wx.BOTTOM|wx.EXPAND,
+            border=top_level._FromDIP(5))
+        cmd_sizer.Add(exp_coflow_sizer, flag=wx.EXPAND,
+            border=top_level._FromDIP(5))
+
+    return cmd_sizer
+
+def make_standalone_exp_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
+    read_only=False):
+    ################ Metadata #################
+    column_choices = ['Superdex 200 10/300 Increase', 'Superdex 75 10/300 Increase',
+        'Superose 6 10/300 Increase', 'Superdex 200 5/150 Increase',
+        'Superdex 75 5/150 Increase', 'Superose 6 5/150 Increase',
+        'Superdex 200 10/300', 'Superdex 75 10/300', 'Superose 6 10/300',
+        'Superdex 200 5/150', 'Superdex 75 5/150', 'Superose 6 5/150',
+        'Wyatt 010S5', 'Wyatt 015S5', 'Wyatt 030S5', 'Capto HiRes Q 5/50',
+        'Capto HiRes S 5/50', 'Other']
+
+    exp_choices = ['AF4-MALS-SAXS', 'Batch mode SAXS', 'IEC-SAXS',
+        'SEC-SAXS', 'SEC-MALS-SAXS', 'TR-SAXS', 'Other']
+
+    channel_choices = ['Short', 'Long', 'Dispersion Inlet']
+
+    membrane_choices = ['PES, 5 kDa cutoff', 'PES, 10 kDa cutoff',
+        'PES, 30 kDa cutoff', 'Cellulose, 2 kDa cutoff',
+        'Cellulose, 5 kDa cutoff', 'Cellulose, 10 kDa cutoff',
+        'Cellulose, 30 kDa cutoff']
+
+    spacer_choices = ['275', '400', '525']
+
+    metadata_settings = {
+        'exp_type'      : ['Experiment type:', ctrl_ids['exp_type'],
+                            'choice', exp_choices],
+        'sample_name'   : ['Sample:', ctrl_ids['sample_name'], 'text'],
+        'buf'           : ['Buffer:', ctrl_ids['buf'], 'text'],
+        'inj_vol'       : ['Injection volume [uL]:', ctrl_ids['inj_vol'], 'float'],
+        'temp'          : ['Temperature [C]:', ctrl_ids['temp'], 'float'],
+        'conc'          : ['Concentration [mg/ml]:', ctrl_ids['conc'], 'float'],
+        }
+
+    sec_saxs_settings = {
+        'column'        : ['Column:', ctrl_ids['column'], 'choice', column_choices],
+        }
+
+    batch_saxs_settings = {
+        'is_buf'        : ['Is buffer', ctrl_ids['is_buf'], 'bool'],
+        'separate_buf'  : ['Use separate buffer measurement',
+                            ctrl_ids['separate_buf'], 'bool'],
+        }
+
+    af4_saxs_settings = {
+        'channel'       : ['Channel:', ctrl_ids['channel'], 'choice', channel_choices],
+        'membrane'      : ['Membrane:', ctrl_ids['membrane'], 'choice', membrane_choices],
+        'spacer'        : ['Spacer:', ctrl_ids['spacer'], 'choice', spacer_choices],
+        }
+
+    metadata_box = wx.StaticBox(parent, label='Metadata')
+    md_sizer1 = create_info_sizer(metadata_settings, top_level, metadata_box,
+        read_only)
+
+    md_sizer3 = create_info_sizer(sec_saxs_settings, top_level, metadata_box,
+        read_only)
+    md_sizer4 = create_info_sizer(batch_saxs_settings, top_level, metadata_box,
+        read_only)
+    md_sizer5 = create_info_sizer(af4_saxs_settings, top_level, metadata_box,
+        read_only)
+
+    notes = wx.TextCtrl(metadata_box, ctrl_ids['notes'],
+        style=wx.TE_MULTILINE, size=top_level._FromDIP((100, 100)))
+
+    if read_only:
+        notes.SetEditable(False)
+
+    md_sizer2 = wx.BoxSizer(wx.HORIZONTAL)
+    md_sizer2.Add(wx.StaticText(metadata_box, label='Notes:'),
+        border=top_level._FromDIP(5), flag=wx.TOP|wx.BOTTOM|wx.LEFT)
+    md_sizer2.Add(notes, proportion=1, border=top_level._FromDIP(5),
+        flag=wx.EXPAND|wx.ALL)
+
+    metadata_sizer = wx.StaticBoxSizer(metadata_box, wx.VERTICAL)
+    metadata_sizer.Add(md_sizer1, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
+        border=top_level._FromDIP(5))
+    metadata_sizer.Add(md_sizer3, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
+        border=top_level._FromDIP(5))
+    metadata_sizer.Add(md_sizer4, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
+        border=top_level._FromDIP(5))
+    metadata_sizer.Add(md_sizer5, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
+        border=top_level._FromDIP(5))
+
     metadata_sizer.Add(md_sizer2, proportion=1, flag=wx.EXPAND|wx.ALL,
         border=top_level._FromDIP(5))
 
@@ -3027,6 +3288,7 @@ class AutoListPanel(wx.Panel):
         self.cmd_set = {
             'sec_sample'    : SecSampleCommand,
             'batch_sample'  : BatchSampleCommand,
+            'af4_sample'    : AF4SampleCommand,
             'equilibrate'   : EquilibrateCommand,
             'switch_pumps'  : SwitchPumpsCommand,
             'exposure'      : ExposureCommand,
@@ -3172,6 +3434,10 @@ class AutoList(utils.ItemList):
                 'exp' in self.auto_panel.settings['instruments']):
                 actions.extend(['Run batch SAXS sample'])
 
+            if ('exp' in self.auto_panel.settings['instruments'] and
+                'coflow' in self.auto_panel.settings['instruments']):
+                actions.extend(['Run AF4-SAXS sample'])
+
             if ('hplc' in self.auto_panel.settings['instruments'] and
                 'exp' in self.auto_panel.settings['instruments'] and
                 'coflow' in self.auto_panel.settings['instruments']):
@@ -3214,6 +3480,8 @@ class AutoList(utils.ItemList):
                 choice = 'Run SEC-SAXS sample'
             elif settings['item_type'] == 'batch_sample':
                 choice = 'Run batch SAXS sample'
+            elif settings['item_type'] == 'af4_sample':
+                choice = 'Run AF4-SAXS sample'
             elif settings['item_type'] == 'equilibrate':
                 choice = 'Equilibrate column'
             elif settings['item_type'] == 'switch_pumps':
@@ -3415,6 +3683,17 @@ class AutoList(utils.ItemList):
 
                 cmd_dialog = BatchSampleCmdDialog(self, default_settings,
                     title='Batch SAXS Sample Settings')
+
+            elif choice == 'Run AF4-SAXS sample':
+                if settings is None:
+                    default_settings = self._get_default_af4_autosampler_settings()
+
+                else:
+                    default_settings = settings
+                    default_settings['inst'] = 'autosampler'
+
+                cmd_dialog = AF4SampleCmdDialog(self, default_settings,
+                    title='AF4-AXS Sample Settings')
 
             elif choice == 'Run SEC-SAXS sample':
                 hplc_panel = self.auto_panel.settings['instruments']['hplc']['hplc_panel']
@@ -3687,11 +3966,42 @@ class AutoList(utils.ItemList):
                     default_settings['conc'] = default_metadata['Concentration [mg/ml]:']
                     default_settings['buf'] = default_metadata['Buffer:']
                     default_settings['sample_name'] = default_metadata['Sample:']
-                    default_settings['column'] = default_metadata['Column:']
+
                     default_settings['exp_type'] = default_metadata['Experiment type:']
                     default_settings['inj_vol'] = default_metadata['Loaded volume [uL]:']
+
                     try:
                         default_settings['temp'] = default_metadata['Temperature [C]:']
+                    except Exception:
+                        pass
+
+                    try:
+                        default_settings['column'] = default_metadata['Column:']
+                    except Exception:
+                        pass
+
+                    try:
+                        default_settings['channel'] = default_metadata['Channel:']
+                    except Exception:
+                        pass
+
+                    try:
+                        default_settings['membrane'] = default_metadata['Membrane:']
+                    except Exception:
+                        pass
+
+                    try:
+                        default_settings['spacer'] = default_metadata['Spacer height [um]:']
+                    except Exception:
+                        pass
+
+                    try:
+                        default_settings['is_buf'] = default_metadata['Is Buffer:']
+                    except Exception:
+                        pass
+
+                    try:
+                        default_settings['is_buf'] = default_metadata['Needs Separate Buffer Measurement:']
                     except Exception:
                         pass
 
@@ -3778,6 +4088,48 @@ class AutoList(utils.ItemList):
 
         return default_settings
 
+    def _get_default_af4_autosampler_settings(self):
+
+        exp_panel = wx.FindWindowByName('exposure')
+        default_exp_settings, _ = exp_panel.get_exp_values(False)
+
+        coflow_panel = wx.FindWindowByName('coflow')
+        coflow_fr = coflow_panel.get_flow_rate()
+        try:
+            coflow_fr = float(coflow_fr)
+        except ValueError:
+            coflow_fr = float(coflow_panel.settings['lc_flow_rate'])
+
+        metadata_panel = wx.FindWindowByName('metadata')
+        metadata_panel.saxs_panel.set_metadata({'Experiment type:' : 'AF4-MALS-SAXS'})
+        default_metadata = metadata_panel.metadata()
+
+        default_settings = copy.deepcopy(default_af4_saxs_settings)
+
+        # General parameters
+        default_settings['notes'] = default_metadata['Notes:']
+        default_settings['conc'] = default_metadata['Concentration [mg/ml]:']
+        default_settings['buf'] = default_metadata['Buffer:']
+        default_settings['sample_name'] = default_metadata['Sample:']
+        default_settings['column'] = default_metadata['Column:']
+        default_settings['channel'] = default_metadata['Channel:']
+        default_settings['membrane'] = default_metadata['Membrane:']
+        default_settings['spacer'] = default_metadata['Spacer height [um]:']
+
+        # Exposure parameters
+        default_settings['num_frames'] = default_exp_settings['num_frames']
+        default_settings['exp_time'] = default_exp_settings['exp_time']
+        default_settings['exp_period'] = default_exp_settings['exp_period']
+        default_settings['data_dir'] = exp_panel.settings['base_data_dir']
+        default_settings['num_trig'] = default_exp_settings['num_trig']
+        #Not used, for completeness
+        default_settings['struck_measurement_time'] = default_exp_settings['struck_measurement_time']
+
+        #Coflow parameters
+        default_settings['coflow_fr'] = coflow_fr
+
+        return default_settings
+
     def _validate_cmd(self, cmd_settings):
         err_msg = ''
 
@@ -3822,6 +4174,17 @@ class AutoList(utils.ItemList):
                     err_msg += '\n\nLoad and injection settings:'
                     for err in batch_errors:
                         err_msg = err_msg + '\n- ' + err
+
+        if cmd_settings['item_type'] == 'af4_sample':
+            # Do exposure verification and autosampler param verification here
+            cmd_settings, af4_valid, af4_errors = self._validate_af4_params(
+                cmd_settings)
+
+            if not af4_valid:
+                err_msg = 'The following field(s) have invalid values:'
+
+                for err in af4_errors:
+                    err_msg = err_msg + '\n- ' + err
 
         elif cmd_settings['item_type'] == 'sec_sample':
             # Do exposure verification and hplc param verification here
@@ -4053,6 +4416,23 @@ class AutoList(utils.ItemList):
 
         return cmd_settings, valid, errors
 
+    def _validate_af4_params(self, cmd_settings):
+        # Do exposure verification and autosampler param verification here
+        cmd_settings['data_dir'] = os.path.join(cmd_settings['data_dir'],
+            cmd_settings['filename'])
+
+        cmd_settings, exp_valid, exp_errors = self._validate_exp_params(
+            cmd_settings, sec_saxs=False)
+
+        cmd_settings, coflow_valid, coflow_errors = self._validate_coflow_params(
+            cmd_settings)
+
+        valid = exp_valid and coflow_valid
+
+        errors = exp_errors + coflow_errors
+
+        return cmd_settings, valid, errors
+
     def _validate_hplc_injection_params(self, cmd_settings):
         hplc_panel = self.auto_panel.settings['instruments']['hplc']['hplc_panel']
 
@@ -4266,7 +4646,7 @@ class AutoList(utils.ItemList):
         item_type = item_info['item_type']
 
         if (item_type == 'sec_sample' or item_type == 'exposure'
-            or item_type == 'batch_sample'):
+            or item_type == 'batch_sample' or item_type == 'af4_sample'):
             command.add_check_cmd_callback(self._check_exposure_cmd)
 
         new_item = AutoListItem(self, item_type, command)
@@ -4448,6 +4828,8 @@ class AutoListItem(utils.ListItem):
             item_label = 'Stop Flow'
         elif self.item_type == 'batch_sample':
             item_label = 'Batch sample'
+        elif self.item_type == 'af4_sample':
+            item_label = 'AF4 sample'
         elif self.item_type == 'end_exp':
             item_label = 'End of Experiment'
         elif self.item_type == 'clean_cell':
@@ -4491,7 +4873,7 @@ class AutoListItem(utils.ListItem):
 
         self.text_list.extend([status_label, self.status_ctrl])
 
-        if self.item_type == 'sec_sample':
+        if self.item_type == 'sec_sample' or self.item_type == 'af4_sample':
 
             name_label = wx.StaticText(item_parent, label='Name:')
             self.name_ctrl = wx.StaticText(item_parent, label='')
@@ -4672,7 +5054,8 @@ class AutoListItem(utils.ListItem):
             child.Bind(wx.EVT_LEFT_DOWN, self._on_left_mouse_btn)
 
         # This should be moved into the list item?
-        if self.item_type == 'sec_sample' or self.item_type == 'batch_sample':
+        if (self.item_type == 'sec_sample' or self.item_type == 'batch_sample'
+            or self.item_type == 'af4_sample'):
             name = self.item_info['filename']
             descrip = self.item_info['sample_name']
             conc = self.item_info['conc']
@@ -4942,6 +5325,30 @@ class BatchSampleCmdDialog(AutoCmdDialog):
             self._selected_well = well
 
             self.sample_well.SetLabel(self._selected_well)
+
+class AF4SampleCmdDialog(AutoCmdDialog):
+    """
+    Allows addition/editing of the buffer info in the buffer list
+    """
+    def __init__(self, parent, default_settings, *args, **kwargs):
+        AutoCmdDialog.__init__(self, parent, default_settings, *args, **kwargs)
+
+    def _create_layout(self):
+        parent = self
+        top_level = self
+
+        cmd_sizer =  make_af4_saxs_info_panel(top_level, parent, self.ctrl_ids,
+            'horiz')
+
+        button_sizer = self.CreateButtonSizer(wx.OK | wx.CANCEL)
+
+        top_sizer = wx.BoxSizer(wx.VERTICAL)
+        top_sizer.Add(cmd_sizer, proportion=1, flag=wx.EXPAND|wx.ALL,
+            border=self._FromDIP(5))
+        top_sizer.Add(button_sizer ,flag=wx.BOTTOM|wx.RIGHT|wx.LEFT|wx.ALIGN_RIGHT,
+            border=self._FromDIP(5))
+
+        self.SetSizer(top_sizer)
 
 class EquilibrateDialog(AutoCmdDialog):
     """
