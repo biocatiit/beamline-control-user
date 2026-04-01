@@ -511,7 +511,7 @@ if __name__ == '__main__':
         # TR SAXS
         logger.info('Starting TRSAXS server')
 
-        ip = '164.54.204.8'
+        ip = '164.54.204.201'
         # ip = '164.54.204.24'
 
         if exp_type == 'trsaxs_chaotic':
@@ -594,7 +594,7 @@ if __name__ == '__main__':
         elif exp_type == 'trsaxs_laminar':
             # Laminar flow
             setup_pumps = [
-                {'name': 'Buffer', 'args': ['Pico Plus', 'COM11'],
+                {'name': 'Buffer', 'args': ['Pico Plus', 'COM13'],
                     'kwargs': {'syringe_id': '3 mL, Medline P.C.',
                     'pump_address': '00', 'dual_syringe': 'False'},
                     'ctrl_args': {'flow_rate' : '0.0655', 'refill_rate' : '3'}},
@@ -609,24 +609,24 @@ if __name__ == '__main__':
                 ]
 
             setup_valves = [
-                # {'name': 'Injection', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo14'],
-                #     'kwargs': {'positions' : 2}},
-                {'name': 'Injection', 'args': ['Rheodyne', 'COM16'],
+                {'name': 'Injection', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo15'],
                     'kwargs': {'positions' : 2}},
-                {'name': 'Buffer 1', 'args': ['Rheodyne', 'COM21'],
+                # {'name': 'Injection', 'args': ['Rheodyne', 'COM16'],
+                #     'kwargs': {'positions' : 2}},
+                {'name': 'Buffer 1', 'args': ['Rheodyne', 'COM6'],
                     'kwargs': {'positions' : 6}},
                 {'name': 'Buffer 2', 'args': ['Rheodyne', 'COM8'],
                     'kwargs': {'positions' : 6}},
                 {'name': 'Sample', 'args': ['Rheodyne', 'COM4'],
                     'kwargs': {'positions' : 6}},
-                {'name': 'Sheath 1', 'args': ['Rheodyne', 'COM6'],
+                {'name': 'Sheath 1', 'args': ['Rheodyne', 'COM5'],
                     'kwargs': {'positions' : 6}},
-                {'name': 'Sheath 2', 'args': ['Rheodyne', 'COM3'],
+                {'name': 'Sheath 2', 'args': ['Rheodyne', 'COM7'],
                     'kwargs': {'positions' : 6}},
                 ]
 
             setup_fms = [
-                {'name': 'outlet', 'args' : ['BFS', 'COM13'], 'kwargs': {}}
+                {'name': 'outlet', 'args' : ['BFS', 'COM3'], 'kwargs': {}}
                 ]
 
 
