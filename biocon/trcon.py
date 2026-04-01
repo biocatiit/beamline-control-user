@@ -5613,12 +5613,12 @@ default_trsaxs_settings = {
     'center_fw_height'      : 0.85,
     'center_shutter_pvs'    : [{'name': '18ID:LJT4:2:Bo6', 'open': 0, 'close': 1},
                                 {'name': '18ID:LJT4:2:Bo9', 'open': 1, 'close': 0}],
-    'center_start'          : -0.05,  # Chaotic
-    'center_stop'           : 0.05,
-    'center_step'           : 0.002,
-    # 'center_start'          : -0.15,   # Laminar
-    # 'center_stop'           : 0.15,
-    # 'center_step'           : 0.005,
+    # 'center_start'          : -0.05,  # Chaotic
+    # 'center_stop'           : 0.05,
+    # 'center_step'           : 0.002,
+    'center_start'          : -0.15,   # Laminar
+    'center_stop'           : 0.15,
+    'center_step'           : 0.005,
     'center_offset'         : 0,
     'center_mixer'          : True,
     # 'center_mixer'          : False,
@@ -5764,8 +5764,8 @@ default_trsaxs_settings = {
     'autoinject_scan'       : '5',
     'autoinject_delay'      : 0,
     'autoinject_valve_pos'  : 1,
-    'mixer_type'            : 'chaotic', # laminar or chaotic
-    # 'mixer_type'            : 'laminar', # laminar or chaotic
+    # 'mixer_type'            : 'chaotic', # laminar or chaotic
+    'mixer_type'            : 'laminar', # laminar or chaotic
     'sample_ratio'          : '0.0687', # For laminar flow
     'sheath_ratio'          : '0.0763', # For laminar flow
     'buffer_change_cycles'  : 5, # For syringe pumps

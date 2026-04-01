@@ -458,6 +458,15 @@ class ExpCommThread(threading.Thread):
 
         # cur_fprefix = '{}_{:04}'.format(fprefix, current_run)
 
+        det.stop()
+
+        while det.get_status() != 0:
+            time.sleep(0.001)
+            if self._abort_event.is_set():
+                self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6,
+                    comp_settings, exp_time)
+                break
+
         if self._settings['add_file_postfix']:
             new_fname = '{}_{}.tif'.format(fprefix, exp_start_num)
         else:
@@ -744,6 +753,13 @@ class ExpCommThread(threading.Thread):
 
         if (self._settings['detector'] == '18IDpil1M:_epics'
             or self._settings['detector'] == 'pilatus_mx'):
+            while det.get_status() != 0:
+                time.sleep(0.001)
+                if self._abort_event.is_set():
+                    self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6,
+                        comp_settings, exp_time)
+                    break
+
             det.set_filename(new_fname)
             det.arm()
 
@@ -4654,8 +4670,11 @@ class ExpPanel(wx.Panel):
             elif cmd_kwargs['item_type'] == 'batch_sample':
                 exp_type = 'Batch mode SAXS'
 
+            elif cmd_kwargs['item_type'] == 'af4_sample':
+                exp_type = 'AF4-MALS-SAXS'
+
             if (exp_type == 'SEC-SAXS' or exp_type == 'SEC-MALS-SAXS' or
-                exp_type == 'IEC-SAXS'):
+                exp_type == 'IEC-SAXS' or exp_type == 'AF4-MALS-SAXS'):
                 vol = cmd_kwargs['inj_vol']
             elif exp_type == 'Batch mode SAXS':
                 vol = cmd_kwargs['volume']
