@@ -511,23 +511,22 @@ if __name__ == '__main__':
         # TR SAXS
         logger.info('Starting TRSAXS server')
 
-        ip = '164.54.204.201'
-        # ip = '164.54.204.24'
+        ip = '164.54.204.175'
 
         if exp_type == 'trsaxs_chaotic':
             # Chaotic flow
 
             # Teledyne SSI Reaxus pumps with scaling
             setup_pumps = [
-                {'name': 'Buffer 2', 'args': ['SSI Next Gen', 'COM10'],
+                {'name': 'Buffer 2', 'args': ['SSI Next Gen', 'COM9'],
                     'kwargs': {'flow_rate_scale': 1.045,
                     'flow_rate_offset': -48.462/1000,'scale_type': 'up'},
                     'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-                {'name': 'Sample', 'args': ['SSI Next Gen', 'COM9'],
+                {'name': 'Sample', 'args': ['SSI Next Gen', 'COM10'],
                     'kwargs': {'flow_rate_scale': 1.02,
                     'flow_rate_offset': 0.1251/1000,'scale_type': 'up'},
                     'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-                {'name': 'Buffer 1', 'args': ['SSI Next Gen', 'COM7'],
+                {'name': 'Buffer 1', 'args': ['SSI Next Gen', 'COM11'],
                     'kwargs': {'flow_rate_scale': 1.03,
                     'flow_rate_offset': -19.853/1000,'scale_type': 'up'},
                     'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
@@ -543,7 +542,7 @@ if __name__ == '__main__':
                 ]
 
             setup_fms = [
-                {'name': 'outlet', 'args' : ['BFS', 'COM5'], 'kwargs': {}}
+                {'name': 'outlet', 'args' : ['BFS', 'COM15'], 'kwargs': {}}
                 ]
 
 
