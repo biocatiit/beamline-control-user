@@ -410,7 +410,7 @@ class ExpCommThread(threading.Thread):
 
         motor_cmd_q.append(('move_absolute', ('TR_motor', (x_start, y_start)), {}))
 
-        logger.debug('Waiting for detector to finish')
+        logger.debug('Clearing detector')
         start = time.monotonic()
         timeout = False
         while det.get_status() !=0 and not timeout:
@@ -423,7 +423,7 @@ class ExpCommThread(threading.Thread):
             # Is this long enough? Should it be based off of the scan/return time?
             if time.monotonic() - start > 5:
                 timeout = True
-                logger.error('Timeout while waiting for detector to finish!')
+                logger.error('Timeout while waiting for detector to abort!')
 
                 if det.get_status() !=0:
                     try:
@@ -480,7 +480,7 @@ class ExpCommThread(threading.Thread):
         det.set_exp_time(exp_time)
         det.set_exp_period(exp_period)
 
-        if scan_rearm:
+        if not scan_rearm:
             det.set_num_frames(tot_frames)
             det.set_filename(new_fname)
             det.arm()
@@ -574,7 +574,7 @@ class ExpCommThread(threading.Thread):
                     autoinject, autoinject_scan, start_autoinject_event, s_counters, log_vals,
                     x_positions, y_positions, comp_settings, tr_scan_settings)
 
-                if scan_rearm:
+                if not scan_rearm:
                     logger.debug('starting renum thread')
                     renum_t = threading.Thread(target=self.renum_scan_files,
                         args=(data_dir, fprefix, num_frames, current_run))
@@ -586,7 +586,7 @@ class ExpCommThread(threading.Thread):
 
                 logger.info('Scan %s done', current_run)
 
-            if self._settings['detector'] == '18ID:EIG2:_epics':
+            if not scan_rearm:
                 for t in renum_threads:
                     t.join()
 
@@ -719,6 +719,38 @@ class ExpCommThread(threading.Thread):
             motor_con.join(timeout=5)
         except Exception:
             pass
+
+        logger.debug('Clearing detector')
+        start = time.monotonic()
+        timeout = False
+        while det.get_status() !=0 and not timeout:
+            time.sleep(0.001)
+            if self._abort_event.is_set():
+                self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6,
+                    comp_settings, exp_time)
+                break
+
+            # Is this long enough? Should it be based off of the scan/return time?
+            if time.monotonic() - start > 5:
+                timeout = True
+                logger.error('Timeout while waiting for detector to abort!')
+
+                if det.get_status() !=0:
+                    try:
+                        det.abort()
+                    except (mp.Device_Action_Failed_Error, mp.Unparseable_String_Error):
+                        pass
+                    try:
+                        det.abort()
+                    except (mp.Device_Action_Failed_Error, mp.Unparseable_String_Error):
+                        pass
+
+        # For some reason not all the renumbering seems to be done in a timely fashion
+        # So redo it all at the end
+        if not scan_rearm:
+            for current_run in range(1,num_runs+1):
+                self.renum_scan_files(data_dir, fprefix, num_frames,
+                    current_run, wait=False)
 
         self._exp_event.clear()
 
@@ -911,7 +943,8 @@ class ExpCommThread(threading.Thread):
                 comp_settings, exp_time)
 
 
-    def renum_scan_files(self, data_dir, fprefix, num_frames, current_run):
+    def renum_scan_files(self, data_dir, fprefix, num_frames, current_run,
+        wait=True):
 
         data_dir = data_dir.replace(self._settings['remote_dir_root'],
             self._settings['local_dir_root'], 1)
@@ -937,24 +970,26 @@ class ExpCommThread(threading.Thread):
 
             full_new = os.path.join(data_dir, new_name)
 
-            if not os.path.exists(full_path):
-                start = time.monotonic()
+            if wait:
+                if not os.path.exists(full_path):
+                    start = time.monotonic()
 
-            while not os.path.exists(full_path):
-                if time.monotonic() - start > 10:
-                    timeout = True
+                while not os.path.exists(full_path):
+                    if time.monotonic() - start > 10:
+                        timeout = True
+                        break
+                        logger.debug('Timeout waiting for %s', full_path)
+                    time.sleep(0.1)
+
+                    if self._abort_event.is_set():
+                        timeout = True
+
+                if timeout:
                     break
-                    logger.debug('Timeout waiting for %s', full_path)
-                time.sleep(0.1)
 
-                if self._abort_event.is_set():
-                    timeout = True
-
-            if timeout:
-                break
-
-            logger.debug('Moving %s to %s', full_path, full_new)
-            shutil.move(full_path, full_new)
+            if os.path.exists(full_path):
+                logger.debug('Moving %s to %s', full_path, full_new)
+                shutil.move(full_path, full_new)
 
 
     def scan_exposure(self, exp_settings, comp_settings):
