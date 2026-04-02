@@ -312,6 +312,7 @@ class ExpCommThread(threading.Thread):
         data_dir = exp_settings['data_dir']
         fprefix = exp_settings['fprefix']
         num_frames = exp_settings['num_frames']
+        scan_rearm = exp_settings['scan_rearm']
 
         shutter_speed_open = exp_settings['shutter_speed_open']
         shutter_speed_close = exp_settings['shutter_speed_close']
@@ -479,12 +480,11 @@ class ExpCommThread(threading.Thread):
         det.set_exp_time(exp_time)
         det.set_exp_period(exp_period)
 
-        if self._settings['detector'] == '18ID:EIG2:_epics':
+        if scan_rearm:
             det.set_num_frames(tot_frames)
             det.set_filename(new_fname)
             det.arm()
-        elif (self._settings['detector'] == '18IDpil1M:_epics'
-            or self._settings['detector'] == 'pilatus_mx'):
+        else:
             det.set_num_frames(num_frames)
 
         # struck_mode_pv.caput(1, timeout=5)
@@ -574,7 +574,7 @@ class ExpCommThread(threading.Thread):
                     autoinject, autoinject_scan, start_autoinject_event, s_counters, log_vals,
                     x_positions, y_positions, comp_settings, tr_scan_settings)
 
-                if self._settings['detector'] == '18ID:EIG2:_epics':
+                if scan_rearm:
                     logger.debug('starting renum thread')
                     renum_t = threading.Thread(target=self.renum_scan_files,
                         args=(data_dir, fprefix, num_frames, current_run))
@@ -737,6 +737,8 @@ class ExpCommThread(threading.Thread):
         dio_out9.write(0) # Make sure the NM shutter is closed
         dio_out10.write(0) # Make sure the trigger is off
 
+        scan_rearm = exp_settings['scan_rearm']
+
         exp_start_num = '000001'
 
         cur_fprefix = '{}_{:04}'.format(fprefix, current_run)
@@ -751,8 +753,7 @@ class ExpCommThread(threading.Thread):
         struck.start()
         ab_burst.arm()
 
-        if (self._settings['detector'] == '18IDpil1M:_epics'
-            or self._settings['detector'] == 'pilatus_mx'):
+        if scan_rearm:
             while det.get_status() != 0:
                 time.sleep(0.001)
                 if self._abort_event.is_set():
@@ -3420,12 +3421,6 @@ class ExpPanel(wx.Panel):
             self._preparing_exposure = False
             return
 
-        # Do this twice as some settings get set in _check components and you
-        # want the right metdata, but check components starts some things,
-        # so you don't want to run that if the metadata is otherwise invalid
-        metadata, metadata_valid = self._get_metadata(metadata_vals, False)
-        exp_values['metadata'] = metadata
-
         cont = True
 
         if (('trsaxs_scan' in self.settings['components'] and exp_only) or
@@ -3443,6 +3438,18 @@ class ExpPanel(wx.Panel):
             return
 
         self._mono_auto_tune()
+
+        if 'trsaxs_scan' in self.settings['components'] and not exp_only:
+            trsaxs_panel = wx.FindWindowByName('trsaxs_scan')
+            trsaxs_panel.run_and_wait_for_centering()
+            trsaxs_values, trsaxs_scan_valid = trsaxs_panel.get_scan_values()
+            comp_settings['trsaxs_scan'] = trsaxs_values
+
+        # Do this twice as some settings get set in _check components and you
+        # want the right metdata, but check components starts some things,
+        # so you don't want to run that if the metadata is otherwise invalid
+        metadata, metadata_valid = self._get_metadata(metadata_vals, False)
+        exp_values['metadata'] = metadata
 
         self._pipeline_start_exp()
 
@@ -3906,6 +3913,7 @@ class ExpPanel(wx.Panel):
         scaler_log_vals = self.settings['scaler_log_vals']
         struck_measurement_time = float(self.muscle_sampling.GetValue())
         open_shutter_before_trig_cont_exp = self.settings['open_shutter_before_trig_cont_exp']
+        scan_rearm = self.settings['scan_rearm']
 
         (num_frames, exp_time, exp_period, data_dir, filename,
             wait_for_trig, num_trig, local_data_dir, struck_num_meas, valid,
@@ -3926,11 +3934,12 @@ class ExpPanel(wx.Panel):
             'shutter_speed_close'       : shutter_speed_close,
             'shutter_cycle'             : shutter_cycle,
             'shutter_pad'               : shutter_pad,
-            'scaler_log_vals'          : scaler_log_vals,
-            'mcs_log_vals'           : mcs_log_vals,
+            'scaler_log_vals'           : scaler_log_vals,
+            'mcs_log_vals'              : mcs_log_vals,
             'struck_measurement_time'   : struck_measurement_time,
             'struck_num_meas'           : struck_num_meas,
             'open_shutter_before_trig_cont_exp' : open_shutter_before_trig_cont_exp,
+            'scan_rearm'                : scan_rearm
             }
 
         return exp_values, valid
@@ -4070,9 +4079,9 @@ class ExpPanel(wx.Panel):
         if 'trsaxs_scan' in self.settings['components'] and not exp_only:
             trsaxs_panel = wx.FindWindowByName('trsaxs_scan')
             trsaxs_values, trsaxs_scan_valid = trsaxs_panel.get_scan_values()
-            if trsaxs_scan_valid:
-                trsaxs_panel.run_and_wait_for_centering()
-                trsaxs_values, trsaxs_scan_valid = trsaxs_panel.get_scan_values()
+            # if trsaxs_scan_valid:
+            #     trsaxs_panel.run_and_wait_for_centering()
+            #     trsaxs_values, trsaxs_scan_valid = trsaxs_panel.get_scan_values()
             comp_settings['trsaxs_scan'] = trsaxs_values
         else:
             trsaxs_scan_valid = True
@@ -4856,6 +4865,7 @@ default_exposure_settings = {
     'det_args'              : {}, #Allows detector specific keyword arguments
     'add_file_postfix'      : False,
     'monitor_dark'          : False,
+    'scan_rearm'            : False, #Rearm the detector between scans. If True may slow down scans
 
     # #Eiger2 XE 9M
     # 'exp_time_min'          : 0.000000050,
@@ -4872,6 +4882,7 @@ default_exposure_settings = {
     #                             'photon_energy' : 12.0, 'images_per_file': 1000}, #1 image/file for TR, 300 for equilibrium
     # 'add_file_postfix'      : False,
     # 'monitor_dark'          : False,
+    # 'scan_rearm'            : False, #Rearm the detector between scans. If True may slow down scans
 
     # # For Mar165
     # 'exp_time_min'          : 0.001,
@@ -4888,6 +4899,7 @@ default_exposure_settings = {
     # 'add_file_postfix'      : False,
     # 'monitor_dark'          : True,
     # 'dark_interval'         : 3600, #in s
+    # 'scan_rearm'            : False, #Rearm the detector between scans. If True may slow down scans
 
     # 'shutter_speed_open'    : 0.004, #in s      NM vacuum shutter, broken
     # 'shutter_speed_close'   : 0.004, # in s
