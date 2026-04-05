@@ -481,6 +481,7 @@ class ExpCommThread(threading.Thread):
         det.set_exp_period(exp_period)
 
         if not scan_rearm:
+            det.set_img_ctr(0)
             det.set_num_frames(tot_frames)
             det.set_filename(new_fname)
             det.arm()
@@ -509,7 +510,7 @@ class ExpCommThread(threading.Thread):
         # Flow stuff starts here
         if tr_flow:
             if start_condition.lower() != 'none':
-                start_flow_event.set()
+                # start_flow_event.set()
 
                 while not start_exposure_event.is_set():
                     if self._abort_event.is_set():
@@ -529,7 +530,7 @@ class ExpCommThread(threading.Thread):
                     x_positions = [tr_scan_settings['x_pco_start'] + i*tr_scan_settings['x_pco_step']
                         for i in range(num_frames)]
                 else:
-                    x_positions = [tr_scan_settings['x_pco_end'] - i*tr_scan_settings['x_pco_step']
+                    x_positions = [tr_scan_settings['x_pco_start'] - i*tr_scan_settings['x_pco_step']
                         for i in range(num_frames)]
 
                 step_start = tr_scan_settings['y_start']
@@ -545,7 +546,7 @@ class ExpCommThread(threading.Thread):
                     y_positions = [tr_scan_settings['y_pco_start'] + i*tr_scan_settings['y_pco_step']
                         for i in range(num_frames)]
                 else:
-                    y_positions = [tr_scan_settings['y_pco_end'] - i*tr_scan_settings['y_pco_step']
+                    y_positions = [tr_scan_settings['y_pco_start'] - i*tr_scan_settings['y_pco_step']
                         for i in range(num_frames)]
 
                 step_start = tr_scan_settings['x_start']
@@ -577,7 +578,7 @@ class ExpCommThread(threading.Thread):
                 if not scan_rearm:
                     logger.debug('starting renum thread')
                     renum_t = threading.Thread(target=self.renum_scan_files,
-                        args=(data_dir, fprefix, num_frames, current_run))
+                        args=(data_dir, fprefix, num_frames, current_run, det))
                     renum_t.daemon = True
                     renum_t.start()
 
@@ -750,7 +751,7 @@ class ExpCommThread(threading.Thread):
         if not scan_rearm:
             for current_run in range(1,num_runs+1):
                 self.renum_scan_files(data_dir, fprefix, num_frames,
-                    current_run, wait=False)
+                    current_run, det, wait=False)
 
         self._exp_event.clear()
 
@@ -943,13 +944,14 @@ class ExpCommThread(threading.Thread):
                 comp_settings, exp_time)
 
 
-    def renum_scan_files(self, data_dir, fprefix, num_frames, current_run,
+    def renum_scan_files(self, data_dir, fprefix, num_frames, current_run, det,
         wait=True):
 
         data_dir = data_dir.replace(self._settings['remote_dir_root'],
             self._settings['local_dir_root'], 1)
 
         f_start = (int(current_run) - 1)*num_frames + 1
+        f_end = (int(current_run) )*num_frames
 
         if self._settings['detector'] == '18ID:EIG2:_epics':
             f_list = ['{}_data_{:06d}.h5'.format(fprefix, f_start+i) for i in range(num_frames)]
@@ -959,37 +961,63 @@ class ExpCommThread(threading.Thread):
 
         timeout = False
 
-        for i, f in enumerate(f_list):
-            full_path = os.path.join(data_dir, f)
+        if wait:
+            # Waits for images to be recognized by EPICS, so that AreaDetector
+            # knows exposure status and doesn't lock up
+            start = time.monotonic()
 
-            if self._settings['detector'] == '18ID:EIG2:_epics':
-                new_name = '{}_{:04d}_data_{:06d}.h5'.format(fprefix, int(current_run), i+1)
-            elif (self._settings['detector'] == '18IDpil1M:_epics'
-                or self._settings['detector'] == 'pilatus_mx'):
-                new_name = '{}_{:04d}_{:06d}.tif'.format(fprefix, int(current_run), i+1)
+            while not det.get_img_ctr() >= f_end:
 
-            full_new = os.path.join(data_dir, new_name)
+                if time.monotonic() - start > 10:
+                    timeout = True
+                    break
+                    logger.debug('Timeout waiting for %s images to be read by EPICS',
+                        current_run)
 
-            if wait:
-                if not os.path.exists(full_path):
-                    start = time.monotonic()
-
-                while not os.path.exists(full_path):
-                    if time.monotonic() - start > 10:
-                        timeout = True
-                        break
-                        logger.debug('Timeout waiting for %s', full_path)
-                    time.sleep(0.1)
-
-                    if self._abort_event.is_set():
-                        timeout = True
-
-                if timeout:
+                if self._abort_event.is_set():
+                    timeout = True
                     break
 
-            if os.path.exists(full_path):
-                logger.debug('Moving %s to %s', full_path, full_new)
-                shutil.move(full_path, full_new)
+                time.sleep(0.1)
+
+        if not timeout:
+            timeout = False
+
+            for i, f in enumerate(f_list):
+                full_path = os.path.join(data_dir, f)
+
+                if self._settings['detector'] == '18ID:EIG2:_epics':
+                    new_name = '{}_{:04d}_data_{:06d}.h5'.format(fprefix, int(current_run), i+1)
+                elif (self._settings['detector'] == '18IDpil1M:_epics'
+                    or self._settings['detector'] == 'pilatus_mx'):
+                    new_name = '{}_{:04d}_{:06d}.tif'.format(fprefix, int(current_run), i+1)
+
+                full_new = os.path.join(data_dir, new_name)
+
+                if wait:
+                    if not os.path.exists(full_path):
+                        start = time.monotonic()
+
+                    while not os.path.exists(full_path):
+                        if time.monotonic() - start > 10:
+                            timeout = True
+                            break
+                            logger.debug('Timeout waiting for %s', full_path)
+
+                        if self._abort_event.is_set():
+                            timeout = True
+                            break
+
+                        time.sleep(0.1)
+
+                    if timeout:
+                        break
+                        logger.debug('Aborting rename thread due to timeout')
+
+                if os.path.exists(full_path):
+                    logger.debug('Moving %s to %s', full_path, full_new)
+                    shutil.move(full_path, full_new)
+                    # logger.debug('Moved %s to %s', full_path, full_new)
 
 
     def scan_exposure(self, exp_settings, comp_settings):
@@ -3297,7 +3325,7 @@ class ExpPanel(wx.Panel):
                 self.shutter_permit_pv = None
 
             if self.shutter_permit_pv is not None:
-                cbid = self.shutter_permit_pv.add_callback(self._open_a_shutter)
+                cbid = self.shutter_permit_pv.add_callback(self._open_shutter_callback)
                 self._pv_callbacks.append([self.shutter_permit_pv, cbid])
 
             fe_shutter_open_pv, connected = self._initialize_pv(self.settings['fe_shutter_open_pv'])
@@ -3472,13 +3500,30 @@ class ExpPanel(wx.Panel):
             self._preparing_exposure = False
             return
 
+        # Start trsaxs flow before centering scan (if appropriate)
+        if 'trsaxs_flow' in self.settings['components'] and not exp_only:
+            trsaxs_flow_panel = wx.FindWindowByName('trsaxs_flow')
+            trsaxs_flow_panel.prepare_for_exposure(comp_settings['trsaxs_flow'])
+
+            tr_flow_settings = comp_settings['trsaxs_flow']
+            start_condition = tr_flow_settings['start_condition']
+            start_flow_event = tr_flow_settings['start_flow_event']
+
+            if start_condition.lower() != 'none':
+                start_flow_event.set()
+                time.sleep(2) # Gives pumps a little time to ramp up before a possible centering scan
+
+        # Tune up mono intensity
         self._mono_auto_tune()
 
+        # Center mixer (if appropriate)
         if 'trsaxs_scan' in self.settings['components'] and not exp_only:
-            trsaxs_panel = wx.FindWindowByName('trsaxs_scan')
-            trsaxs_panel.run_and_wait_for_centering()
-            trsaxs_values, trsaxs_scan_valid = trsaxs_panel.get_scan_values()
-            comp_settings['trsaxs_scan'] = trsaxs_values
+            fes, ds = self._get_hutch_shutter_status()
+            if fes and ds:
+                trsaxs_panel = wx.FindWindowByName('trsaxs_scan')
+                trsaxs_panel.run_and_wait_for_centering()
+                trsaxs_values, trsaxs_scan_valid = trsaxs_panel.get_scan_values()
+                comp_settings['trsaxs_scan'] = trsaxs_values
 
         # Do this twice as some settings get set in _check components and you
         # want the right metdata, but check components starts some things,
@@ -3527,10 +3572,6 @@ class ExpPanel(wx.Panel):
             wx.CallAfter(self.scan_number.SetLabel, '1')
         else:
             wx.CallAfter(self.exp_status_sizer.Hide, self.scan_num_sizer, recursive=True)
-
-        if 'trsaxs_flow' in self.settings['components'] and not exp_only:
-            trsaxs_flow_panel = wx.FindWindowByName('trsaxs_flow')
-            trsaxs_flow_panel.prepare_for_exposure(comp_settings['trsaxs_flow'])
 
         start_thread = threading.Thread(target=self.monitor_exp_status)
         start_thread.daemon = True
@@ -4592,7 +4633,7 @@ class ExpPanel(wx.Panel):
                         break
                     time.sleep(0.5)
 
-    def _open_a_shutter(self, **kwargs):
+    def _open_a_shutter(self):
         try:
             fes_val = self.fe_shutter_pv.get(timeout=2)
 
@@ -4630,6 +4671,12 @@ class ExpPanel(wx.Panel):
                     self.fe_shutter_open_pv.put(1, timeout=2)
         except Exception:
             logger.exception('Failed to reopen A shutter.')
+
+    def _open_shutter_callback(self, **kwargs):
+        # Seems like it's not necessarily ready as soon as beam PVs indicate.
+        # So wait just a little before trying to open on callback.
+        time.sleep(5)
+        self._open_a_shutter()
 
     def automator_callback(self, cmd_name, cmd_args, cmd_kwargs):
         success = True

@@ -334,6 +334,12 @@ class EPICSEigerDetector(object):
     def set_manual_trigger(self, mode):
         self.det.put('cam1:ManualTrigger', mode, wait=True, timeout=1)
 
+    def set_img_ctr(self, val):
+        self.det.put('cam1:ArrayCounter', val, wait=True, timeout=1)
+
+    def get_img_ctr(self):
+        return self.det.get('cam1:ArrayCounter_RBV')
+
     def stop(self):
         # self.det.put("cam1:Acquire", 0, wait=True, timeout=1)
         self.det.put('cam1:Acquire', 0, timeout=1)
@@ -441,6 +447,12 @@ class EPICSPilatusDetector(object):
             tm = 0
 
         self.det.put("cam1:TriggerMode", tm, wait=True, timeout=1)
+
+    def set_img_ctr(self, val):
+        self.det.put('cam1:ArrayCounter', val, wait=True, timeout=1)
+
+    def get_img_ctr(self):
+        return self.det.get('cam1:ArrayCounter_RBV')
 
     def stop(self):
         # self.det.put("cam1:Acquire", 0, wait=True, timeout=1)
