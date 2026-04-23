@@ -403,10 +403,10 @@ if __name__ == '__main__':
     exposure_settings['shutter_pad'] = 0.002
     exposure_settings['shutter_cycle'] = 0.1
 
-    # EIGER2 XE 9M
-    exposure_settings['det_args'] =  {'use_tiff_writer': False,
-        'use_file_writer': True, 'photon_energy' : 12.0,
-        'images_per_file': 1000} #1 image/file for TR, 300 for eq SAXS, 1000 for muscle
+    # # EIGER2 XE 9M
+    # exposure_settings['det_args'] =  {'use_tiff_writer': False,
+    #     'use_file_writer': True, 'photon_energy' : 12.0,
+    #     'images_per_file': 1000} #1 image/file for TR, 300 for eq SAXS, 1000 for muscle
 
     # Muscle settings
     exposure_settings['struck_measurement_time'] = '0.001'
@@ -435,11 +435,11 @@ if __name__ == '__main__':
         # {'mx_record': 'mcs14', 'channel': 13, 'name': 'Length',
         # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
         ]
-    exposure_settings['warnings'] = {'shutter' : True, 'col_vac' : {'check': True,
-        'thresh': 0.04}, 'guard_vac' : {'check': True, 'thresh': 0.04},
+    exposure_settings['warnings'] = {'shutter' : False, 'col_vac' : {'check': False,
+        'thresh': 0.04}, 'guard_vac' : {'check': False, 'thresh': 0.04},
         'sample_vac': {'check': False, 'thresh': 0.04}, 'sc_vac':
-        {'check': True, 'thresh':0.04}}
-    exposure_settings['base_data_dir'] = '/nas_data/Eiger2x/2026_Run1/' #CHANGE ME and pipeline local_basedir
+        {'check': False, 'thresh':0.04}}
+    exposure_settings['base_data_dir'] = '/nas_data/MarCCD/2026_Run1/' #CHANGE ME and pipeline local_basedir
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']
 
 
@@ -565,14 +565,14 @@ if __name__ == '__main__':
         # ('trsaxs_scan', trcon.TRScanPanel),
         # ('trsaxs_flow', trcon.TRFlowPanel),
         # ('scan',    scancon.ScanPanel),
-        ('metadata', metadata.ParamPanel),
+        # ('metadata', metadata.ParamPanel),
         # ('pipeline', pipeline_ctrl.PipelineControl),
         # ('uv', spectrometercon.UVPanel),
         # ('hplc', biohplccon.HPLCPanel),
         # ('automator', autocon.AutoPanel),
         # ('autosampler', autosamplercon.AutosamplerPanel),
         # ('toaster', toastcon.ToasterPanel),
-        ('mono_auto_tune', monotunecon.MonoAutoTune)
+        # ('mono_auto_tune', monotunecon.MonoAutoTune)
         ])
 
     settings = {

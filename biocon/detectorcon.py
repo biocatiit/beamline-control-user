@@ -493,7 +493,7 @@ class AD_MarCCDCamera(Device):
         Device.__init__(self, prefix, delim='', mutable=False,
                               attrs=self.attrs)
 
-        self.prefix = prefix
+
 
     def ensure_value(self, attr, value, wait=False):
         """ensures that an attribute with an associated _RBV value is
@@ -552,7 +552,7 @@ class Scan(Device):
             attrs.append('D%2.2iCV' % i)
             attrs.append('D%2.2iLV' % i)
             attrs.append('D%2.2iCA' % i)
-            # attrs.append('D%2.2iDA' % i)
+            attrs.append('D%2.2iDA' % i)
 
         Device.__init__(self, name, delim='.', attrs=attrs, **kwargs)
         for attr, pv in Scan._alias.items():
@@ -857,6 +857,9 @@ class Scan(Device):
     def get_data_in_progress(self, idet):
         return self.get('D%2.2iCA' % idet)
 
+    def get_data(self, idet):
+        return self.get('D%2.2iDA' % idet)
+
     def stop(self):
         self.put('EXSC', 0, wait=False)
         self.put('EXSC', 0, wait=False)
@@ -875,6 +878,7 @@ class EPICSMarCCDDetector(object):
         """
         """
         self.det = AD_MarCCDCamera(pv_prefix)
+        self.det_prefix = pv_prefix
 
         if scan_pv:
             self.scan = Scan(scan_pv)

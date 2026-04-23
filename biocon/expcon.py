@@ -256,7 +256,7 @@ class ExpCommThread(threading.Thread):
         **kwargs):
         kwargs['metadata'] = self._add_metadata(kwargs['metadata'])
 
-        if self._settings['detector'].lower() == 'mar':
+        if 'mar' in self._settings['detector'].lower():
             self.mar_exposure(data_dir, fprefix, num_frames, exp_time, exp_period, **kwargs)
         else:
             self.fast_exposure(data_dir, fprefix, num_frames, exp_time, exp_period, **kwargs)
@@ -1646,7 +1646,7 @@ class ExpCommThread(threading.Thread):
 
     def fast_exposure(self, data_dir, fprefix, num_frames, exp_time, exp_period,
         exp_type='standard', **kwargs):
-        logger.debug('Setting up %s exposure', exp_type)
+        logger.debug('Setting up %s fast exposure', exp_type)
         det = self._mx_data['det']          #Detector
 
         struck = self._mx_data['struck']    #Struck SIS3820
@@ -1797,7 +1797,9 @@ class ExpCommThread(threading.Thread):
             cd_burst.setup(exp_period, (exp_period-(exp_time+s_open_time))/10.,
                 num_frames, exp_time+s_open_time, 1, 2)
             ef_burst.setup(exp_period, exp_time, num_frames, s_open_time, 1, 2)
-            gh_burst.setup(exp_period, uv_time/1.1, num_frames, s_open_time, 1, 2)
+            gh_burst.setup(exp_period, uv_time/1.1, num_frames, s_open_time, 1, 2) # Re-enable after CTR08 testing!!!
+            # gh_burst.setup(exp_period, (exp_period-(exp_time+s_open_time))/10., # For testing CTR08 only
+            #     num_frames, exp_time+s_open_time, 1, 2)
 
             ab_burst_2.setup(exp_period, exp_time+s_open_time, num_frames, 0, 1, 2)
             cd_burst_2.setup(exp_period, exp_time+s_open_time, num_frames, 0, 1, 2) #Irrelevant
@@ -1814,7 +1816,9 @@ class ExpCommThread(threading.Thread):
             cd_burst.setup(exp_period, (exp_period-exp_time)/10.,
                 num_frames, exp_time+(exp_period-exp_time)/10., 1, 2)
             ef_burst.setup(exp_period, exp_time, num_frames, offset, 1, 2)
-            gh_burst.setup(exp_period, uv_time/1.1, num_frames, 0, 1, 2)
+            gh_burst.setup(exp_period, uv_time/1.1, num_frames, 0, 1, 2) #Reenable after CTR08 testing!!!!!
+            # gh_burst.setup(exp_period, (exp_period-exp_time)/10.,
+            #     num_frames, exp_time+(exp_period-exp_time)/10., 1, 2) # For testing CTR08 only
 
             if exp_period*num_frames <= 1999:
                 ab_burst_2.setup(1, exp_period*num_frames, 1, 0, 1, 2)
@@ -2117,7 +2121,7 @@ class ExpCommThread(threading.Thread):
 
     def mar_exposure(self, data_dir, fprefix, num_frames, exp_time, exp_period,
         exp_type='mar', **kwargs):
-        logger.debug('Setting up %s exposure', exp_type)
+        logger.debug('Setting up %s mar exposure', exp_type)
         aborted = False
 
         det = self._mx_data['det']          #Detector
@@ -2139,6 +2143,7 @@ class ExpCommThread(threading.Thread):
 
         if take_dark and not self._abort_event.is_set():
             logger.info('Collecting dark image')
+            self.return_queue.append(['dark', None])
             dio_out6.write(1) #Close the slow normally closed xia shutter
 
             if det.get_status() !=0:
@@ -2158,8 +2163,29 @@ class ExpCommThread(threading.Thread):
                     aborted = True
                     break
 
+            start = time.monotonic()
+            while not det.get_status() and time.monotonic() - start < 3:
+                time.sleep(0.1)
+                if self._abort_event.is_set() and not aborted:
+                    self.mar_abort_cleanup(det, dio_out9, dio_out6, scaler)
+                    aborted = True
+                    break
+
+            while det.get_status():
+                time.sleep(0.1)
+                if self._abort_event.is_set() and not aborted:
+                    self.mar_abort_cleanup(det, dio_out9, dio_out6, scaler)
+                    aborted = True
+                    break
+
+            logger.debug('Done taking dark image')
+
         if take_image and not self._abort_event.is_set():
+            logger.debug('Starting standard mar data collection')
             log_vals = kwargs['scaler_log_vals']['channels']
+            for idx, log_val in enumerate(log_vals):
+                log_val['channel'] = idx #Adds compatibility with MCS readouts for writing log vals
+
             extra_vals = []
 
             det.set_exp_period(exp_period)
@@ -2170,12 +2196,18 @@ class ExpCommThread(threading.Thread):
                 log_vals, extra_vals, exp_time, exp_period,
                 num_frames, kwargs)
 
+        elif not take_image and not self._abort_event.is_set():
+            # Ends exposure in GUI without updating status to exposing
+            self._abort_event.set()
 
-        dio_out6.write(1) #Open the slow normally closed xia shutter
+
+        dio_out6.write(1) #Close the slow normally closed xia shutter
+        self._exp_event.clear()
+        logger.debug('Done with mar data collection')
 
     def _inner_mar_exposure(self, det, dio_out6, dio_out9, data_dir, fprefix,
         log_vals, extra_vals, exp_time, exp_period, num_frames, kwargs):
-
+        logger.debug('Taking mar image')
         metadata = kwargs['metadata']
         wait_for_trig = kwargs['wait_for_trig']
         scaler_pv = kwargs['scaler_log_vals']['scaler_pv']
@@ -2201,10 +2233,7 @@ class ExpCommThread(threading.Thread):
 
         # Set up detector
         cur_fprefix = fprefix
-        if self._settings['add_file_postfix']:
-            new_fname = '{}_{}.tif'.format(cur_fprefix, '00001')
-        else:
-            new_fname = cur_fprefix
+        new_fname = cur_fprefix
 
         det.set_data_dir(data_dir)
         det.set_filename(new_fname)
@@ -2223,20 +2252,20 @@ class ExpCommThread(threading.Thread):
         # Add scalers to scan
         for sc in log_vals:
             if sc['use_dark']:
-                sc_name = '{}_calc{}.VAL'.format(scaler_pv, sc['chan'])
+                sc_name = '{}_calc{}.VAL'.format(scaler_pv, sc['sc_chan'])
             else:
-                sc_name = '{}.S{}'.format(scaler_pv, sc['chan'])
+                sc_name = '{}.S{}'.format(scaler_pv, sc['sc_chan'])
 
             idet = det.scan.add_detector(sc_name)
-            scaler_dets[sc['chan']] = idet
+            scaler_dets[sc['sc_chan']] = idet
             dark_counts.append(0)
 
         # Add triggers to scan
         det.scan.add_trigger('{}.CNT'.format(scaler_pv))
-        det.scan.add_trigger('{}:cam1:Acquire'.format(det.det.prefix))
+        det.scan.add_trigger('{}cam1:Acquire'.format(det.det_prefix))
 
         # Set number of points
-        det.scan.set_points(num_frames)
+        det.scan.set_points(1)
 
         if self._abort_event.is_set():
             self.mar_abort_cleanup(det, dio_out9, dio_out6, scaler)
@@ -2257,83 +2286,79 @@ class ExpCommThread(threading.Thread):
                 self.mar_abort_cleanup(det, dio_out9, dio_out6, scaler)
             return False
 
-        # Start sscan here
-        det.scan.run()
+        start_time = 0
 
-        # After scan starts
-        metadata['Date:'] = datetime.datetime.now().isoformat(str(' '))
+        for i in range(num_frames):
 
-        self.write_log_header(data_dir, cur_fprefix, log_vals,
-            metadata, extra_vals)
+            while time.monotonic() - start_time < i*exp_period:
+                if self._abort_event.is_set():
+                    self.mar_abort_cleanup(det, dio_out9, dio_out6, scaler)
+                    return False
+                    break
 
-        logger.debug('Exposures started')
-        self._exp_event.set()
+                time.sleep(0.001)
 
-        last_meas = 0
+            # Start sscan here
+            det.scan.run()
 
-        while not det.scan.get_status():
-            if self._abort_event.is_set():
-                self.mar_abort_cleanup(det, dio_out9, dio_out6, scaler)
-                return False
-            time.sleep(0.1)
+            if i == 0:
+                # After scan starts
+                start_time = time.monotonic()
 
-        while True:
+                metadata['Date:'] = datetime.datetime.now().isoformat(str(' '))
 
-            exp_done = det.scan.get_status()
+                self.write_log_header(data_dir, cur_fprefix, log_vals,
+                    metadata, extra_vals)
 
-            if exp_done:
-                break
+                logger.debug('Exposures started')
+                self._exp_event.set()
 
-            if self._abort_event.is_set():
-                self.mar_abort_cleanup(det, dio_out9, dio_out6, scaler)
-                aborted = True
-                break
+            else:
+                cur_img_time = time.monotonic()
 
-            current_meas = det.scan.get_current_point()
+            while not det.scan.get_status():
+                if self._abort_event.is_set():
+                    self.mar_abort_cleanup(det, dio_out9, dio_out6, scaler)
+                    return False
+                time.sleep(0.1)
 
-            if current_meas != last_meas:
-                # Get scan data and put into cvals
-                cvals = []
+            while det.scan.get_current_point() != 0:
+                if self._abort_event.is_set():
+                    self.mar_abort_cleanup(det, dio_out9, dio_out6, scaler)
+                    return False
+                time.sleep(0.1)
 
-                for sc in log_vals:
-                    new_vals = det.scan.get_data_in_progress(scaler_dets[sc['chan']])
-                    cvals.append(new_vals)
+            while True:
+                exp_done = not det.scan.get_status()
 
-                    if last_meas == 0:
-                        prev_meas = -1
-                    else:
-                        prev_meas = last_meas
+                if exp_done:
+                    break
 
-                    self.append_log_counters(cvals, prev_meas, current_meas,
-                        data_dir, cur_fprefix, exp_period, num_frames,
-                        dark_counts, log_vals, extra_vals, exp_time)
+                if self._abort_event.is_set():
+                    self.mar_abort_cleanup(det, dio_out9, dio_out6, scaler)
+                    aborted = True
+                    break
 
-                    last_meas = current_meas
+                time.sleep(0.1)
 
-            time.sleep(0.1)
-
-        dio_out6.write(1) #Close the slow normally closed xia shutter
-
-        # Get final scan point as current_meas
-
-        if current_meas != last_meas:
             # Get scan data
+            logger.debug('Getting final scan data')
             cvals = []
 
             for sc in log_vals:
-                new_vals = det.scan.get_data_in_progress(scaler_dets[sc['chan']])
+                new_vals = det.scan.get_data(scaler_dets[sc['sc_chan']])
                 cvals.append(new_vals)
 
-                if last_meas == 0:
-                    prev_meas = -1
-                else:
-                    prev_meas = last_meas
+            if i == 0:
+                act_start_time = 0
+            else:
+                act_start_time = round(cur_img_time - start_time, 2)
 
-                self.append_log_counters(cvals, prev_meas, current_meas,
-                    data_dir, cur_fprefix, exp_period, num_frames,
-                    dark_counts, log_vals, extra_vals, exp_time)
+            self.append_log_counters(cvals, i-1, i,
+                data_dir, cur_fprefix, exp_period, num_frames,
+                dark_counts, log_vals, extra_vals, exp_time, act_start_time)
 
-                last_meas = current_meas
+        dio_out6.write(1) #Close the slow normally closed xia shutter
 
         if self._abort_event.is_set():
             if not aborted:
@@ -2373,7 +2398,7 @@ class ExpCommThread(threading.Thread):
 
     def append_log_counters(self, cvals, prev_meas, cur_meas, data_dir,
             fprefix, exp_period, num_frames, dark_counts, log_vals,
-            extra_vals=None, exp_time=None):
+            extra_vals=None, exp_time=None, act_exp_start=None):
         logger.debug('Appending log counters to file')
 
         if self._timeout_event.is_set():
@@ -2397,7 +2422,8 @@ class ExpCommThread(threading.Thread):
         with open(log_file, 'a') as f:
             for i in range(prev_meas+1, cur_meas+1):
                 val = self.format_log_value(i, fprefix, exp_period, cvals,
-                    log_vals, dark_counts, extra_vals, zpad, exp_time)
+                    log_vals, dark_counts, extra_vals, zpad, exp_time,
+                    act_exp_start)
 
                 f.write(val)
 
@@ -2448,14 +2474,16 @@ class ExpCommThread(threading.Thread):
         return header
 
     def format_log_value(self, index, fprefix, exp_period, cvals, log_vals, dark_counts,
-        extra_vals, zpad, exp_time=None):
+        extra_vals, zpad, exp_time=None, act_exp_start=None):
 
         if self._settings['add_file_postfix']:
             val = "{0}_{1:0{2}d}.tif".format(fprefix, index+1, zpad)
         else:
             val = "{0}_{1:0{2}d}".format(fprefix, index+1, zpad)
 
-        val = val + "\t{0}".format(exp_period*index)
+        if act_exp_start is None:
+            act_exp_start = exp_period*index
+        val = val + "\t{0}".format(act_exp_start)
 
         if exp_time is None:
             exp_time = cvals[0][index]/50.e6
@@ -3050,6 +3078,11 @@ class ExpPanel(wx.Panel):
         self.muscle_sampling = wx.TextCtrl(self, value=self.settings['struck_measurement_time'],
             size=self._FromDIP((60,-1)), validator=utils.CharValidator('float'))
 
+        if (float(self.settings['exp_period']) < (float(self.settings['exp_time'])
+            + float(self.settings['exp_period_min']))):
+            self.exp_period.SetValue(str(float(self.settings['exp_time'])
+                + float(self.settings['exp_period_min'])))
+
         if 'trsaxs_scan' in self.settings['components']:
             self.num_frames.SetValue('')
             self.num_frames.Disable()
@@ -3562,6 +3595,10 @@ class ExpPanel(wx.Panel):
                     exp_values['take_dark'] = self._check_dark(exp_values['exp_time'])
                     exp_values['take_image'] = True
 
+                if exp_values['take_dark']:
+                    self._last_dark_time = time.monotonic()
+                    self._last_dark_exp_time = copy.deepcopy(exp_values['exp_time'])
+
             self.exp_cmd_q.append(('start_exp', (), exp_values))
 
         self.set_time_remaining(self.total_time)
@@ -3697,6 +3734,8 @@ class ExpPanel(wx.Panel):
             elif status == 'exposing':
                 wx.CallAfter(self.set_status, 'Exposing')
                 wx.CallAfter(self.soft_trig.Disable)
+            elif status == 'dark':
+                wx.CallAfter(self.set_status, 'Collecting dark')
 
         return status, val
 
@@ -4070,21 +4109,23 @@ class ExpPanel(wx.Panel):
                 self.settings['exp_time_min'], self.settings['exp_time_max']))
 
         if isinstance(exp_period, float):
-            if (exp_period < self.settings['exp_period_min']
-                or exp_period > self.settings['exp_period_max']):
+            if ((exp_period < self.settings['exp_period_min']
+                or exp_period > self.settings['exp_period_max'])):
 
-                errors.append(('Exposure period (between {} and {} s, and at '
-                    'least {} s greater than the exposure time)'.format(
-                    self.settings['exp_period_min'], self.settings['exp_period_max'],
-                    self.settings['exp_period_delta'])))
+                if (isinstance(num_frames, int) and num_frames > 1):
+                    errors.append(('Exposure period (between {} and {} s, and at '
+                        'least {} s greater than the exposure time)'.format(
+                        self.settings['exp_period_min'], self.settings['exp_period_max'],
+                        self.settings['exp_period_delta'])))
 
             elif (isinstance(exp_time, float) and exp_period < exp_time
                 + self.settings['exp_period_delta']):
 
-                errors.append(('Exposure period (between {} and {} s, and at '
-                    'least {} s greater than the exposure time)'.format(
-                    self.settings['exp_period_min'], self.settings['exp_period_max'],
-                    self.settings['exp_period_delta'])))
+                if (isinstance(num_frames, int) and num_frames > 1):
+                    errors.append(('Exposure period (between {} and {} s, and at '
+                        'least {} s greater than the exposure time)'.format(
+                        self.settings['exp_period_min'], self.settings['exp_period_max'],
+                        self.settings['exp_period_delta'])))
 
         if (isinstance(exp_period, float) and isinstance(num_frames, int) and
             isinstance(struck_measurement_time, float) and self.settings['tr_muscle_exp']):
@@ -4930,7 +4971,7 @@ default_exposure_settings = {
     'run_num'               : 1,
     'exp_time'              : '0.5',
     'exp_period'            : '1',
-    'exp_num'               : '2',
+    'exp_num'               : '1',
 
     # # For Pilatus3 X 1M
     # 'exp_time_min'          : 0.00105,
@@ -4949,39 +4990,38 @@ default_exposure_settings = {
     # 'monitor_dark'          : False,
     # 'scan_rearm'            : False, #Rearm the detector between scans. If True may slow down scans
 
-    # #Eiger2 XE 9M
-    'exp_time_min'          : 0.000000050,
-    'exp_time_max'          : 3600,
-    'exp_period_min'        : 0.001785714286, #There's an 8bit undocumented mode that can go faster, in theory
-    'exp_period_max'        : 5184000, # Not clear there is a maximum, so left it at this
-    'nframes_max'           : 15000, # For Eiger: 2000000000, for Struck: 15000 (set by maxChannels in the driver configuration)
-    'nparams_max'           : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
-    'exp_period_delta'      : 0.000000200,
-    'local_dir_root'        : '/nas_data/Eiger2x',
-    'remote_dir_root'       : '/nas_data/Eiger2x',
-    'detector'              : '18ID:EIG2:_epics',
-    'det_args'              :  {'use_tiff_writer': False, 'use_file_writer': True,
-                                'photon_energy' : 12.0, 'images_per_file': 1000}, #1 image/file for TR, 300 for equilibrium
-    'add_file_postfix'      : False,
-    'monitor_dark'          : False,
-    'scan_rearm'            : False, #Rearm the detector between scans. If True may slow down scans
-
-    # # For Mar165
-    # 'exp_time_min'          : 0.001,
-    # 'exp_time_max'          : 5184000,
-    # 'exp_period_min'        : 2.5,
-    # 'exp_period_max'        : 5184000,
-    # 'nframes_max'           : 15000,
-    # 'exp_period_delta'      : 2.5,
-    # 'local_dir_root'        : '/nas_data/MarCCD',
-    # 'remote_dir_root'       : '/nas_data_mar',
-    # # 'detector'              : 'pilatus_mx',
-    # 'detector'              : 'Mar165:_epics',
-    # 'det_args'              : {'scan_pv': '18ID:Scans:scan1'}, #Allows detector specific keyword arguments
+    # # #Eiger2 XE 9M
+    # 'exp_time_min'          : 0.000000050,
+    # 'exp_time_max'          : 3600,
+    # 'exp_period_min'        : 0.001785714286, #There's an 8bit undocumented mode that can go faster, in theory
+    # 'exp_period_max'        : 5184000, # Not clear there is a maximum, so left it at this
+    # 'nframes_max'           : 15000, # For Eiger: 2000000000, for Struck: 15000 (set by maxChannels in the driver configuration)
+    # 'nparams_max'           : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
+    # 'exp_period_delta'      : 0.000000200,
+    # 'local_dir_root'        : '/nas_data/Eiger2x',
+    # 'remote_dir_root'       : '/nas_data/Eiger2x',
+    # 'detector'              : '18ID:EIG2:_epics',
+    # 'det_args'              :  {'use_tiff_writer': False, 'use_file_writer': True,
+    #                             'photon_energy' : 12.0, 'images_per_file': 1000}, #1 image/file for TR, 300 for equilibrium
     # 'add_file_postfix'      : False,
-    # 'monitor_dark'          : True,
-    # 'dark_interval'         : 3600, #in s
+    # 'monitor_dark'          : False,
     # 'scan_rearm'            : False, #Rearm the detector between scans. If True may slow down scans
+
+    # For Mar165
+    'exp_time_min'          : 0.001,
+    'exp_time_max'          : 5184000,
+    'exp_period_min'        : 4.5,
+    'exp_period_max'        : 5184000,
+    'nframes_max'           : 15000,
+    'exp_period_delta'      : 4.5,
+    'local_dir_root'        : '/nas_data/MarCCD',
+    'remote_dir_root'       : '/nas_data/MarCCD',
+    'detector'              : 'Mar165:_epics',
+    'det_args'              : {'scan_pv': '18ID:Scans:scan1'}, #Allows detector specific keyword arguments
+    'add_file_postfix'      : False,
+    'monitor_dark'          : True,
+    'dark_interval'         : 3600, #in s
+    'scan_rearm'            : False, #Rearm the detector between scans. If True may slow down scans
 
     # 'shutter_speed_open'    : 0.004, #in s      NM vacuum shutter, broken
     # 'shutter_speed_close'   : 0.004, # in s
@@ -5057,10 +5097,10 @@ default_exposure_settings = {
         ],
     'scaler_log_vals'      : {'scaler_pv': '18ID:scaler2',
         'channels':[
-        {'chan': 3, 'name': 'I0', 'scale': 1, 'offset': 0, 'use_dark': True,
+        {'sc_chan': 3, 'name': 'I0', 'scale': 1, 'offset': 0, 'use_dark': False,
             'norm_time': False},
-        {'chan': 4, 'name': 'I1', 'scale': 1, 'offset': 0, 'use_dark': True,
-        'norm_time': False},
+        {'sc_chan': 4, 'name': 'I1', 'scale': 1, 'offset': 0, 'use_dark': False,
+            'norm_time': False},
         ],},
     'warnings'              : {'shutter' : True, 'col_vac' : {'check': True,
         'thresh': 0.04}, 'guard_vac' : {'check': True, 'thresh': 0.04},
