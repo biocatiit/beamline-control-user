@@ -482,7 +482,7 @@ class AD_MarCCDCamera(Device):
              "cam1:SizeX", "cam1:SizeX_RBV", "cam1:SizeY", "cam1:SizeY_RBV",
              "cam1:TimeRemaining_RBV",
              "cam1:TriggerMode", "cam1:TriggerMode_RBV",
-             "cam1:FilePath",
+             "cam1:FilePath", 'cam1:FileTemplate',
              "cam1:AutoSave", "cam1:FileNumber", "cam1:AutoIncrement",
              )
 
@@ -884,6 +884,8 @@ class EPICSMarCCDDetector(object):
             self.scan = Scan(scan_pv)
         else:
             self.scan = None
+
+        self.det.put('cam1:FileTemplate', '%s%s_%6.6d.tif', wait=True, timeout=1)
 
     # def __repr__(self):
     #     return '{}({}, {})'.format(self.__class__.__name__, self.name, self.device)

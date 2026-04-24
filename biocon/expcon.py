@@ -5018,7 +5018,7 @@ default_exposure_settings = {
     'remote_dir_root'       : '/nas_data/MarCCD',
     'detector'              : 'Mar165:_epics',
     'det_args'              : {'scan_pv': '18ID:Scans:scan1'}, #Allows detector specific keyword arguments
-    'add_file_postfix'      : False,
+    'add_file_postfix'      : True,
     'monitor_dark'          : True,
     'dark_interval'         : 3600, #in s
     'scan_rearm'            : False, #Rearm the detector between scans. If True may slow down scans
