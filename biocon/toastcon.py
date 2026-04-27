@@ -146,7 +146,10 @@ class ToastMotorPanel(utils.DevicePanel):
             self.settings['device_data']['name']))
 
         # high_ctrl = epics.wx.PVTextCtrl(toast_box, self.settings['device_data']['kwargs']['high_pv'], size=self._FromDIP((80,-1)))
-        low_ctrl = epics.wx.PVTextCtrl(toast_box, self.low_pv, size=self._FromDIP((80,-1)))
+        # low_ctrl = epics.wx.PVTextCtrl(toast_box, self.low_pv, size=self._FromDIP((80,-1)))
+        low_ctrl = custom_epics_widgets.PVTextCtrl2(toast_box, self.low_pv,
+                dirty_timeout=None, validator=utils.CharValidator('float_te'),
+                size=self._FromDIP((80, -1)))
         high_ctrl = custom_epics_widgets.PVTextCtrl2(toast_box, self.high_pv,
                 dirty_timeout=None, validator=utils.CharValidator('float_te'),
                 size=self._FromDIP((80, -1)))
@@ -158,6 +161,7 @@ class ToastMotorPanel(utils.DevicePanel):
         egu_ctrl2 = epics.wx.PVText(toast_box, self.motor_egu_pv)
         egu_ctrl3 = epics.wx.PVText(toast_box, self.motor_egu_pv,
             size=self._FromDIP((25,-1)))
+        egu_ctrl4 = epics.wx.PVText(toast_box, self.motor_egu_pv)
 
         speed_units = wx.BoxSizer(wx.HORIZONTAL)
         speed_units.Add(egu_ctrl3)
@@ -169,6 +173,9 @@ class ToastMotorPanel(utils.DevicePanel):
         status_ctrl.SetTranslations({'0': 'Not Toasting', '1': 'Toasting'})
         status_ctrl.SetForegroundColourTranslations({'Toasting': 'forest green',
             'Not Toasting': 'red'})
+
+        self.stop_point_ctrl = wx.TextCtrl(toast_box, size=self._FromDIP((80,-1)),
+            value='0', validator=utils.CharValidator('float_te'))
 
         toast_ctrl_sizer = wx.FlexGridSizer(cols=3, hgap=self._FromDIP(5),
             vgap=self._FromDIP(5))
@@ -184,6 +191,10 @@ class ToastMotorPanel(utils.DevicePanel):
             flag=wx.ALIGN_CENTER_VERTICAL)
         toast_ctrl_sizer.Add(low_ctrl, flag=wx.ALIGN_CENTER_VERTICAL)
         toast_ctrl_sizer.Add(egu_ctrl2, flag=wx.ALIGN_CENTER_VERTICAL)
+        toast_ctrl_sizer.Add(wx.StaticText(toast_box, label='Stop point:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        toast_ctrl_sizer.Add(self.stop_point_ctrl, flag=wx.ALIGN_CENTER_VERTICAL)
+        toast_ctrl_sizer.Add(egu_ctrl4, flag=wx.ALIGN_CENTER_VERTICAL)
         toast_ctrl_sizer.Add(wx.StaticText(toast_box, label='Speed:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
         toast_ctrl_sizer.Add(self.speed_ctrl, flag=wx.ALIGN_CENTER_VERTICAL)
@@ -239,10 +250,11 @@ class ToastMotorPanel(utils.DevicePanel):
             wx.LEFT|wx.RIGHT|wx.BOTTOM, border=self._FromDIP(5))
 
         top_sizer = wx.BoxSizer(wx.VERTICAL)
-        top_sizer.Add(motor_sizer, flag=wx.EXPAND|wx.ALL, border=self._FromDIP(5))
-        top_sizer.Add(toast_sizer, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM,
+        top_sizer.Add(toast_sizer, flag=wx.EXPAND|wx.ALL,
             border=self._FromDIP(5))
         top_sizer.Add(home_sizer, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM,
+            border=self._FromDIP(5))
+        top_sizer.Add(motor_sizer, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM,
             border=self._FromDIP(5))
 
         self.SetSizer(top_sizer)
@@ -276,16 +288,38 @@ class ToastMotorPanel(utils.DevicePanel):
         self.stop_toast()
 
     def start_toast(self, wait=False):
+        logger.info('Starting motor toasting')
         self._start_home_btn.Disable()
         self._abort_home_btn.Disable()
         self.start_pv.put(1, wait=wait)
 
+    @EpicsFunction
     def stop_toast(self):
+        if self.start_pv.get(use_monitor=False) == 0:
+            logger.debug('Toasting is already stopped')
+            return
+
+        logger.info('Stopping motor toasting')
         self.start_pv.put(0)
         self.stop_pv.put(1)
         self.motor.stop()
         self._start_home_btn.Enable()
         self._abort_home_btn.Enable()
+
+        stop_pnt = self.stop_point_ctrl.GetValue()
+
+        try:
+            stop_pnt = float(stop_pnt)
+        except Exception:
+            stop_pnt = None
+
+        if stop_pnt is not None:
+            start = time.monotonic()
+            while self.motor.is_moving() and time.monotonic() - start < 1:
+                time.sleep(0.1)
+                # Waits for motor to stop moving before sending command
+            logger.debug('Moving motor to stop point')
+            self.motor.move_absolute(stop_pnt)
 
     def auto_start(self):
         auto = self.auto_toast.GetValue()
