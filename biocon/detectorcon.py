@@ -1045,9 +1045,9 @@ class EPICSSRSAmplifier(object):
         self.amp = srs570.SRS570(pv_prefix)
 
         self.sens_num_pv = self.amp.PV('sens_num')
-        self.unit_pv = self.amp.PV('sens_unt')
+        self.unit_pv = self.amp.PV('sens_unit')
 
-        gain_opts = self.gain_pv.get_ctrlvars()['enum_strs']
+        gain_opts = self.sens_num_pv.get_ctrlvars()['enum_strs']
         unit_opts = self.unit_pv.get_ctrlvars()['enum_strs']
 
         self.gain_set_lookup = {}

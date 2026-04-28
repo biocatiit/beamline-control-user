@@ -4980,38 +4980,38 @@ default_exposure_settings = {
     # 'monitor_dark'          : False,
     # 'scan_rearm'            : False, #Rearm the detector between scans. If True may slow down scans
 
-    # # #Eiger2 XE 9M
-    # 'exp_time_min'          : 0.000000050,
-    # 'exp_time_max'          : 3600,
-    # 'exp_period_min'        : 0.001785714286, #There's an 8bit undocumented mode that can go faster, in theory
-    # 'exp_period_max'        : 5184000, # Not clear there is a maximum, so left it at this
-    # 'nframes_max'           : 15000, # For Eiger: 2000000000, for Struck: 15000 (set by maxChannels in the driver configuration)
-    # 'nparams_max'           : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
-    # 'exp_period_delta'      : 0.000000200,
-    # 'local_dir_root'        : '/nas_data/Eiger2x',
-    # 'remote_dir_root'       : '/nas_data/Eiger2x',
-    # 'detector'              : '18ID:EIG2:_epics',
-    # 'det_args'              :  {'use_tiff_writer': False, 'use_file_writer': True,
-    #                             'photon_energy' : 12.0, 'images_per_file': 1000}, #1 image/file for TR, 300 for equilibrium
-    # 'add_file_postfix'      : False,
-    # 'monitor_dark'          : False,
-    # 'scan_rearm'            : False, #Rearm the detector between scans. If True may slow down scans
-
-    # For Mar165
-    'exp_time_min'          : 0.001,
-    'exp_time_max'          : 5184000,
-    'exp_period_min'        : 4.5,
-    'exp_period_max'        : 5184000,
-    'nframes_max'           : 15000,
-    'exp_period_delta'      : 4.5,
-    'local_dir_root'        : '/nas_data/MarCCD',
-    'remote_dir_root'       : '/nas_data/MarCCD',
-    'detector'              : 'Mar165:_epics',
-    'det_args'              : {'scan_pv': '18ID:Scans:scan1'}, #Allows detector specific keyword arguments
-    'add_file_postfix'      : True,
-    'monitor_dark'          : True,
-    'dark_interval'         : 3600, #in s
+    # #Eiger2 XE 9M
+    'exp_time_min'          : 0.000000050,
+    'exp_time_max'          : 3600,
+    'exp_period_min'        : 0.001785714286, #There's an 8bit undocumented mode that can go faster, in theory
+    'exp_period_max'        : 5184000, # Not clear there is a maximum, so left it at this
+    'nframes_max'           : 15000, # For Eiger: 2000000000, for Struck: 15000 (set by maxChannels in the driver configuration)
+    'nparams_max'           : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
+    'exp_period_delta'      : 0.000000200,
+    'local_dir_root'        : '/nas_data/Eiger2x',
+    'remote_dir_root'       : '/nas_data/Eiger2x',
+    'detector'              : '18ID:EIG2:_epics',
+    'det_args'              :  {'use_tiff_writer': False, 'use_file_writer': True,
+                                'photon_energy' : 12.0, 'images_per_file': 1000}, #1 image/file for TR, 300 for equilibrium
+    'add_file_postfix'      : False,
+    'monitor_dark'          : False,
     'scan_rearm'            : False, #Rearm the detector between scans. If True may slow down scans
+
+    # # For Mar165
+    # 'exp_time_min'          : 0.001,
+    # 'exp_time_max'          : 5184000,
+    # 'exp_period_min'        : 4.5,
+    # 'exp_period_max'        : 5184000,
+    # 'nframes_max'           : 15000,
+    # 'exp_period_delta'      : 4.5,
+    # 'local_dir_root'        : '/nas_data/MarCCD',
+    # 'remote_dir_root'       : '/nas_data/MarCCD',
+    # 'detector'              : 'Mar165:_epics',
+    # 'det_args'              : {'scan_pv': '18ID:Scans:scan1'}, #Allows detector specific keyword arguments
+    # 'add_file_postfix'      : True,
+    # 'monitor_dark'          : True,
+    # 'dark_interval'         : 3600, #in s
+    # 'scan_rearm'            : False, #Rearm the detector between scans. If True may slow down scans
 
     # 'shutter_speed_open'    : 0.004, #in s      NM vacuum shutter, broken
     # 'shutter_speed_close'   : 0.004, # in s
@@ -5052,7 +5052,7 @@ default_exposure_settings = {
     'c_hutch_H_pv'          : '18ID:EnvMon:C:Humid',
     'd_hutch_T_pv'          : '18ID:EnvMon:D:TempC',
     'd_hutch_H_pv'          : '18ID:EnvMon:D:Humid',
-    'use_keithley_amps'       : True,
+    'use_keithley_amps'     : False,
     'i0_gain_pv'            : '18ID_D_BPM_Gain:Level-SP',
     'c_hutch_beam_ready_pv' : 'PA:18ID:STA_C_BEAMREADY_PL',
     'a_hutch_beam_ready_pv' : 'PA:18ID:STA_A_BEAMREADY_PL',
