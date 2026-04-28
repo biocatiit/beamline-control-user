@@ -26,8 +26,8 @@ if __name__ != '__main__':
     logger = logging.getLogger(__name__)
 
 import epics
-
 from epics import Device, poll
+from epics.devices import srs570
 
 import utils
 
@@ -1036,3 +1036,47 @@ class Scaler(Device):
 
     def stop(self):
         self.put('CNT', 0, wait=False)
+
+
+class EPICSSRSAmplifier(object):
+    def __init__(self, pv_prefix):
+        """
+        """
+        self.amp = srs570.SRS570(pv_prefix)
+
+        self.sens_num_pv = self.amp.PV('sens_num')
+        self.unit_pv = self.amp.PV('sens_unt')
+
+        gain_opts = self.gain_pv.get_ctrlvars()['enum_strs']
+        unit_opts = self.unit_pv.get_ctrlvars()['enum_strs']
+
+        self.gain_set_lookup = {}
+        self.rev_gain_set_lookup = {}
+
+        for uval in unit_opts:
+            if uval == 'pA/V':
+                base = 1e-12
+            elif uval == 'nA/V':
+                base = 1e-9
+            elif uval == 'uA/V':
+                base = 1e-6
+            elif uval == 'mA/V':
+                base = 1e-3
+
+            if uval != 'mA/V':
+                for gval in gain_opts:
+                    gain = 1/(float(gval)*base)
+                    self.gain_set_lookup['{:.0E}'.format(gain)] = [uval, gval]
+                    self.rev_gain_set_lookup['{}_{}'.format(uval, gval)] = gain
+            else:
+                gain = 1/base
+                self.gain_set_lookup['{:.0E}'.format(gain)] = [uval, '1']
+                self.rev_gain_set_lookup['{}_{}'.format(uval, '1')] = gain
+
+    def get_gain(self):
+        gval = self.sens_num_pv.get(as_string=True)
+        uval = self.unit_pv.get(as_string=True)
+
+        gain = self.rev_gain_set_lookup['{}_{}'.format(uval, gval)]
+
+        return gain

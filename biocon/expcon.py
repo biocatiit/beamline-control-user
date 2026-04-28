@@ -200,11 +200,16 @@ class ExpCommThread(threading.Thread):
             'attenuators' : attenuators,
             }
 
-        if self._settings['use_old_i0_gain']:
-            mx_data['ki0'] = mx_database.get_record('ki0')
+        if self._settings['use_keithley_amps']:
+            mx_data['i0'] = mx_database.get_record('ki0')
+            mx_data['i1'] = mx_database.get_record('ki1')
+            mx_data['i2'] = mx_database.get_record('ki2')
+            mx_data['i3'] = mx_database.get_record('ki3')
         else:
-            mx_data['ki0'] = epics.get_pv(self._settings['i0_gain_pv'])
-            mx_data['ki0'].get()
+            mx_data['i0'] = detectorcon.EPICSSRSAmplifier('18ID:SR570:1:asyn_1')
+            mx_data['i1'] = detectorcon.EPICSSRSAmplifier('18ID:SR570:2:asyn_2')
+            mx_data['i2'] = detectorcon.EPICSSRSAmplifier('18ID:SR570:3:asyn_3')
+            mx_data['i3'] = detectorcon.EPICSSRSAmplifier('18ID:SR570:4:asyn_4')
 
         logger.debug("Generated mx_data")
 
@@ -2661,25 +2666,10 @@ class ExpCommThread(threading.Thread):
         return header
 
     def _add_metadata(self, metadata):
-        if self._settings['use_old_i0_gain']:
-            i0_gain = self._mx_data['ki0'].get_gain()
-        else:
-            value = self._mx_data['ki0'].get()
-            if value == 0:
-                i0_gain = 1e+07
-            elif value == 1:
-                i0_gain = 1e+06
-            elif value == 2:
-                i0_gain = 1e+05
-            elif value == 3:
-                i0_gain = 1e+04
-            elif value == 4:
-                i0_gain = 1e+02
-
-        metadata['I0 gain:'] = '{:.0e}'.format(i0_gain)
-        metadata['I1 gain:'] = '{:.0e}'.format(self._mx_data['ki1'].get_gain())
-        metadata['I2 gain:'] = '{:.0e}'.format(self._mx_data['ki2'].get_gain())
-        metadata['I3 gain:'] = '{:.0e}'.format(self._mx_data['ki3'].get_gain())
+        metadata['I0 gain:'] = '{:.0e}'.format(self._mx_data['i0'].get_gain())
+        metadata['I1 gain:'] = '{:.0e}'.format(self._mx_data['i1'].get_gain())
+        metadata['I2 gain:'] = '{:.0e}'.format(self._mx_data['i2'].get_gain())
+        metadata['I3 gain:'] = '{:.0e}'.format(self._mx_data['i3'].get_gain())
 
         atten_length = 0
         for atten in sorted(self._mx_data['attenuators'].keys()):
@@ -5062,7 +5052,7 @@ default_exposure_settings = {
     'c_hutch_H_pv'          : '18ID:EnvMon:C:Humid',
     'd_hutch_T_pv'          : '18ID:EnvMon:D:TempC',
     'd_hutch_H_pv'          : '18ID:EnvMon:D:Humid',
-    'use_old_i0_gain'       : True,
+    'use_keithley_amps'       : True,
     'i0_gain_pv'            : '18ID_D_BPM_Gain:Level-SP',
     'c_hutch_beam_ready_pv' : 'PA:18ID:STA_C_BEAMREADY_PL',
     'a_hutch_beam_ready_pv' : 'PA:18ID:STA_A_BEAMREADY_PL',
