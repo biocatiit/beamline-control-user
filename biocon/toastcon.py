@@ -325,7 +325,7 @@ class ToastMotorPanel(utils.DevicePanel):
         auto = self.auto_toast.GetValue()
 
         if auto:
-            self.start_toast(wait=True)
+            self.start_toast(wait=False)
 
         return True
 
