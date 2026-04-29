@@ -40,7 +40,7 @@ import numpy as np
 import epics
 
 import motorcon
-import detectorcon
+import devices
 import utils
 import XPS_C8_drivers as xps_drivers
 
@@ -110,7 +110,7 @@ class ExpCommThread(threading.Thread):
 
             det_args = self._settings['det_args']
 
-            det = detectorcon.MXDetector(record_name, mx_database, data_dir_root, **det_args)
+            det = devices.MXDetector(record_name, mx_database, data_dir_root, **det_args)
 
             # server_record_name = det.get_field('server_record')
             # remote_det_name = det.get_field('remote_record_name')
@@ -135,11 +135,11 @@ class ExpCommThread(threading.Thread):
             det_args = self._settings['det_args']
 
             if 'eig' in record_name.lower():
-                det = detectorcon.EPICSEigerDetector(record_name, **det_args)
+                det = devices.EPICSEigerDetector(record_name, **det_args)
             elif 'pil' in record_name.lower():
-                det = detectorcon.EPICSPilatusDetector(record_name, **det_args)
+                det = devices.EPICSPilatusDetector(record_name, **det_args)
             elif 'mar' in record_name.lower():
-                det = detectorcon.EPICSMarCCDDetector(record_name, **det_args)
+                det = devices.EPICSMarCCDDetector(record_name, **det_args)
 
         logger.debug("Got detector records")
 
@@ -156,7 +156,7 @@ class ExpCommThread(threading.Thread):
         logger.debug("Got dg645 records")
 
         if self._settigs['use_huber_atten']:
-            attenuator = detectorcon.Attenuator()
+            attenuator = devices.Attenuator()
         else:
             attenuator = {
                     1   : mx_database.get_record('di_0'),
@@ -169,7 +169,7 @@ class ExpCommThread(threading.Thread):
 
         logger.debug("Got attenuator records.")
 
-        scaler = detectorcon.Scaler(self._settings['scaler_log_vals']['scaler_pv'])
+        scaler = devices.Scaler(self._settings['scaler_log_vals']['scaler_pv'])
         logger.debug('Got scaler records.')
 
         mx_data = {'det': det,
@@ -209,13 +209,13 @@ class ExpCommThread(threading.Thread):
             mx_data['i2'] = mx_database.get_record('ki2')
             mx_data['i3'] = mx_database.get_record('ki3')
         else:
-            mx_data['i0'] = detectorcon.EPICSSRSAmplifier('18ID:SR570:1:asyn_1')
-            mx_data['i1'] = detectorcon.EPICSSRSAmplifier('18ID:SR570:2:asyn_2')
-            mx_data['i2'] = detectorcon.EPICSSRSAmplifier('18ID:SR570:3:asyn_3')
-            mx_data['i3'] = detectorcon.EPICSSRSAmplifier('18ID:SR570:4:asyn_4')
+            mx_data['i0'] = devices.EPICSSRSAmplifier('18ID:SR570:1:asyn_1')
+            mx_data['i1'] = devices.EPICSSRSAmplifier('18ID:SR570:2:asyn_2')
+            mx_data['i2'] = devices.EPICSSRSAmplifier('18ID:SR570:3:asyn_3')
+            mx_data['i3'] = devices.EPICSSRSAmplifier('18ID:SR570:4:asyn_4')
 
         if self._settings['use_huber_atten']:
-            mx_data['slow_shutter'] = detectorcon.EPICSPVWrapper('18ID:HUBER1:A1Out')
+            mx_data['slow_shutter'] = devices.EPICSPVWrapper('18ID:HUBER1:A1Out')
         else:
             mx_data['slow_shutter'] = mx_data['dio'][6]
 
