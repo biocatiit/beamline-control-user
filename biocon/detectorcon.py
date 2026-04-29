@@ -1080,3 +1080,78 @@ class EPICSSRSAmplifier(object):
         gain = self.rev_gain_set_lookup['{}_{}'.format(uval, gval)]
 
         return gain
+
+class EPICSPVWrapper(object):
+    """
+    Wraps a pyepics PV in syntax compatible with MP records
+    """
+    def __init(self, pv_name):
+        self.pv = epics.get_pv(pv_name)
+
+    def write(self, val, wait=False):
+        self.pv.put(val, wait=wait)
+
+    def read(self):
+        self.pv.get()
+
+class Attenuator(object):
+    """
+    Huber attenuator
+    """
+    def __init__(self):
+        logger.debug('Initializing Huber attenuator')
+        self.atten_length = 256.568 #256.568 is Al attenuation length at 12 keV
+
+        self.attenuator_position = [1, 2, 3, 4, 5, 6, 7, 8]
+        self.atten_pvs = {}
+
+
+        for atten in self.attenuator_position:
+            huber_pv_list = [
+                '18ID:HUBER1:A{}Out'.format(atten),
+                '18ID:HUBER1:T{}'.format(atten),
+                '18ID:HUBER1:L{}'.format(atten),
+                ]
+
+            self.atten_pvs[atten] = {}
+
+            for pv_name in huber_pv_list:
+                pv = epics.get_pv(pv_name)
+                connected = pv.wait_for_connection(5)
+
+                if not connected:
+                    logger.error('Failed to connect to EPICS PV %s on startup', pv_name)
+
+                else:
+                    if 'Out' in pv_name:
+                        self.atten_pvs[atten]['ctrl'] = pv
+                    elif 'T{}'.format(atten) in pv_name:
+                        self.atten_pvs[atten]['thickness'] = pv
+                    elif 'L{}'.format(atten) in pv_name:
+                        self.atten_pvs[atten]['material'] = pv
+
+        self.attenuator_thickness = {}
+
+        for atten in self.atten_pvs:
+            if self.atten_pvs[atten]['material'].get().lower() == 'al':
+                self.attenuator_thickness[atten] = float(self.atten_pvs[atten]['thickness'].get())
+                #thickness in microns
+
+    def get_attenuation(self):
+        length = 0
+        for atten in self.attenuator_thickness:
+            pv = self.atten_pvs[atten]['ctrl']
+            if pv.get():
+                length += self.attenuator_thickness[atten]
+
+        current_atten = math.exp(-length/self.atten_length)
+
+        return current_atten
+
+    def get_attenuator_status(self, pos):
+        return self.atten_pvs[atten]['ctrl'].get()
+
+    def get_attenuator_def(self, pos):
+        material = self.atten_pvs[atten]['material'].get()
+        thickness = self.atten_pvs[atten]['thickness'].get()
+        return material, thickness

@@ -155,14 +155,17 @@ class ExpCommThread(threading.Thread):
 
         logger.debug("Got dg645 records")
 
-        attenuators = {
-                1   : mx_database.get_record('di_0'),
-                2   : mx_database.get_record('di_1'),
-                4   : mx_database.get_record('di_2'),
-                8   : mx_database.get_record('di_3'),
-                16  : mx_database.get_record('di_4'),
-                32  : mx_database.get_record('di_5'),
-            }
+        if self._settigs['use_huber_atten']:
+            attenuator = detectorcon.Attenuator()
+        else:
+            attenuator = {
+                    1   : mx_database.get_record('di_0'),
+                    2   : mx_database.get_record('di_1'),
+                    4   : mx_database.get_record('di_2'),
+                    8   : mx_database.get_record('di_3'),
+                    16  : mx_database.get_record('di_4'),
+                    32  : mx_database.get_record('di_5'),
+                }
 
         logger.debug("Got attenuator records.")
 
@@ -197,7 +200,7 @@ class ExpCommThread(threading.Thread):
             'ki3'   : mx_database.get_record('ki3'),
             'mx_db' : mx_database,
             'motors'  : {},
-            'attenuators' : attenuators,
+            'attenuator' : attenuator,
             }
 
         if self._settings['use_keithley_amps']:
@@ -210,6 +213,11 @@ class ExpCommThread(threading.Thread):
             mx_data['i1'] = detectorcon.EPICSSRSAmplifier('18ID:SR570:2:asyn_2')
             mx_data['i2'] = detectorcon.EPICSSRSAmplifier('18ID:SR570:3:asyn_3')
             mx_data['i3'] = detectorcon.EPICSSRSAmplifier('18ID:SR570:4:asyn_4')
+
+        if self._settings['use_huber_atten']:
+            mx_data['slow_shutter'] = detectorcon.EPICSPVWrapper('18ID:HUBER1:A1Out')
+        else:
+            mx_data['slow_shutter'] = mx_data['dio'][6]
 
         logger.debug("Generated mx_data")
 
@@ -303,7 +311,7 @@ class ExpCommThread(threading.Thread):
         gh_burst = self._mx_data['gh_burst']
         # dg645_trigger_source = self._mx_data['dg645_trigger_source']
 
-        dio_out6 = self._mx_data['dio'][6]      #Xia/wharberton shutter N.C.
+        slow_shutter = self._mx_data['slow_shutter']#Huber or Xia/wharberton shutter N.C.
         dio_out9 = self._mx_data['dio'][9]      #Shutter control signal (alt.)
         dio_out10 = self._mx_data['dio'][10]    #SRS DG645 trigger
 
@@ -421,7 +429,7 @@ class ExpCommThread(threading.Thread):
         while det.get_status() !=0 and not timeout:
             time.sleep(0.001)
             if self._abort_event.is_set():
-                self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6,
+                self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, slow_shutter,
                     comp_settings, exp_time)
                 break
 
@@ -469,7 +477,7 @@ class ExpCommThread(threading.Thread):
         while det.get_status() != 0:
             time.sleep(0.001)
             if self._abort_event.is_set():
-                self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6,
+                self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, slow_shutter,
                     comp_settings, exp_time)
                 break
 
@@ -519,7 +527,7 @@ class ExpCommThread(threading.Thread):
 
                 while not start_exposure_event.is_set():
                     if self._abort_event.is_set():
-                        self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6,
+                        self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, slow_shutter,
                             comp_settings, exp_time)
                         break
                     time.sleep(0.001)
@@ -572,7 +580,7 @@ class ExpCommThread(threading.Thread):
                 self.return_queue.append(['scan', current_run])
 
                 self._inner_tr_exp(det, exp_time, exp_period, exp_settings,
-                    data_dir, fprefix, num_frames, current_run, struck, ab_burst, dio_out6,
+                    data_dir, fprefix, num_frames, current_run, struck, ab_burst, slow_shutter,
                     dio_out9, dio_out10, wait_for_trig, motor, motor_type, pco_direction,
                     x_motor, y_motor, vect_scan_speed, vect_scan_accel, vect_return_speed,
                     vect_return_accel, x_start, y_start, x_end, y_end, next_x, next_y,
@@ -693,7 +701,7 @@ class ExpCommThread(threading.Thread):
                     step_fprefix = '{}_s{:03}'.format(fprefix, step_num+1)
 
                     self._inner_tr_exp(det, exp_time, exp_period, exp_settings,
-                        data_dir, step_fprefix, num_frames, current_run, struck, ab_burst, dio_out6,
+                        data_dir, step_fprefix, num_frames, current_run, struck, ab_burst, slow_shutter,
                         dio_out9, dio_out10, wait_for_trig, motor, motor_type, pco_direction,
                         x_motor, y_motor, vect_scan_speed, vect_scan_accel, vect_return_speed,
                         vect_return_accel, step_x_start, step_y_start, step_x_end, step_y_end,
@@ -714,7 +722,7 @@ class ExpCommThread(threading.Thread):
 
         while motor.is_moving():
             if self._abort_event.is_set():
-                self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6,
+                self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, slow_shutter,
                     comp_settings, exp_time)
                 break
 
@@ -732,7 +740,7 @@ class ExpCommThread(threading.Thread):
         while det.get_status() !=0 and not timeout:
             time.sleep(0.001)
             if self._abort_event.is_set():
-                self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6,
+                self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, slow_shutter,
                     comp_settings, exp_time)
                 break
 
@@ -761,7 +769,7 @@ class ExpCommThread(threading.Thread):
         self._exp_event.clear()
 
     def _inner_tr_exp(self, det, exp_time, exp_period, exp_settings,
-        data_dir, fprefix, num_frames, current_run, struck, ab_burst, dio_out6,
+        data_dir, fprefix, num_frames, current_run, struck, ab_burst, slow_shutter,
         dio_out9, dio_out10, wait_for_trig, motor, motor_type, pco_direction,
         x_motor, y_motor, vect_scan_speed, vect_scan_accel, vect_return_speed,
         vect_return_accel, x_start, y_start, x_end, y_end, next_x, next_y,
@@ -786,7 +794,7 @@ class ExpCommThread(threading.Thread):
         else:
             new_fname = cur_fprefix
 
-        dio_out6.write(0) #Open the slow normally closed xia shutter
+        slow_shutter.write(0) #Open the slow shutter
 
         struck.start()
         ab_burst.arm()
@@ -795,7 +803,7 @@ class ExpCommThread(threading.Thread):
             while det.get_status() != 0:
                 time.sleep(0.001)
                 if self._abort_event.is_set():
-                    self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6,
+                    self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, slow_shutter,
                         comp_settings, exp_time)
                     break
 
@@ -817,13 +825,13 @@ class ExpCommThread(threading.Thread):
 
         while motor.is_moving():
             if self._abort_event.is_set():
-                self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6,
+                self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, slow_shutter,
                     comp_settings, exp_time)
                 break
             time.sleep(0.001)
 
         if self._abort_event.is_set():
-            self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6,
+            self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, slow_shutter,
                 comp_settings, exp_time)
             return
 
@@ -877,13 +885,13 @@ class ExpCommThread(threading.Thread):
 
         while motor.is_moving():
             if self._abort_event.is_set():
-                self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6,
+                self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, slow_shutter,
                     comp_settings, exp_time)
                 break
 
             time.sleep(0.001)
 
-        dio_out6.write(1) #Close the slow normally closed xia shutter
+        slow_shutter.write(1) #Close the slow shutter
 
         if motor_type == 'Newport_XPS':
             if pco_direction == 'x':
@@ -940,12 +948,12 @@ class ExpCommThread(threading.Thread):
         # while det.get_status() != 0:
         #     time.sleep(0.001)
         #     if self._abort_event.is_set():
-        #         self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6,
+        #         self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, slow_shutter,
         #             comp_settings, exp_time)
         #         break
 
         if self._abort_event.is_set():
-            self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, dio_out6,
+            self.tr_abort_cleanup(det, struck, ab_burst, dio_out9, slow_shutter,
                 comp_settings, exp_time)
 
 
@@ -1045,7 +1053,7 @@ class ExpCommThread(threading.Thread):
 
         ab_burst_2 = None
 
-        dio_out6 = self._mx_data['dio'][6]      #Xia/wharberton shutter N.C.
+        slow_shutter = self._mx_data['slow_shutter']#Huber or Xia/wharberton shutter N.C.
         dio_out9 = self._mx_data['dio'][9]      #Shutter control signal (alt.)
         dio_out10 = self._mx_data['dio'][10]    #SRS DG645 trigger
 
@@ -1183,7 +1191,7 @@ class ExpCommThread(threading.Thread):
 
     #         ab_burst = self._mx_data['ab_burst']   #Shutter control signal
 
-    #         dio_out6 = self._mx_data['dio'][6]      #Xia/wharberton shutter N.C.
+    #         slow_shutter = self._mx_data['slow_shutter']#Huber or Xia/wharberton shutter N.C.
     #         dio_out9 = self._mx_data['dio'][9]      #Shutter control signal (alt.)
     #         dio_out10 = self._mx_data['dio'][10]    #SRS DG645 trigger
 
@@ -1276,7 +1284,7 @@ class ExpCommThread(threading.Thread):
 
 
     #             finished = self._inner_fast_exp(det,
-    #             struck, ab_burst, ab_burst_2, dio_out6, dio_out9, dio_out10,
+    #             struck, ab_burst, ab_burst_2, slow_shutter, dio_out9, dio_out10,
     #             continuous_exp, wait_for_trig, exp_type, data_dir, new_fname,
     #             cur_fprefix, log_vals, extra_vals, dark_counts, cur_trig, exp_time,
     #             exp_period, num_frames, struck_num_meas, struck_meas_time, kwargs)
@@ -1345,7 +1353,7 @@ class ExpCommThread(threading.Thread):
 
             ab_burst_2 = None
 
-            dio_out6 = self._mx_data['dio'][6]      #Xia/wharberton shutter N.C.
+            slow_shutter = self._mx_data['slow_shutter']#Huber or Xia/wharberton shutter N.C.
             dio_out9 = self._mx_data['dio'][9]      #Shutter control signal (alt.)
             dio_out10 = self._mx_data['dio'][10]    #SRS DG645 trigger
 
@@ -1464,7 +1472,7 @@ class ExpCommThread(threading.Thread):
 
             extra_vals.append(['m{}'.format(motor_num), np.array(log_positions)])
 
-            dio_out6.write(0) #Open the slow normally closed xia shutter
+            slow_shutter.write(0) #Open the slow shutter
 
             ab_burst.get_status() #Maybe need to clear this status?
 
@@ -1519,7 +1527,7 @@ class ExpCommThread(threading.Thread):
                     ab_burst_2.arm()
 
                 self.wait_for_trigger(wait_for_trig, cur_trig, exp_time, ab_burst,
-                    ab_burst_2, det, struck, dio_out6, dio_out9, dio_out10)
+                    ab_burst_2, det, struck, slow_shutter, dio_out9, dio_out10)
 
                 start_time = time.monotonic()
 
@@ -1536,7 +1544,7 @@ class ExpCommThread(threading.Thread):
 
                 if self._abort_event.is_set():
                     self.fast_mode_abort_cleanup(det, struck, ab_burst, ab_burst_2,
-                        dio_out9, dio_out6, exp_time)
+                        dio_out9, slow_shutter, exp_time)
                     aborted = True
                     return False
 
@@ -1557,7 +1565,7 @@ class ExpCommThread(threading.Thread):
                             logger.error(("Exposure aborted because current exposure "
                                 "status could not be verified"))
                         self.fast_mode_abort_cleanup(det, struck, ab_burst, ab_burst_2,
-                            dio_out9, dio_out6, exp_time)
+                            dio_out9, slow_shutter, exp_time)
                         aborted = True
                         break
 
@@ -1590,7 +1598,7 @@ class ExpCommThread(threading.Thread):
                 while time.monotonic() - start_time < num_frames*exp_period:
                     if self._abort_event.is_set() and not aborted:
                         self.fast_mode_abort_cleanup(det, struck, ab_burst, ab_burst_2,
-                            dio_out9, dio_out6, exp_time)
+                            dio_out9, slow_shutter, exp_time)
                         aborted = True
                         break
 
@@ -1598,7 +1606,7 @@ class ExpCommThread(threading.Thread):
                     break
 
         if len(scan_motors) == 0: # Base case
-            dio_out6.write(1) #Close the slow normally closed xia shutter
+            slow_shutter.write(1) #Close the slow shutter
 
             if exp_type != 'muscle':
                 current_meas = struck.get_last_measurement_number()
@@ -1629,7 +1637,7 @@ class ExpCommThread(threading.Thread):
                 time.sleep(0.001)
                 if self._abort_event.is_set() and not aborted:
                     self.fast_mode_abort_cleanup(det, struck, ab_burst, ab_burst_2,
-                        dio_out9, dio_out6, exp_time)
+                        dio_out9, slow_shutter, exp_time)
                     aborted = True
                     break
 
@@ -1638,7 +1646,7 @@ class ExpCommThread(threading.Thread):
             if self._abort_event.is_set():
                 if not aborted:
                     self.fast_mode_abort_cleanup(det, struck, ab_burst, ab_burst_2,
-                        dio_out9, dio_out6, exp_time)
+                        dio_out9, slow_shutter, exp_time)
                     aborted = True
                 return False
 
@@ -1684,7 +1692,7 @@ class ExpCommThread(threading.Thread):
         ef_burst_2 = self._mx_data['ef_burst_2']
         gh_burst_2 = self._mx_data['gh_burst_2']
 
-        dio_out6 = self._mx_data['dio'][6]      #Xia/wharberton shutter N.C.
+        slow_shutter = self._mx_data['slow_shutter']#Huber or Xia/wharberton shutter N.C.
         dio_out9 = self._mx_data['dio'][9]      #Shutter control signal (alt.)
         dio_out10 = self._mx_data['dio'][10]    #SRS DG645 trigger
 
@@ -1859,7 +1867,7 @@ class ExpCommThread(threading.Thread):
                 new_fname = cur_fprefix
 
             finished = self._inner_fast_exp(det,
-                struck, ab_burst, ab_burst_2, dio_out6, dio_out9, dio_out10,
+                struck, ab_burst, ab_burst_2, slow_shutter, dio_out9, dio_out10,
                 continuous_exp, wait_for_trig, exp_type, data_dir, new_fname,
                 cur_fprefix, log_vals, extra_vals, dark_counts, cur_trig, exp_time,
                 exp_period, num_frames, struck_num_meas, struck_meas_time, kwargs)
@@ -1871,7 +1879,7 @@ class ExpCommThread(threading.Thread):
         self._exp_event.clear()
 
     def wait_for_trigger(self, wait_for_trig, cur_trig, exp_time, ab_burst,
-        ab_burst_2, det, struck, dio_out6, dio_out9, dio_out10):
+        ab_burst_2, det, struck, slow_shutter, dio_out9, dio_out10):
         if not wait_for_trig:
             logger.debug("Sending trigger")
             dio_out10.write(1)
@@ -1890,7 +1898,7 @@ class ExpCommThread(threading.Thread):
 
                 if self._abort_event.is_set():
                     self.fast_mode_abort_cleanup(det, struck, ab_burst, ab_burst_2,
-                        dio_out9, dio_out6, exp_time)
+                        dio_out9, slow_shutter, exp_time)
                     break
 
                 if det.get_status() == 0:
@@ -1944,7 +1952,7 @@ class ExpCommThread(threading.Thread):
         return ret_status, timeouts
 
     def _inner_fast_exp(self, det, struck, ab_burst,
-        ab_burst_2, dio_out6, dio_out9, dio_out10, continuous_exp, wait_for_trig,
+        ab_burst_2, slow_shutter, dio_out9, dio_out10, continuous_exp, wait_for_trig,
         exp_type, data_dir, new_fname, cur_fprefix, log_vals, extra_vals,
         dark_counts, cur_trig, exp_time, exp_period, num_frames, struck_num_meas,
         struck_meas_time, kwargs):
@@ -1982,7 +1990,7 @@ class ExpCommThread(threading.Thread):
         det.set_data_dir(data_dir)
         det.set_filename(new_fname)
 
-        dio_out6.write(0) #Open the slow normally closed xia shutter
+        slow_shutter.write(0) #Open the slow shutter
 
         ab_burst.get_status() #Maybe need to clear this status?
 
@@ -2003,11 +2011,11 @@ class ExpCommThread(threading.Thread):
         time.sleep(1)
 
         real_start_time = self.wait_for_trigger(wait_for_trig, cur_trig, exp_time, ab_burst,
-            ab_burst_2, det, struck, dio_out6, dio_out9, dio_out10)
+            ab_burst_2, det, struck, slow_shutter, dio_out9, dio_out10)
 
         if self._abort_event.is_set():
             self.fast_mode_abort_cleanup(det, struck, ab_burst, ab_burst_2,
-                dio_out9, dio_out6, exp_time)
+                dio_out9, slow_shutter, exp_time)
             aborted = True
             return False
 
@@ -2045,7 +2053,7 @@ class ExpCommThread(threading.Thread):
                     logger.error(("Exposure aborted because current exposure "
                         "status could not be verified"))
                 self.fast_mode_abort_cleanup(det, struck, ab_burst, ab_burst_2,
-                    dio_out9, dio_out6, exp_time)
+                    dio_out9, slow_shutter, exp_time)
                 aborted = True
                 break
 
@@ -2075,7 +2083,7 @@ class ExpCommThread(threading.Thread):
         if continuous_exp:
             dio_out9.write(0)
 
-        dio_out6.write(1) #Close the slow normally closed xia shutter
+        slow_shutter.write(1) #Close the slow shutter
 
         if exp_type != 'muscle':
             current_meas = struck.get_last_measurement_number()
@@ -2109,7 +2117,7 @@ class ExpCommThread(threading.Thread):
             time.sleep(0.001)
             if self._abort_event.is_set() and not aborted:
                 self.fast_mode_abort_cleanup(det, struck, ab_burst, ab_burst_2,
-                    dio_out9, dio_out6, exp_time)
+                    dio_out9, slow_shutter, exp_time)
                 aborted = True
                 break
 
@@ -2118,7 +2126,7 @@ class ExpCommThread(threading.Thread):
         if self._abort_event.is_set():
             if not aborted:
                 self.fast_mode_abort_cleanup(det, struck, ab_burst, ab_burst_2,
-                    dio_out9, dio_out6, exp_time)
+                    dio_out9, slow_shutter, exp_time)
                 aborted = True
             return False
 
@@ -2134,7 +2142,7 @@ class ExpCommThread(threading.Thread):
         take_image = kwargs['take_image']
         scaler = self._mx_data['scaler']
 
-        dio_out6 = self._mx_data['dio'][6]      #Xia/wharberton shutter N.C.
+        slow_shutter = self._mx_data['slow_shutter']#Huber or Xia/wharberton shutter N.C.
         dio_out9 = self._mx_data['dio'][9]      #Shutter control signal (alt.)
 
         # det.set_duration_mode(num_frames)
@@ -2149,7 +2157,7 @@ class ExpCommThread(threading.Thread):
         if take_dark and not self._abort_event.is_set():
             logger.info('Collecting dark image')
             self.return_queue.append(['dark', None])
-            dio_out6.write(1) #Close the slow normally closed xia shutter
+            slow_shutter.write(1) #Close the slow shutter
 
             if det.get_status() !=0:
                 det.stop()
@@ -2158,13 +2166,13 @@ class ExpCommThread(threading.Thread):
             det.set_frame_type('bg')
             det.set_file_auto_save(False)
 
-            time.sleep(0.1) #Wait to be sure xia shutter is closed
+            time.sleep(0.1) #Wait to be sure slow shutter is closed
             det.arm()
 
             while det.get_status():
                 time.sleep(0.1)
                 if self._abort_event.is_set() and not aborted:
-                    self.mar_abort_cleanup(det, dio_out9, dio_out6, scaler)
+                    self.mar_abort_cleanup(det, dio_out9, slow_shutter, scaler)
                     aborted = True
                     break
 
@@ -2172,14 +2180,14 @@ class ExpCommThread(threading.Thread):
             while not det.get_status() and time.monotonic() - start < 3:
                 time.sleep(0.1)
                 if self._abort_event.is_set() and not aborted:
-                    self.mar_abort_cleanup(det, dio_out9, dio_out6, scaler)
+                    self.mar_abort_cleanup(det, dio_out9, slow_shutter, scaler)
                     aborted = True
                     break
 
             while det.get_status():
                 time.sleep(0.1)
                 if self._abort_event.is_set() and not aborted:
-                    self.mar_abort_cleanup(det, dio_out9, dio_out6, scaler)
+                    self.mar_abort_cleanup(det, dio_out9, slow_shutter, scaler)
                     aborted = True
                     break
 
@@ -2197,7 +2205,7 @@ class ExpCommThread(threading.Thread):
             det.set_frame_type('normal')
             det.set_file_auto_save(True)
 
-            self._inner_mar_exposure(det, dio_out6, dio_out9, data_dir, fprefix,
+            self._inner_mar_exposure(det, slow_shutter, dio_out9, data_dir, fprefix,
                 log_vals, extra_vals, exp_time, exp_period,
                 num_frames, kwargs)
 
@@ -2206,11 +2214,11 @@ class ExpCommThread(threading.Thread):
             self._abort_event.set()
 
 
-        dio_out6.write(1) #Close the slow normally closed xia shutter
+        slow_shutter.write(1) #Close the slow shutter
         self._exp_event.clear()
         logger.debug('Done with mar data collection')
 
-    def _inner_mar_exposure(self, det, dio_out6, dio_out9, data_dir, fprefix,
+    def _inner_mar_exposure(self, det, slow_shutter, dio_out9, data_dir, fprefix,
         log_vals, extra_vals, exp_time, exp_period, num_frames, kwargs):
         logger.debug('Taking mar image')
         metadata = kwargs['metadata']
@@ -2221,7 +2229,7 @@ class ExpCommThread(threading.Thread):
         aborted = False
 
         if self._abort_event.is_set():
-            self.mar_abort_cleanup(det, dio_out9, dio_out6, scaler)
+            self.mar_abort_cleanup(det, dio_out9, slow_shutter, scaler)
             return False
 
         if det.get_status() !=0:
@@ -2234,7 +2242,7 @@ class ExpCommThread(threading.Thread):
             except (mp.Device_Action_Failed_Error, mp.Unparseable_String_Error):
                 pass
 
-        dio_out6.write(0) #Open the slow normally closed xia shutter
+        slow_shutter.write(0) #Open the slow shutter
 
         # Set up detector
         cur_fprefix = fprefix
@@ -2273,7 +2281,7 @@ class ExpCommThread(threading.Thread):
         det.scan.set_points(1)
 
         if self._abort_event.is_set():
-            self.mar_abort_cleanup(det, dio_out9, dio_out6, scaler)
+            self.mar_abort_cleanup(det, dio_out9, slow_shutter, scaler)
             return False
 
         if wait_for_trig:
@@ -2282,13 +2290,13 @@ class ExpCommThread(threading.Thread):
             while not self._mar_trigger.is_set():
                 time.sleep(0.001)
                 if self._abort_event.is_set():
-                    self.mar_abort_cleanup(det, dio_out9, dio_out6, scaler)
+                    self.mar_abort_cleanup(det, dio_out9, slow_shutter, scaler)
                     aborted = True
                     break
 
         if self._abort_event.is_set():
             if not aborted:
-                self.mar_abort_cleanup(det, dio_out9, dio_out6, scaler)
+                self.mar_abort_cleanup(det, dio_out9, slow_shutter, scaler)
             return False
 
         start_time = 0
@@ -2297,7 +2305,7 @@ class ExpCommThread(threading.Thread):
 
             while time.monotonic() - start_time < i*exp_period:
                 if self._abort_event.is_set():
-                    self.mar_abort_cleanup(det, dio_out9, dio_out6, scaler)
+                    self.mar_abort_cleanup(det, dio_out9, slow_shutter, scaler)
                     return False
                     break
 
@@ -2323,13 +2331,13 @@ class ExpCommThread(threading.Thread):
 
             while not det.scan.get_status():
                 if self._abort_event.is_set():
-                    self.mar_abort_cleanup(det, dio_out9, dio_out6, scaler)
+                    self.mar_abort_cleanup(det, dio_out9, slow_shutter, scaler)
                     return False
                 time.sleep(0.1)
 
             while det.scan.get_current_point() != 0:
                 if self._abort_event.is_set():
-                    self.mar_abort_cleanup(det, dio_out9, dio_out6, scaler)
+                    self.mar_abort_cleanup(det, dio_out9, slow_shutter, scaler)
                     return False
                 time.sleep(0.1)
 
@@ -2340,7 +2348,7 @@ class ExpCommThread(threading.Thread):
                     break
 
                 if self._abort_event.is_set():
-                    self.mar_abort_cleanup(det, dio_out9, dio_out6, scaler)
+                    self.mar_abort_cleanup(det, dio_out9, slow_shutter, scaler)
                     aborted = True
                     break
 
@@ -2363,11 +2371,11 @@ class ExpCommThread(threading.Thread):
                 data_dir, cur_fprefix, exp_period, num_frames,
                 dark_counts, log_vals, extra_vals, exp_time, act_start_time)
 
-        dio_out6.write(1) #Close the slow normally closed xia shutter
+        slow_shutter.write(1) #Close the slow shutter
 
         if self._abort_event.is_set():
             if not aborted:
-                self.mar_abort_cleanup(det, dio_out9, dio_out6, scaler)
+                self.mar_abort_cleanup(det, dio_out9, slow_shutter, scaler)
             return False
 
         return True
@@ -2671,21 +2679,40 @@ class ExpCommThread(threading.Thread):
         metadata['I2 gain:'] = '{:.0e}'.format(self._mx_data['i2'].get_gain())
         metadata['I3 gain:'] = '{:.0e}'.format(self._mx_data['i3'].get_gain())
 
-        atten_length = 0
-        for atten in sorted(self._mx_data['attenuators'].keys()):
-            atten_in = not self._mx_data['attenuators'][atten].read()
-            if atten_in:
-                atten_str = 'In'
-            else:
-                atten_str = 'Out'
+        if self._settings['use_huber_atten']:
+            att = self._mx_data['attenuator']
 
-            metadata['Attenuator, {} foil:'.format(atten)] = atten_str
+            for i in range(2,9):
+                mat, thick = att.get_attenuator_def(i)
+                atten_in = att.get_attenuator_status(i)
 
-            if atten_in:
-                atten_length = atten_length + atten
-        atten_length = 20*atten_length
+                if atten_in:
+                    atten_str = 'In'
+                else:
+                    atten_str = 'Out'
 
-        atten = np.exp(-atten_length/256.568) #256.568 is Al attenuation length at 12 keV
+                metadata['Attenuator {}, {} um {}:'.format(i, thick, mat)] = atten_str
+
+            atten = att.get_attenuation()
+
+
+        else:
+            atten_length = 0
+            for att in sorted(self._mx_data['attenuator'].keys()):
+                atten_in = not self._mx_data['attenuator'][att].read()
+                if atten_in:
+                    atten_str = 'In'
+                else:
+                    atten_str = 'Out'
+
+                metadata['Attenuator, {} foil:'.format(att)] = atten_str
+
+                if atten_in:
+                    atten_length = atten_length + att
+
+            atten_length = 20*atten_length
+
+            atten = np.exp(-atten_length/256.568) #256.568 is Al attenuation length at 12 keV
 
         if atten > 0.1:
             atten = '{}'.format(round(atten, 3))
@@ -2803,7 +2830,7 @@ class ExpCommThread(threading.Thread):
 
 
     def fast_mode_abort_cleanup(self, det, struck, ab_burst, ab_burst_2, dio_out9,
-        dio_out6, exp_time):
+        slow_shutter, exp_time):
         logger.info("Aborting fast exposure")
         if exp_time < 60:
             logger.debug('Aborting detector')
@@ -2836,9 +2863,9 @@ class ExpCommThread(threading.Thread):
 
         logger.debug('Closing shutters')
         dio_out9.write(0) #Close the fast shutter
-        dio_out6.write(1) #Close the slow normally closed xia shutter
+        slow_shutter.write(1) #Close the slow shutter
 
-    def mar_abort_cleanup(self, det, dio_out9, dio_out6, scaler):
+    def mar_abort_cleanup(self, det, dio_out9, slow_shutter, scaler):
         logger.info('Aborting mar exposure')
 
         logger.debug('Aborting scan')
@@ -2852,9 +2879,9 @@ class ExpCommThread(threading.Thread):
 
         logger.debug('Closing shutters')
         dio_out9.write(0) #Close the fast shutter
-        dio_out6.write(1) #Close the slow normally closed xia shutter
+        slow_shutter.write(1) #Close the slow shutter
 
-    def tr_abort_cleanup(self, det, struck, ab_burst, dio_out9, dio_out6,
+    def tr_abort_cleanup(self, det, struck, ab_burst, dio_out9, slow_shutter,
         comp_settings, exp_time):
         logger.info("Aborting trsaxs exposure")
 
@@ -2880,7 +2907,7 @@ class ExpCommThread(threading.Thread):
         struck.stop()
         ab_burst.stop()
         dio_out9.write(0) #Close the fast shutter
-        dio_out6.write(1) #Close the slow normally closed xia shutter
+        slow_shutter.write(1) #Close the slow shutter
 
         if 'trsaxs_scan' in comp_settings:
             tr_scan_settings = comp_settings['trsaxs_scan']
@@ -2924,7 +2951,7 @@ class ExpCommThread(threading.Thread):
         ab_burst = self._mx_data['ab_burst']   #Shutter control signal
         ab_burst_2 = self._mx_data['ab_burst_2']   #Shutter control signal
 
-        dio_out6 = self._mx_data['dio'][6]      #Xia/wharberton shutter N.C.
+        slow_shutter = self._mx_data['slow_shutter']#Huber or Xia/wharberton shutter N.C.
         dio_out9 = self._mx_data['dio'][9]      #Shutter control signal (alt.)
         dio_out10 = self._mx_data['dio'][10]    #SRS DG645 trigger
         dio_out11 = self._mx_data['dio'][11]    #Struck LNE/channel advance signal (alt.)
@@ -2942,7 +2969,7 @@ class ExpCommThread(threading.Thread):
         scaler.stop()
         ab_burst.stop()
         ab_burst_2.stop()
-        dio_out6.write(1) #Close the slow normally closed xia shutter]
+        slow_shutter.write(1) #Close the slow shutter
         dio_out9.write(0) #Close the fast shutter
         dio_out10.write(0)
         dio_out11.write(0)
@@ -5052,8 +5079,8 @@ default_exposure_settings = {
     'c_hutch_H_pv'          : '18ID:EnvMon:C:Humid',
     'd_hutch_T_pv'          : '18ID:EnvMon:D:TempC',
     'd_hutch_H_pv'          : '18ID:EnvMon:D:Humid',
-    'use_keithley_amps'     : False,
-    'i0_gain_pv'            : '18ID_D_BPM_Gain:Level-SP',
+    'use_keithley_amps'     : False, #Use old Keithley amps or new SRS amps for metadata
+    'use_huber_atten'       : True, #Use new Huber attenuator or old XIA atten. for slow shutter and metadata
     'c_hutch_beam_ready_pv' : 'PA:18ID:STA_C_BEAMREADY_PL',
     'a_hutch_beam_ready_pv' : 'PA:18ID:STA_A_BEAMREADY_PL',
     'shutter_permit_pv'     : 'XFD:ShutterPermit',
