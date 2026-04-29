@@ -155,7 +155,7 @@ class ExpCommThread(threading.Thread):
 
         logger.debug("Got dg645 records")
 
-        if self._settigs['use_huber_atten']:
+        if self._settings['use_huber_atten']:
             attenuator = devices.Attenuator()
         else:
             attenuator = {
@@ -3039,12 +3039,6 @@ class ExpPanel(wx.Panel):
         self.timeout_event = threading.Event()
         self.mar_trigger = threading.Event()
 
-        self.exp_con = ExpCommThread(self.exp_cmd_q, self.exp_ret_q, self.abort_event,
-            self.exp_event, self.timeout_event, self.settings, self.mar_trigger, 'ExpCon')
-        self.exp_con.start()
-
-        # self.exp_con = None #For testing purposes
-
         self.current_exposure_values = {}
         self._last_dark_time = 0
         self._last_dark_exp_time = 0
@@ -3057,6 +3051,13 @@ class ExpPanel(wx.Panel):
         self.SetSizer(self.top_sizer)
 
         self._initialize()
+
+        # Initialize the exposur thread after connecting PVs in the main thread
+        self.exp_con = ExpCommThread(self.exp_cmd_q, self.exp_ret_q, self.abort_event,
+            self.exp_event, self.timeout_event, self.settings, self.mar_trigger, 'ExpCon')
+        self.exp_con.start()
+
+        # self.exp_con = None #For testing purposes
 
     def _FromDIP(self, size):
         # This is a hack to provide easy back compatibility with wxpython < 4.1

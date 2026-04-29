@@ -21,6 +21,7 @@
 import copy
 import time
 import logging
+import math
 
 if __name__ != '__main__':
     logger = logging.getLogger(__name__)
@@ -78,7 +79,7 @@ class Detector(object):
 
 class MXDetector(Detector):
     def __init__(self, record, mx_database, data_dir_root):
-
+        logger.debug('Connecting MXDetector %s', record)
         self.record_name = record
 
         self.det = mx_database.get_record('pilatus')
@@ -218,6 +219,8 @@ class EPICSEigerDetector(object):
         use_file_writer = True, photon_energy = 12.0, images_per_file=100):
         """
         """
+        logger.debug('Connecting EPICSEigerDetector %s', pv_prefix)
+
         self.det = AD_EigerCamera(pv_prefix)
 
         self.use_tiff_writer = use_tiff_writer
@@ -394,6 +397,8 @@ class EPICSPilatusDetector(object):
     def __init__(self, pv_prefix):
         """
         """
+        logger.debug('Connecting EPICSPilatusDetector %s', pv_prefix)
+
         self.det = AD_PilatusCamera(pv_prefix)
 
         # self.det.put('cam1:PhotonEnergy', photon_energy*1000, wait=True, timeout=1)
@@ -540,6 +545,8 @@ class Scan(Device):
 
         name: The name of the scan record.
         """
+        logger.debug('Connecting EPICS Scan %s', name)
+
         attrs = list(self.attrs)
         for i in range(1, NUM_POSITIONERS+1):
             for a in self.pos_attrs:
@@ -877,6 +884,8 @@ class EPICSMarCCDDetector(object):
     def __init__(self, pv_prefix, scan_pv=''):
         """
         """
+        logger.debug('Connecting EPICSMarCCDDetector %s', pv_prefix)
+
         self.det = AD_MarCCDCamera(pv_prefix)
         self.det_prefix = pv_prefix
 
@@ -974,6 +983,8 @@ class Scaler(Device):
     _nonpvs = ('_prefix', '_pvs', '_delim', '_nchan', '_chans')
 
     def __init__(self, prefix, nchan=8):
+        logger.debug('Connecting Scaler %s', prefix)
+
         self._nchan  = nchan
         self._chans = range(1, nchan+1)
 
@@ -1042,6 +1053,8 @@ class EPICSSRSAmplifier(object):
     def __init__(self, pv_prefix):
         """
         """
+        logger.debug('Connecting EPICSSRSAmplifier %s', pv_prefix)
+
         self.amp = srs570.SRS570(pv_prefix)
 
         self.sens_num_pv = self.amp.PV('sens_num')
@@ -1085,7 +1098,8 @@ class EPICSPVWrapper(object):
     """
     Wraps a pyepics PV in syntax compatible with MP records
     """
-    def __init(self, pv_name):
+    def __init__(self, pv_name):
+        self._pv_name = pv_name
         self.pv = epics.get_pv(pv_name)
 
     def write(self, val, wait=False):
@@ -1099,7 +1113,7 @@ class Attenuator(object):
     Huber attenuator
     """
     def __init__(self):
-        logger.debug('Initializing Huber attenuator')
+        logger.debug('Connecting Huber attenuator')
         self.atten_length = 256.568 #256.568 is Al attenuation length at 12 keV
 
         self.attenuator_position = [1, 2, 3, 4, 5, 6, 7, 8]
@@ -1149,9 +1163,9 @@ class Attenuator(object):
         return current_atten
 
     def get_attenuator_status(self, pos):
-        return self.atten_pvs[atten]['ctrl'].get()
+        return self.atten_pvs[pos]['ctrl'].get()
 
     def get_attenuator_def(self, pos):
-        material = self.atten_pvs[atten]['material'].get()
-        thickness = self.atten_pvs[atten]['thickness'].get()
+        material = self.atten_pvs[pos]['material'].get()
+        thickness = self.atten_pvs[pos]['thickness'].get()
         return material, thickness
