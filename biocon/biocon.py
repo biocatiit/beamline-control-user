@@ -44,6 +44,7 @@ import autocon
 import autosamplercon
 import toastcon
 import monotunecon
+import airshotcon
 
 class BioFrame(wx.Frame):
     """
@@ -191,6 +192,10 @@ class BioFrame(wx.Frame):
 
             if 'toaster' in component_sizers:
                 exp_sizer.Add(component_sizers['toaster'], border=self._FromDIP(5),
+                    flag=wx.EXPAND|wx.ALL)
+
+            if 'airshot' in component_sizers:
+                exp_sizer.Add(component_sizers['airshot'], border=self._FromDIP(5),
                     flag=wx.EXPAND|wx.ALL)
 
             panel_sizer.Add(exp_sizer, flag=wx.EXPAND)
@@ -557,6 +562,10 @@ if __name__ == '__main__':
     # Mono Auto Tune Settings
     mono_auto_tune_settings = monotunecon.default_mono_tune_settings
 
+    ###################################################################
+    # Air Shot Settings
+    airshot_settings = airshotcon.default_airshot_settings
+
     biocon_settings = {}
 
     components = OrderedDict([
@@ -573,6 +582,7 @@ if __name__ == '__main__':
         # ('autosampler', autosamplercon.AutosamplerPanel),
         # ('toaster', toastcon.ToasterPanel),
         # ('mono_auto_tune', monotunecon.MonoAutoTune)
+        # ('airshot', airshotcon.AirShotPanel)
         ])
 
     settings = {
@@ -589,6 +599,7 @@ if __name__ == '__main__':
         'autosampler'   : autosampler_settings,
         'toaster'       : toaster_settings,
         'mono_auto_tune': mono_auto_tune_settings,
+        'airshot'       : airshot_settings,
         'components'    : components,
         'biocon'        : biocon_settings,
         }

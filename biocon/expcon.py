@@ -1544,7 +1544,7 @@ class ExpCommThread(threading.Thread):
 
                 if self._abort_event.is_set():
                     self.fast_mode_abort_cleanup(det, struck, ab_burst, ab_burst_2,
-                        dio_out9, slow_shutter, exp_time)
+                        dio_out9, slow_shutter, exp_time, kwargs)
                     aborted = True
                     return False
 
@@ -1565,7 +1565,7 @@ class ExpCommThread(threading.Thread):
                             logger.error(("Exposure aborted because current exposure "
                                 "status could not be verified"))
                         self.fast_mode_abort_cleanup(det, struck, ab_burst, ab_burst_2,
-                            dio_out9, slow_shutter, exp_time)
+                            dio_out9, slow_shutter, exp_time, kwargs)
                         aborted = True
                         break
 
@@ -1598,7 +1598,7 @@ class ExpCommThread(threading.Thread):
                 while time.monotonic() - start_time < num_frames*exp_period:
                     if self._abort_event.is_set() and not aborted:
                         self.fast_mode_abort_cleanup(det, struck, ab_burst, ab_burst_2,
-                            dio_out9, slow_shutter, exp_time)
+                            dio_out9, slow_shutter, exp_time, kwargs)
                         aborted = True
                         break
 
@@ -1637,7 +1637,7 @@ class ExpCommThread(threading.Thread):
                 time.sleep(0.001)
                 if self._abort_event.is_set() and not aborted:
                     self.fast_mode_abort_cleanup(det, struck, ab_burst, ab_burst_2,
-                        dio_out9, slow_shutter, exp_time)
+                        dio_out9, slow_shutter, exp_time, kwargs)
                     aborted = True
                     break
 
@@ -1646,7 +1646,7 @@ class ExpCommThread(threading.Thread):
             if self._abort_event.is_set():
                 if not aborted:
                     self.fast_mode_abort_cleanup(det, struck, ab_burst, ab_burst_2,
-                        dio_out9, slow_shutter, exp_time)
+                        dio_out9, slow_shutter, exp_time, kwargs)
                     aborted = True
                 return False
 
@@ -1898,7 +1898,7 @@ class ExpCommThread(threading.Thread):
 
                 if self._abort_event.is_set():
                     self.fast_mode_abort_cleanup(det, struck, ab_burst, ab_burst_2,
-                        dio_out9, slow_shutter, exp_time)
+                        dio_out9, slow_shutter, exp_time, kwargs)
                     break
 
                 if det.get_status() == 0:
@@ -2008,6 +2008,31 @@ class ExpCommThread(threading.Thread):
                 open_shutter_before_trig_cont_exp):
                 dio_out9.write(1)
 
+        if 'airshot' in kwargs:
+            logger.debug('Moving in-air shot motors to out position')
+            motors = []
+            for vals in kwargs['airshot']:
+                auto_move, out_pos, in_pos, motor = vals
+
+                if auto_move:
+                    motor.move_absolute(dist)
+                    motors.append(out_pos)
+                    start = time.monotonic()
+
+                    while not motor.is_moving() and time.monotonic() - start < 1:
+                        time.sleep(0.025)
+
+            if len(motors) > 0:
+                for motor in motors:
+                    while motor.is_moving() and not self._abort_event.is_set():
+                        time.sleep(0.05)
+
+                        if self._abort_event.is_set():
+                            self.fast_mode_abort_cleanup(det, struck, ab_burst, ab_burst_2,
+                                dio_out9, slow_shutter, exp_time, kwargs)
+                            aborted = True
+                            return False
+
         time.sleep(1)
 
         real_start_time = self.wait_for_trigger(wait_for_trig, cur_trig, exp_time, ab_burst,
@@ -2015,7 +2040,7 @@ class ExpCommThread(threading.Thread):
 
         if self._abort_event.is_set():
             self.fast_mode_abort_cleanup(det, struck, ab_burst, ab_burst_2,
-                dio_out9, slow_shutter, exp_time)
+                dio_out9, slow_shutter, exp_time, kwargs)
             aborted = True
             return False
 
@@ -2053,7 +2078,7 @@ class ExpCommThread(threading.Thread):
                     logger.error(("Exposure aborted because current exposure "
                         "status could not be verified"))
                 self.fast_mode_abort_cleanup(det, struck, ab_burst, ab_burst_2,
-                    dio_out9, slow_shutter, exp_time)
+                    dio_out9, slow_shutter, exp_time, kwargs)
                 aborted = True
                 break
 
@@ -2084,6 +2109,14 @@ class ExpCommThread(threading.Thread):
             dio_out9.write(0)
 
         slow_shutter.write(1) #Close the slow shutter
+
+        if 'airshot' in kwargs:
+            logger.debug('Moving in-air shot motors back to starting position')
+            for vals in kwargs['airshot']:
+                auto_move, out_pos, in_pos, motor = vals
+
+                if auto_move:
+                    motor.move_absolute(in_pos)
 
         if exp_type != 'muscle':
             current_meas = struck.get_last_measurement_number()
@@ -2117,7 +2150,7 @@ class ExpCommThread(threading.Thread):
             time.sleep(0.001)
             if self._abort_event.is_set() and not aborted:
                 self.fast_mode_abort_cleanup(det, struck, ab_burst, ab_burst_2,
-                    dio_out9, slow_shutter, exp_time)
+                    dio_out9, slow_shutter, exp_time, kwargs)
                 aborted = True
                 break
 
@@ -2126,7 +2159,7 @@ class ExpCommThread(threading.Thread):
         if self._abort_event.is_set():
             if not aborted:
                 self.fast_mode_abort_cleanup(det, struck, ab_burst, ab_burst_2,
-                    dio_out9, slow_shutter, exp_time)
+                    dio_out9, slow_shutter, exp_time, kwargs)
                 aborted = True
             return False
 
@@ -2172,7 +2205,8 @@ class ExpCommThread(threading.Thread):
             while det.get_status():
                 time.sleep(0.1)
                 if self._abort_event.is_set() and not aborted:
-                    self.mar_abort_cleanup(det, dio_out9, slow_shutter, scaler)
+                    self.mar_abort_cleanup(det, dio_out9, slow_shutter,
+                        scaler, kwargs)
                     aborted = True
                     break
 
@@ -2180,14 +2214,16 @@ class ExpCommThread(threading.Thread):
             while not det.get_status() and time.monotonic() - start < 3:
                 time.sleep(0.1)
                 if self._abort_event.is_set() and not aborted:
-                    self.mar_abort_cleanup(det, dio_out9, slow_shutter, scaler)
+                    self.mar_abort_cleanup(det, dio_out9, slow_shutter,
+                        scaler, kwargs)
                     aborted = True
                     break
 
             while det.get_status():
                 time.sleep(0.1)
                 if self._abort_event.is_set() and not aborted:
-                    self.mar_abort_cleanup(det, dio_out9, slow_shutter, scaler)
+                    self.mar_abort_cleanup(det, dio_out9, slow_shutter,
+                        scaler, kwargs)
                     aborted = True
                     break
 
@@ -2229,7 +2265,8 @@ class ExpCommThread(threading.Thread):
         aborted = False
 
         if self._abort_event.is_set():
-            self.mar_abort_cleanup(det, dio_out9, slow_shutter, scaler)
+            self.mar_abort_cleanup(det, dio_out9, slow_shutter,
+                scaler, kwargs)
             return False
 
         if det.get_status() !=0:
@@ -2281,8 +2318,34 @@ class ExpCommThread(threading.Thread):
         det.scan.set_points(1)
 
         if self._abort_event.is_set():
-            self.mar_abort_cleanup(det, dio_out9, slow_shutter, scaler)
+            self.mar_abort_cleanup(det, dio_out9, slow_shutter,
+                scaler, kwargs)
             return False
+
+        if 'airshot' in kwargs:
+            logger.debug('Moving in-air shot motors to out position')
+            motors = []
+            for vals in kwargs['airshot']:
+                auto_move, out_pos, in_pos, motor = vals
+
+                if auto_move:
+                    motor.move_absolute(dist)
+                    motors.append(out_pos)
+                    start = time.monotonic()
+
+                    while not motor.is_moving() and time.monotonic() - start < 1:
+                        time.sleep(0.025)
+
+            if len(motors) > 0:
+                for motor in motors:
+                    while motor.is_moving() and not self._abort_event.is_set():
+                        time.sleep(0.05)
+
+                        if self._abort_event.is_set():
+                            self.mar_abort_cleanup(det, dio_out9, slow_shutter,
+                                scaler, kwargs)
+                            aborted = True
+                            return False
 
         if wait_for_trig:
             logger.info("Waiting for trigger")
@@ -2290,13 +2353,15 @@ class ExpCommThread(threading.Thread):
             while not self._mar_trigger.is_set():
                 time.sleep(0.001)
                 if self._abort_event.is_set():
-                    self.mar_abort_cleanup(det, dio_out9, slow_shutter, scaler)
+                    self.mar_abort_cleanup(det, dio_out9, slow_shutter,
+                        scaler, kwargs)
                     aborted = True
                     break
 
         if self._abort_event.is_set():
             if not aborted:
-                self.mar_abort_cleanup(det, dio_out9, slow_shutter, scaler)
+                self.mar_abort_cleanup(det, dio_out9, slow_shutter,
+                    scaler, kwargs)
             return False
 
         start_time = 0
@@ -2305,9 +2370,9 @@ class ExpCommThread(threading.Thread):
 
             while time.monotonic() - start_time < i*exp_period:
                 if self._abort_event.is_set():
-                    self.mar_abort_cleanup(det, dio_out9, slow_shutter, scaler)
+                    self.mar_abort_cleanup(det, dio_out9, slow_shutter,
+                        scaler, kwargs)
                     return False
-                    break
 
                 time.sleep(0.001)
 
@@ -2331,13 +2396,15 @@ class ExpCommThread(threading.Thread):
 
             while not det.scan.get_status():
                 if self._abort_event.is_set():
-                    self.mar_abort_cleanup(det, dio_out9, slow_shutter, scaler)
+                    self.mar_abort_cleanup(det, dio_out9, slow_shutter,
+                        scaler, kwargs)
                     return False
                 time.sleep(0.1)
 
             while det.scan.get_current_point() != 0:
                 if self._abort_event.is_set():
-                    self.mar_abort_cleanup(det, dio_out9, slow_shutter, scaler)
+                    self.mar_abort_cleanup(det, dio_out9, slow_shutter,
+                        scaler, kwargs)
                     return False
                 time.sleep(0.1)
 
@@ -2348,7 +2415,8 @@ class ExpCommThread(threading.Thread):
                     break
 
                 if self._abort_event.is_set():
-                    self.mar_abort_cleanup(det, dio_out9, slow_shutter, scaler)
+                    self.mar_abort_cleanup(det, dio_out9, slow_shutter,
+                        scaler, kwargs)
                     aborted = True
                     break
 
@@ -2373,9 +2441,18 @@ class ExpCommThread(threading.Thread):
 
         slow_shutter.write(1) #Close the slow shutter
 
+        if 'airshot' in kwargs:
+            logger.debug('Moving in-air shot motors back to starting position')
+            for vals in kwargs['airshot']:
+                auto_move, out_pos, in_pos, motor = vals
+
+                if auto_move:
+                    motor.move_absolute(in_pos)
+
         if self._abort_event.is_set():
             if not aborted:
-                self.mar_abort_cleanup(det, dio_out9, slow_shutter, scaler)
+                self.mar_abort_cleanup(det, dio_out9, slow_shutter,
+                    scaler, kwargs)
             return False
 
         return True
@@ -2830,7 +2907,7 @@ class ExpCommThread(threading.Thread):
 
 
     def fast_mode_abort_cleanup(self, det, struck, ab_burst, ab_burst_2, dio_out9,
-        slow_shutter, exp_time):
+        slow_shutter, exp_time, kwargs):
         logger.info("Aborting fast exposure")
         if exp_time < 60:
             logger.debug('Aborting detector')
@@ -2865,6 +2942,14 @@ class ExpCommThread(threading.Thread):
         dio_out9.write(0) #Close the fast shutter
         slow_shutter.write(1) #Close the slow shutter
 
+        if 'airshot' in kwargs:
+            logger.debug('Moving in-air shot motors back to starting position')
+            for vals in kwargs['airshot']:
+                auto_move, out_pos, in_pos, motor = vals
+
+                if auto_move:
+                    motor.move_absolute(in_pos)
+
     def mar_abort_cleanup(self, det, dio_out9, slow_shutter, scaler):
         logger.info('Aborting mar exposure')
 
@@ -2880,6 +2965,14 @@ class ExpCommThread(threading.Thread):
         logger.debug('Closing shutters')
         dio_out9.write(0) #Close the fast shutter
         slow_shutter.write(1) #Close the slow shutter
+
+        if 'airshot' in kwargs:
+            logger.debug('Moving in-air shot motors back to starting position')
+            for vals in kwargs['airshot']:
+                auto_move, out_pos, in_pos, motor = vals
+
+                if auto_move:
+                    motor.move_absolute(in_pos)
 
     def tr_abort_cleanup(self, det, struck, ab_burst, dio_out9, slow_shutter,
         comp_settings, exp_time):
@@ -3537,6 +3630,9 @@ class ExpPanel(wx.Panel):
 
         cont = True
 
+        if 'airshot' in self.settings['components']:
+            exp_values['airshot'] comp_settings['airshot']
+
         if (('trsaxs_scan' in self.settings['components'] and exp_only) or
             ('scan' in self.settings['components'] and exp_only)):
             msg = ("Only exposures will be taken, no scan will be done. Are you sure you want to continue?")
@@ -4193,8 +4289,6 @@ class ExpPanel(wx.Panel):
             else:
                 struck_num_meas = 0
 
-
-
             valid = True
 
         return (num_frames, exp_time, exp_period, data_dir, filename,
@@ -4250,6 +4344,12 @@ class ExpPanel(wx.Panel):
         else:
             toaster_started = True
 
+        if 'airshot' in self.settings['components']:
+            airshot_panel = wx.FindWindowByName('airshot')
+            airshot_values, airshot_valid = airshot_panel.get_airshot_values()
+            comp_settings['airshot'] = airshot_values
+
+
         if not coflow_started:
             msg = ('Coflow failed to start, so exposure has been canceled. '
                 'Please correct the errors then start the exposure again.')
@@ -4263,6 +4363,7 @@ class ExpPanel(wx.Panel):
 
             wx.CallAfter(wx.MessageBox, msg, 'Error starting toasting',
                 style=wx.OK|wx.ICON_ERROR)
+
 
         if ('trsaxs_scan' in self.settings['components'] and 'trsaxs_flow' in self.settings['components']
             and trsaxs_scan_valid and trsaxs_flow_valid and not exp_only):
@@ -4281,7 +4382,10 @@ class ExpPanel(wx.Panel):
             if (self.current_exposure_values['exp_period']
                 - self.current_exposure_values['exp_time'] < 0.01):
                 errors.append(('Exposure period must be at least 0.01 s longer '
-                    'than exposure time with UV data collection'))
+                    'than exposure time with UV data collection.'))
+
+        if not airshot_valid:
+            errors.append('Air shot translation distance must be a number.')
 
         if len(errors) > 0 and verbose:
             msg = 'The following field(s) have invalid values:'
@@ -4298,7 +4402,7 @@ class ExpPanel(wx.Panel):
             valid = True
         else:
             valid = (coflow_started and trsaxs_scan_valid and trsaxs_flow_valid
-                and scan_valid and uv_valid and toaster_started)
+                and scan_valid and uv_valid and toaster_started and airshot_valid)
 
         return valid, comp_settings
 
