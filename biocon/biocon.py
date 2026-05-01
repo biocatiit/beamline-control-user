@@ -582,7 +582,7 @@ if __name__ == '__main__':
         # ('autosampler', autosamplercon.AutosamplerPanel),
         # ('toaster', toastcon.ToasterPanel),
         # ('mono_auto_tune', monotunecon.MonoAutoTune)
-        # ('airshot', airshotcon.AirShotPanel)
+        ('airshot', airshotcon.AirShotPanel)
         ])
 
     settings = {

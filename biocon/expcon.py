@@ -1527,7 +1527,7 @@ class ExpCommThread(threading.Thread):
                     ab_burst_2.arm()
 
                 self.wait_for_trigger(wait_for_trig, cur_trig, exp_time, ab_burst,
-                    ab_burst_2, det, struck, slow_shutter, dio_out9, dio_out10)
+                    ab_burst_2, det, struck, slow_shutter, dio_out9, dio_out10, kwargs)
 
                 start_time = time.monotonic()
 
@@ -1879,7 +1879,7 @@ class ExpCommThread(threading.Thread):
         self._exp_event.clear()
 
     def wait_for_trigger(self, wait_for_trig, cur_trig, exp_time, ab_burst,
-        ab_burst_2, det, struck, slow_shutter, dio_out9, dio_out10):
+        ab_burst_2, det, struck, slow_shutter, dio_out9, dio_out10, kwargs):
         if not wait_for_trig:
             logger.debug("Sending trigger")
             dio_out10.write(1)
@@ -2008,6 +2008,12 @@ class ExpCommThread(threading.Thread):
                 open_shutter_before_trig_cont_exp):
                 dio_out9.write(1)
 
+        if self._abort_event.is_set():
+            self.fast_mode_abort_cleanup(det, struck, ab_burst, ab_burst_2,
+                dio_out9, slow_shutter, exp_time, kwargs)
+            aborted = True
+            return False
+
         if 'airshot' in kwargs:
             logger.debug('Moving in-air shot motors to out position')
             motors = []
@@ -2015,14 +2021,15 @@ class ExpCommThread(threading.Thread):
                 auto_move, out_pos, in_pos, motor = vals
 
                 if auto_move:
-                    motor.move_absolute(dist)
-                    motors.append(out_pos)
+                    motor.move_absolute(out_pos)
+                    motors.append(motor)
                     start = time.monotonic()
 
                     while not motor.is_moving() and time.monotonic() - start < 1:
                         time.sleep(0.025)
 
             if len(motors) > 0:
+                logger.info('Moving in-air shot motors to out position')
                 for motor in motors:
                     while motor.is_moving() and not self._abort_event.is_set():
                         time.sleep(0.05)
@@ -2036,7 +2043,7 @@ class ExpCommThread(threading.Thread):
         time.sleep(1)
 
         real_start_time = self.wait_for_trigger(wait_for_trig, cur_trig, exp_time, ab_burst,
-            ab_burst_2, det, struck, slow_shutter, dio_out9, dio_out10)
+            ab_burst_2, det, struck, slow_shutter, dio_out9, dio_out10, kwargs)
 
         if self._abort_event.is_set():
             self.fast_mode_abort_cleanup(det, struck, ab_burst, ab_burst_2,
@@ -2329,14 +2336,15 @@ class ExpCommThread(threading.Thread):
                 auto_move, out_pos, in_pos, motor = vals
 
                 if auto_move:
-                    motor.move_absolute(dist)
-                    motors.append(out_pos)
+                    motor.move_absolute(out_pos)
+                    motors.append(motor)
                     start = time.monotonic()
 
                     while not motor.is_moving() and time.monotonic() - start < 1:
                         time.sleep(0.025)
 
             if len(motors) > 0:
+                logger.info('Moving in-air shot motors to out position')
                 for motor in motors:
                     while motor.is_moving() and not self._abort_event.is_set():
                         time.sleep(0.05)
@@ -2950,7 +2958,7 @@ class ExpCommThread(threading.Thread):
                 if auto_move:
                     motor.move_absolute(in_pos)
 
-    def mar_abort_cleanup(self, det, dio_out9, slow_shutter, scaler):
+    def mar_abort_cleanup(self, det, dio_out9, slow_shutter, scaler, kwargs):
         logger.info('Aborting mar exposure')
 
         logger.debug('Aborting scan')
@@ -3142,6 +3150,8 @@ class ExpPanel(wx.Panel):
         self.top_sizer = self._create_layout()
 
         self.SetSizer(self.top_sizer)
+
+        self.SetMinSize(self._FromDIP((625, -1)))
 
         self._initialize()
 
@@ -3631,7 +3641,7 @@ class ExpPanel(wx.Panel):
         cont = True
 
         if 'airshot' in self.settings['components']:
-            exp_values['airshot'] comp_settings['airshot']
+            exp_values['airshot'] = comp_settings['airshot']
 
         if (('trsaxs_scan' in self.settings['components'] and exp_only) or
             ('scan' in self.settings['components'] and exp_only)):

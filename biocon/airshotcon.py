@@ -168,10 +168,15 @@ class AirShotMotorPanel(utils.DevicePanel):
             except Exception:
                 valid = False
 
-        out_pos = self.motor.position + dist
-        in_pos = self.motor.position
+        if auto_move and valid:
+            out_pos = self.motor.position + dist
+            in_pos = self.motor.position
+        else:
+            # In case it still somehow tries to move it doesn't go anywhere
+            out_pos = self.motor.position
+            in_pos = self.motor.position
 
-        return valid, out_pos, in_pos, self.motor
+        return valid, auto_move, out_pos, in_pos, self.motor
 
     def _on_close(self):
         """Device specific stuff goes here"""
@@ -271,8 +276,8 @@ class AirShotPanel(wx.Panel):
         air_shot_values = []
         all_valid = True
         for panel in self.devices:
-            valid, auto_move, dist, motor = panel.get_auto_move_params()
-            air_shot_values.append([auto_move, dist, motor])
+            valid, auto_move, out_pos, in_pos, motor = panel.get_auto_move_params()
+            air_shot_values.append([auto_move, out_pos, in_pos, motor])
 
             all_valid = all_valid and valid
 
