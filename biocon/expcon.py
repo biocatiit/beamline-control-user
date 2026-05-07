@@ -3130,7 +3130,7 @@ class ExpPanel(wx.Panel):
         self.settings = settings
         self._exp_status = 'Ready'
         self._time_remaining = 0
-        self.run_number = '_{:03d}'.format(self.settings['run_num'])
+        self.run_number = '_{:04d}'.format(self.settings['run_num'])
         self._preparing_exposure = False
 
         self.exp_cmd_q = deque()
@@ -3756,7 +3756,7 @@ class ExpPanel(wx.Panel):
         self.set_time_remaining(0)
         old_rn = self.run_num.GetLabel()
         run_num = int(old_rn[1:])+1
-        self.run_number = '_{:03d}'.format(run_num)
+        self.run_number = '_{:04d}'.format(run_num)
         self.run_num.SetLabel(self.run_number)
 
 
