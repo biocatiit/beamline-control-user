@@ -21,13 +21,14 @@
 import copy
 import time
 import logging
+import math
 
 if __name__ != '__main__':
     logger = logging.getLogger(__name__)
 
 import epics
-
 from epics import Device, poll
+from epics.devices import srs570
 
 import utils
 
@@ -78,7 +79,7 @@ class Detector(object):
 
 class MXDetector(Detector):
     def __init__(self, record, mx_database, data_dir_root):
-
+        logger.debug('Connecting MXDetector %s', record)
         self.record_name = record
 
         self.det = mx_database.get_record('pilatus')
@@ -218,6 +219,8 @@ class EPICSEigerDetector(object):
         use_file_writer = True, photon_energy = 12.0, images_per_file=100):
         """
         """
+        logger.debug('Connecting EPICSEigerDetector %s', pv_prefix)
+
         self.det = AD_EigerCamera(pv_prefix)
 
         self.use_tiff_writer = use_tiff_writer
@@ -334,6 +337,12 @@ class EPICSEigerDetector(object):
     def set_manual_trigger(self, mode):
         self.det.put('cam1:ManualTrigger', mode, wait=True, timeout=1)
 
+    def set_img_ctr(self, val):
+        self.det.put('cam1:ArrayCounter', val, wait=True, timeout=1)
+
+    def get_img_ctr(self):
+        return self.det.get('cam1:ArrayCounter_RBV')
+
     def stop(self):
         # self.det.put("cam1:Acquire", 0, wait=True, timeout=1)
         self.det.put('cam1:Acquire', 0, timeout=1)
@@ -388,6 +397,8 @@ class EPICSPilatusDetector(object):
     def __init__(self, pv_prefix):
         """
         """
+        logger.debug('Connecting EPICSPilatusDetector %s', pv_prefix)
+
         self.det = AD_PilatusCamera(pv_prefix)
 
         # self.det.put('cam1:PhotonEnergy', photon_energy*1000, wait=True, timeout=1)
@@ -442,6 +453,12 @@ class EPICSPilatusDetector(object):
 
         self.det.put("cam1:TriggerMode", tm, wait=True, timeout=1)
 
+    def set_img_ctr(self, val):
+        self.det.put('cam1:ArrayCounter', val, wait=True, timeout=1)
+
+    def get_img_ctr(self):
+        return self.det.get('cam1:ArrayCounter_RBV')
+
     def stop(self):
         # self.det.put("cam1:Acquire", 0, wait=True, timeout=1)
         self.det.put('cam1:Acquire', 0, timeout=1)
@@ -470,7 +487,7 @@ class AD_MarCCDCamera(Device):
              "cam1:SizeX", "cam1:SizeX_RBV", "cam1:SizeY", "cam1:SizeY_RBV",
              "cam1:TimeRemaining_RBV",
              "cam1:TriggerMode", "cam1:TriggerMode_RBV",
-             "cam1:FilePath",
+             "cam1:FilePath", 'cam1:FileTemplate',
              "cam1:AutoSave", "cam1:FileNumber", "cam1:AutoIncrement",
              )
 
@@ -481,7 +498,7 @@ class AD_MarCCDCamera(Device):
         Device.__init__(self, prefix, delim='', mutable=False,
                               attrs=self.attrs)
 
-        self.prefix = prefix
+
 
     def ensure_value(self, attr, value, wait=False):
         """ensures that an attribute with an associated _RBV value is
@@ -528,6 +545,8 @@ class Scan(Device):
 
         name: The name of the scan record.
         """
+        logger.debug('Connecting EPICS Scan %s', name)
+
         attrs = list(self.attrs)
         for i in range(1, NUM_POSITIONERS+1):
             for a in self.pos_attrs:
@@ -540,7 +559,7 @@ class Scan(Device):
             attrs.append('D%2.2iCV' % i)
             attrs.append('D%2.2iLV' % i)
             attrs.append('D%2.2iCA' % i)
-            # attrs.append('D%2.2iDA' % i)
+            attrs.append('D%2.2iDA' % i)
 
         Device.__init__(self, name, delim='.', attrs=attrs, **kwargs)
         for attr, pv in Scan._alias.items():
@@ -845,6 +864,9 @@ class Scan(Device):
     def get_data_in_progress(self, idet):
         return self.get('D%2.2iCA' % idet)
 
+    def get_data(self, idet):
+        return self.get('D%2.2iDA' % idet)
+
     def stop(self):
         self.put('EXSC', 0, wait=False)
         self.put('EXSC', 0, wait=False)
@@ -862,12 +884,17 @@ class EPICSMarCCDDetector(object):
     def __init__(self, pv_prefix, scan_pv=''):
         """
         """
+        logger.debug('Connecting EPICSMarCCDDetector %s', pv_prefix)
+
         self.det = AD_MarCCDCamera(pv_prefix)
+        self.det_prefix = pv_prefix
 
         if scan_pv:
             self.scan = Scan(scan_pv)
         else:
             self.scan = None
+
+        self.det.put('cam1:FileTemplate', '%s%s_%6.6d.tif', wait=True, timeout=1)
 
     # def __repr__(self):
     #     return '{}({}, {})'.format(self.__class__.__name__, self.name, self.device)
@@ -956,6 +983,8 @@ class Scaler(Device):
     _nonpvs = ('_prefix', '_pvs', '_delim', '_nchan', '_chans')
 
     def __init__(self, prefix, nchan=8):
+        logger.debug('Connecting Scaler %s', prefix)
+
         self._nchan  = nchan
         self._chans = range(1, nchan+1)
 
@@ -1018,3 +1047,125 @@ class Scaler(Device):
 
     def stop(self):
         self.put('CNT', 0, wait=False)
+
+
+class EPICSSRSAmplifier(object):
+    def __init__(self, pv_prefix):
+        """
+        """
+        logger.debug('Connecting EPICSSRSAmplifier %s', pv_prefix)
+
+        self.amp = srs570.SRS570(pv_prefix)
+
+        self.sens_num_pv = self.amp.PV('sens_num')
+        self.unit_pv = self.amp.PV('sens_unit')
+
+        gain_opts = self.sens_num_pv.get_ctrlvars()['enum_strs']
+        unit_opts = self.unit_pv.get_ctrlvars()['enum_strs']
+
+        self.gain_set_lookup = {}
+        self.rev_gain_set_lookup = {}
+
+        for uval in unit_opts:
+            if uval == 'pA/V':
+                base = 1e-12
+            elif uval == 'nA/V':
+                base = 1e-9
+            elif uval == 'uA/V':
+                base = 1e-6
+            elif uval == 'mA/V':
+                base = 1e-3
+
+            if uval != 'mA/V':
+                for gval in gain_opts:
+                    gain = 1/(float(gval)*base)
+                    self.gain_set_lookup['{:.0E}'.format(gain)] = [uval, gval]
+                    self.rev_gain_set_lookup['{}_{}'.format(uval, gval)] = gain
+            else:
+                gain = 1/base
+                self.gain_set_lookup['{:.0E}'.format(gain)] = [uval, '1']
+                self.rev_gain_set_lookup['{}_{}'.format(uval, '1')] = gain
+
+    def get_gain(self):
+        gval = self.sens_num_pv.get(as_string=True)
+        uval = self.unit_pv.get(as_string=True)
+
+        gain = self.rev_gain_set_lookup['{}_{}'.format(uval, gval)]
+
+        return gain
+
+class EPICSPVWrapper(object):
+    """
+    Wraps a pyepics PV in syntax compatible with MP records
+    """
+    def __init__(self, pv_name):
+        self._pv_name = pv_name
+        self.pv = epics.get_pv(pv_name)
+
+    def write(self, val, wait=False):
+        self.pv.put(val, wait=wait)
+
+    def read(self):
+        self.pv.get()
+
+class Attenuator(object):
+    """
+    Huber attenuator
+    """
+    def __init__(self):
+        logger.debug('Connecting Huber attenuator')
+        self.atten_length = 256.568 #256.568 is Al attenuation length at 12 keV
+
+        self.attenuator_position = [1, 2, 3, 4, 5, 6, 7, 8]
+        self.atten_pvs = {}
+
+
+        for atten in self.attenuator_position:
+            huber_pv_list = [
+                '18ID:HUBER1:A{}Out'.format(atten),
+                '18ID:HUBER1:T{}'.format(atten),
+                '18ID:HUBER1:L{}'.format(atten),
+                ]
+
+            self.atten_pvs[atten] = {}
+
+            for pv_name in huber_pv_list:
+                pv = epics.get_pv(pv_name)
+                connected = pv.wait_for_connection(5)
+
+                if not connected:
+                    logger.error('Failed to connect to EPICS PV %s on startup', pv_name)
+
+                else:
+                    if 'Out' in pv_name:
+                        self.atten_pvs[atten]['ctrl'] = pv
+                    elif 'T{}'.format(atten) in pv_name:
+                        self.atten_pvs[atten]['thickness'] = pv
+                    elif 'L{}'.format(atten) in pv_name:
+                        self.atten_pvs[atten]['material'] = pv
+
+        self.attenuator_thickness = {}
+
+        for atten in self.atten_pvs:
+            if self.atten_pvs[atten]['material'].get().lower() == 'al':
+                self.attenuator_thickness[atten] = float(self.atten_pvs[atten]['thickness'].get())
+                #thickness in microns
+
+    def get_attenuation(self):
+        length = 0
+        for atten in self.attenuator_thickness:
+            pv = self.atten_pvs[atten]['ctrl']
+            if pv.get():
+                length += self.attenuator_thickness[atten]
+
+        current_atten = math.exp(-length/self.atten_length)
+
+        return current_atten
+
+    def get_attenuator_status(self, pos):
+        return self.atten_pvs[pos]['ctrl'].get()
+
+    def get_attenuator_def(self, pos):
+        material = self.atten_pvs[pos]['material'].get()
+        thickness = self.atten_pvs[pos]['thickness'].get()
+        return material, thickness

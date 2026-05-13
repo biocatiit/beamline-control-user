@@ -1620,6 +1620,13 @@ class TRScanPanel(wx.Panel):
             if num_scans <= 0:
                 errors.append('Number of scans (greater than 0)')
 
+        if self.auto_center.GetValue():
+            cen_scan_settings, cen_valid, cen_errors = self.get_centering_values(
+                verbose=False)
+
+            if len(cen_errors) > 0:
+                errors.extend(cen_errors)
+
         if len(errors) > 0:
             valid = False
 
@@ -1649,7 +1656,6 @@ class TRScanPanel(wx.Panel):
             except Exception:
                 print(traceback.print_exc())
                 valid = False
-
 
         if len(errors) > 0:
             valid = False
@@ -1838,14 +1844,20 @@ class TRScanPanel(wx.Panel):
 
     def run_and_wait_for_centering(self):
         if self.auto_center.GetValue():
-            self.start_centering()
+            valid = self.start_centering()
 
-            while not self.centering_done_event.is_set():
-                wx.GetApp().Yield()
-                time.sleep(0.1)
+            if valid:
+                while not self.centering_done_event.is_set():
+                    wx.GetApp().Yield()
+                    time.sleep(0.1)
+
+        else:
+            valid = True
+
+        return valid
 
     def start_centering(self):
-        scan_settings, valid = self.get_centering_values()
+        scan_settings, valid, errors = self.get_centering_values()
 
         if valid:
             self._centering_abort_event.clear()
@@ -1855,8 +1867,10 @@ class TRScanPanel(wx.Panel):
             centering_thread.daemon = True
             centering_thread.start()
 
+        return valid
 
-    def get_centering_values(self):
+
+    def get_centering_values(self, verbose=True):
         axis = self.center_scan_axis.GetStringSelection()
         start = self.center_start.GetValue()
         stop = self.center_stop.GetValue()
@@ -1893,27 +1907,27 @@ class TRScanPanel(wx.Panel):
         try:
             start = float(start)
         except Exception:
-            errors.append('Start position')
+            errors.append('Centering start position')
 
         try:
             stop = float(stop)
         except Exception:
-            errors.append('Stop position')
+            errors.append('Centering stop position')
 
         try:
             step = float(step)
         except Exception:
-            errors.append('Step size')
+            errors.append('Centering step size')
 
         try:
             alt_pos = float(alt_pos)
         except Exception:
-            errors.append('2nd axis position')
+            errors.append('Centering 2nd axis position')
 
         try:
             center_offset = float(center_offset)
         except Exception:
-            errors.append('Center offset')
+            errors.append('Centering center offset')
 
         try:
             scan_start = float(scan_start)
@@ -1925,7 +1939,7 @@ class TRScanPanel(wx.Panel):
         except Exception:
             scan_stop = None
 
-        if len(errors) > 0:
+        if len(errors) > 0 and verbose:
             valid = False
             scan_settings = {}
 
@@ -1963,7 +1977,7 @@ class TRScanPanel(wx.Panel):
                 'motor_y_name'  : self.settings['motor_y_name'],
             }
 
-        return scan_settings, valid
+        return scan_settings, valid, errors
 
     def do_centering_scan(self, scan_settings):
         axis = scan_settings['axis']
@@ -2144,9 +2158,9 @@ class TRScanPanel(wx.Panel):
                 while self.y_end.GetValue() != str(new_stop):
                     time.sleep(0.01)
 
-        meas_pv.disconnect()
-        count_time.disconnect()
-        count_start.disconnect()
+        # meas_pv.disconnect()
+        # count_time.disconnect()
+        # count_start.disconnect()
         self.centering_done_event.set()
         wx.CallAfter(self.run_centering.SetLabel, 'Center Mixer')
         print('Centering Done')
@@ -5622,11 +5636,11 @@ default_trsaxs_settings = {
     'center_offset'         : 0,
     'center_mixer'          : True,
     # 'center_mixer'          : False,
-    'remote_pump_ip'        : '164.54.204.8',
+    'remote_pump_ip'        : '164.54.204.175',
     'remote_pump_port'      : '5556',
-    'remote_fm_ip'          : '164.54.204.8',
+    'remote_fm_ip'          : '164.54.204.175',
     'remote_fm_port'        : '5557',
-    'remote_valve_ip'       : '164.54.204.8',
+    'remote_valve_ip'       : '164.54.204.175',
     'remote_valve_port'     : '5558',
     'device_communication'  : 'remote',
     # 'injection_valve'       : [{'name': 'Injection', 'args': ['Rheodyne', 'COM16'],  #Chaotic flow
@@ -5639,44 +5653,42 @@ default_trsaxs_settings = {
     'sample_valve'          : [],
     'buffer1_valve'         : [],
     'buffer2_valve'         : [],
-    'buffer2_pump'          : [{'name': 'Buffer 2', 'args': ['SSI Next Gen', 'COM10'],
+    'buffer2_pump'          : [{'name': 'Buffer 2', 'args': ['SSI Next Gen', 'COM9'],
                                 'kwargs': {'flow_rate_scale': 1.045,
                                 'flow_rate_offset': -48.462/1000,'scale_type': 'up'},
                                 'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0,
                                 'max_pressure': 2000, 'continuous': True}}],
-    'sample_pump'           : [{'name': 'Sample', 'args': ['SSI Next Gen', 'COM9'],
+    'sample_pump'           : [{'name': 'Sample', 'args': ['SSI Next Gen', 'COM10'],
                                 'kwargs': {'flow_rate_scale': 1.02,
                                 'flow_rate_offset': 0.1251/1000,'scale_type': 'up'},
                                 'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0,
                                 'max_pressure': 1800, 'continuous': True}}],
-    'buffer1_pump'           : [{'name': 'Buffer 1', 'args': ['SSI Next Gen', 'COM7'],
+    'buffer1_pump'           : [{'name': 'Buffer 1', 'args': ['SSI Next Gen', 'COM11'],
                                 'kwargs': {'flow_rate_scale': 1.03,
                                 'flow_rate_offset': -19.853/1000,'scale_type': 'up'},
                                 'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0,
                                 'max_pressure': 2000, 'continuous': True}}],
-    'outlet_fm'             : {'name': 'outlet', 'args' : ['BFS', 'COM5'], 'kwargs': {}},
+    'outlet_fm'             : {'name': 'outlet', 'args' : ['BFS', 'COM15'], 'kwargs': {}},
     'injection_valve_label' : 'Injection',
     'sample_valve_label'    : 'Sample',
     'buffer1_valve_label'   : 'Buffer 1',
     'buffer2_valve_label'   : 'Buffer 2',
     # 'injection_valve'       : [{'name': 'Injection', 'args': ['Rheodyne', 'COM16'], # Laminar flow
     #                             'kwargs': {'positions' : 2}},],
-    # # 'injection_valve'       : [{'name': 'Injection', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo14'],
-    # #                                 'kwargs': {'positions' : 2}},
-    #                             # {'name': 'Injection 2', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo14'],
-    #                             #     'kwargs': {'positions' : 2}},
-    #                             # ],
+    # 'injection_valve'       : [{'name': 'Injection', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo15'],
+    #                                 'kwargs': {'positions' : 2}},
+    #                             ],
     # 'sample_valve'          : [{'name': 'Sample', 'args': ['Rheodyne', 'COM4'],
     #                             'kwargs': {'positions' : 6}},],
-    # 'buffer1_valve'         : [{'name': 'Buffer 1', 'args': ['Rheodyne', 'COM21'],
+    # 'buffer1_valve'         : [{'name': 'Buffer 1', 'args': ['Rheodyne', 'COM6'],
     #                             'kwargs': {'positions' : 6}},
     #                             {'name': 'Buffer 2', 'args': ['Rheodyne', 'COM8'],
     #                             'kwargs': {'positions' : 6}},],
-    # 'buffer2_valve'         : [{'name': 'Sheath 1', 'args': ['Rheodyne', 'COM6'],
+    # 'buffer2_valve'         : [{'name': 'Sheath 1', 'args': ['Rheodyne', 'COM5'],
     #                             'kwargs': {'positions' : 6}},
-    #                             {'name': 'Sheath 2', 'args': ['Rheodyne', 'COM3'],
+    #                             {'name': 'Sheath 2', 'args': ['Rheodyne', 'COM7'],
     #                             'kwargs': {'positions' : 6}},],
-    # 'buffer1_pump'           : [{'name': 'Buffer', 'args': ['Pico Plus', 'COM11'],
+    # 'buffer1_pump'           : [{'name': 'Buffer', 'args': ['Pico Plus', 'COM13'],
     #                             'kwargs': {'syringe_id': '3 mL, Medline P.C.',
     #                             'pump_address': '00', 'dual_syringe': 'False'},
     #                             'ctrl_args': {'flow_rate' : '0.068', 'refill_rate' : '3',
@@ -5691,7 +5703,7 @@ default_trsaxs_settings = {
     #                             'pump_address': '00', 'dual_syringe': 'False'}, 'ctrl_args':
     #                             {'flow_rate' : '0.002', 'refill_rate' : '1',
     #                             'continuous': False}},],
-    # 'outlet_fm'             : {'name': 'outlet', 'args' : ['BFS', 'COM13'], 'kwargs': {}},
+    # 'outlet_fm'             : {'name': 'outlet', 'args' : ['BFS', 'COM3'], 'kwargs': {}},
     # 'injection_valve_label' : 'Injection',
     # 'sample_valve_label'    : 'Sample',
     # 'buffer1_valve_label'   : 'Buffer',

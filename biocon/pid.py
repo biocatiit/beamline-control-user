@@ -70,11 +70,14 @@ class PID(object):
         output_limits=(None, None),
         auto_mode=True,
         proportional_on_measurement=False,
-        differetial_on_measurement=True,
+        differential_on_measurement=True,
         error_map=None,
+        time_fn=None,
+        starting_output=0.0,
     ):
         """
         Initialize a new PID controller.
+
         :param Kp: The value for the proportional gain Kp
         :param Ki: The value for the integral gain Ki
         :param Kd: The value for the derivative gain Kd
@@ -93,9 +96,17 @@ class PID(object):
         :param proportional_on_measurement: Whether the proportional term should be calculated on
             the input directly rather than on the error (which is the traditional way). Using
             proportional-on-measurement avoids overshoot for some types of systems.
-        :param differetial_on_measurement: Whether the differential term should be calculated on
+        :param differential_on_measurement: Whether the differential term should be calculated on
             the input directly rather than on the error (which is the traditional way).
         :param error_map: Function to transform the error value in another constrained value.
+        :param time_fn: The function to use for getting the current time, or None to use the
+            default. This should be a function taking no arguments and returning a number
+            representing the current time. The default is to use time.monotonic() if available,
+            otherwise time.time().
+        :param starting_output: The starting point for the PID's output. If you start controlling
+            a system that is already at the setpoint, you can set this to your best guess at what
+            output the PID should give when first calling it to avoid the PID outputting zero and
+            moving the system away from the setpoint.
         """
         self.Kp, self.Ki, self.Kd = Kp, Ki, Kd
         self.setpoint = setpoint
@@ -104,7 +115,7 @@ class PID(object):
         self._min_output, self._max_output = None, None
         self._auto_mode = auto_mode
         self.proportional_on_measurement = proportional_on_measurement
-        self.differetial_on_measurement = differetial_on_measurement
+        self.differential_on_measurement = differential_on_measurement
         self.error_map = error_map
 
         self._proportional = 0
@@ -116,22 +127,33 @@ class PID(object):
         self._last_error = None
         self._last_input = None
 
-        try:
-            # Get monotonic time to ensure that time deltas are always positive
-            self.time_fn = time.monotonic
-        except AttributeError:
-            # time.monotonic() not available (using python < 3.3), fallback to time.time()
-            self.time_fn = time.time
+        if time_fn is not None:
+            # Use the user supplied time function
+            self.time_fn = time_fn
+        else:
+            import time
+
+            try:
+                # Get monotonic time to ensure that time deltas are always positive
+                self.time_fn = time.monotonic
+            except AttributeError:
+                # time.monotonic() not available (using python < 3.3), fallback to time.time()
+                self.time_fn = time.time
 
         self.output_limits = output_limits
         self.reset()
 
+        # Set initial state of the controller
+        self._integral = _clamp(starting_output, output_limits)
+
     def __call__(self, input_, dt=None):
         """
         Update the PID controller.
+
         Call the PID controller with *input_* and calculate and return a control output if
         sample_time seconds has passed since the last update. If no new output is calculated,
         return the previous output instead (or None if no value has been calculated yet).
+
         :param dt: If set, uses this value for timestep instead of real time. This can be used in
             simulations when simulation time is different from real time.
         """
@@ -169,7 +191,7 @@ class PID(object):
         self._integral += self.Ki * error * dt
         self._integral = _clamp(self._integral, self.output_limits)  # Avoid integral windup
 
-        if self.differetial_on_measurement:
+        if self.differential_on_measurement:
             self._derivative = -self.Kd * d_input / dt
         else:
             self._derivative = self.Kd * d_error / dt
@@ -193,7 +215,7 @@ class PID(object):
             'setpoint={self.setpoint!r}, sample_time={self.sample_time!r}, '
             'output_limits={self.output_limits!r}, auto_mode={self.auto_mode!r}, '
             'proportional_on_measurement={self.proportional_on_measurement!r}, '
-            'differetial_on_measurement={self.differetial_on_measurement!r}, '
+            'differential_on_measurement={self.differential_on_measurement!r}, '
             'error_map={self.error_map!r}'
             ')'
         ).format(self=self)
@@ -229,10 +251,12 @@ class PID(object):
     def set_auto_mode(self, enabled, last_output=None):
         """
         Enable or disable the PID controller, optionally setting the last output value.
+
         This is useful if some system has been manually controlled and if the PID should take over.
         In that case, disable the PID by setting auto mode to False and later when the PID should
         be turned back on, pass the last output variable (the control variable) and it will be set
         as the starting I-term when the PID is set to auto mode.
+
         :param enabled: Whether auto mode should be enabled, True or False
         :param last_output: The last output, or the control variable, that the PID should start
             from when going from manual mode to auto mode. Has no effect if the PID is already in
@@ -251,6 +275,7 @@ class PID(object):
     def output_limits(self):
         """
         The current output limits as a 2-tuple: (lower, upper).
+
         See also the *output_limits* parameter in :meth:`PID.__init__`.
         """
         return self._min_output, self._max_output
@@ -276,6 +301,7 @@ class PID(object):
     def reset(self):
         """
         Reset the PID controller internals.
+
         This sets each term to 0 as well as clearing the integral, the last output and the last
         input (derivative calculation).
         """
@@ -288,3 +314,4 @@ class PID(object):
         self._last_time = self.time_fn()
         self._last_output = None
         self._last_input = None
+        self._last_error = None

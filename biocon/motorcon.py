@@ -1401,11 +1401,11 @@ class EpicsMotor(Motor):
         mov = not self.epics_motor.get('done_moving')
         return mov
 
-    def move_relative(self, displacement):
-        self.epics_motor.move(displacement, relative=True)
+    def move_relative(self, displacement, wait=False):
+        self.epics_motor.move(displacement, relative=True, wait=wait)
 
-    def move_absolute(self, position):
-        self.epics_motor.move(position)
+    def move_absolute(self, position, wait=False):
+        self.epics_motor.move(position, wait=wait)
 
     def home(self):
         pass #should be implimented in each subclass

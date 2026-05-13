@@ -4946,7 +4946,7 @@ class UVFrame(utils.DeviceFrame):
 
 default_spectrometer_settings = {
         'device_init'           : [{'name': 'CoflowUV', 'args': ['StellarNet', None],
-                                    'kwargs': {'shutter_pv_name': '18ID:E1608:Bo1',
+                                    'kwargs': {'shutter_pv_name': '18ID:USB1608G_2:Bo1', # Was 18ID:E1608:Bo1
                                     'trigger_pv_name' : '18ID:LJT4:2:Bo12',
                                     'out1_pv_name' : '18ID:E1608:Ao1',
                                     'out2_pv_name' : '18ID:E1608:Ao2',
