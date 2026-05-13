@@ -2821,7 +2821,8 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
 
             for valve, fp_pos in self._flow_path_positions[flow_path].items():
                 current_pos = self.get_valve_position(valve)
-
+                print(valve)
+                print(current_pos)
                 if int(fp_pos) != int(current_pos):
                     active_flow_path = False
                     break
