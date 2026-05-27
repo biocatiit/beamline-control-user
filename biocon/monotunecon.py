@@ -100,7 +100,7 @@ class MonoAutoTune(object):
 
     def optimize_intensity(self):
         self.ct_time_pv.put(self.settings['optimize_ct_time'], wait=True)
-        self.i0_shutter_pv.put(0, wait=True)
+        self.i0_shutter_pv.put(1, wait=True)
         time.sleep(0.1) #Waits for shutter to open
 
         v_start = self.ao_pv.get()
@@ -148,7 +148,7 @@ class MonoAutoTune(object):
             logger.debug('Search improved: %s, V new: %s V, I0 new: %s ct/s',
                 improved, v_best, i_best/self.settings['optimize_ct_time'])
 
-        self.i0_shutter_pv.put(1)
+        self.i0_shutter_pv.put(0)
 
         logger.info('Finished optimizing I0 intensity. Final: %s cts/s at %s V',
             i_best/self.settings['optimize_ct_time'], v_best)
@@ -273,7 +273,7 @@ default_mono_tune_settings = {
     'fe_shutter_close'      : '18ID:rshtr:A:CLOSE',
     'd_shutter_open'        : '18ID:rshtr:D:OPEN',
     'd_shutter_close'       : '18ID:rshtr:D:CLOSE',
-    'exp_slow_shtr1'        : '18ID:LJT4:2:Bo6',
+    'exp_slow_shtr1'        : '18ID:HUBER1:A1Out',
     'device_communication'  : 'local',
     'remote_device'         : 'tuning', #Ignore
     'remote_ip'             : '164.54.204.53', #Ignore
