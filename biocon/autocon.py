@@ -1947,6 +1947,10 @@ class AutoSettings(scrolled.ScrolledPanel):
                 panel_rets = panel_func(top_level, parent,
                     self.ctrl_ids[cmd_key], 'vert', read_only=True)
 
+            elif cmd_key == 'af4_sample':
+                panel_rets = panel_func(top_level, parent,
+                    self.ctrl_ids[cmd_key], 'vert', read_only=True)
+
             else:
                 panel_rets = panel_func(top_level, parent,
                     self.ctrl_ids[cmd_key], 'vert', num_flow_paths, read_only=True)
@@ -2663,7 +2667,7 @@ def make_batch_saxs_info_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
     return cmd_sizer, sample_well, well_ids_96, reverse_well_ids_96
 
 def make_af4_saxs_info_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
-    well_bmp, well_callback, read_only=False):
+    read_only=False):
     ################ Metadata #################
 
     channel_choices = ['Short', 'Long', 'Dispersion Inlet']
@@ -2742,8 +2746,6 @@ def make_af4_saxs_info_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
 
     ################ Coflow #################
     coflow_settings = {
-        'coflow_from_fr': ['Set coflow flow from injection flow rate',
-                            ctrl_ids['coflow_from_fr'], 'bool'],
         'start_coflow'  : ['Start coflow automatically',
                             ctrl_ids['start_coflow'], 'bool'],
         'coflow_fr'     : ['Coflow flow rate [mL/min]:',
@@ -3211,7 +3213,7 @@ def make_end_exp_info_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
     return cmd_sizer
 
 def make_clean_cell_info_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
-    num_flow_paths, read_only=False):
+    num_flow_paths=1, read_only=False):
 
     buffer_choices = ['{}'.format(i) for i in range(1,11)]
 
@@ -3939,14 +3941,8 @@ class AutoList(utils.ItemList):
                     default_settings['coflow_rate'] = coflow_fr
                     default_settings['coflow_buf_pos'] = valve_pos
 
-
-                    inst = self.auto_panel.settings['hplc_inst']
-                    num_flow_paths = self.auto_panel.settings['instruments'][inst]['num_paths']
-                    default_settings['num_flow_paths'] = num_flow_paths
-
                 else:
                     default_settings = settings
-                    default_settings['inst'] = self.auto_panel.settings['hplc_inst']
 
                 cmd_dialog = CleanCellDialog(self, default_settings,
                     title='Clean Cell Settings')
@@ -4111,7 +4107,6 @@ class AutoList(utils.ItemList):
         default_settings['conc'] = default_metadata['Concentration [mg/ml]:']
         default_settings['buf'] = default_metadata['Buffer:']
         default_settings['sample_name'] = default_metadata['Sample:']
-        default_settings['column'] = default_metadata['Column:']
         default_settings['channel'] = default_metadata['Channel:']
         default_settings['membrane'] = default_metadata['Membrane:']
         default_settings['spacer'] = default_metadata['Spacer height [um]:']
@@ -5465,10 +5460,8 @@ class CleanCellDialog(AutoCmdDialog):
         parent = self
         top_level = self
 
-        num_flow_paths = self._default_settings['num_flow_paths']
-
         cmd_sizer = make_clean_cell_info_panel(top_level, parent, self.ctrl_ids,
-            'horiz', num_flow_paths)
+            'horiz')
 
         button_sizer = self.CreateButtonSizer(wx.OK | wx.CANCEL)
 
