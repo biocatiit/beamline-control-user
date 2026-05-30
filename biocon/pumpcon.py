@@ -44,11 +44,11 @@ import wx
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_03_00\\python_32')#add the path of the LoadElveflow.py
 # elve_version = '3.03.00'
 
-# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\DLL64\\DLL64') #add the path of the library here
-# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\Python_64')#add the path of the LoadElveflow.py
-# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\DLL32\\DLL32') #add the path of the library here
-# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\Python_32')#add the path of the LoadElveflow.py
-# elve_version = '3.07.02'
+sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\DLL64\\DLL64') #add the path of the library here
+sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\Python_64')#add the path of the LoadElveflow.py
+sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\DLL32\\DLL32') #add the path of the library here
+sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\Python_32')#add the path of the LoadElveflow.py
+elve_version = '3.07.02'
 
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_03\\DLL64\\DLL64') #add the path of the library here
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_03\\Python_64')#add the path of the LoadElveflow.py
@@ -68,19 +68,20 @@ import wx
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_09_04\\DLL\\Python\\Python_32')#add the path of the LoadElveflow.py
 # elve_version = '3.09.04'
 
-sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_10_03\\DLL\\DLL64') #add the path of the library here
-sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_10_03\\DLL\\Python\\Python_64')#add the path of the LoadElveflow.py
-sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_10_03\\DLL\\DLL32') #add the path of the library here
-sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_10_03\\DLL\\Python\\Python_32')#add the path of the LoadElveflow.py
-elve_version = '3.10.03'
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_10_03\\DLL\\DLL64') #add the path of the library here
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_10_03\\DLL\\Python\\Python_64')#add the path of the LoadElveflow.py
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_10_03\\DLL\\DLL32') #add the path of the library here
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_10_03\\DLL\\Python\\Python_32')#add the path of the LoadElveflow.py
+# elve_version = '3.10.03'
 
 try:
     import Elveflow64 as Elveflow
 except Exception:
+    traceback.print_exc()
     try:
         import Elveflow32 as Elveflow
     except Exception:
-        pass
+        traceback.print_exc()
 
 import fmcon
 import utils
@@ -6446,19 +6447,19 @@ if __name__ == '__main__':
     #         'ctrl_args': {}}
     #     ]
 
-    # OB1 by itself
-    # bfs = fmcon.BFS('outlet_fm', 'COM5')
+    #OB1 by itself
+    bfs = fmcon.BFS('outlet_fm', 'COM6')
 
-    # ob1_comm_lock = threading.RLock()
+    ob1_comm_lock = threading.RLock()
 
-    # setup_devices = [
-    #     {'name': 'outlet', 'args': ['OB1 Pump', 'COM8'],
-    #         'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
-    #         'min_pressure': -1000, 'max_pressure': 1000, 'P': 8, 'I': 2,
-    #         'D': 0, 'bfs_instr_ID': bfs.instr_ID, 'comm_lock': ob1_comm_lock,
-    #         'calib_path': './resources/ob1_calib.txt'},
-    #         'ctrl_args': {}}
-    #     ]
+    setup_devices = [
+        {'name': 'outlet', 'args': ['OB1 Pump', 'COM7'],
+            'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
+            'min_pressure': -1000, 'max_pressure': 1000, 'P': 8, 'I': 2,
+            'D': 0, 'bfs_instr_ID': bfs.instr_ID, 'comm_lock': ob1_comm_lock,
+            'calib_path': './resources/ob1_calib.txt'},
+            'ctrl_args': {}}
+        ]
 
     # # TR-SAXS PHD 4400 pumps
     # setup_devices = [
@@ -6506,21 +6507,21 @@ if __name__ == '__main__':
     #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
     #      ]
 
-    # Teledyne SSI Reaxus pumps without scaling
-    setup_devices = [
-        {'name': 'Pump 4', 'args': ['SSI Next Gen', 'COM9'],
-            'kwargs': {'flow_rate_scale': 1,
-            'flow_rate_offset': 0,'scale_type': 'up'},
-            'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-        {'name': 'Pump 3', 'args': ['SSI Next Gen', 'COM10'],
-            'kwargs': {'flow_rate_scale': 1,
-            'flow_rate_offset': 0,'scale_type': 'up'},
-            'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-        {'name': 'Pump 2', 'args': ['SSI Next Gen', 'COM11'],
-            'kwargs': {'flow_rate_scale': 1,
-            'flow_rate_offset': 0,'scale_type': 'up'},
-            'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-        ]
+    # # Teledyne SSI Reaxus pumps without scaling
+    # setup_devices = [
+    #     {'name': 'Pump 4', 'args': ['SSI Next Gen', 'COM9'],
+    #         'kwargs': {'flow_rate_scale': 1,
+    #         'flow_rate_offset': 0,'scale_type': 'up'},
+    #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
+    #     {'name': 'Pump 3', 'args': ['SSI Next Gen', 'COM10'],
+    #         'kwargs': {'flow_rate_scale': 1,
+    #         'flow_rate_offset': 0,'scale_type': 'up'},
+    #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
+    #     {'name': 'Pump 2', 'args': ['SSI Next Gen', 'COM11'],
+    #         'kwargs': {'flow_rate_scale': 1,
+    #         'flow_rate_offset': 0,'scale_type': 'up'},
+    #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
+    #     ]
 
     # # SEC-SAXS pump, Teledyne SSI Reaxus pumps without scaling
     # setup_devices = [
@@ -6574,7 +6575,7 @@ if __name__ == '__main__':
 
     # # Longer pumps
     # setup_devices = [
-    #     {'name': 'test', 'args': ['Longer L100S2', 'COM15'],
+    #     {'name': 'test', 'args': ['Longer L100S2', 'COM5'],
     #         'kwargs': {'pump_addr': 1, 'flow_cal': 0.0512},
     #         'ctrl_args': {'flow_rate': 1}},
     #     ]
