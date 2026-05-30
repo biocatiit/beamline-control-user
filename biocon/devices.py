@@ -1048,6 +1048,19 @@ class Scaler(Device):
     def stop(self):
         self.put('CNT', 0, wait=False)
 
+class SRSAmplifier(Device):
+    """
+    Basic SRS SR570 Amplifier
+    """
+    attrs = ('sens_num', 'sens_unit', 'offset_num', 'offset_unit',
+             'offset_sign', 'offset_on', 'off_u_put', 'bias_put',
+             'gain_mode', 'filter_type', 'invert_on', 'init.PROC')
+
+    _nonpvs = ('_prefix', '_pvs', '_delim', '_nchan', '_chans')
+
+    def __init__(self, prefix):
+        Device.__init__(self, prefix, delim='', mutable=False,
+                              attrs=self.attrs)
 
 class EPICSSRSAmplifier(object):
     def __init__(self, pv_prefix):
@@ -1055,7 +1068,7 @@ class EPICSSRSAmplifier(object):
         """
         logger.debug('Connecting EPICSSRSAmplifier %s', pv_prefix)
 
-        self.amp = srs570.SRS570(pv_prefix)
+        self.amp = SRSAmplifier(pv_prefix)
 
         self.sens_num_pv = self.amp.PV('sens_num')
         self.unit_pv = self.amp.PV('sens_unit')
