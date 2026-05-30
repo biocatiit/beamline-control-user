@@ -3190,24 +3190,24 @@ default_autosampler_settings = {
         'coflow_y_motor'        : {'name': 'coflow_y', 'args': ['18ID_DMC_E01:6'],
                                         'kwargs': {}},
         'needle_valve'          : {'name': 'Needle',
-                                        'args':['Cheminert', 'COM10'],
+                                        'args':['Cheminert', 'COM11'],
                                         'kwargs': {'positions' : 6,
                                         'comm_lock': None}},
-        'sample_pump'           : {'name': 'sample', 'args': ['Hamilton PSD6', 'COM8'],
+        'sample_pump'           : {'name': 'sample', 'args': ['Hamilton PSD6', 'COM9'],
                                     'kwargs': {'syringe_id': '0.05 mL, Hamilton Glass',
                                     'pump_address': '1', 'dual_syringe': 'False',
                                     'comm_lock': None,},
                                     'ctrl_args': {'flow_rate' : 100,
                                     'refill_rate' : 100, 'units': 'uL/min'}},
-        'clean1_pump'           : {'name': 'water', 'args': ['KPHM100', 'COM9'],
+        'clean1_pump'           : {'name': 'water', 'args': ['KPHM100', 'COM10'],
                                     'kwargs': {'flow_cal': '319.2',
                                     'comm_lock': None},
                                     'ctrl_args': {'flow_rate': 1}},
-        'clean2_pump'           : {'name': 'ethanol', 'args': ['KPHM100', 'COM11'],
+        'clean2_pump'           : {'name': 'ethanol', 'args': ['KPHM100', 'COM12'],
                                     'kwargs': {'flow_cal': '319.2',
                                     'comm_lock': None},
                                     'ctrl_args': {'flow_rate': 1}},
-        'clean3_pump'           : {'name': 'hellmanex', 'args': ['KPHM100', 'COM7'],
+        'clean3_pump'           : {'name': 'hellmanex', 'args': ['KPHM100', 'COM8'],
                                     'kwargs': {'flow_cal': '319.2',
                                     'comm_lock': None},
                                     'ctrl_args': {'flow_rate': 1}},
@@ -3227,10 +3227,10 @@ default_autosampler_settings = {
     'home_settings'         : {'plate_x': {'dir': -1, 'step': 0.1, 'pos': 0},
                                 'plate_z': {'dir': 1, 'step': 0.1, 'pos': 0},
                                 'needle_y': {'dir': -1, 'step': 0.01, 'pos': -2.70}}, #Direction 1/-1 for positive/negative. step is step size off limit, pos is what to set the home position as.
-    'base_position'         : {'plate_x': 270.65, 'plate_z': -70.4, 'needle_y': 113.3}, # A1 well position, needle height at chiller plate top
+    'base_position'         : {'plate_x': 346.4, 'plate_z': -75.0, 'needle_y': 107.1}, # A1 well position, needle height at chiller plate top
     'clean_offsets'         : {'plate_x': 99.7, 'plate_z': -21.4, 'needle_y': -10}, # Relative to base position
     'needle_out_offset'     : 5, # mm
-    'needle_in_position'    : 3,
+    'needle_in_position'    : -2.5,
     'plate_out_position'    : {'plate_x': -31, 'plate_z': 0}, # Relative
     'plate_load_position'   : {'plate_x': 0, 'plate_z': -80.4}, # Absolute
     'coflow_y_ref_position' : 0, # Position for coflow y motor when base position was set
@@ -3251,20 +3251,20 @@ default_autosampler_settings = {
                                 ('clean5', 'move_x', -10, 0), #distance in mm relative to y position
 
                                 ],
-    'pump_rates'            : {'sample': (0.05, 0.1), 'buffer': (0.05, 0.1), 'purge': (1, 1)}, # (refill, infuse) rates in ml/min
+    'pump_rates'            : {'sample': (0.2, 0.1), 'buffer': (0.05, 0.1), 'purge': (1, 1)}, # (refill, infuse) rates in ml/min
     'max_inject_rate'       : 0.5,
     'max_draw_rate'         : 0.5,
-    'loop_volume'           : 30, #Loop volume in uL
+    'loop_volume'           : 35, #Loop volume in uL
     'min_load_volume'       : 2.0,
-    'default_load_vol'      : 29.0,
+    'default_load_vol'      : 30.0,
     'default_start_delay_time': 10.0,
     'default_end_delay_time': 30.0,
-    'load_dwell_time'       : 45.0, #Time to wait in well after aspirating
+    'load_dwell_time'       : 5.0, #Time to wait in well after aspirating
     'inject_connect_vol'    : 0, #Volume to eject from the needle after loading before re-entering the cell, to ensure a wet-to-wet entry for the needle and prevent bubbles, uL
     'inject_connect_rate'   : 100, #Rate to eject the inject connect volume at, in uL/min
-    'reserve_vol'           : 3.0, #Volume to reserve from dispensing when measuring sample, to avoid bubbles, uL
+    'reserve_vol'           : 2.0, #Volume to reserve from dispensing when measuring sample, to avoid bubbles, uL
     'inline_panel'          : False,
-    'load_pos_y_offset'     : 0.4,
+    'load_pos_y_offset'     : 1.5,
     }
 
 
