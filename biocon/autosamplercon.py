@@ -3257,14 +3257,14 @@ default_autosampler_settings = {
     'loop_volume'           : 35, #Loop volume in uL
     'min_load_volume'       : 2.0,
     'default_load_vol'      : 30.0,
-    'default_start_delay_time': 10.0,
-    'default_end_delay_time': 30.0,
+    'default_start_delay_time': 30.0,
+    'default_end_delay_time': 5.0,
     'load_dwell_time'       : 5.0, #Time to wait in well after aspirating
     'inject_connect_vol'    : 0, #Volume to eject from the needle after loading before re-entering the cell, to ensure a wet-to-wet entry for the needle and prevent bubbles, uL
-    'inject_connect_rate'   : 100, #Rate to eject the inject connect volume at, in uL/min
-    'reserve_vol'           : 2.0, #Volume to reserve from dispensing when measuring sample, to avoid bubbles, uL
+    'inject_connect_rate'   : 200, #Rate to eject the inject connect volume at, in uL/min
+    'reserve_vol'           : 2.5, #Volume to reserve from dispensing when measuring sample, to avoid bubbles, uL
     'inline_panel'          : False,
-    'load_pos_y_offset'     : 1.5,
+    'load_pos_y_offset'     : 2.0,
     }
 
 
