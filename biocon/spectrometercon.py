@@ -498,8 +498,9 @@ class Spectrometer(object):
                 all_spectra = []
 
                 for i in range(averages):
-                    timestamp = datetime.datetime.now()
+
                     spectrum = self._collect_spectrum(True)
+                    timestamp = datetime.datetime.now()
 
                     all_spectra.append(spectrum)
 
@@ -643,8 +644,8 @@ class Spectrometer(object):
     def _collect_spectrum_inner(self, dark_correct, int_trigger):
         logger.debug('Spectrometer %s: Getting raw spectrum', self.name)
 
-        timestamp = datetime.datetime.now()
         spectrum = self._collect_spectrum(int_trigger)
+        timestamp = datetime.datetime.now()
 
         spectrum = SpectraData(spectrum, timestamp,
             absorbance_window=self._absorbance_window,
@@ -797,7 +798,6 @@ class Spectrometer(object):
             self._calculate_all_abs_single_wavelength()
 
             dt_delta_t = datetime.timedelta(seconds=delta_t_min)
-
             if self._series_abort_event.is_set():
                 self._taking_series = False
                 self.series_ready_event.clear()
