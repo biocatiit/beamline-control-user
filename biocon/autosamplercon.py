@@ -3251,7 +3251,7 @@ default_autosampler_settings = {
                                 ('clean5', 'move_x', -10, 0), #distance in mm relative to y position
 
                                 ],
-    'pump_rates'            : {'sample': (0.2, 0.1), 'buffer': (0.05, 0.1), 'purge': (1, 1)}, # (refill, infuse) rates in ml/min
+    'pump_rates'            : {'sample': (0.1, 0.1), 'buffer': (0.05, 0.1), 'purge': (1, 1)}, # (refill, infuse) rates in ml/min
     'max_inject_rate'       : 0.5,
     'max_draw_rate'         : 0.5,
     'loop_volume'           : 35, #Loop volume in uL
@@ -3259,9 +3259,9 @@ default_autosampler_settings = {
     'default_load_vol'      : 30.0,
     'default_start_delay_time': 30.0,
     'default_end_delay_time': 5.0,
-    'load_dwell_time'       : 5.0, #Time to wait in well after aspirating
+    'load_dwell_time'       : 10.0, #Time to wait in well after aspirating
     'inject_connect_vol'    : 0, #Volume to eject from the needle after loading before re-entering the cell, to ensure a wet-to-wet entry for the needle and prevent bubbles, uL
-    'inject_connect_rate'   : 200, #Rate to eject the inject connect volume at, in uL/min
+    'inject_connect_rate'   : 100, #Rate to eject the inject connect volume at, in uL/min
     'reserve_vol'           : 2.5, #Volume to reserve from dispensing when measuring sample, to avoid bubbles, uL
     'inline_panel'          : False,
     'load_pos_y_offset'     : 2.0,
