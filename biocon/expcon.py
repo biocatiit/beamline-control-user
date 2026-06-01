@@ -1660,6 +1660,8 @@ class ExpCommThread(threading.Thread):
     def fast_exposure(self, data_dir, fprefix, num_frames, exp_time, exp_period,
         exp_type='standard', **kwargs):
         logger.debug('Setting up %s fast exposure', exp_type)
+
+        logger.debug('Getting settings and devices')
         det = self._mx_data['det']          #Detector
 
         struck = self._mx_data['struck']    #Struck SIS3820
@@ -1724,6 +1726,7 @@ class ExpCommThread(threading.Thread):
             logger.info('Continuous mode')
             continuous_exp = True
 
+        logger.debug('Getting dark counts')
         dark_counts = []
         for i in range(len(s_counters)):
             if log_vals[i]['dark']:
@@ -1738,6 +1741,7 @@ class ExpCommThread(threading.Thread):
         # det_exp_time.put(exp_time)
         # det_exp_period.put(exp_period)
 
+        logger.debug('Setting detector settings')
         if self._settings['detector'] == '18IDpil1M:_epics':
             det.set_trigger_mode('ext_enable')
         else:
@@ -1747,6 +1751,7 @@ class ExpCommThread(threading.Thread):
         det.set_exp_period(exp_period)
 
 
+        logger.debug('Setting MCS settings')
         if exp_type == 'muscle':
             logger.debug('muscle setup')
             logger.debug(struck_meas_time)
@@ -1766,6 +1771,7 @@ class ExpCommThread(threading.Thread):
         # if exp_type == 'muscle':
         #     dg645_trigger_source2.put(1)
 
+        logger.debug('Setting delay generator settings')
         #Need to clear srs possibly?
         ab_burst.setup(0.000001, 0.000000, 1, 0, 1, 2)
         cd_burst.setup(0.000001, 0.000000, 1, 0, 1, 2)

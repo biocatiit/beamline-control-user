@@ -3548,8 +3548,10 @@ class UVPanel(utils.DevicePanel):
                 uv_time = (max(int_time+self.settings['int_t_readout'],
                     self.settings['int_t_min'])*scan_avgs)
 
-                # delta_t_min = (exp_time-uv_time)*1.05
-                delta_t_min = (exp_period-0.5)*1.05
+                if exp_period - 0.5 > 0:
+                    delta_t_min = max(0.25, (exp_time-uv_time)*1.05)
+                else:
+                    delta_t_min = (exp_time-uv_time)*1.05
 
                 if delta_t_min < 0.01:
                     delta_t_min = 0
