@@ -3152,17 +3152,21 @@ class UVPanel(utils.DevicePanel):
 
         # Need some kind of delay or I get a USB error message from the stellarnet driver?
 
-        if self.inline:
-            cmd = ['set_hist_time', [self.name, float(self._history_length)], {}]
-            self._send_cmd(cmd, get_response=False)
-
         is_busy = self._get_busy()
 
-        self._get_full_history()
-
         if not is_busy:
+            self._set_wavelength_range()
+
             self._set_abs_params()
             self._set_ao_params()
+
+            cmd = ['set_int_time', [self.name, float(self.int_time.GetValue())], {}]
+            self._send_cmd(cmd, get_response=False)
+
+            cmd = ['set_hist_time', [self.name, float(self.history_time.GetValue())], {}]
+            self._send_cmd(cmd, get_response=False)
+
+        self._get_full_history()
 
         cmd = ['get_spec_settings', [self.name,], {}]
         ret = self._send_cmd(cmd, True)
@@ -3255,7 +3259,6 @@ class UVPanel(utils.DevicePanel):
                 self.abs_window.SafeChangeValue('{}'.format(self.settings['abs_window']))
             except Exception:
                 pass
-
 
     def _on_settings_change(self, obj, val):
         if obj == self.int_time:
