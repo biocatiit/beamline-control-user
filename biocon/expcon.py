@@ -2159,13 +2159,20 @@ class ExpCommThread(threading.Thread):
         if ab_burst_2 is not None:
             ab_burst_2.get_status() #Maybe need to clear this status?
 
-        while det.get_status() !=0:
-            time.sleep(0.001)
+        start = time.monotonic()
+        timeout = 3*60
+
+        while det.get_status() !=0
+            time.sleep(0.01)
             if self._abort_event.is_set() and not aborted:
                 self.fast_mode_abort_cleanup(det, struck, ab_burst, ab_burst_2,
                     dio_out9, slow_shutter, exp_time, kwargs)
                 aborted = True
                 break
+
+            if time.monotonic()-start>timeout:
+                logger.error('Timed out waiting for detector to finish)')
+                self._abort_event.set()
 
         logger.info('Exposures done')
 
