@@ -7888,7 +7888,7 @@ default_hplc_2pump_settings = {
     'com_thread'    : None,
     # Default settings for hplc
     'purge_volume'              : 20,
-    'purge_rate'                : 3,
+    'purge_rate'                : 1.5,
     'purge_accel'               : 10,
     'purge_max_pressure'        : 250,
     'restore_flow_after_purge'  : True,
