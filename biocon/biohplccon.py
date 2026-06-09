@@ -53,7 +53,8 @@ class AgilentHPLCStandard(AgilentHPLC):
     """
 
     def __init__(self, name, device, hplc_args={}, purge1_valve_args={},
-        buffer1_valve_args={}, pump1_id='', connect_valves=True, dual_pump=False):
+        buffer1_valve_args={}, mals_valve_args={}, pump1_id='',
+        connect_valves=True, dual_pump=False, use_mals_valve=False):
         """
         Initializes the HPLC plus valves
 
@@ -65,22 +66,14 @@ class AgilentHPLCStandard(AgilentHPLC):
             Ignored. Dummy argument so the format is consistent with other devices.
         hplc_args: dict
             Dictionary of input arguments for the Agilent HPLC
-        selector_valve_args: dict
-            Dictionary of input arguments for the selector valve
-        outlet_valve_args: dict
-            Dictionary of input arguments for the outlet valve
         purge1_valve_args: dict
             Dictionary of the input arguments for the flowpath 1 purge valve
-        purge2_valve_args: dict
-            Dictionary of the input arguments for the flowpath 2 purge valve
         buffer1_valve_args: dict
             Dictionary of the input arguments for the flowpath 1 buffer valve
-        buffer2_valve_args: dict
-            Dictionary of the input arguments for the flowpath 2 buffer valve
+        mals_valve_args: dict
+            Dictionary of the input arguments for the MALS selector valve
         pump1_id: str
             The Agilent hashkey for pump 1
-        pump2_id: str
-            The Agilent hashkey for pump 2
         """
         self._dual_pump = dual_pump
 
@@ -106,7 +99,22 @@ class AgilentHPLCStandard(AgilentHPLC):
             self._current_buffer1 = None
             self._current_buffer2 = None
 
-            self._connect_valves(purge1_valve_args, buffer1_valve_args)
+            self.use_mals_valve = use_mals_valve
+
+            self._connect_valves(purge1_valve_args, buffer1_valve_args,
+                mals_valve_args)
+
+        # Maybe move this MALS bit to a separate function?
+        self._mals_positions = {
+            1   : False,
+            2   : True,
+            }
+
+        if self._mals_valve is not None:
+            current_pos = int(self._get_valve_position('mals'))
+            self._mals_inline = self._mals_positions[current_pos]
+        else:
+            self._mals_inline = False
 
         # Connect HPLC
         self._pump1_id = pump1_id
@@ -224,7 +232,7 @@ class AgilentHPLCStandard(AgilentHPLC):
         """
         return True
 
-    def _connect_valves(self, p1_args, b1_args):
+    def _connect_valves(self, p1_args, b1_args, mals_args):
 
         p1_name = p1_args['name']
         p1_arg_list = p1_args['args']
@@ -246,9 +254,24 @@ class AgilentHPLCStandard(AgilentHPLC):
             b1_comm, **b1_kwarg_list)
         self._buffer1_valve.connect()
 
+        if self.use_mals_valve:
+            mals_name = mals_args['name']
+            mals_arg_list = mals_args['args']
+            mals_kwarg_list = mals_args['kwargs']
+            mals_device_type = mals_arg_list[0]
+            mals_comm = mals_arg_list[1]
+
+            self._mals_valve = valvecon.known_valves[mals_device_type](mals_name,
+                mals_comm, **mals_kwarg_list)
+            self._mals_valve.connect()
+
+        else:
+            self._mals_valve = None
+
         self._valves = {
             'purge1'    : self._purge1_valve,
             'buffer1'   : self._buffer1_valve,
+            'mals'      : self._mals_valve,
             }
 
         self._active_flow_path = 1
@@ -285,16 +308,18 @@ class AgilentHPLCStandard(AgilentHPLC):
         """
         valve = self._valves[valve_id]
         position = None
-        retry = 5
-        while position is None and retry > 0:
-            try:
-                position = valve.get_position()
-            except Exception:
-                # traceback.print_exc()
-                pass
-            if position is None:
-                retry -= 1
-                time.sleep(0.1)
+
+        if valve is not None:
+            retry = 5
+            while position is None and retry > 0:
+                try:
+                    position = valve.get_position()
+                except Exception:
+                    # traceback.print_exc()
+                    pass
+                if position is None:
+                    retry -= 1
+                    time.sleep(0.1)
 
         return position
 
@@ -396,6 +421,18 @@ class AgilentHPLCStandard(AgilentHPLC):
             is_switching = copy.copy(self._switching_buffer_bottle2)
 
         return is_switching
+
+    def get_mals_status(self):
+        """
+        Gets the MALS status, whether the MALS is inline or offline.
+
+        Returns
+        -------
+        mals_in_use: bool
+            True if the MALS valve is switched so the instruments are inline,
+            False if not. Also returns False is the MALS valve is not in use.
+        """
+        return self._mals_inline
 
     def get_hplc_flow_rate(self, flow_path):
         """
@@ -1813,22 +1850,28 @@ class AgilentHPLCStandard(AgilentHPLC):
             Whether or not the position was successfully set.
         """
         valve = self._valves[valve_id]
-        success = valve.set_position(position)
 
-        if valve_id == 'buffer1':
-            self.set_active_buffer_position(position, 1)
-        elif valve_id == 'buffer2':
-            self.set_active_buffer_position(position, 2)
-        elif valve_id == 'purge1':
-            if position == self._purge_positions[1]['purge1']:
-                self._purging_flow1 = True
-            else:
-                self._purging_flow1 = False
-        elif valve_id == 'purge2':
-            if position == self._purge_positions[2]['purge2']:
-                self._purging_flow2 = True
-            else:
-                self._purging_flow2 = False
+        success = False
+
+        if valve is not None:
+            success = valve.set_position(position)
+
+            if valve_id == 'buffer1':
+                self.set_active_buffer_position(position, 1)
+            elif valve_id == 'buffer2':
+                self.set_active_buffer_position(position, 2)
+            elif valve_id == 'purge1':
+                if position == self._purge_positions[1]['purge1']:
+                    self._purging_flow1 = True
+                else:
+                    self._purging_flow1 = False
+            elif valve_id == 'purge2':
+                if position == self._purge_positions[2]['purge2']:
+                    self._purging_flow2 = True
+                else:
+                    self._purging_flow2 = False
+            elif valve_id == 'mals':
+                self._mals_inline = self._mals_positions[position]
 
         return success
 
@@ -2604,7 +2647,8 @@ class AgilentHPLCStandard(AgilentHPLC):
         self._buffer_monitor1.stop_monitor()
 
         for valve in self._valves.values():
-            valve.disconnect()
+            if valve is not None:
+                valve.disconnect()
 
         self._terminate_monitor_purge.set()
         self._monitor_purge_evt.set()
@@ -2632,7 +2676,8 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
 
     def __init__(self, name, device, hplc_args={}, selector_valve_args={},
         outlet_valve_args={}, purge1_valve_args={}, purge2_valve_args={},
-        buffer1_valve_args={}, buffer2_valve_args={}, pump1_id='', pump2_id=''):
+        buffer1_valve_args={}, buffer2_valve_args={}, mals_valve_args={},
+        pump1_id='', pump2_id='', use_mals_valve=False):
         """
         Initializes the HPLC plus valves
 
@@ -2656,6 +2701,8 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
             Dictionary of the input arguments for the flowpath 1 buffer valve
         buffer2_valve_args: dict
             Dictionary of the input arguments for the flowpath 2 buffer valve
+        mals_valve_args: dict
+            Dictionary of the input arguments for the MALS selector valve
         pump1_id: str
             The Agilent hashkey for pump 1
         pump2_id: str
@@ -2682,15 +2729,22 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
             2   : {'purge2': 1},
             }
 
+        self._mals_positions = {
+                1   : True,
+                2   : False,
+                }
+
         self._active_flow_path = None
         self._purging_flow1 = False
         self._purging_flow2 = False
         self._equil_flow2 = False
 
+        self.use_mals_valve = use_mals_valve
+
         # Connect valves
         self._connect_valves(selector_valve_args, outlet_valve_args,
             purge1_valve_args, purge2_valve_args, buffer1_valve_args,
-            buffer2_valve_args)
+            buffer2_valve_args, mals_valve_args)
 
         AgilentHPLCStandard.__init__(self, name, device, hplc_args=hplc_args,
             purge1_valve_args=purge1_valve_args,
@@ -2807,6 +2861,20 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
             b2_comm, **b2_kwarg_list)
         self._buffer2_valve.connect()
 
+        if self.use_mals_valve:
+            mals_name = mals_args['name']
+            mals_arg_list = mals_args['args']
+            mals_kwarg_list = mals_args['kwargs']
+            mals_device_type = mals_arg_list[0]
+            mals_comm = mals_arg_list[1]
+
+            self._mals_valve = valvecon.known_valves[mals_device_type](mals_name,
+                mals_comm, **mals_kwarg_list)
+            self._mals_valve.connect()
+
+        else:
+            self._mals_valve = None
+
         self._valves = {
             'selector'  : self._selector_valve,
             'outlet'    : self._outlet_valve,
@@ -2814,6 +2882,7 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
             'purge2'    : self._purge2_valve,
             'buffer1'   : self._buffer1_valve,
             'buffer2'   : self._buffer2_valve,
+            'mals'      : self._mals_valve,
             }
 
         for flow_path in self._flow_path_positions:
@@ -3307,7 +3376,8 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
         self._buffer_monitor2.stop_monitor()
 
         for valve in self._valves.values():
-            valve.disconnect()
+            if valve is not None:
+                valve.disconnect()
 
         self._terminate_monitor_purge.set()
         self._monitor_purge_evt.set()
@@ -3505,6 +3575,7 @@ class HPLCCommThread(utils.CommManager):
             'high_pressure_lim1': device.get_hplc_high_pressure_limit(1),
             'target_flow1'      : device.get_hplc_target_flow_rate(1),
             'flow_accel1'       : device.get_hplc_flow_accel(1),
+            'mals_inline'       : device.get_mals_status(),
             }
 
         if isinstance(device, AgilentHPLC2Pumps):
@@ -3571,6 +3642,9 @@ class HPLCCommThread(utils.CommManager):
             valve_status['purge2'] = device.get_valve_position('purge2')
             valve_status['selector'] = device.get_valve_position('selector')
             valve_status['outlet'] = device.get_valve_position('outlet')
+
+        if device.use_mals_valve:
+            valve_status['mals'] = device.get_valve_position('mals')
 
         self._return_value((name, cmd, valve_status), comm_name)
 
@@ -4203,6 +4277,9 @@ class HPLCPanel(utils.DevicePanel):
         self._purge2_valve = 0
         self._selector_valve = 0
         self._outlet_valve = 0
+        self._mals_valve = 0
+
+        self._mals_inline = False
 
         self._sampler_thermostat_power = ''
         self._sampler_submitting = ''
@@ -4744,6 +4821,11 @@ class HPLCPanel(utils.DevicePanel):
             self._outlet_valve_ctrl.Bind(utils.EVT_MY_SPIN,
                 self._on_set_valve_position)
 
+        if self.settings['use_mals_valve']:
+            self._mals_valve_ctrl = utils.IntSpinCtrl(valve_box, my_min=1)
+            self._mals_valve_ctrl.Bind(utils.EVT_MY_SPIN,
+                self._on_set_valve_position)
+
         valve_sizer = wx.FlexGridSizer(cols=4, vgap=self._FromDIP(5),
             hgap=self._FromDIP(5))
         valve_sizer.Add(wx.StaticText(valve_box, label='Buffer 1:'),
@@ -4773,6 +4855,22 @@ class HPLCPanel(utils.DevicePanel):
             valve_sizer.Add(self._outlet_valve_ctrl,
                 flag=wx.ALIGN_CENTER_VERTICAL)
 
+        if self.settings['use_mals_valve']:
+            valve_sizer.Add(wx.StaticText(valve_box, label='MALS:'),
+                flag=wx.ALIGN_CENTER_VERTICAL)
+            valve_sizer.Add(self._outlet_valve_ctrl,
+                flag=wx.ALIGN_CENTER_VERTICAL)
+
+
+        if self.settings['use_mals_valve']:
+            self._mals_status = wx.StaticText(valve_box,
+                size=self._FromDIP((60,-1)), style=wx.ST_NO_AUTORESIZE)
+
+            mals_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(5),
+                hgap=self._FromDIP(5))
+            mals_sizer.Add(wx.StaticText(valve_box, label='MALS status:'),
+                flag=wx.ALIGN_CENTER_VERTICAL)
+            mals_sizer.Add(self._mals_status, flag=wx.ALIGN_CENTER_VERTICAL)
 
         self._buffer1_valve_switch = wx.StaticText(valve_box,
             size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
@@ -4824,6 +4922,11 @@ class HPLCPanel(utils.DevicePanel):
         top_sizer = wx.StaticBoxSizer(valve_box, wx.VERTICAL)
         top_sizer.Add(valve_sizer, flag=wx.ALL|wx.EXPAND, proportion=1,
             border=self._FromDIP(5))
+
+        if self.settings['use_mals_valve']:
+            top_sizer.Add(mals_sizer, flag=wx.LEFT|wx.RIGHT|wx.BOTTOM,
+            border=self._FromDIP(5))
+
         top_sizer.Add(buffer_switch_sizer, flag=wx.LEFT|wx.RIGHT|wx.BOTTOM,
             border=self._FromDIP(5))
         top_sizer.Add(buffer_switch_ctrl_sizer, flag=wx.LEFT|wx.RIGHT|wx.BOTTOM,
@@ -5041,6 +5144,8 @@ class HPLCPanel(utils.DevicePanel):
         args = copy.copy(device_data['args'])
         kwargs = device_data['kwargs']
 
+        kwargs['use_mals_valve'] = settings['use_mals_valve']
+
         valve_max = kwargs['purge1_valve_args']['kwargs']['positions']
         self._purge1_valve_ctrl.SetMax(valve_max)
 
@@ -5060,6 +5165,10 @@ class HPLCPanel(utils.DevicePanel):
             valve_max = kwargs['outlet_valve_args']['kwargs']['positions']
             self._outlet_valve_ctrl.SetMax(valve_max)
 
+        if settings['use_mals_valve']:
+            valve_max = kwargs['mals_valve_args']['kwargs']['positions']
+            self._mals_valve_ctrl.SetMax(valve_max)
+
         args.insert(0, self.name)
 
         connect_cmd = ['connect', args, kwargs]
@@ -5069,7 +5178,6 @@ class HPLCPanel(utils.DevicePanel):
         if connected:
             get_fast_hplc_status_cmd = ['get_fast_hplc_status', [self.name,], {}]
             self._update_status_cmd(get_fast_hplc_status_cmd, 2)
-
 
             get_valve_status_cmd = ['get_valve_status', [self.name,], {}]
             self._update_status_cmd(get_valve_status_cmd, 15)
@@ -5839,6 +5947,9 @@ class HPLCPanel(utils.DevicePanel):
         elif evt_obj == self._outlet_valve_ctrl:
             valve = 'outlet'
             val = self._outlet_valve_ctrl.GetValue()
+        elif evt_obj == self._mals_valve_ctrl:
+            valve = 'mals'
+            val = self._mals_valve_ctrl.GetValue()
 
         try:
             val = int(val)
@@ -6540,6 +6651,15 @@ class HPLCPanel(utils.DevicePanel):
                         pump2_flow_accel)
                     self._pump2_flow_accel = pump2_flow_accel
 
+            if self.settings['use_mals_valve']
+                if self._mals_inline != pump_status['mals_inline']:
+                    if pump_status['mals_inline']:
+                        status = 'Inline'
+                    else:
+                        status = 'Bypassed'
+
+                    wx.CallAfter(self._mals_status.SetLabel, status)
+                    self._mals_inline = pump_status['mals_inline']
 
             sampler_status = val['autosampler_status']
             submitting_sample = str(sampler_status['submitting_sample'])
@@ -6637,6 +6757,14 @@ class HPLCPanel(utils.DevicePanel):
                     wx.CallAfter(self._outlet_valve_ctrl.SafeChangeValue,
                         outlet)
                     self._outlet_valve = outlet
+
+            if self.settings['use_mals_valve']:
+                mals = int(val['mals'])
+
+                if mals != self._mals_valve:
+                    wx.CallAfter(self._mals_valve_ctrl.SafeChangeValue,
+                        mals)
+                    self._mals_valve = mals
 
     def _update_buffer_list(self, flow_path, pos, vol, descrip):
         if flow_path == 1:
@@ -7728,6 +7856,12 @@ default_buffer2_valve_args = {
     'kwargs': {'positions' : 10}
     }
 
+default_mals_valve_args = {
+    'name'  : 'MALS',
+    'args'  : ['Cheminert', 'COM8'],
+    'kwargs': {'positions' : 2}
+    }
+
 # 2 pump HPLC for SEC-SAXS
 setup_devices = [
     {'name': 'SEC-SAXS', 'args': ['AgilentHPLC2Pumps', None],
@@ -7738,6 +7872,7 @@ setup_devices = [
         'purge2_valve_args' : default_purge2_valve_args,
         'buffer1_valve_args' : default_buffer1_valve_args,
         'buffer2_valve_args' : default_buffer2_valve_args,
+        'mals_valve_args' : default_mals_valve_args,
         'pump1_id' : 'quat. pump 1#1c#1',
         'pump2_id' : 'quat. pump 2#1c#2'},
         }
@@ -7792,6 +7927,7 @@ default_hplc_2pump_settings = {
     'sp_method'                 : '',
     'wait_for_flow_ramp'        : True,
     'settle_time'               : 0.0,
+    'use_mals_valve'            : False,
     }
 
 if __name__ == '__main__':
