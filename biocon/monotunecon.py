@@ -101,7 +101,7 @@ class MonoAutoTune(object):
     def optimize_intensity(self):
         self.ct_time_pv.put(self.settings['optimize_ct_time'], wait=True)
         self.i0_shutter_pv.put(0, wait=True)
-        time.sleep(0.1) #Waits for shutter to open
+        time.sleep(0.15) #Waits for shutter to open
 
         v_start = self.ao_pv.get()
         i_start = self._measure_intensity()

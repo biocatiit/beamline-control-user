@@ -158,6 +158,16 @@ known_well_plates = {
         'height'        : 3.5, # bottom of well from chiller base plate
         'plate_height'  : 14.4, # top of plate from chiller base plate
         },
+
+    'Falcon 96 well clear round bottom (PN# 353077)' : {
+        'max_volume'    : 250, # uL
+        'num_columns'   : 12,
+        'num_rows'      : 8,
+        'col_step'      : 8.99, # mm
+        'row_step'      : 8.99, # mm
+        'height'        : 3.71, # bottom of well from chiller base plate
+        'plate_height'  : 14.3, # top of plate from chiller base plate
+        },
 }
 
 class Autosampler(object):

@@ -2159,13 +2159,20 @@ class ExpCommThread(threading.Thread):
         if ab_burst_2 is not None:
             ab_burst_2.get_status() #Maybe need to clear this status?
 
-        while det.get_status() !=0:
-            time.sleep(0.001)
+        start = time.monotonic()
+        timeout = 3*60
+
+        while det.get_status() !=0
+            time.sleep(0.01)
             if self._abort_event.is_set() and not aborted:
                 self.fast_mode_abort_cleanup(det, struck, ab_burst, ab_burst_2,
                     dio_out9, slow_shutter, exp_time, kwargs)
                 aborted = True
                 break
+
+            if time.monotonic()-start>timeout:
+                logger.error('Timed out waiting for detector to finish)')
+                self._abort_event.set()
 
         logger.info('Exposures done')
 
@@ -2212,7 +2219,7 @@ class ExpCommThread(threading.Thread):
             det.set_frame_type('bg')
             det.set_file_auto_save(False)
 
-            time.sleep(0.1) #Wait to be sure slow shutter is closed
+            time.sleep(0.15) #Wait to be sure slow shutter is closed
             det.arm()
 
             while det.get_status():
@@ -5113,39 +5120,39 @@ default_exposure_settings = {
     'exp_period'            : '1',
     'exp_num'               : '1',
 
-    # # For Pilatus3 X 1M
-    # 'exp_time_min'          : 0.00105,
-    # 'exp_time_max'          : 5184000,
-    # 'exp_period_min'        : 0.002,
-    # 'exp_period_max'        : 5184000,
-    # 'nframes_max'           : 15000, # For Pilatus: 999999, for Struck: 15000 (set by maxChannels in the driver configuration)
-    # 'nparams_max'           : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
-    # 'exp_period_delta'      : 0.00095,
-    # 'local_dir_root'        : '/nas_data/Pilatus1M',
-    # 'remote_dir_root'       : '/nas_data_pilatus',
-    # # 'detector'              : 'pilatus_mx',
-    # 'detector'              : '18IDpil1M:_epics',
-    # 'det_args'              : {}, #Allows detector specific keyword arguments
-    # 'add_file_postfix'      : False,
-    # 'monitor_dark'          : False,
-    # 'scan_rearm'            : False, #Rearm the detector between scans. If True may slow down scans
-
-    # #Eiger2 XE 9M
-    'exp_time_min'          : 0.000000050,
-    'exp_time_max'          : 3600,
-    'exp_period_min'        : 0.001785714286, #There's an 8bit undocumented mode that can go faster, in theory
-    'exp_period_max'        : 5184000, # Not clear there is a maximum, so left it at this
-    'nframes_max'           : 15000, # For Eiger: 2000000000, for Struck: 15000 (set by maxChannels in the driver configuration)
+    # For Pilatus3 X 1M
+    'exp_time_min'          : 0.00105,
+    'exp_time_max'          : 5184000,
+    'exp_period_min'        : 0.002,
+    'exp_period_max'        : 5184000,
+    'nframes_max'           : 15000, # For Pilatus: 999999, for Struck: 15000 (set by maxChannels in the driver configuration)
     'nparams_max'           : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
-    'exp_period_delta'      : 0.000000200,
-    'local_dir_root'        : '/nas_data/Eiger2x',
-    'remote_dir_root'       : '/nas_data/Eiger2x',
-    'detector'              : '18ID:EIG2:_epics',
-    'det_args'              :  {'use_tiff_writer': False, 'use_file_writer': True,
-                                'photon_energy' : 12.0, 'images_per_file': 300}, #1 image/file for TR, 300 for equilibrium
+    'exp_period_delta'      : 0.00095,
+    'local_dir_root'        : '/nas_data/Pilatus1M',
+    'remote_dir_root'       : '/nas_data_pilatus',
+    # 'detector'              : 'pilatus_mx',
+    'detector'              : '18IDpil1M:_epics',
+    'det_args'              : {}, #Allows detector specific keyword arguments
     'add_file_postfix'      : False,
     'monitor_dark'          : False,
     'scan_rearm'            : False, #Rearm the detector between scans. If True may slow down scans
+
+    # # #Eiger2 XE 9M
+    # 'exp_time_min'          : 0.000000050,
+    # 'exp_time_max'          : 3600,
+    # 'exp_period_min'        : 0.001785714286, #There's an 8bit undocumented mode that can go faster, in theory
+    # 'exp_period_max'        : 5184000, # Not clear there is a maximum, so left it at this
+    # 'nframes_max'           : 15000, # For Eiger: 2000000000, for Struck: 15000 (set by maxChannels in the driver configuration)
+    # 'nparams_max'           : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
+    # 'exp_period_delta'      : 0.000000200,
+    # 'local_dir_root'        : '/nas_data/Eiger2x',
+    # 'remote_dir_root'       : '/nas_data/Eiger2x',
+    # 'detector'              : '18ID:EIG2:_epics',
+    # 'det_args'              :  {'use_tiff_writer': False, 'use_file_writer': True,
+    #                             'photon_energy' : 12.0, 'images_per_file': 300}, #1 image/file for TR, 300 for equilibrium
+    # 'add_file_postfix'      : False,
+    # 'monitor_dark'          : False,
+    # 'scan_rearm'            : False, #Rearm the detector between scans. If True may slow down scans
 
     # # For Mar165
     # 'exp_time_min'          : 0.001,
