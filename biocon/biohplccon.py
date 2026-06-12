@@ -3165,8 +3165,8 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
 
         return pressure
 
-    def set_active_flow_path(self, flow_path, stop_flow1=False,
-        stop_flow2=False, restore_flow_after_switch=True, purge_active=True,
+    def set_active_flow_path(self, flow_path, stop_flow1=True,
+        stop_flow2=True, restore_flow1=True, restore_flow2=True, purge_active=True,
         purge_volume=1.0, purge_rate=None, purge_accel=None,
         switch_with_sample=False, purge_max_pressure=None, mals_valve_pos=None):
         """
@@ -3183,10 +3183,15 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
         stop_flow2: bool
             Whether flow from pump 2 should be stopped while the
             flow path is switched.
-        restore_flow_after_switch: bool
-            Whether the flow rate should be restored to the current flow rate
-            after switching is done. Note that this is only needed if either
-            stop_flow is True. If False, any flow that is stopped will not
+        restore_flow1: bool
+            Whether the flow rate of flow path 1 should be restored to the
+            current flow rate after switching is done. Note that this is only
+            needed if stop_flow1 is True. If False, flow that is stopped will not
+            be resumed after switching.
+        restore_flow2: bool
+            Whether the flow rate of flow path 2 should be restored to the
+            current flow rate after switching is done. Note that this is only
+            needed if stop_flow2 is True. If False, flow that is stopped will not
             be resumed after switching.
         purge_active: bool
             If true, this will do a purge of the active flow path after
@@ -3257,7 +3262,8 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
                     'flow_path': flow_path,
                     'stop_flow1': stop_flow1,
                     'stop_flow2': stop_flow2,
-                    'restore_flow_after_switch': restore_flow_after_switch,
+                    'restore_flow1' : restore_flow1,
+                    'restore_flow2' : restore_flow2,
                     'purge_active': purge_active,
                     'purge_volume': purge_volume,
                     'purge_rate': purge_rate,
@@ -3287,7 +3293,8 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
             flow_path = self._switch_args['flow_path']
             stop_flow1 = self._switch_args['stop_flow1']
             stop_flow2 = self._switch_args['stop_flow2']
-            restore_flow_after_switch = self._switch_args['restore_flow_after_switch']
+            restore_flow1 = self._switch_args['restore_flow1']
+            restore_flow2 = self._switch_args['restore_flow2']
             purge_active = self._switch_args['purge_active']
             purge_volume = self._switch_args['purge_volume']
             purge_rate = self._switch_args['purge_rate']
@@ -3358,30 +3365,42 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
                     if flow_path == 1:
                         stop_before_purge = stop_flow1
                         stop_after_purge = stop_flow1
+                        restore_flow_after_purge = restore_flow1
                     elif flow_path == 2:
                         stop_before_purge = stop_flow2
                         stop_after_purge = stop_flow2
+                        restore_flow_after_purge = restore_flow1
 
                     self.purge_flow_path(flow_path, purge_volume, purge_rate,
-                        purge_accel, True, switch_with_sample, stop_before_purge,
-                        stop_after_purge, purge_max_pressure=purge_max_pressure)
+                        purge_accel, restore_flow_after_purge, switch_with_sample,
+                        stop_before_purge, stop_after_purge,
+                        purge_max_pressure=purge_max_pressure)
 
-                    if restore_flow_after_switch:
-                        if flow_path == 1:
+                    if flow_path == 1:
+                        if restore_flow1:
                             self._pre_purge_flow1 = initial_flow1
+
+                        if restore_flow2:
                             self.set_hplc_flow_rate(initial_flow2, 2)
 
-                        elif flow_path == 2:
+                    elif flow_path == 2:
+                        if restore_flow2:
                             self._pre_purge_flow2 = initial_flow2
+
+                        if restore_flow1:
                             self.set_hplc_flow_rate(initial_flow1, 1)
 
-                elif restore_flow_after_switch:
-                    self.set_hplc_flow_rate(initial_flow1, 1)
-                    self.set_hplc_flow_rate(initial_flow2, 2)
+                else:
+                    if restore_flow1:
+                        self.set_hplc_flow_rate(initial_flow1, 1)
+                    if restore_flow2:
+                        self.set_hplc_flow_rate(initial_flow2, 2)
 
-            elif self._abort_switch.is_set() and restore_flow_after_switch:
-                self.set_hplc_flow_rate(initial_flow1, 1)
-                self.set_hplc_flow_rate(initial_flow2, 2)
+            elif self._abort_switch.is_set():
+                if restore_flow1:
+                    self.set_hplc_flow_rate(initial_flow1, 1)
+                if restore_flow2:
+                    self.set_hplc_flow_rate(initial_flow2, 2)
 
             self._switching_flow_path = False
             self._monitor_switch_evt.clear()
@@ -5496,7 +5515,8 @@ class HPLCPanel(utils.DevicePanel):
             'purge_volume'              : self.settings['switch_purge_volume'],
             'purge_rate'                : self.settings['switch_purge_rate'],
             'purge_accel'               : self.settings['switch_purge_accel'],
-            'restore_flow_after_switch' : self.settings['restore_flow_after_switch'],
+            'restore_flow1'             : self.settings['restore_flow1'],
+            'restore_flow2'             : self.settings['restore_flow2'],
             'switch_with_sample'        : self.settings['switch_with_sample'],
             'stop_flow1'                : self.settings['switch_stop_flow1'],
             'stop_flow2'                : self.settings['switch_stop_flow2'],
@@ -7770,8 +7790,10 @@ class SwitchDialog(wx.Dialog):
     def _create_layout(self, settings):
         parent = self
 
-        self._switch_restore_flow = wx.CheckBox(parent,
-            label='Restore flow to current rate after switching')
+        self._switch_restore_flow1 = wx.CheckBox(parent,
+            label='Restore flow on path 1 to current rate after switching')
+        self._switch_restore_flow2 = wx.CheckBox(parent,
+            label='Restore flow on path 2 to current rate after switching')
         self._switch_with_sample = wx.CheckBox(parent,
             label='Switch even if a sample is running')
         self._switch_stop1 = wx.CheckBox(parent,
@@ -7781,14 +7803,17 @@ class SwitchDialog(wx.Dialog):
         self._purge_active = wx.CheckBox(parent,
             label='Purge active flow path after switching')
 
-        self._switch_restore_flow.SetValue(settings['restore_flow_after_switch'])
+        self._switch_restore_flow1.SetValue(settings['restore_flow1'])
+        self._switch_restore_flow2.SetValue(settings['restore_flow2'])
         self._switch_with_sample.SetValue(settings['switch_with_sample'])
         self._switch_stop1.SetValue(settings['stop_flow1'])
         self._switch_stop2.SetValue(settings['stop_flow2'])
         self._purge_active.SetValue(settings['purge_active'])
 
         switch_sizer = wx.BoxSizer(wx.VERTICAL)
-        switch_sizer.Add(self._switch_restore_flow, flag=wx.BOTTOM,
+        switch_sizer.Add(self._switch_restore_flow1, flag=wx.BOTTOM,
+            border=self._FromDIP(5))
+        switch_sizer.Add(self._switch_restore_flow2, flag=wx.BOTTOM,
             border=self._FromDIP(5))
         switch_sizer.Add(self._switch_with_sample, flag=wx.BOTTOM,
             border=self._FromDIP(5))
@@ -7852,7 +7877,8 @@ class SwitchDialog(wx.Dialog):
         rate = self._purge_rate_ctrl.GetValue()
         vol = self._purge_vol_ctrl.GetValue()
         accel = self._purge_accel_ctrl.GetValue()
-        restore_flow_after_switch = self._switch_restore_flow.GetValue()
+        restore_flow1 = self._switch_restore_flow1.GetValue()
+        restore_flow2 = self._switch_restore_flow2.GetValue()
         switch_with_sample = self._switch_with_sample.GetValue()
         stop_flow1 = self._switch_stop1.GetValue()
         stop_flow2 = self._switch_stop2.GetValue()
@@ -7862,7 +7888,8 @@ class SwitchDialog(wx.Dialog):
             'purge_rate'                : rate,
             'purge_volume'              : vol,
             'purge_accel'               : accel,
-            'restore_flow_after_switch' : restore_flow_after_switch,
+            'restore_flow1'             : restore_flow1,
+            'restore_flow2'             : restore_flow2,
             'switch_with_sample'        : switch_with_sample,
             'stop_flow1'                : stop_flow1,
             'stop_flow2'                : stop_flow2,
@@ -8445,7 +8472,8 @@ default_hplc_2pump_settings = {
     'switch_with_sample'        : False,
     'switch_stop_flow1'         : True,
     'switch_stop_flow2'         : True,
-    'restore_flow_after_switch' : True,
+    'switch_restore_flow1'      : True,
+    'switch_restore_flow2'      : True,
     'buffer_switch_stop_flow'   : True,
     'buffer_switch_accel'       : 0.1,
     'buffer_switch_restore_flow': False,
