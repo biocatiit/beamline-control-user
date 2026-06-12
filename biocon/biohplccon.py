@@ -6651,7 +6651,7 @@ class HPLCPanel(utils.DevicePanel):
                         pump2_flow_accel)
                     self._pump2_flow_accel = pump2_flow_accel
 
-            if self.settings['use_mals_valve']
+            if self.settings['use_mals_valve']:
                 if self._mals_inline != pump_status['mals_inline']:
                     if pump_status['mals_inline']:
                         status = 'Inline'
