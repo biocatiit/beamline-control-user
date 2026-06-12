@@ -3708,7 +3708,7 @@ default_coflow_settings = {
         'flow_units'                : 'mL/min',
         'sheath_pump'
                                     : {'name': 'sheath', 'args': ['Longer L100S2', 'COM5'],
-                                        'kwargs': {'pump_addr': 1, 'flow_cal': 0.0407},
+                                        'kwargs': {'pump_addr': 1, 'flow_cal': 0.0502},
                                         'ctrl_args': {'flow_rate': 1}},
         # 'sheath_pump'               : {'name': 'sheath', 'args': ['VICI M50', 'COM6'],
         #                                 'kwargs': {'flow_cal': '630.4',
