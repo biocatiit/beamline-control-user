@@ -3230,7 +3230,7 @@ default_autosampler_settings = {
     'base_position'         : {'plate_x': 346.4, 'plate_z': -75.0, 'needle_y': 107.1}, # A1 well position, needle height at chiller plate top
     'clean_offsets'         : {'plate_x': 99.7, 'plate_z': -21.4, 'needle_y': -10}, # Relative to base position
     'needle_out_offset'     : 5, # mm
-    'needle_in_position'    : -2.5,
+    'needle_in_position'    : -2.3,
     'plate_out_position'    : {'plate_x': -31, 'plate_z': 0}, # Relative
     'plate_load_position'   : {'plate_x': 0, 'plate_z': -80.4}, # Absolute
     'coflow_y_ref_position' : 0, # Position for coflow y motor when base position was set
@@ -3254,7 +3254,7 @@ default_autosampler_settings = {
     'pump_rates'            : {'sample': (0.1, 0.1), 'buffer': (0.05, 0.1), 'purge': (1, 1)}, # (refill, infuse) rates in ml/min
     'max_inject_rate'       : 0.5,
     'max_draw_rate'         : 0.5,
-    'loop_volume'           : 35, #Loop volume in uL
+    'loop_volume'           : 50, #Loop volume in uL
     'min_load_volume'       : 2.0,
     'default_load_vol'      : 30.0,
     'default_start_delay_time': 30.0,
@@ -3262,9 +3262,9 @@ default_autosampler_settings = {
     'load_dwell_time'       : 10.0, #Time to wait in well after aspirating
     'inject_connect_vol'    : 0, #Volume to eject from the needle after loading before re-entering the cell, to ensure a wet-to-wet entry for the needle and prevent bubbles, uL
     'inject_connect_rate'   : 100, #Rate to eject the inject connect volume at, in uL/min
-    'reserve_vol'           : 2.5, #Volume to reserve from dispensing when measuring sample, to avoid bubbles, uL
+    'reserve_vol'           : 3, #Volume to reserve from dispensing when measuring sample, to avoid bubbles, uL
     'inline_panel'          : False,
-    'load_pos_y_offset'     : 2.0,
+    'load_pos_y_offset'     : 3,
     }
 
 
