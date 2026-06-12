@@ -4693,7 +4693,10 @@ class AutoList(utils.ItemList):
                     move_up = False
 
             if move_up:
-                self.auto_panel.automator.set_automator_state('pause')
+                state = self.auto_panel.automator.get_automator_state()
+
+                if state == 'run':
+                    self.auto_panel.automator.set_automator_state('pause')
 
                 do_move = self._check_move_status(sel_items, 'up')
 
@@ -4701,7 +4704,8 @@ class AutoList(utils.ItemList):
                     for item in sel_items:
                         self._do_move_item(item, 'up')
 
-                self.auto_panel.automator.set_automator_state('run')
+                if state == 'run':
+                    self.auto_panel.automator.set_automator_state('run')
 
     def _on_move_item_down(self, evt):
         sel_items = self.get_selected_items()
@@ -4726,7 +4730,10 @@ class AutoList(utils.ItemList):
                     move_down = False
 
             if move_down:
-                self.auto_panel.automator.set_automator_state('pause')
+                state = self.auto_panel.automator.get_automator_state()
+
+                if state == 'run':
+                    self.auto_panel.automator.set_automator_state('pause')
 
                 do_move = self._check_move_status(sel_items, 'down')
 
@@ -4734,7 +4741,8 @@ class AutoList(utils.ItemList):
                     for item in sel_items:
                         self._do_move_item(item, 'down')
 
-                self.auto_panel.automator.set_automator_state('run')
+                if state == 'run':
+                    self.auto_panel.automator.set_automator_state('run')
 
     def _check_move_status(self, sel_items, move):
         do_move = True
