@@ -77,11 +77,12 @@ elve_version = '3.07.02'
 try:
     import Elveflow64 as Elveflow
 except Exception:
-    traceback.print_exc()
+    # traceback.print_exc()
+    print('Failed to import Elveflow64')
     try:
         import Elveflow32 as Elveflow
     except Exception:
-        traceback.print_exc()
+        print('Failed to import Elveflow32')
 
 import fmcon
 import utils
