@@ -5524,6 +5524,8 @@ class HPLCPanel(utils.DevicePanel):
 
         if self.settings['use_mals_valve']:
             default_switch_settings['mals_valve_pos'] = self._mals_valve
+        else:
+            default_switch_settings['mals_valve_pos'] = None
 
         return default_switch_settings
 
@@ -7514,6 +7516,14 @@ class HPLCPanel(utils.DevicePanel):
             else:
                 pump2_state = ''
 
+            if self.settings['use_mals_valve']:
+                if self._mals_inline:
+                    mals_state = 'Inline'
+                else:
+                    mals_state = 'Bypassed'
+            else:
+                mals_state = ''
+
             state = {
                 'state'         : state,
                 'flow_path'     : copy.copy(self._flow_path),
@@ -7524,6 +7534,7 @@ class HPLCPanel(utils.DevicePanel):
                 'pump2_state'   : pump2_state,
                 'pump2_fr'      : copy.copy(self._pump2_flow),
                 'pump2_pressure': copy.copy(self._pump2_pressure),
+                'mals_state'    : mals_state,
             }
 
         return state, success
@@ -7545,6 +7556,8 @@ class PurgeDialog(wx.Dialog):
         self.SetSize(self._FromDIP((400, 250)))
 
         self._create_layout(settings)
+
+        self.Fit()
 
         self.CenterOnParent()
 
@@ -7648,6 +7661,8 @@ class EquilDialog(wx.Dialog):
         self.SetSize(self._FromDIP((325, 325)))
 
         self._create_layout(settings)
+
+        self.Fit()
 
         self.CenterOnParent()
 
@@ -7774,6 +7789,8 @@ class SwitchDialog(wx.Dialog):
         self.SetSize(self._FromDIP((325, 325)))
 
         self._create_layout(settings)
+
+        self.Fit()
 
         self._input_settings = settings
 
@@ -7914,6 +7931,7 @@ class SampleDialog(wx.Dialog):
         self._create_layout(settings)
 
         self.Fit()
+
         self.CenterOnParent()
 
     def _FromDIP(self, size):
@@ -8084,6 +8102,8 @@ class SealWashDialog(wx.Dialog):
 
         self._create_layout(settings)
 
+        self.Fit()
+
         self.CenterOnParent()
 
     def _FromDIP(self, size):
@@ -8162,6 +8182,8 @@ class SwitchBufferBottleDialog(wx.Dialog):
         self.SetSize(self._FromDIP((400, 250)))
 
         self._create_layout(settings)
+
+        self.Fit()
 
         self.CenterOnParent()
 
@@ -8258,6 +8280,8 @@ class SwitchMALSValveDialog(wx.Dialog):
         self.SetSize(self._FromDIP((375, 225)))
 
         self._create_layout(settings)
+
+        self.Fit()
 
         self.CenterOnParent()
 

@@ -1119,6 +1119,7 @@ class SwitchPumpsCommand(AutoCommand):
             'stop_flow2'    : cmd_info['stop_flow2'],
             'purge_active'  : cmd_info['purge_active'],
             'flow_path'     : cmd_info['flow_path'],
+            'mals_valve_pos': cmd_info['mals_valve_pos'],
             }
 
         num_paths = cmd_info['num_flow_paths']
@@ -1568,6 +1569,7 @@ class AutoStatusPanel(wx.Panel):
 
         if 'hplc' in self.settings['instruments']:
             num_paths = self.settings['instruments']['hplc']['num_paths']
+            hplc_panel = self.settings['instruments']['hplc']['hplc_panel']
 
             hplc_status_box = wx.StaticBox(ctrl_parent, label='HPLC')
 
@@ -1587,6 +1589,12 @@ class AutoStatusPanel(wx.Panel):
                 style=wx.ST_NO_AUTORESIZE)
 
             num_cols = 11
+
+            if hplc_panel.settings['use_mals_valve']:
+                self.hplc_mals_state = wx.StaticText(hplc_status_box, size=self._FromDIP((60,-1)),
+                    style=wx.ST_NO_AUTORESIZE)
+
+                num_cols = 13
 
             if num_paths == 2:
                 self.pump2_state = wx.StaticText(hplc_status_box, size=self._FromDIP((100,-1)),
@@ -1616,9 +1624,15 @@ class AutoStatusPanel(wx.Panel):
                 flag=wx.ALIGN_CENTER_VERTICAL)
             hplc_sub_status_sizer.Add(self.pump1_pressure, flag=wx.ALIGN_CENTER_VERTICAL)
 
+            if hplc_panel.settings['use_mals_valve']:
+                hplc_sub_status_sizer.Add(wx.StaticText(hplc_status_box, label='MALS:'),
+                    flag=wx.ALIGN_CENTER_VERTICAL)
+                hplc_sub_status_sizer.Add(self.hplc_mals_state, flag=wx.ALIGN_CENTER_VERTICAL)
+
             if num_paths == 2:
-                hplc_sub_status_sizer.AddSpacer(1)
-                hplc_sub_status_sizer.AddSpacer(1)
+                if not hplc_panel.settings['use_mals_valve']:
+                    hplc_sub_status_sizer.AddSpacer(1)
+                    hplc_sub_status_sizer.AddSpacer(1)
                 # hplc_sub_status_sizer.Add(hplc_stop_btn, flag=wx.ALIGN_CENTER_VERTICAL)
                 hplc_sub_status_sizer.Add(wx.StaticText(hplc_status_box, label='Flow path:'),
                     flag=wx.ALIGN_CENTER_VERTICAL)
@@ -1784,6 +1798,9 @@ class AutoStatusPanel(wx.Panel):
                     self.pump2_fr.SetLabel(status['pump2_fr'])
                     self.pump2_pressure.SetLabel(status['pump2_pressure'])
 
+                if status['mals_state'] != '':
+                    self.hplc_mals_state.SetLabel(status['mals_state'])
+
 
         if 'exp' in self.settings['instruments']:
             exp_callback = self.settings['instruments']['exp']['automator_callback']
@@ -1922,6 +1939,7 @@ class AutoSettings(scrolled.ScrolledPanel):
             sample_methods.insert(0, 'None')
             inst = self.auto_panel.settings['hplc_inst']
             num_flow_paths = self.auto_panel.settings['instruments'][inst]['num_paths']
+            use_mals_valve = hplc_panel.settings['use_mals_valve']
 
         else:
             acq_methods = []
@@ -1951,6 +1969,11 @@ class AutoSettings(scrolled.ScrolledPanel):
             elif cmd_key == 'af4_sample':
                 panel_rets = panel_func(top_level, parent,
                     self.ctrl_ids[cmd_key], 'vert', read_only=True)
+
+            elif cmd_key == 'switch_pumps':
+                panel_rets = panel_func(top_level, parent,
+                    self.ctrl_ids[cmd_key], 'vert', num_flow_paths, use_mals_valve,
+                    read_only=True)
 
             else:
                 panel_rets = panel_func(top_level, parent,
@@ -2194,6 +2217,7 @@ default_switch_pump_settings = {
     'stop_flow1'    : True,
     'stop_flow2'    : True,
     'purge_active'  : True,
+    'mals_valve_pos': 1,
     'flow_path'     : 1,
 
     #Coflow switch parameters
@@ -3023,7 +3047,7 @@ def make_equilibrate_info_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
     return cmd_sizer
 
 def make_switch_info_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
-    num_flow_paths, read_only=False):
+    num_flow_paths, use_mals_valve, read_only=False):
     ################ HPLC #################
     fp_choices = ['{}'.format(i+1) for i in range(int(num_flow_paths))]
 
@@ -3048,6 +3072,10 @@ def make_switch_info_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
         'purge_accel'   : ['Purge acceleration [mL/min^2]:',
                             ctrl_ids['purge_accel'], 'float'],
     }
+
+    if use_mals_valve:
+        switch_adv_settings['mals_valve_pos'] = ['MALS valve:',
+            ctrl_ids['mals_valve_pos'], 'choice', ['1', '2']]
 
     switch_box = wx.StaticBox(parent, label='HPLC Settings')
 
@@ -3857,13 +3885,14 @@ class AutoList(utils.ItemList):
 
                     #Switch parameters
                     default_settings['purge_rate'] = default_switch_settings['purge_rate']
-                    default_settings['purge_volume'] = default_switch_settings['purge_vol']
+                    default_settings['purge_volume'] = default_switch_settings['purge_volume']
                     default_settings['purge_accel'] = default_switch_settings['purge_accel']
                     default_settings['restore_flow1'] = default_switch_settings['restore_flow1']
                     default_settings['restore_flow2'] = default_switch_settings['restore_flow2']
                     default_settings['stop_flow1'] = default_switch_settings['stop_flow1']
                     default_settings['stop_flow2'] = default_switch_settings['stop_flow2']
                     default_settings['purge_active'] = default_switch_settings['purge_active']
+                    default_settings['mals_valve_pos'] = default_switch_settings['mals_valve_pos']
 
                     #Coflow switch parameters
                     default_settings['coflow_rate'] = coflow_fr
@@ -5397,8 +5426,13 @@ class SwitchDialog(AutoCmdDialog):
 
         num_flow_paths = self._default_settings['num_flow_paths']
 
+        if self._default_settings['mals_valve_pos'] is None:
+            use_mals_valve = False
+        else:
+            use_mals_valve = True
+
         cmd_sizer = make_switch_info_panel(top_level, parent, self.ctrl_ids,
-            'horiz', num_flow_paths)
+            'horiz', num_flow_paths, use_mals_valve)
 
         button_sizer = self.CreateButtonSizer(wx.OK | wx.CANCEL)
 
