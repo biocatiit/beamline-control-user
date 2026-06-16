@@ -2945,6 +2945,9 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
 
         self.use_mals_valve = use_mals_valve
 
+        # Connect HPLC
+        self._pump2_id = pump2_id
+
         # Connect valves
         self._connect_valves(selector_valve_args, outlet_valve_args,
             purge1_valve_args, purge2_valve_args, buffer1_valve_args,
@@ -2955,11 +2958,7 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
             buffer1_valve_args=buffer1_valve_args, pump1_id=pump1_id,
             connect_valves=False, dual_pump=self._dual_pump)
 
-        # Connect HPLC
-        self._pump2_id = pump2_id
-
         self._get_initial_status_dual_pump()
-
 
         self._switching_flow_path = False
 
@@ -3338,7 +3337,7 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
             if not self._abort_switch.is_set():
                 # Switch MALS valve if present
                 if self.use_mals_valve and mals_valve_pos is not None:
-                    current_pos = int(self.get_valve_position('mals)'))
+                    current_pos = int(self.get_valve_position('mals'))
 
                     if current_pos != int(mals_valve_pos):
                         self.set_valve_position('mals', mals_valve_pos)
@@ -5154,13 +5153,13 @@ class HPLCPanel(utils.DevicePanel):
             self._mals_stop_btn = wx.Button(valve_box, label='Stop MALS switch')
 
             self._mals_switch_btn.Bind(wx.EVT_BUTTON, self._on_mals_switch)
-            self._mals_stop_btn.Bind(wx.EVT_BUTTON, self._on_mals_stop)
+            self._mals_stop_btn.Bind(wx.EVT_BUTTON, self._on_stop_mals_switch)
 
-            self._mals_status = wx.StaticText(valve_box,
+            self._mals_status = wx.StaticText(valve_box, label='Bypassed',
                 size=self._FromDIP((60,-1)), style=wx.ST_NO_AUTORESIZE)
 
             self._mals_switch_status = wx.StaticText(valve_box,
-                size=self._FromDIP((60,-1)), style=wx.ST_NO_AUTORESIZE)
+                size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
 
             mals_sub_sizer1 = wx.FlexGridSizer(cols=4, vgap=self._FromDIP(5),
                 hgap=self._FromDIP(5))
@@ -5515,8 +5514,8 @@ class HPLCPanel(utils.DevicePanel):
             'purge_volume'              : self.settings['switch_purge_volume'],
             'purge_rate'                : self.settings['switch_purge_rate'],
             'purge_accel'               : self.settings['switch_purge_accel'],
-            'restore_flow1'             : self.settings['restore_flow1'],
-            'restore_flow2'             : self.settings['restore_flow2'],
+            'restore_flow1'             : self.settings['switch_restore_flow1'],
+            'restore_flow2'             : self.settings['switch_restore_flow2'],
             'switch_with_sample'        : self.settings['switch_with_sample'],
             'stop_flow1'                : self.settings['switch_stop_flow1'],
             'stop_flow2'                : self.settings['switch_stop_flow2'],
@@ -7772,7 +7771,7 @@ class SwitchDialog(wx.Dialog):
         wx.Dialog.__init__(self, parent, *args,
             style=wx.RESIZE_BORDER|wx.CAPTION|wx.CLOSE_BOX, **kwargs)
 
-        self.SetSize(self._FromDIP((300, 275)))
+        self.SetSize(self._FromDIP((325, 325)))
 
         self._create_layout(settings)
 
@@ -8256,7 +8255,7 @@ class SwitchMALSValveDialog(wx.Dialog):
         wx.Dialog.__init__(self, parent, *args,
             style=wx.RESIZE_BORDER|wx.CAPTION|wx.CLOSE_BOX, **kwargs)
 
-        self.SetSize(self._FromDIP((400, 250)))
+        self.SetSize(self._FromDIP((375, 225)))
 
         self._create_layout(settings)
 
@@ -8481,7 +8480,7 @@ default_hplc_2pump_settings = {
     'buffer_switch_with_active' : False,
     'mals_switch_stop_flow'     : True,
     'mals_switch_accel'         : 0.1,
-    'mals_switch_restore_flow'  : False,
+    'mals_switch_restore_flow'  : True,
     'mals_switch_with_sample'   : False,
     'mals_switch_with_active'   : False,
     'acq_method'                : 'SECSAXS_default',
@@ -8497,7 +8496,7 @@ default_hplc_2pump_settings = {
     'sp_method'                 : '',
     'wait_for_flow_ramp'        : True,
     'settle_time'               : 0.0,
-    'use_mals_valve'            : False,
+    'use_mals_valve'            : True,
     }
 
 if __name__ == '__main__':
