@@ -1112,7 +1112,8 @@ class SwitchPumpsCommand(AutoCommand):
             'purge_rate'    : cmd_info['purge_rate'],
             'purge_volume'  : cmd_info['purge_volume'],
             'purge_accel'   : cmd_info['purge_accel'],
-            'restore_flow_after_switch' : cmd_info['restore_flow_after_switch'],
+            'restore_flow1' : cmd_info['restore_flow1'],
+            'restore_flow2' : cmd_info['restore_flow2'],
             'switch_with_sample'    : cmd_info['switch_with_sample'],
             'stop_flow1'    : cmd_info['stop_flow1'],
             'stop_flow2'    : cmd_info['stop_flow2'],
@@ -2187,7 +2188,8 @@ default_switch_pump_settings = {
     'purge_rate'    : 0.,
     'purge_volume'  : 0.,
     'purge_accel'   : 0.,
-    'restore_flow_after_switch' : True,
+    'restore_flow1' : True,
+    'restore_flow2' : True,
     'switch_with_sample'    : False,
     'stop_flow1'    : True,
     'stop_flow2'    : True,
@@ -3031,8 +3033,10 @@ def make_switch_info_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
     }
 
     switch_adv_settings = {
-        'restore_flow_after_switch' : ['Restore flow to current rate after switching',
-                                ctrl_ids['restore_flow_after_switch'], 'bool'],
+        'restore_flow1' : ['Restore flow on path 1 to current rate after switching',
+                                ctrl_ids['restore_flow1'], 'bool'],
+        'restore_flow2' : ['Restore flow on path 1 to current rate after switching',
+                                ctrl_ids['restore_flow2'], 'bool'],
         'stop_flow1'     : ['Ramp pump 1 flow to 0 before switching',
                                 ctrl_ids['stop_flow1'], 'bool'],
         'stop_flow2'     : ['Ramp pump 2 flow to 0 before switching',
@@ -3855,7 +3859,8 @@ class AutoList(utils.ItemList):
                     default_settings['purge_rate'] = default_switch_settings['purge_rate']
                     default_settings['purge_volume'] = default_switch_settings['purge_vol']
                     default_settings['purge_accel'] = default_switch_settings['purge_accel']
-                    default_settings['restore_flow_after_switch'] = default_switch_settings['restore_flow_after_switch']
+                    default_settings['restore_flow1'] = default_switch_settings['restore_flow1']
+                    default_settings['restore_flow2'] = default_switch_settings['restore_flow2']
                     default_settings['stop_flow1'] = default_switch_settings['stop_flow1']
                     default_settings['stop_flow2'] = default_switch_settings['stop_flow2']
                     default_settings['purge_active'] = default_switch_settings['purge_active']
@@ -4693,7 +4698,10 @@ class AutoList(utils.ItemList):
                     move_up = False
 
             if move_up:
-                self.auto_panel.automator.set_automator_state('pause')
+                state = self.auto_panel.automator.get_automator_state()
+
+                if state == 'run':
+                    self.auto_panel.automator.set_automator_state('pause')
 
                 do_move = self._check_move_status(sel_items, 'up')
 
@@ -4701,7 +4709,8 @@ class AutoList(utils.ItemList):
                     for item in sel_items:
                         self._do_move_item(item, 'up')
 
-                self.auto_panel.automator.set_automator_state('run')
+                if state == 'run':
+                    self.auto_panel.automator.set_automator_state('run')
 
     def _on_move_item_down(self, evt):
         sel_items = self.get_selected_items()
@@ -4726,7 +4735,10 @@ class AutoList(utils.ItemList):
                     move_down = False
 
             if move_down:
-                self.auto_panel.automator.set_automator_state('pause')
+                state = self.auto_panel.automator.get_automator_state()
+
+                if state == 'run':
+                    self.auto_panel.automator.set_automator_state('pause')
 
                 do_move = self._check_move_status(sel_items, 'down')
 
@@ -4734,7 +4746,8 @@ class AutoList(utils.ItemList):
                     for item in sel_items:
                         self._do_move_item(item, 'down')
 
-                self.auto_panel.automator.set_automator_state('run')
+                if state == 'run':
+                    self.auto_panel.automator.set_automator_state('run')
 
     def _check_move_status(self, sel_items, move):
         do_move = True

@@ -53,7 +53,8 @@ class AgilentHPLCStandard(AgilentHPLC):
     """
 
     def __init__(self, name, device, hplc_args={}, purge1_valve_args={},
-        buffer1_valve_args={}, pump1_id='', connect_valves=True, dual_pump=False):
+        buffer1_valve_args={}, mals_valve_args={}, pump1_id='',
+        connect_valves=True, dual_pump=False, use_mals_valve=False):
         """
         Initializes the HPLC plus valves
 
@@ -65,22 +66,14 @@ class AgilentHPLCStandard(AgilentHPLC):
             Ignored. Dummy argument so the format is consistent with other devices.
         hplc_args: dict
             Dictionary of input arguments for the Agilent HPLC
-        selector_valve_args: dict
-            Dictionary of input arguments for the selector valve
-        outlet_valve_args: dict
-            Dictionary of input arguments for the outlet valve
         purge1_valve_args: dict
             Dictionary of the input arguments for the flowpath 1 purge valve
-        purge2_valve_args: dict
-            Dictionary of the input arguments for the flowpath 2 purge valve
         buffer1_valve_args: dict
             Dictionary of the input arguments for the flowpath 1 buffer valve
-        buffer2_valve_args: dict
-            Dictionary of the input arguments for the flowpath 2 buffer valve
+        mals_valve_args: dict
+            Dictionary of the input arguments for the MALS selector valve
         pump1_id: str
             The Agilent hashkey for pump 1
-        pump2_id: str
-            The Agilent hashkey for pump 2
         """
         self._dual_pump = dual_pump
 
@@ -106,7 +99,22 @@ class AgilentHPLCStandard(AgilentHPLC):
             self._current_buffer1 = None
             self._current_buffer2 = None
 
-            self._connect_valves(purge1_valve_args, buffer1_valve_args)
+            self.use_mals_valve = use_mals_valve
+
+            self._connect_valves(purge1_valve_args, buffer1_valve_args,
+                mals_valve_args)
+
+        # Maybe move this MALS bit to a separate function?
+        self._mals_positions = {
+            1   : False,
+            2   : True,
+            }
+
+        if self._mals_valve is not None:
+            current_pos = int(self.get_valve_position('mals'))
+            self._mals_inline = self._mals_positions[current_pos]
+        else:
+            self._mals_inline = False
 
         # Connect HPLC
         self._pump1_id = pump1_id
@@ -188,6 +196,16 @@ class AgilentHPLCStandard(AgilentHPLC):
         self._monitor_switch_buffer_bottle_thread.daemon = True
         self._monitor_switch_buffer_bottle_thread.start()
 
+        self._abort_switch_mals_valve = threading.Event()
+        self._monitor_switch_mals_valve_evt = threading.Event()
+        self._terminate_monitor_switch_mals_valve = threading.Event()
+        self._monitor_switch_mals_valve_thread = threading.Thread(
+            target=self._monitor_switch_mals_valve)
+        self._monitor_switch_mals_valve_thread.daemon = True
+        self._monitor_switch_mals_valve_thread.start()
+
+        self._switching_mals_valve = False
+
         self.set_active_buffer_position(self.get_valve_position('buffer1'), 1)
 
         self._uv_abs_traces = {}
@@ -224,7 +242,7 @@ class AgilentHPLCStandard(AgilentHPLC):
         """
         return True
 
-    def _connect_valves(self, p1_args, b1_args):
+    def _connect_valves(self, p1_args, b1_args, mals_args):
 
         p1_name = p1_args['name']
         p1_arg_list = p1_args['args']
@@ -246,9 +264,24 @@ class AgilentHPLCStandard(AgilentHPLC):
             b1_comm, **b1_kwarg_list)
         self._buffer1_valve.connect()
 
+        if self.use_mals_valve:
+            mals_name = mals_args['name']
+            mals_arg_list = mals_args['args']
+            mals_kwarg_list = mals_args['kwargs']
+            mals_device_type = mals_arg_list[0]
+            mals_comm = mals_arg_list[1]
+
+            self._mals_valve = valvecon.known_valves[mals_device_type](mals_name,
+                mals_comm, **mals_kwarg_list)
+            self._mals_valve.connect()
+
+        else:
+            self._mals_valve = None
+
         self._valves = {
             'purge1'    : self._purge1_valve,
             'buffer1'   : self._buffer1_valve,
+            'mals'      : self._mals_valve,
             }
 
         self._active_flow_path = 1
@@ -285,16 +318,18 @@ class AgilentHPLCStandard(AgilentHPLC):
         """
         valve = self._valves[valve_id]
         position = None
-        retry = 5
-        while position is None and retry > 0:
-            try:
-                position = valve.get_position()
-            except Exception:
-                # traceback.print_exc()
-                pass
-            if position is None:
-                retry -= 1
-                time.sleep(0.1)
+
+        if valve is not None:
+            retry = 5
+            while position is None and retry > 0:
+                try:
+                    position = valve.get_position()
+                except Exception:
+                    # traceback.print_exc()
+                    pass
+                if position is None:
+                    retry -= 1
+                    time.sleep(0.1)
 
         return position
 
@@ -396,6 +431,29 @@ class AgilentHPLCStandard(AgilentHPLC):
             is_switching = copy.copy(self._switching_buffer_bottle2)
 
         return is_switching
+
+    def get_mals_status(self):
+        """
+        Gets the MALS status, whether the MALS is inline or offline.
+
+        Returns
+        -------
+        mals_in_use: bool
+            True if the MALS valve is switched so the instruments are inline,
+            False if not. Also returns False is the MALS valve is not in use.
+        """
+        return self._mals_inline
+
+    def get_switch_mals_valve_status(self):
+        """
+        Gets the MALS valve switching status.
+
+        Returns
+        -------
+        is_switching: bool
+            True if the MALS valve is switching, False if not.
+        """
+        return copy.copy(self._switching_mals_valve)
 
     def get_hplc_flow_rate(self, flow_path):
         """
@@ -837,6 +895,11 @@ class AgilentHPLCStandard(AgilentHPLC):
                 flow_path)
             success = False
 
+        elif (flow_path == self._active_flow_path and self._switching_mals_valve):
+            logger.error('HPLC is switching the MALS valve, so a new '
+                'equilibration on the active flow path cannot be started', self.name)
+            success = False
+
         else:
             do_equil = self._check_equil_sample_status(flow_path,
                 equil_with_sample)
@@ -1147,8 +1210,13 @@ class AgilentHPLCStandard(AgilentHPLC):
         elif ((flow_path == 1 and self._switching_buffer_bottle1) or
             (flow_path == 2 and self._switching_buffer_bottle2)):
             logger.error('HPLC %s flow path %s is switching buffer bottles, so '
-                'a new equilibration cannot be started', self.name,
+                'a new purge cannot be started', self.name,
                 flow_path)
+            success = False
+
+        elif (flow_path == self._active_flow_path and self._switching_mals_valve):
+            logger.error('HPLC is switching the MALS valve, so a new '
+                'purge on the active flow path cannot be started', self.name)
             success = False
 
         else:
@@ -1597,11 +1665,12 @@ class AgilentHPLCStandard(AgilentHPLC):
                 (self._purging_flow2 and flow_path == 2) or
                 (self._equil_flow1 and flow_path == 1) or
                 (self._equil_flow2 and flow_path == 2) or
-                (self._dual_pump and self._switching_flow_path)):
+                (self._dual_pump and self._switching_flow_path) or
+                self._switching_mals_valve):
 
                 if not switch_with_activity:
-                    logger.info('HPLC %s cannot switch buffer bottles '
-                        'because the HPLC is busy.')
+                    logger.info(('HPLC %s cannot switch buffer bottles '
+                        'because the HPLC is busy.'), self.name)
                     success = False
 
         if success:
@@ -1796,6 +1865,166 @@ class AgilentHPLCStandard(AgilentHPLC):
             else:
                 time.sleep(0.1)
 
+    def switch_mals_valve(self, mals_valve_pos, stop_flow=True,
+        flow_accel=0.1, restore_flow_after_switch=True, switch_with_sample=False,
+        switch_with_activity=False):
+        """
+        Switches the MALS valve.
+
+        Parameters
+        ----------
+        mals_valve_pos: int
+            The new position of the MALS valve.
+        stop_flow: bool
+            Whether flow from the pump on the active flow path should be
+            stopped while the MALS valve is switched.
+        flow_accel: float
+            The flow acceletration to stop and start the flow at.
+        restore_flow_after_switch: bool
+            Whether the flow rate should be restored to the current flow rate
+            after switching is done. Note that this is only needed if
+            stop_flow is True. If False, the flow will not be resumed after
+            switching.
+        switch_with_sample: bool
+            Checks whether there are samples in the run queue. If there are,
+            and the run queue is not paused you must pass True for this
+            value to switch the MALS valve.
+        switch_with_activity: bool
+            Checks whether the system is equilibrating, purging, or
+            switching flow path. If you want to switch the MALS valve
+            while one of these is ongoing pass True.
+        """
+        mals_valve_pos = int(mals_valve_pos)
+
+        success = True
+
+        if mals_valve_pos == int(self.get_valve_position('mals')):
+            logger.info('HPLC %s MALS valve already set to position %s',
+                self.name, mals_valve_pos)
+            success = False
+
+        if success:
+            flow_path = self._active_flow_path
+
+            samples_being_run = self.check_samples_being_run()
+
+            if samples_being_run and not switch_with_sample:
+                logger.info(('HPLC %s cannot switch the MALS valve '
+                    'because samples are being run'), self.name)
+                success = False
+
+            elif ((self._purging_flow1 and flow_path == 1) or
+                (self._purging_flow2 and flow_path == 2) or
+                (self._equil_flow1 and flow_path == 1) or
+                (self._equil_flow2 and flow_path == 2) or
+                (self._dual_pump and self._switching_flow_path) or
+                (self._switching_buffer_bottle1 and self._active_flow_path == 1) or
+                (self._switching_buffer_bottle2 and self._active_flow_path == 2)):
+
+                if not switch_with_activity:
+                    logger.info(('HPLC %s cannot switch the MALS valve '
+                        'because the HPLC is busy.'), self.name)
+                    success = False
+
+        if success:
+                self._switch_mals_valve_args = {
+                    'mals_valve_pos': mals_valve_pos,
+                    'stop_flow': stop_flow,
+                    'restore_flow_after_switch': restore_flow_after_switch,
+                    'flow_accel': flow_accel,
+                    }
+
+                self._abort_switch_mals_valve.clear()
+                self._switching_mals_valve = True
+                self._monitor_switch_mals_valve_evt.set()
+
+                logger.info(('HPLC %s starting to switch MALS valve'), self.name)
+
+        return success
+
+    def _monitor_switch_mals_valve(self):
+        start_switch = False
+        monitor_switch = False
+        switch_valve = False
+        restart_flow = False
+
+        while not self._terminate_monitor_switch_mals_valve.is_set():
+            self._monitor_switch_mals_valve_evt.wait()
+
+            if (self._switching_mals_valve and not start_switch
+                and not monitor_switch and not switch_valve
+                and not restart_flow):
+                fp = self._active_flow_path
+                start_switch = True
+                monitor_switch = False
+                switch_valve = False
+                restart_flow = False
+                initial_flow = self.get_hplc_flow_rate(fp)
+                initial_accel = self.get_hplc_flow_accel(fp)
+
+                mals_valve_pos = self._switch_mals_valve_args['mals_valve_pos']
+                stop_flow = self._switch_mals_valve_args['stop_flow']
+                restart_flow_after_switch = self._switch_mals_valve_args['restore_flow_after_switch']
+                flow_accel = self._switch_mals_valve_args['flow_accel']
+
+                if stop_flow:
+                    self.set_hplc_flow_accel(flow_accel, fp)
+
+
+            if start_switch:
+                if stop_flow:
+                    self.set_hplc_flow_rate(0, fp)
+
+                start_switch = False
+                monitor_switch = True
+
+            if monitor_switch:
+                if not self._abort_switch_mals_valve.is_set():
+                    current_flow = self.get_hplc_flow_rate(fp)
+                    if ((stop_flow and current_flow == 0)
+                        or not stop_flow):
+                        monitor_switch = False
+                        switch_valve = True
+                else:
+                    monitor_switch = False
+                    switch_valve = True
+
+            if switch_valve:
+                if not self._abort_switch_mals_valve.is_set():
+                    self.set_valve_position('mals', mals_valve_pos)
+                    switch_valve = False
+                    restart_flow = True
+
+                    if restart_flow_after_switch:
+                        self.set_hplc_flow_rate(initial_flow, fp)
+                else:
+                    switch_valve = False
+                    restart_flow = True
+
+            if restart_flow:
+                if not self._abort_switch_mals_valve.is_set():
+                    current_flow = self.get_hplc_flow_rate(fp)
+
+                    if ((restart_flow_after_switch and current_flow == initial_flow)
+                        or not restart_flow_after_switch):
+
+                        restart_flow = False
+                        self._switching_mals_valve = False
+
+                        if stop_flow:
+                            self.set_hplc_flow_accel(initial_accel, fp)
+
+                        logger.info(('HPLC %s finished switching MALS valve'),
+                            self.name)
+                else:
+                    restart_flow = False
+                    self._switching_mals_valve = False
+
+            if not self._switching_mals_valve:
+                self._monitor_switch_mals_valve_evt.clear()
+            else:
+                time.sleep(0.1)
+
     def set_valve_position(self, valve_id, position):
         """
         Sets the position of the specified valve.
@@ -1813,22 +2042,28 @@ class AgilentHPLCStandard(AgilentHPLC):
             Whether or not the position was successfully set.
         """
         valve = self._valves[valve_id]
-        success = valve.set_position(position)
 
-        if valve_id == 'buffer1':
-            self.set_active_buffer_position(position, 1)
-        elif valve_id == 'buffer2':
-            self.set_active_buffer_position(position, 2)
-        elif valve_id == 'purge1':
-            if position == self._purge_positions[1]['purge1']:
-                self._purging_flow1 = True
-            else:
-                self._purging_flow1 = False
-        elif valve_id == 'purge2':
-            if position == self._purge_positions[2]['purge2']:
-                self._purging_flow2 = True
-            else:
-                self._purging_flow2 = False
+        success = False
+
+        if valve is not None:
+            success = valve.set_position(position)
+
+            if valve_id == 'buffer1':
+                self.set_active_buffer_position(position, 1)
+            elif valve_id == 'buffer2':
+                self.set_active_buffer_position(position, 2)
+            elif valve_id == 'purge1':
+                if position == self._purge_positions[1]['purge1']:
+                    self._purging_flow1 = True
+                else:
+                    self._purging_flow1 = False
+            elif valve_id == 'purge2':
+                if position == self._purge_positions[2]['purge2']:
+                    self._purging_flow2 = True
+                else:
+                    self._purging_flow2 = False
+            elif valve_id == 'mals':
+                self._mals_inline = self._mals_positions[position]
 
         return success
 
@@ -2522,6 +2757,13 @@ class AgilentHPLCStandard(AgilentHPLC):
             if self._switching_buffer_bottle2:
                 self._abort_switch_buffer_bottle2.set()
 
+    def stop_switch_mals_valve(self):
+        """
+        Stops the MALS valve switching
+        """
+        if self._switching_mals_valve:
+            self._abort_switch_mals_valve.set()
+
     def stop_submit_sample(self):
         """
         Stops current sample submission (will not abort the sample run if it's
@@ -2540,6 +2782,7 @@ class AgilentHPLCStandard(AgilentHPLC):
         self.stop_equilibration(1)
         self.stop_purge(1)
         self.stop_switch_buffer_bottle(1)
+        self.stop_switch_mals_valve()
         self.stop_submit_sample()
         self.pause_run_queue()
         try:
@@ -2604,7 +2847,8 @@ class AgilentHPLCStandard(AgilentHPLC):
         self._buffer_monitor1.stop_monitor()
 
         for valve in self._valves.values():
-            valve.disconnect()
+            if valve is not None:
+                valve.disconnect()
 
         self._terminate_monitor_purge.set()
         self._monitor_purge_evt.set()
@@ -2623,6 +2867,10 @@ class AgilentHPLCStandard(AgilentHPLC):
         self._monitor_switch_buffer_bottle_evt.set()
         self._monitor_switch_buffer_bottle_thread.join(timeout=5)
 
+        self._terminate_monitor_switch_mals_valve.set()
+        self._monitor_switch_mals_valve_evt.set()
+        self._monitor_switch_mals_valve_thread.join(timeout=5)
+
         self.disconnect()
 
 class AgilentHPLC2Pumps(AgilentHPLCStandard):
@@ -2632,7 +2880,8 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
 
     def __init__(self, name, device, hplc_args={}, selector_valve_args={},
         outlet_valve_args={}, purge1_valve_args={}, purge2_valve_args={},
-        buffer1_valve_args={}, buffer2_valve_args={}, pump1_id='', pump2_id=''):
+        buffer1_valve_args={}, buffer2_valve_args={}, mals_valve_args={},
+        pump1_id='', pump2_id='', use_mals_valve=False):
         """
         Initializes the HPLC plus valves
 
@@ -2656,6 +2905,8 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
             Dictionary of the input arguments for the flowpath 1 buffer valve
         buffer2_valve_args: dict
             Dictionary of the input arguments for the flowpath 2 buffer valve
+        mals_valve_args: dict
+            Dictionary of the input arguments for the MALS selector valve
         pump1_id: str
             The Agilent hashkey for pump 1
         pump2_id: str
@@ -2682,15 +2933,22 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
             2   : {'purge2': 1},
             }
 
+        self._mals_positions = {
+                1   : True,
+                2   : False,
+                }
+
         self._active_flow_path = None
         self._purging_flow1 = False
         self._purging_flow2 = False
         self._equil_flow2 = False
 
+        self.use_mals_valve = use_mals_valve
+
         # Connect valves
         self._connect_valves(selector_valve_args, outlet_valve_args,
             purge1_valve_args, purge2_valve_args, buffer1_valve_args,
-            buffer2_valve_args)
+            buffer2_valve_args, mals_valve_args)
 
         AgilentHPLCStandard.__init__(self, name, device, hplc_args=hplc_args,
             purge1_valve_args=purge1_valve_args,
@@ -2746,7 +3004,7 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
         self._pump_flow_accel2 = self.get_flow_accel(self._pump2_id, False)
 
     def _connect_valves(self, sv_args, ov_args, p1_args, p2_args, b1_args,
-        b2_args):
+        b2_args, mals_args):
         sv_name = sv_args['name']
         sv_arg_list = sv_args['args']
         sv_kwarg_list = sv_args['kwargs']
@@ -2807,6 +3065,20 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
             b2_comm, **b2_kwarg_list)
         self._buffer2_valve.connect()
 
+        if self.use_mals_valve:
+            mals_name = mals_args['name']
+            mals_arg_list = mals_args['args']
+            mals_kwarg_list = mals_args['kwargs']
+            mals_device_type = mals_arg_list[0]
+            mals_comm = mals_arg_list[1]
+
+            self._mals_valve = valvecon.known_valves[mals_device_type](mals_name,
+                mals_comm, **mals_kwarg_list)
+            self._mals_valve.connect()
+
+        else:
+            self._mals_valve = None
+
         self._valves = {
             'selector'  : self._selector_valve,
             'outlet'    : self._outlet_valve,
@@ -2814,6 +3086,7 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
             'purge2'    : self._purge2_valve,
             'buffer1'   : self._buffer1_valve,
             'buffer2'   : self._buffer2_valve,
+            'mals'      : self._mals_valve,
             }
 
         for flow_path in self._flow_path_positions:
@@ -2892,10 +3165,10 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
 
         return pressure
 
-    def set_active_flow_path(self, flow_path, stop_flow1=False,
-        stop_flow2=False, restore_flow_after_switch=True, purge_active=True,
+    def set_active_flow_path(self, flow_path, stop_flow1=True,
+        stop_flow2=True, restore_flow1=True, restore_flow2=True, purge_active=True,
         purge_volume=1.0, purge_rate=None, purge_accel=None,
-        switch_with_sample=False, purge_max_pressure=None):
+        switch_with_sample=False, purge_max_pressure=None, mals_valve_pos=None):
         """
         Sets the active flow path (i.e. which one is connected to the
         multisampler and the active port on the outlet).
@@ -2910,10 +3183,15 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
         stop_flow2: bool
             Whether flow from pump 2 should be stopped while the
             flow path is switched.
-        restore_flow_after_switch: bool
-            Whether the flow rate should be restored to the current flow rate
-            after switching is done. Note that this is only needed if either
-            stop_flow is True. If False, any flow that is stopped will not
+        restore_flow1: bool
+            Whether the flow rate of flow path 1 should be restored to the
+            current flow rate after switching is done. Note that this is only
+            needed if stop_flow1 is True. If False, flow that is stopped will not
+            be resumed after switching.
+        restore_flow2: bool
+            Whether the flow rate of flow path 2 should be restored to the
+            current flow rate after switching is done. Note that this is only
+            needed if stop_flow2 is True. If False, flow that is stopped will not
             be resumed after switching.
         purge_active: bool
             If true, this will do a purge of the active flow path after
@@ -2936,6 +3214,10 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
         purge_max_pressure: float
             Maximum pressure during purging. If no pressure is supplied, the
             device's default purge max pressure is used.
+        mals_valve_pos: int
+            Position to set the MALS valve to during the switch, if the MALS
+            valve is connected to the system. If no position is supplied
+            then the valve is not switched.
         """
         flow_path = int(flow_path)
 
@@ -2948,6 +3230,14 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
         elif self._switching_flow_path:
             logger.error('HPLC %s cannot switch flow paths because a switch '
                 'is already underway.', self.name)
+            success = False
+        elif self._switching_mals_valve:
+            logger.error('HPLC is switching the MALS valve, so the flow path '
+                'cannot be switched.', self.name)
+            success = False
+        elif (self._switching_buffer_bottle1 or self._switching_buffer_bottle2):
+            logger.error('HPLC %s is switching buffer bottles, so '
+                'the flow path cannot be switched', self.name)
             success = False
         else:
             samples_being_run = self.check_samples_being_run()
@@ -2972,13 +3262,15 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
                     'flow_path': flow_path,
                     'stop_flow1': stop_flow1,
                     'stop_flow2': stop_flow2,
-                    'restore_flow_after_switch': restore_flow_after_switch,
+                    'restore_flow1' : restore_flow1,
+                    'restore_flow2' : restore_flow2,
                     'purge_active': purge_active,
                     'purge_volume': purge_volume,
                     'purge_rate': purge_rate,
                     'purge_accel': purge_accel,
                     'purge_max_pressure': purge_max_pressure,
                     'switch_with_sample': switch_with_sample,
+                    'mals_valve_pos': mals_valve_pos,
                     }
 
                 self._abort_switch.clear()
@@ -3001,13 +3293,15 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
             flow_path = self._switch_args['flow_path']
             stop_flow1 = self._switch_args['stop_flow1']
             stop_flow2 = self._switch_args['stop_flow2']
-            restore_flow_after_switch = self._switch_args['restore_flow_after_switch']
+            restore_flow1 = self._switch_args['restore_flow1']
+            restore_flow2 = self._switch_args['restore_flow2']
             purge_active = self._switch_args['purge_active']
             purge_volume = self._switch_args['purge_volume']
             purge_rate = self._switch_args['purge_rate']
             purge_accel = self._switch_args['purge_accel']
             purge_max_pressure = self._switch_args['purge_max_pressure']
             switch_with_sample = self._switch_args['switch_with_sample']
+            mals_valve_pos = self._switch_args['mals_valve_pos']
 
             initial_flow1 = self.get_hplc_flow_rate(1)
             initial_flow2 = self.get_hplc_flow_rate(2)
@@ -3042,6 +3336,14 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
                     time.sleep(0.1)
 
             if not self._abort_switch.is_set():
+                # Switch MALS valve if present
+                if self.use_mals_valve and mals_valve_pos is not None:
+                    current_pos = int(self.get_valve_position('mals)'))
+
+                    if current_pos != int(mals_valve_pos):
+                        self.set_valve_position('mals', mals_valve_pos)
+
+                # Switch flow path
                 for name, pos in self._flow_path_positions[flow_path].items():
                     current_pos = int(self.get_valve_position(name))
 
@@ -3063,30 +3365,42 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
                     if flow_path == 1:
                         stop_before_purge = stop_flow1
                         stop_after_purge = stop_flow1
+                        restore_flow_after_purge = restore_flow1
                     elif flow_path == 2:
                         stop_before_purge = stop_flow2
                         stop_after_purge = stop_flow2
+                        restore_flow_after_purge = restore_flow1
 
                     self.purge_flow_path(flow_path, purge_volume, purge_rate,
-                        purge_accel, True, switch_with_sample, stop_before_purge,
-                        stop_after_purge, purge_max_pressure=purge_max_pressure)
+                        purge_accel, restore_flow_after_purge, switch_with_sample,
+                        stop_before_purge, stop_after_purge,
+                        purge_max_pressure=purge_max_pressure)
 
-                    if restore_flow_after_switch:
-                        if flow_path == 1:
+                    if flow_path == 1:
+                        if restore_flow1:
                             self._pre_purge_flow1 = initial_flow1
+
+                        if restore_flow2:
                             self.set_hplc_flow_rate(initial_flow2, 2)
 
-                        elif flow_path == 2:
+                    elif flow_path == 2:
+                        if restore_flow2:
                             self._pre_purge_flow2 = initial_flow2
+
+                        if restore_flow1:
                             self.set_hplc_flow_rate(initial_flow1, 1)
 
-                elif restore_flow_after_switch:
-                    self.set_hplc_flow_rate(initial_flow1, 1)
-                    self.set_hplc_flow_rate(initial_flow2, 2)
+                else:
+                    if restore_flow1:
+                        self.set_hplc_flow_rate(initial_flow1, 1)
+                    if restore_flow2:
+                        self.set_hplc_flow_rate(initial_flow2, 2)
 
-            elif self._abort_switch.is_set() and restore_flow_after_switch:
-                self.set_hplc_flow_rate(initial_flow1, 1)
-                self.set_hplc_flow_rate(initial_flow2, 2)
+            elif self._abort_switch.is_set():
+                if restore_flow1:
+                    self.set_hplc_flow_rate(initial_flow1, 1)
+                if restore_flow2:
+                    self.set_hplc_flow_rate(initial_flow2, 2)
 
             self._switching_flow_path = False
             self._monitor_switch_evt.clear()
@@ -3233,6 +3547,7 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
         self.stop_purge(2)
         self.stop_switch_buffer_bottle(1)
         self.stop_switch_buffer_bottle(2)
+        self.stop_switch_mals_valve()
         self.stop_switch()
         self.stop_submit_sample()
         self.pause_run_queue()
@@ -3307,7 +3622,8 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
         self._buffer_monitor2.stop_monitor()
 
         for valve in self._valves.values():
-            valve.disconnect()
+            if valve is not None:
+                valve.disconnect()
 
         self._terminate_monitor_purge.set()
         self._monitor_purge_evt.set()
@@ -3322,6 +3638,18 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
         self._terminate_monitor_submit.set()
         self._monitor_submit_evt.set()
         self._monitor_submit_thread.join()
+
+        self._terminate_monitor_equil.set()
+        self._monitor_equil_evt.set()
+        self._monitor_equil_thread.join(timeout=5)
+
+        self._terminate_monitor_switch_buffer_bottle.set()
+        self._monitor_switch_buffer_bottle_evt.set()
+        self._monitor_switch_buffer_bottle_thread.join(timeout=5)
+
+        self._terminate_monitor_switch_mals_valve.set()
+        self._monitor_switch_mals_valve_evt.set()
+        self._monitor_switch_mals_valve_thread.join(timeout=5)
 
         self.disconnect()
 
@@ -3358,6 +3686,7 @@ class HPLCCommThread(utils.CommManager):
             'equil_flow_path'           : self._equil_flow_path,
             'set_active_flow_path'      : self._set_active_flow_path,
             'switch_buffer_bottle'      : self._switch_buffer_bottle,
+            'switch_mals_valve'         : self._switch_mals_valve,
             'set_flow_rate'             : self._set_flow_rate,
             'set_flow_accel'            : self._set_flow_accel,
             'set_high_pressure_lim'     : self._set_high_pressure_lim,
@@ -3381,6 +3710,7 @@ class HPLCCommThread(utils.CommManager):
             'stop_equil'                : self._stop_equil,
             'stop_switch'               : self._stop_switch,
             'stop_switch_buffer'        : self._stop_switch_buffer,
+            'stop_switch_mals'          : self._stop_switch_mals,
             'stop_sample_submission'    : self._stop_sample_submission,
             'stop_all'                  : self._stop_all,
             'stop_all_immediately'      : self._stop_all_immediately,
@@ -3505,6 +3835,8 @@ class HPLCCommThread(utils.CommManager):
             'high_pressure_lim1': device.get_hplc_high_pressure_limit(1),
             'target_flow1'      : device.get_hplc_target_flow_rate(1),
             'flow_accel1'       : device.get_hplc_flow_accel(1),
+            'mals_inline'       : device.get_mals_status(),
+            'switch_mals_valve' : device.get_switch_mals_valve_status()
             }
 
         if isinstance(device, AgilentHPLC2Pumps):
@@ -3571,6 +3903,9 @@ class HPLCCommThread(utils.CommManager):
             valve_status['purge2'] = device.get_valve_position('purge2')
             valve_status['selector'] = device.get_valve_position('selector')
             valve_status['outlet'] = device.get_valve_position('outlet')
+
+        if device.use_mals_valve:
+            valve_status['mals'] = device.get_valve_position('mals')
 
         self._return_value((name, cmd, valve_status), comm_name)
 
@@ -3647,6 +3982,19 @@ class HPLCCommThread(utils.CommManager):
 
         logger.debug("%s flow path %s buffer bottle switch started: %s", name,
             flow_path, success)
+
+    def _switch_mals_valve(self, name, val, **kwargs):
+        logger.debug("Setting %s MALS valve to %s", name, val)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        success = device.switch_mals_valve(val, **kwargs)
+
+        self._return_value((name, cmd, success), comm_name)
+
+        logger.debug("%s MALS valve switch started: %s", name, success)
 
     def _set_flow_rate(self, name, val, flow_path, **kwargs):
         logger.debug("Setting %s flow path %s flow rate %s ", name, flow_path,
@@ -3978,6 +4326,19 @@ class HPLCCommThread(utils.CommManager):
         logger.debug("Stopped %s buffer bottle switch on flow path %s", name,
             flow_path)
 
+    def _stop_switch_mals(self, name, **kwargs):
+        logger.debug("Stopping %s MALS valve switch", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        device.stop_switch_mals_valve(**kwargs)
+
+        self._return_value((name, cmd, True), comm_name)
+
+        logger.debug("Stopped %s MALS valve switch", name)
+
     def _stop_sample_submission(self, name, **kwargs):
         logger.debug("Stopping %s sample submission", name)
 
@@ -4203,6 +4564,10 @@ class HPLCPanel(utils.DevicePanel):
         self._purge2_valve = 0
         self._selector_valve = 0
         self._outlet_valve = 0
+        self._mals_valve = 0
+
+        self._mals_inline = False
+        self._mals_valve_switch = ''
 
         self._sampler_thermostat_power = ''
         self._sampler_submitting = ''
@@ -4744,6 +5109,11 @@ class HPLCPanel(utils.DevicePanel):
             self._outlet_valve_ctrl.Bind(utils.EVT_MY_SPIN,
                 self._on_set_valve_position)
 
+        if self.settings['use_mals_valve']:
+            self._mals_valve_ctrl = utils.IntSpinCtrl(valve_box, my_min=1)
+            self._mals_valve_ctrl.Bind(utils.EVT_MY_SPIN,
+                self._on_set_valve_position)
+
         valve_sizer = wx.FlexGridSizer(cols=4, vgap=self._FromDIP(5),
             hgap=self._FromDIP(5))
         valve_sizer.Add(wx.StaticText(valve_box, label='Buffer 1:'),
@@ -4773,6 +5143,42 @@ class HPLCPanel(utils.DevicePanel):
             valve_sizer.Add(self._outlet_valve_ctrl,
                 flag=wx.ALIGN_CENTER_VERTICAL)
 
+        if self.settings['use_mals_valve']:
+            valve_sizer.Add(wx.StaticText(valve_box, label='MALS:'),
+                flag=wx.ALIGN_CENTER_VERTICAL)
+            valve_sizer.Add(self._mals_valve_ctrl,
+                flag=wx.ALIGN_CENTER_VERTICAL)
+
+        if self.settings['use_mals_valve']:
+            self._mals_switch_btn = wx.Button(valve_box, label='Switch MALS')
+            self._mals_stop_btn = wx.Button(valve_box, label='Stop MALS switch')
+
+            self._mals_switch_btn.Bind(wx.EVT_BUTTON, self._on_mals_switch)
+            self._mals_stop_btn.Bind(wx.EVT_BUTTON, self._on_mals_stop)
+
+            self._mals_status = wx.StaticText(valve_box,
+                size=self._FromDIP((60,-1)), style=wx.ST_NO_AUTORESIZE)
+
+            self._mals_switch_status = wx.StaticText(valve_box,
+                size=self._FromDIP((60,-1)), style=wx.ST_NO_AUTORESIZE)
+
+            mals_sub_sizer1 = wx.FlexGridSizer(cols=4, vgap=self._FromDIP(5),
+                hgap=self._FromDIP(5))
+            mals_sub_sizer1.Add(wx.StaticText(valve_box, label='MALS status:'),
+                flag=wx.ALIGN_CENTER_VERTICAL)
+            mals_sub_sizer1.Add(self._mals_status, flag=wx.ALIGN_CENTER_VERTICAL)
+            mals_sub_sizer1.Add(wx.StaticText(valve_box, label='Switching MALS:'),
+                flag=wx.ALIGN_CENTER_VERTICAL)
+            mals_sub_sizer1.Add(self._mals_switch_status, flag=wx.ALIGN_CENTER_VERTICAL)
+
+            mals_sub_sizer2 = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(5),
+                hgap=self._FromDIP(5))
+            mals_sub_sizer2.Add(self._mals_switch_btn, flag=wx.ALIGN_CENTER_VERTICAL)
+            mals_sub_sizer2.Add(self._mals_stop_btn, flag=wx.ALIGN_CENTER_VERTICAL)
+
+            mals_sizer = wx.BoxSizer(wx.VERTICAL)
+            mals_sizer.Add(mals_sub_sizer1)
+            mals_sizer.Add(mals_sub_sizer2, flag=wx.TOP, border=self._FromDIP(5))
 
         self._buffer1_valve_switch = wx.StaticText(valve_box,
             size=self._FromDIP((40,-1)), style=wx.ST_NO_AUTORESIZE)
@@ -4824,6 +5230,11 @@ class HPLCPanel(utils.DevicePanel):
         top_sizer = wx.StaticBoxSizer(valve_box, wx.VERTICAL)
         top_sizer.Add(valve_sizer, flag=wx.ALL|wx.EXPAND, proportion=1,
             border=self._FromDIP(5))
+
+        if self.settings['use_mals_valve']:
+            top_sizer.Add(mals_sizer, flag=wx.LEFT|wx.RIGHT|wx.BOTTOM,
+            border=self._FromDIP(5))
+
         top_sizer.Add(buffer_switch_sizer, flag=wx.LEFT|wx.RIGHT|wx.BOTTOM,
             border=self._FromDIP(5))
         top_sizer.Add(buffer_switch_ctrl_sizer, flag=wx.LEFT|wx.RIGHT|wx.BOTTOM,
@@ -5041,6 +5452,8 @@ class HPLCPanel(utils.DevicePanel):
         args = copy.copy(device_data['args'])
         kwargs = device_data['kwargs']
 
+        kwargs['use_mals_valve'] = settings['use_mals_valve']
+
         valve_max = kwargs['purge1_valve_args']['kwargs']['positions']
         self._purge1_valve_ctrl.SetMax(valve_max)
 
@@ -5060,6 +5473,10 @@ class HPLCPanel(utils.DevicePanel):
             valve_max = kwargs['outlet_valve_args']['kwargs']['positions']
             self._outlet_valve_ctrl.SetMax(valve_max)
 
+        if settings['use_mals_valve']:
+            valve_max = kwargs['mals_valve_args']['kwargs']['positions']
+            self._mals_valve_ctrl.SetMax(valve_max)
+
         args.insert(0, self.name)
 
         connect_cmd = ['connect', args, kwargs]
@@ -5069,7 +5486,6 @@ class HPLCPanel(utils.DevicePanel):
         if connected:
             get_fast_hplc_status_cmd = ['get_fast_hplc_status', [self.name,], {}]
             self._update_status_cmd(get_fast_hplc_status_cmd, 2)
-
 
             get_valve_status_cmd = ['get_valve_status', [self.name,], {}]
             self._update_status_cmd(get_valve_status_cmd, 15)
@@ -5096,15 +5512,19 @@ class HPLCPanel(utils.DevicePanel):
 
     def get_default_switch_flow_path_settings(self):
         default_switch_settings = {
-            'purge_vol'                 : self.settings['switch_purge_volume'],
+            'purge_volume'              : self.settings['switch_purge_volume'],
             'purge_rate'                : self.settings['switch_purge_rate'],
             'purge_accel'               : self.settings['switch_purge_accel'],
-            'restore_flow_after_switch' : self.settings['restore_flow_after_switch'],
+            'restore_flow1'             : self.settings['restore_flow1'],
+            'restore_flow2'             : self.settings['restore_flow2'],
             'switch_with_sample'        : self.settings['switch_with_sample'],
             'stop_flow1'                : self.settings['switch_stop_flow1'],
             'stop_flow2'                : self.settings['switch_stop_flow2'],
             'purge_active'              : self.settings['switch_purge_active'],
             }
+
+        if self.settings['use_mals_valve']:
+            default_switch_settings['mals_valve_pos'] = self._mals_valve
 
         return default_switch_settings
 
@@ -5177,7 +5597,6 @@ class HPLCPanel(utils.DevicePanel):
             except Exception:
                 errors.append('Purge acceleration (must be >0)')
 
-        if switch_settings['purge_active']:
             if isinstance(switch_settings['purge_volume'], float):
                 if switch_settings['purge_volume'] <= 0:
                     errors.append('Purge volume (must be >0)')
@@ -5189,6 +5608,16 @@ class HPLCPanel(utils.DevicePanel):
             if isinstance(switch_settings['purge_accel'], float):
                 if switch_settings['purge_accel'] <= 0:
                     errors.append('Purge acceleration (must be >0)')
+
+        if self.settings['use_mals_valve']:
+            try:
+                switch_settings['mals_valve_pos'] = int(switch_settings['mals_valve_pos'])
+            except Exception:
+                errors.append('MALS valve position must be an integer')
+
+            if isinstance(switch_settings['mals_valve_pos'], int):
+                if switch_settings['mals_valve_pos'] not in (1,2):
+                    errors.append('MALS valve position must be 1 or 2')
 
         if len(errors) > 0:
             valid = False
@@ -5385,7 +5814,7 @@ class HPLCPanel(utils.DevicePanel):
             flow_path = 2
 
         default_purge_settings = {
-            'purge_vol'     : self.settings['purge_volume'],
+            'purge_volume'  : self.settings['purge_volume'],
             'purge_rate'    : self.settings['purge_rate'],
             'purge_accel'   : self.settings['purge_accel'],
             'restore_flow_after_purge'  : self.settings['restore_flow_after_purge'],
@@ -5406,7 +5835,7 @@ class HPLCPanel(utils.DevicePanel):
         purge_dialog.Destroy()
 
         if purge_settings is not None:
-            purge_vol = purge_settings.pop('purge_vol')
+            purge_vol = purge_settings.pop('purge_volume')
 
             try:
                 purge_vol = float(purge_vol)
@@ -5444,7 +5873,7 @@ class HPLCPanel(utils.DevicePanel):
             'equil_rate'    : self.settings['equil_rate'],
             'equil_accel'   : self.settings['equil_accel'],
             'purge'         : self.settings['equil_purge'],
-            'purge_vol'     : self.settings['purge_volume'],
+            'purge_volume'  : self.settings['purge_volume'],
             'purge_rate'    : self.settings['purge_rate'],
             'purge_accel'   : self.settings['purge_accel'],
             'equil_with_sample' : self.settings['equil_with_sample'],
@@ -5635,9 +6064,9 @@ class HPLCPanel(utils.DevicePanel):
         switch_dialog.Destroy()
 
         if switch_settings is not None:
-            self._validate_and_buffer_bottle_switch(flow_path, switch_settings)
+            self._validate_and_run_buffer_bottle_switch(flow_path, switch_settings)
 
-    def _validate_and_buffer_bottle_switch(self, flow_path, switch_settings, verbose=True):
+    def _validate_and_run_buffer_bottle_switch(self, flow_path, switch_settings, verbose=True):
         valid, errors = self.validate_buffer_bottle_switch_params(switch_settings)
 
         if valid:
@@ -5701,6 +6130,96 @@ class HPLCPanel(utils.DevicePanel):
 
     def _stop_buffer_switch(self, flow_path):
         cmd = ['stop_switch_buffer', [self.name, flow_path,], {}]
+        self._send_cmd(cmd, False)
+
+    def _on_mals_switch(self, evt):
+        device_data = self.settings['device_data']
+        kwargs = device_data['kwargs']
+
+        cur_pos = copy.copy(self._mals_valve)
+        valve_max = kwargs['mals_valve_args']['kwargs']['positions']
+
+        default_switch_settings = {
+            'valve_position'        : cur_pos,
+            'max_positions'         : valve_max,
+            'stop_flow'             : self.settings['mals_switch_stop_flow'],
+            'flow_accel'            : self.settings['mals_switch_accel'],
+            'restore_flow_after_switch' : self.settings['mals_switch_restore_flow'],
+            'switch_with_sample'    : self.settings['mals_switch_with_sample'],
+            'switch_with_activity'  : self.settings['mals_switch_with_active'],
+        }
+
+        switch_dialog = SwitchMALSValveDialog(self, default_switch_settings,
+            title='MALS valve switch settings')
+        result = switch_dialog.ShowModal()
+
+        if result == wx.ID_OK:
+            switch_settings = switch_dialog.get_settings()
+        else:
+            switch_settings = None
+
+        switch_dialog.Destroy()
+
+        if switch_settings is not None:
+            self._validate_and_run_mals_valve_switch(switch_settings)
+
+    def _validate_and_run_mals_valve_switch(self, switch_settings, verbose=True):
+        valid, errors = self.validate_mals_valve_switch_params(switch_settings)
+
+        if valid:
+            valve_position = switch_settings.pop('valve_position')
+            cmd = ['switch_mals_valve', [self.name, valve_position],
+                switch_settings]
+            self._send_cmd(cmd, False)
+
+            do_switch = True
+
+        else:
+            do_switch = False
+
+            if verbose:
+                msg = 'The following field(s) have invalid values:'
+                for err in errors:
+                    msg = msg + '\n- ' + err
+                msg = msg + ('\n\nPlease correct these errors, then start the '
+                    'switch.')
+
+                wx.CallAfter(wx.MessageBox, msg, ('Error in MALS valve '
+                    'switch parameters'), style=wx.OK|wx.ICON_ERROR)
+
+        return do_switch
+
+    def validate_mals_valve_switch_params(self, switch_settings):
+        errors = []
+
+        try:
+            switch_settings['valve_position'] = int(switch_settings['valve_position'])
+        except Exception:
+            errors.append('MALS valve position not valid')
+
+        if switch_settings['stop_flow']:
+            try:
+                switch_settings['flow_accel'] = float(switch_settings['flow_accel'])
+            except Exception:
+                errors.append('Flow acceleration must be a number')
+
+            if isinstance(switch_settings['flow_accel'], float):
+                if switch_settings['flow_accel'] <= 0:
+                    errors.append('Flow acceleration must be >0')
+
+
+        if len(errors) > 0:
+            valid = False
+        else:
+            valid =  True
+
+        return valid, errors
+
+    def _on_stop_mals_switch(self, evt):
+        self._stop_mals_switch()
+
+    def _stop_mals_switch(self):
+        cmd = ['stop_switch_mals', [self.name,], {}]
         self._send_cmd(cmd, False)
 
     def _on_pump_on(self, evt):
@@ -5839,6 +6358,9 @@ class HPLCPanel(utils.DevicePanel):
         elif evt_obj == self._outlet_valve_ctrl:
             valve = 'outlet'
             val = self._outlet_valve_ctrl.GetValue()
+        elif evt_obj == self._mals_valve_ctrl:
+            valve = 'mals'
+            val = self._mals_valve_ctrl.GetValue()
 
         try:
             val = int(val)
@@ -6185,7 +6707,7 @@ class HPLCPanel(utils.DevicePanel):
         if self._remove_buffer1_btn == evt_obj:
             flow_path = 1
             buffer_info = self._buffer1_info
-        elif self._remove_buffer1_btn == evt_obj:
+        elif self._remove_buffer2_btn == evt_obj:
             buffer_info = self._buffer2_info
             flow_path = 2
 
@@ -6243,6 +6765,9 @@ class HPLCPanel(utils.DevicePanel):
         self._send_cmd(cmd, False)
 
     def _set_status(self, cmd, val):
+        if val is None:
+            return
+
         if cmd == 'get_fast_hplc_status':
             inst_status = val['instrument_status']
             connected = str(inst_status['connected'])
@@ -6540,6 +7065,27 @@ class HPLCPanel(utils.DevicePanel):
                         pump2_flow_accel)
                     self._pump2_flow_accel = pump2_flow_accel
 
+            if self.settings['use_mals_valve']:
+                mals_inline = pump_status['mals_inline']
+                switch_mals = str(pump_status['switch_mals_valve'])
+
+                if self._mals_inline != mals_inline:
+                    if mals_inline:
+                        status = 'Inline'
+                    else:
+                        status = 'Bypassed'
+
+                    wx.CallAfter(self._mals_status.SetLabel, status)
+                    self._mals_inline = mals_inline
+
+                if switch_mals != self._mals_valve_switch:
+                    wx.CallAfter(self._mals_switch_status.SetLabel, switch_mals)
+                    self._mals_valve_switch = switch_mals
+
+                    if switch_mals.lower() == 'true':
+                        wx.CallAfter(self._mals_switch_btn.Disable)
+                    else:
+                        wx.CallAfter(self._mals_switch_btn.Enable)
 
             sampler_status = val['autosampler_status']
             submitting_sample = str(sampler_status['submitting_sample'])
@@ -6638,6 +7184,14 @@ class HPLCPanel(utils.DevicePanel):
                         outlet)
                     self._outlet_valve = outlet
 
+            if self.settings['use_mals_valve']:
+                mals = int(val['mals'])
+
+                if mals != self._mals_valve:
+                    wx.CallAfter(self._mals_valve_ctrl.SafeChangeValue,
+                        mals)
+                    self._mals_valve = mals
+
     def _update_buffer_list(self, flow_path, pos, vol, descrip):
         if flow_path == 1:
             buffer_list = self._buffer1_list
@@ -6723,6 +7277,9 @@ class HPLCPanel(utils.DevicePanel):
     def _get_automator_state(self, flow_path):
         if self._flow_path_status.lower() == 'true':
             state = 'switch'
+
+        elif self._mals_valve_switch.lower() == 'true':
+            state = 'equil'
 
         elif flow_path == 1:
             if self._pump1_purge.lower() == 'true':
@@ -6826,7 +7383,7 @@ class HPLCPanel(utils.DevicePanel):
         elif cmd_name == 'switch_buffer_bottle':
             flow_path = cmd_kwargs.pop('flow_path')
             buffer_position = cmd_kwargs['buffer_position']
-            success = self._validate_and_buffer_bottle_switch(flow_path,
+            success = self._validate_and_run_buffer_bottle_switch(flow_path,
                 cmd_kwargs, False)
 
             if int(flow_path) == 1:
@@ -6835,6 +7392,17 @@ class HPLCPanel(utils.DevicePanel):
                 cur_buffer_pos = self._buffer2_valve
 
             if str(buffer_position) == str(cur_buffer_pos):
+                state = 'idle'
+            else:
+                state = 'equil'
+
+        elif cmd_name == 'switch_mals_valve':
+            valve_position = cmd_kwargs['valve_position']
+            success = self._validate_and_run_mals_valve_switch(cmd_kwargs, False)
+
+            cur_valve_pos = self._mals_valve
+
+            if str(valve_position) == str(cur_valve_pos):
                 state = 'idle'
             else:
                 state = 'equil'
@@ -6999,7 +7567,7 @@ class PurgeDialog(wx.Dialog):
             validator=utils.CharValidator('float'))
 
         self._purge_rate_ctrl.SetValue(str(settings['purge_rate']))
-        self._purge_vol_ctrl.SetValue(str(settings['purge_vol']))
+        self._purge_vol_ctrl.SetValue(str(settings['purge_volume']))
         self._purge_accel_ctrl.SetValue(str(settings['purge_accel']))
 
         purge_sizer1 = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(5),
@@ -7060,7 +7628,7 @@ class PurgeDialog(wx.Dialog):
 
         settings = {
             'purge_rate'                : rate,
-            'purge_vol'                 : vol,
+            'purge_volume'              : vol,
             'purge_accel'               : accel,
             'restore_flow_after_purge'  : restore_flow_after_purge,
             'purge_with_sample'         : purge_with_sample,
@@ -7134,7 +7702,7 @@ class EquilDialog(wx.Dialog):
             validator=utils.CharValidator('float'))
 
         self._purge_rate_ctrl.SetValue(str(settings['purge_rate']))
-        self._purge_vol_ctrl.SetValue(str(settings['purge_vol']))
+        self._purge_vol_ctrl.SetValue(str(settings['purge_volume']))
         self._purge_accel_ctrl.SetValue(str(settings['purge_accel']))
 
         purge_sizer1 = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(5),
@@ -7208,6 +7776,8 @@ class SwitchDialog(wx.Dialog):
 
         self._create_layout(settings)
 
+        self._input_settings = settings
+
         self.CenterOnParent()
 
     def _FromDIP(self, size):
@@ -7220,8 +7790,10 @@ class SwitchDialog(wx.Dialog):
     def _create_layout(self, settings):
         parent = self
 
-        self._switch_restore_flow = wx.CheckBox(parent,
-            label='Restore flow to current rate after switching')
+        self._switch_restore_flow1 = wx.CheckBox(parent,
+            label='Restore flow on path 1 to current rate after switching')
+        self._switch_restore_flow2 = wx.CheckBox(parent,
+            label='Restore flow on path 2 to current rate after switching')
         self._switch_with_sample = wx.CheckBox(parent,
             label='Switch even if a sample is running')
         self._switch_stop1 = wx.CheckBox(parent,
@@ -7231,14 +7803,17 @@ class SwitchDialog(wx.Dialog):
         self._purge_active = wx.CheckBox(parent,
             label='Purge active flow path after switching')
 
-        self._switch_restore_flow.SetValue(settings['restore_flow_after_switch'])
+        self._switch_restore_flow1.SetValue(settings['restore_flow1'])
+        self._switch_restore_flow2.SetValue(settings['restore_flow2'])
         self._switch_with_sample.SetValue(settings['switch_with_sample'])
         self._switch_stop1.SetValue(settings['stop_flow1'])
         self._switch_stop2.SetValue(settings['stop_flow2'])
         self._purge_active.SetValue(settings['purge_active'])
 
         switch_sizer = wx.BoxSizer(wx.VERTICAL)
-        switch_sizer.Add(self._switch_restore_flow, flag=wx.BOTTOM,
+        switch_sizer.Add(self._switch_restore_flow1, flag=wx.BOTTOM,
+            border=self._FromDIP(5))
+        switch_sizer.Add(self._switch_restore_flow2, flag=wx.BOTTOM,
             border=self._FromDIP(5))
         switch_sizer.Add(self._switch_with_sample, flag=wx.BOTTOM,
             border=self._FromDIP(5))
@@ -7257,7 +7832,7 @@ class SwitchDialog(wx.Dialog):
             validator=utils.CharValidator('float'))
 
         self._purge_rate_ctrl.SetValue(str(settings['purge_rate']))
-        self._purge_vol_ctrl.SetValue(str(settings['purge_vol']))
+        self._purge_vol_ctrl.SetValue(str(settings['purge_volume']))
         self._purge_accel_ctrl.SetValue(str(settings['purge_accel']))
 
         purge_sizer1 = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(5),
@@ -7272,12 +7847,27 @@ class SwitchDialog(wx.Dialog):
             flag=wx.ALIGN_CENTER_VERTICAL)
         purge_sizer1.Add(self._purge_accel_ctrl, flag=wx.ALIGN_CENTER_VERTICAL)
 
+        if 'mals_valve_pos' in settings:
+            self._mals_valve_ctrl = wx.Choice(parent, choices=['1', '2'])
+            self._mals_valve_ctrl.SetStringSelection(str(settings['mals_valve_pos']))
+
+            mals_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(5),
+                hgap=self._FromDIP(5))
+            mals_sizer.Add(wx.StaticText(parent, label='MALS valve position:'),
+                flag=wx.ALIGN_CENTER_VERTICAL)
+            mals_sizer.Add(self._mals_valve_ctrl, flag=wx.ALIGN_CENTER_VERTICAL)
+
         button_sizer = self.CreateButtonSizer(wx.OK | wx.CANCEL)
 
         top_sizer=wx.BoxSizer(wx.VERTICAL)
         top_sizer.Add(switch_sizer, flag=wx.ALL, border=self._FromDIP(5))
         top_sizer.Add(purge_sizer1, flag=wx.LEFT|wx.RIGHT|wx.BOTTOM,
             border=self._FromDIP(5))
+
+        if 'mals_valve_pos' in settings:
+            top_sizer.Add(mals_sizer, flag=wx.LEFT|wx.RIGHT|wx.BOTTOM,
+            border=self._FromDIP(5))
+
         top_sizer.Add(button_sizer ,flag=wx.BOTTOM|wx.RIGHT|wx.LEFT|wx.ALIGN_RIGHT,
             border=self._FromDIP(10))
 
@@ -7287,7 +7877,8 @@ class SwitchDialog(wx.Dialog):
         rate = self._purge_rate_ctrl.GetValue()
         vol = self._purge_vol_ctrl.GetValue()
         accel = self._purge_accel_ctrl.GetValue()
-        restore_flow_after_switch = self._switch_restore_flow.GetValue()
+        restore_flow1 = self._switch_restore_flow1.GetValue()
+        restore_flow2 = self._switch_restore_flow2.GetValue()
         switch_with_sample = self._switch_with_sample.GetValue()
         stop_flow1 = self._switch_stop1.GetValue()
         stop_flow2 = self._switch_stop2.GetValue()
@@ -7297,12 +7888,17 @@ class SwitchDialog(wx.Dialog):
             'purge_rate'                : rate,
             'purge_volume'              : vol,
             'purge_accel'               : accel,
-            'restore_flow_after_switch' : restore_flow_after_switch,
+            'restore_flow1'             : restore_flow1,
+            'restore_flow2'             : restore_flow2,
             'switch_with_sample'        : switch_with_sample,
             'stop_flow1'                : stop_flow1,
             'stop_flow2'                : stop_flow2,
             'purge_active'              : purge_active,
             }
+
+        if 'mals_valve_pos' in self._input_settings:
+            mals_valve_pos = int(self._mals_valve_ctrl.GetStringSelection())
+            settings['mals_valve_pos'] = mals_valve_pos
 
         return settings
 
@@ -7652,6 +8248,102 @@ class SwitchBufferBottleDialog(wx.Dialog):
 
         return settings
 
+class SwitchMALSValveDialog(wx.Dialog):
+    """
+    Get settings for switching MALS valve
+    """
+    def __init__(self, parent, settings, *args, **kwargs):
+        wx.Dialog.__init__(self, parent, *args,
+            style=wx.RESIZE_BORDER|wx.CAPTION|wx.CLOSE_BOX, **kwargs)
+
+        self.SetSize(self._FromDIP((400, 250)))
+
+        self._create_layout(settings)
+
+        self.CenterOnParent()
+
+    def _FromDIP(self, size):
+        # This is a hack to provide easy back compatibility with wxpython < 4.1
+        try:
+            return self.FromDIP(size)
+        except Exception:
+            return size
+
+    def _create_layout(self, settings):
+        parent = self
+
+        valve_choices = [str(i) for i in range(1, settings['max_positions']+1)]
+
+        self._valve_position = wx.Choice(parent, choices=valve_choices)
+        self._flow_accel_ctrl = wx.TextCtrl(parent, size=self._FromDIP((60, -1)),
+            validator=utils.CharValidator('float'))
+
+        self._valve_position.SetStringSelection(str(settings['valve_position']))
+        self._flow_accel_ctrl.SetValue(str(settings['flow_accel']))
+
+        switch_sizer1 = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(5),
+            hgap=self._FromDIP(5))
+        switch_sizer1.Add(wx.StaticText(parent, label='MALS valve position:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        switch_sizer1.Add(self._valve_position, flag=wx.ALIGN_CENTER_VERTICAL)
+        switch_sizer1.Add(wx.StaticText(parent, label='Flow acceleration (mL/min^2):'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        switch_sizer1.Add(self._flow_accel_ctrl, flag=wx.ALIGN_CENTER_VERTICAL)
+
+        self._switch_stop_before = wx.CheckBox(parent,
+            label='Ramp flow to 0 before switching MALS valve')
+        self._switch_restore_flow = wx.CheckBox(parent,
+            label='Restore flow to current rate after switching valve')
+        self._switch_with_sample = wx.CheckBox(parent,
+            label='Switch MALS valve even if a sample is running')
+        self._switch_with_activity = wx.CheckBox(parent,
+            label='Switch MALS valve even if a flow is purging or equilibrating')
+
+        self._switch_stop_before.SetValue(settings['stop_flow'])
+        self._switch_restore_flow.SetValue(settings['restore_flow_after_switch'])
+        self._switch_with_sample.SetValue(settings['switch_with_sample'])
+        self._switch_with_activity.SetValue(settings['switch_with_activity'])
+
+        switch_sizer2 = wx.BoxSizer(wx.VERTICAL)
+        switch_sizer2.Add(self._switch_stop_before, flag=wx.BOTTOM,
+            border=self._FromDIP(5))
+        switch_sizer2.Add(self._switch_restore_flow, flag=wx.BOTTOM,
+            border=self._FromDIP(5))
+        switch_sizer2.Add(self._switch_with_sample, flag=wx.BOTTOM,
+            border=self._FromDIP(5))
+        switch_sizer2.Add(self._switch_with_activity, flag=wx.BOTTOM,
+            border=self._FromDIP(5))
+
+        button_sizer = self.CreateButtonSizer(wx.OK | wx.CANCEL)
+
+        top_sizer=wx.BoxSizer(wx.VERTICAL)
+        top_sizer.Add(switch_sizer1, flag=wx.ALL, border=self._FromDIP(5))
+        top_sizer.Add(switch_sizer2, flag=wx.LEFT|wx.RIGHT|wx.BOTTOM,
+            border=self._FromDIP(5))
+        top_sizer.Add(button_sizer ,flag=wx.BOTTOM|wx.RIGHT|wx.LEFT|wx.ALIGN_RIGHT,
+            border=self._FromDIP(10))
+
+        self.SetSizer(top_sizer)
+
+    def get_settings(self):
+        valve_position = self._valve_position.GetStringSelection()
+        flow_accel = self._flow_accel_ctrl.GetValue()
+        stop_flow = self._switch_stop_before.GetValue()
+        restore_flow_after_switch = self._switch_restore_flow.GetValue()
+        switch_with_sample = self._switch_with_sample.GetValue()
+        switch_with_activity = self._switch_with_activity.GetValue()
+
+        settings = {
+            'valve_position'            : valve_position,
+            'stop_flow'                 : stop_flow,
+            'flow_accel'                : flow_accel,
+            'restore_flow_after_switch' : restore_flow_after_switch,
+            'switch_with_sample'        : switch_with_sample,
+            'switch_with_activity'      : switch_with_activity,
+            }
+
+        return settings
+
 class RunList(wx.ListCtrl, wx.lib.mixins.listctrl.ListCtrlAutoWidthMixin):
 
     def __init__(self, *args, **kwargs):
@@ -7728,6 +8420,12 @@ default_buffer2_valve_args = {
     'kwargs': {'positions' : 10}
     }
 
+default_mals_valve_args = {
+    'name'  : 'MALS',
+    'args'  : ['Cheminert', 'COM8'],
+    'kwargs': {'positions' : 2}
+    }
+
 # 2 pump HPLC for SEC-SAXS
 setup_devices = [
     {'name': 'SEC-SAXS', 'args': ['AgilentHPLC2Pumps', None],
@@ -7738,6 +8436,7 @@ setup_devices = [
         'purge2_valve_args' : default_purge2_valve_args,
         'buffer1_valve_args' : default_buffer1_valve_args,
         'buffer2_valve_args' : default_buffer2_valve_args,
+        'mals_valve_args' : default_mals_valve_args,
         'pump1_id' : 'quat. pump 1#1c#1',
         'pump2_id' : 'quat. pump 2#1c#2'},
         }
@@ -7753,7 +8452,7 @@ default_hplc_2pump_settings = {
     'com_thread'    : None,
     # Default settings for hplc
     'purge_volume'              : 20,
-    'purge_rate'                : 3,
+    'purge_rate'                : 1.5,
     'purge_accel'               : 10,
     'purge_max_pressure'        : 250,
     'restore_flow_after_purge'  : True,
@@ -7773,12 +8472,18 @@ default_hplc_2pump_settings = {
     'switch_with_sample'        : False,
     'switch_stop_flow1'         : True,
     'switch_stop_flow2'         : True,
-    'restore_flow_after_switch' : True,
+    'switch_restore_flow1'      : True,
+    'switch_restore_flow2'      : True,
     'buffer_switch_stop_flow'   : True,
     'buffer_switch_accel'       : 0.1,
     'buffer_switch_restore_flow': False,
     'buffer_switch_with_sample' : False,
     'buffer_switch_with_active' : False,
+    'mals_switch_stop_flow'     : True,
+    'mals_switch_accel'         : 0.1,
+    'mals_switch_restore_flow'  : False,
+    'mals_switch_with_sample'   : False,
+    'mals_switch_with_active'   : False,
     'acq_method'                : 'SECSAXS_default',
     # 'acq_method'                : 'SEC-MALS',
     'sample_loc'                : 'D2F-A1',
@@ -7792,6 +8497,7 @@ default_hplc_2pump_settings = {
     'sp_method'                 : '',
     'wait_for_flow_ramp'        : True,
     'settle_time'               : 0.0,
+    'use_mals_valve'            : False,
     }
 
 if __name__ == '__main__':

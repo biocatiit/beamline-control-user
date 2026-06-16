@@ -1660,6 +1660,8 @@ class ExpCommThread(threading.Thread):
     def fast_exposure(self, data_dir, fprefix, num_frames, exp_time, exp_period,
         exp_type='standard', **kwargs):
         logger.debug('Setting up %s fast exposure', exp_type)
+
+        logger.debug('Getting settings and devices')
         det = self._mx_data['det']          #Detector
 
         struck = self._mx_data['struck']    #Struck SIS3820
@@ -1724,6 +1726,7 @@ class ExpCommThread(threading.Thread):
             logger.info('Continuous mode')
             continuous_exp = True
 
+        logger.debug('Getting dark counts')
         dark_counts = []
         for i in range(len(s_counters)):
             if log_vals[i]['dark']:
@@ -1738,6 +1741,7 @@ class ExpCommThread(threading.Thread):
         # det_exp_time.put(exp_time)
         # det_exp_period.put(exp_period)
 
+        logger.debug('Setting detector settings')
         if self._settings['detector'] == '18IDpil1M:_epics':
             det.set_trigger_mode('ext_enable')
         else:
@@ -1747,6 +1751,7 @@ class ExpCommThread(threading.Thread):
         det.set_exp_period(exp_period)
 
 
+        logger.debug('Setting MCS settings')
         if exp_type == 'muscle':
             logger.debug('muscle setup')
             logger.debug(struck_meas_time)
@@ -1766,6 +1771,7 @@ class ExpCommThread(threading.Thread):
         # if exp_type == 'muscle':
         #     dg645_trigger_source2.put(1)
 
+        logger.debug('Setting delay generator settings')
         #Need to clear srs possibly?
         ab_burst.setup(0.000001, 0.000000, 1, 0, 1, 2)
         cd_burst.setup(0.000001, 0.000000, 1, 0, 1, 2)
@@ -2153,13 +2159,20 @@ class ExpCommThread(threading.Thread):
         if ab_burst_2 is not None:
             ab_burst_2.get_status() #Maybe need to clear this status?
 
+        start = time.monotonic()
+        timeout = 3*60
+
         while det.get_status() !=0:
-            time.sleep(0.001)
+            time.sleep(0.01)
             if self._abort_event.is_set() and not aborted:
                 self.fast_mode_abort_cleanup(det, struck, ab_burst, ab_burst_2,
                     dio_out9, slow_shutter, exp_time, kwargs)
                 aborted = True
                 break
+
+            if time.monotonic()-start>timeout:
+                logger.error('Timed out waiting for detector to finish)')
+                self._abort_event.set()
 
         logger.info('Exposures done')
 
@@ -2206,7 +2219,7 @@ class ExpCommThread(threading.Thread):
             det.set_frame_type('bg')
             det.set_file_auto_save(False)
 
-            time.sleep(0.1) #Wait to be sure slow shutter is closed
+            time.sleep(0.15) #Wait to be sure slow shutter is closed
             det.arm()
 
             while det.get_status():
@@ -4358,6 +4371,8 @@ class ExpPanel(wx.Panel):
             airshot_panel = wx.FindWindowByName('airshot')
             airshot_values, airshot_valid = airshot_panel.get_airshot_values()
             comp_settings['airshot'] = airshot_values
+        else:
+            airshot_valid = True
 
 
         if not coflow_started:
@@ -5105,7 +5120,7 @@ default_exposure_settings = {
     'exp_period'            : '1',
     'exp_num'               : '1',
 
-    # # For Pilatus3 X 1M
+    # For Pilatus3 X 1M
     # 'exp_time_min'          : 0.00105,
     # 'exp_time_max'          : 5184000,
     # 'exp_period_min'        : 0.002,
@@ -5123,37 +5138,37 @@ default_exposure_settings = {
     # 'scan_rearm'            : False, #Rearm the detector between scans. If True may slow down scans
 
     # # #Eiger2 XE 9M
-    # 'exp_time_min'          : 0.000000050,
-    # 'exp_time_max'          : 3600,
-    # 'exp_period_min'        : 0.001785714286, #There's an 8bit undocumented mode that can go faster, in theory
-    # 'exp_period_max'        : 5184000, # Not clear there is a maximum, so left it at this
-    # 'nframes_max'           : 15000, # For Eiger: 2000000000, for Struck: 15000 (set by maxChannels in the driver configuration)
-    # 'nparams_max'           : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
-    # 'exp_period_delta'      : 0.000000200,
-    # 'local_dir_root'        : '/nas_data/Eiger2x',
-    # 'remote_dir_root'       : '/nas_data/Eiger2x',
-    # 'detector'              : '18ID:EIG2:_epics',
-    # 'det_args'              :  {'use_tiff_writer': False, 'use_file_writer': True,
-    #                             'photon_energy' : 12.0, 'images_per_file': 1000}, #1 image/file for TR, 300 for equilibrium
-    # 'add_file_postfix'      : False,
-    # 'monitor_dark'          : False,
-    # 'scan_rearm'            : False, #Rearm the detector between scans. If True may slow down scans
-
-    # For Mar165
-    'exp_time_min'          : 0.001,
-    'exp_time_max'          : 5184000,
-    'exp_period_min'        : 4.5,
-    'exp_period_max'        : 5184000,
-    'nframes_max'           : 15000,
-    'exp_period_delta'      : 4.5,
-    'local_dir_root'        : '/nas_data/MarCCD',
-    'remote_dir_root'       : '/nas_data/MarCCD',
-    'detector'              : 'Mar165:_epics',
-    'det_args'              : {'scan_pv': '18ID:Scans:scan1'}, #Allows detector specific keyword arguments
-    'add_file_postfix'      : True,
-    'monitor_dark'          : True,
-    'dark_interval'         : 3600, #in s
+    'exp_time_min'          : 0.000000050,
+    'exp_time_max'          : 3600,
+    'exp_period_min'        : 0.001785714286, #There's an 8bit undocumented mode that can go faster, in theory
+    'exp_period_max'        : 5184000, # Not clear there is a maximum, so left it at this
+    'nframes_max'           : 15000, # For Eiger: 2000000000, for Struck: 15000 (set by maxChannels in the driver configuration)
+    'nparams_max'           : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
+    'exp_period_delta'      : 0.000000200,
+    'local_dir_root'        : '/nas_data/Eiger2x',
+    'remote_dir_root'       : '/nas_data/Eiger2x',
+    'detector'              : '18ID:EIG2:_epics',
+    'det_args'              :  {'use_tiff_writer': False, 'use_file_writer': True,
+                                'photon_energy' : 12.0, 'images_per_file': 300}, #1 image/file for TR, 300 for equilibrium
+    'add_file_postfix'      : False,
+    'monitor_dark'          : False,
     'scan_rearm'            : False, #Rearm the detector between scans. If True may slow down scans
+
+    # # For Mar165
+    # 'exp_time_min'          : 0.001,
+    # 'exp_time_max'          : 5184000,
+    # 'exp_period_min'        : 4.5,
+    # 'exp_period_max'        : 5184000,
+    # 'nframes_max'           : 15000,
+    # 'exp_period_delta'      : 4.5,
+    # 'local_dir_root'        : '/nas_data/MarCCD',
+    # 'remote_dir_root'       : '/nas_data/MarCCD',
+    # 'detector'              : 'Mar165:_epics',
+    # 'det_args'              : {'scan_pv': '18ID:Scans:scan1'}, #Allows detector specific keyword arguments
+    # 'add_file_postfix'      : True,
+    # 'monitor_dark'          : True,
+    # 'dark_interval'         : 3600, #in s
+    # 'scan_rearm'            : False, #Rearm the detector between scans. If True may slow down scans
 
     # 'shutter_speed_open'    : 0.004, #in s      NM vacuum shutter, broken
     # 'shutter_speed_close'   : 0.004, # in s

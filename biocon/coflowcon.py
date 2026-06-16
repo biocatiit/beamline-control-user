@@ -3707,8 +3707,8 @@ default_coflow_settings = {
         'remote_overflow_ip'        : '164.54.204.75',
         'flow_units'                : 'mL/min',
         'sheath_pump'
-                                    : {'name': 'sheath', 'args': ['Longer L100S2', 'COM15'],
-                                        'kwargs': {'pump_addr': 1, 'flow_cal': 0.0407},
+                                    : {'name': 'sheath', 'args': ['Longer L100S2', 'COM5'],
+                                        'kwargs': {'pump_addr': 1, 'flow_cal': 0.0502},
                                         'ctrl_args': {'flow_rate': 1}},
         # 'sheath_pump'               : {'name': 'sheath', 'args': ['VICI M50', 'COM6'],
         #                                 'kwargs': {'flow_cal': '630.4',
@@ -3722,18 +3722,18 @@ default_coflow_settings = {
         #                                 'kwargs': {'flow_cal': '628.68',
         #                                 'backlash_cal': '9.962'},
         #                                 'ctrl_args': {'flow_rate': 1}},
-        'outlet_pump'               : {'name': 'outlet', 'args': ['OB1 Pump', 'COM13'],
+        'outlet_pump'               : {'name': 'outlet', 'args': ['OB1 Pump', 'COM7'],
                                         'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
                                         'min_pressure': -1000, 'max_pressure': 1000, 'P': -2, 'I': -0.15,
                                         'D': 0, 'bfs_instr_ID': None, 'comm_lock': None,
                                         'calib_path': './resources/ob1_calib.txt'},
                                         'ctrl_args': {}},
-        'sheath_fm'                 : {'name': 'sheath', 'args': ['BFS', 'COM5'],
+        'sheath_fm'                 : {'name': 'sheath', 'args': ['BFS', 'COM4'],
                                         'kwargs':{}},
-        'outlet_fm'                 : {'name': 'outlet', 'args': ['BFS', 'COM3'],
+        'outlet_fm'                 : {'name': 'outlet', 'args': ['BFS', 'COM6'],
                                         'kwargs':{}},
         'sheath_valve'              : {'name': 'Coflow Sheath',
-                                        'args':['Cheminert', 'COM4'],
+                                        'args':['Cheminert', 'COM3'],
                                         'kwargs': {'positions' : 10}},
         # 'sheath_pump'               : {'name': 'sheath', 'args': ['Soft', None], # Simulated devices for testing
         #                                 'kwargs': {}},
@@ -3817,18 +3817,18 @@ if __name__ == '__main__':
 
     coflow_settings['components'] = ['coflow']
 
-    # Remote
-    com_thread = None
+    # # Remote
+    # com_thread = None
 
-    # # Local
-    # com_thread = CoflowCommThread('CoflowCon')
-    # com_thread.start()
-    # coflow_settings['device_communication'] = 'local'
-    # coflow_settings['com_thread'] = com_thread
-    # ob1_comm_lock = threading.RLock()
-    # outlet_fm_comm_lock = threading.Lock()
-    # coflow_settings['device_init'][0]['kwargs']['outlet_pump']['kwargs']['comm_lock'] = ob1_comm_lock
-    # coflow_settings['device_init'][0]['kwargs']['outlet_fm']['kwargs']['comm_lock'] = outlet_fm_comm_lock
+    # Local
+    com_thread = CoflowCommThread('CoflowCon')
+    com_thread.start()
+    coflow_settings['device_communication'] = 'local'
+    coflow_settings['com_thread'] = com_thread
+    ob1_comm_lock = threading.RLock()
+    outlet_fm_comm_lock = threading.Lock()
+    coflow_settings['device_init'][0]['kwargs']['outlet_pump']['kwargs']['comm_lock'] = ob1_comm_lock
+    coflow_settings['device_init'][0]['kwargs']['outlet_fm']['kwargs']['comm_lock'] = outlet_fm_comm_lock
 
     app = wx.App()
 
