@@ -2024,6 +2024,9 @@ class AutoSettings(scrolled.ScrolledPanel):
             for key in self.cmd_info_panels:
                 self.top_sizer.Hide(self.cmd_info_panels[key], recursive=True)
 
+    def clear_settings(self):
+        self.on_item_selection({'item_type': None})
+
 default_sec_saxs_settings = {
     # General parameters
     'item_type'     : 'sec_sample',
@@ -4694,6 +4697,8 @@ class AutoList(utils.ItemList):
 
         self.remove_selected_items()
 
+        self.auto_panel.auto_settings.clear_settings()
+
     def _on_move_item_up(self, evt):
         sel_items = self.get_selected_items()
 
@@ -4831,8 +4836,17 @@ class AutoList(utils.ItemList):
     def _get_shared_cmd_number(self, cmd_name, item):
         return item.command.auto_names.count(cmd_name)
 
-    def item_selected(self, item):
-        self.auto_panel.auto_settings.on_item_selection(item.item_info)
+    def item_selected(self, item, selected):
+        if selected:
+            self.auto_panel.auto_settings.on_item_selection(item.item_info)
+        else:
+            sel_items = self.get_selected_items()
+
+            if len(sel_items) > 0:
+                top_item = sel_items[0]
+                self.auto_panel.auto_settings.on_item_selection(top_item.item_info)
+            else:
+                self.auto_panel.auto_settings.clear_settings()
 
     def abort_item(self, aid):
         for item in self.all_items:
@@ -5192,13 +5206,15 @@ class AutoListItem(utils.ListItem):
                 text_item.SetForegroundColour(self.highlight_text_color)
                 text_item.SetBackgroundColour(self.highlight_list_bkg_color)
 
-            self.item_list.item_selected(self)
+            self.item_list.item_selected(self, True)
 
         else:
             self.SetBackgroundColour(self.list_bkg_color)
             for text_item in self.text_list:
                 text_item.SetForegroundColour(self.general_text_color)
                 text_item.SetBackgroundColour(self.list_bkg_color)
+
+            self.item_list.item_selected(self, False)
 
         self.Refresh()
 

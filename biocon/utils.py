@@ -1589,7 +1589,8 @@ class ItemList(wx.Panel):
         selected_items = self.get_selected_items()
 
         if len(selected_items) > 0:
-            self.remove_items(selected_items)
+            remove_list = [item for item in selected_items]
+            self.remove_items(remove_list)
 
     def remove_item(self, item, resize=True):
         item.remove()
