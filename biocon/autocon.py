@@ -3847,7 +3847,7 @@ class AutoList(utils.ItemList):
                     default_settings['equil_accel'] = default_equil_settings['equil_accel']
                     default_settings['purge']      = default_equil_settings['purge']
                     default_settings['purge_rate'] = default_equil_settings['purge_rate']
-                    default_settings['purge_volume'] = default_equil_settings['purge_vol']
+                    default_settings['purge_volume'] = default_equil_settings['purge_volume']
                     default_settings['purge_accel'] = default_equil_settings['purge_accel']
                     default_settings['stop_after_equil'] = default_equil_settings['stop_after_equil']
 
