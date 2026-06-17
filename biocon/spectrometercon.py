@@ -484,10 +484,10 @@ class Spectrometer(object):
     def collect_dark(self, averages=1, set_dark_conditions=True):
         logger.info('Spectrometer %s: Collecting dark spectrum', self.name)
         if self._live_update:
-            self._live_update_evt.clear()
-            self._live_update_paused.wait()
-            while self.is_busy():
-                time.sleep(0.1)
+            self.set_live_update(False, self._live_update_period)
+            restart_live_update = True
+        else:
+            restart_live_update = False
 
         if not self.is_busy():
             is_dark = self._check_dark_conditions(
@@ -527,8 +527,8 @@ class Spectrometer(object):
             raise RuntimeError('A spectrum or series of spectrum is already being '
                 'collected, cannot collect a new spectrum.')
 
-        if self._live_update:
-            self._live_update_evt.set()
+        if restart_live_update:
+            self.set_live_update(True, self._live_update_period)
 
         return self.get_dark()
 
@@ -548,10 +548,10 @@ class Spectrometer(object):
     def collect_reference_spectrum(self, averages=1, dark_correct=True,
         int_trigger=True, auto_dark=True, dark_time=60*60):
         if self._live_update:
-            self._live_update_evt.clear()
-            self._live_update_paused.wait()
-            while self.is_busy():
-                time.sleep(0.1)
+            self.set_live_update(False, self._live_update_period)
+            restart_live_update = True
+        else:
+            restart_live_update = False
 
         if not self.is_busy():
             if auto_dark:
@@ -565,8 +565,8 @@ class Spectrometer(object):
             raise RuntimeError('A spectrum or series of spectrum is already being '
                 'collected, cannot collect a new spectrum.')
 
-        if self._live_update:
-            self._live_update_evt.set()
+        if restart_live_update:
+            self.set_live_update(True, self._live_update_period)
 
         return self.get_reference_spectrum()
 
@@ -609,7 +609,7 @@ class Spectrometer(object):
             self.collect_dark()
 
     def collect_spectrum(self, spec_type='abs', dark_correct=True, int_trigger=True,
-        auto_dark=True, dark_time=60*60, drift_correct=True):
+        auto_dark=True, dark_time=60*60, drift_correct=True, check_live_update=True):
         """
         Parameters
         ----------
@@ -617,6 +617,12 @@ class Spectrometer(object):
             Spectrum type. Can be 'abs' - absorbance, 'trans' - transmission,
             'raw' - uncorrected (except for dark correction).
         """
+        if self._live_update and check_live_update:
+            self.set_live_update(False, self._live_update_period)
+            restart_live_update = True
+        else:
+            restart_live_update = False
+
         if not self.is_busy():
             if auto_dark:
                 self._auto_dark(dark_time)
@@ -637,6 +643,9 @@ class Spectrometer(object):
         else:
             raise RuntimeError('A spectrum or series of spectrum is already being '
                 'collected, cannot collect a new spectrum.')
+
+        if restart_live_update:
+            self.set_live_update(True, self._live_update_period)
 
         return spectrum
 
@@ -724,7 +733,8 @@ class Spectrometer(object):
             if time.monotonic() - start_time > self._live_update_period:
                 self._live_update_paused.clear()
                 try:
-                    self.collect_spectrum(drift_correct=False)
+                    self.collect_spectrum(drift_correct=False,
+                        check_live_update=False)
                 except Exception:
                     # traceback.print_exc()
                     pass
@@ -758,11 +768,11 @@ class Spectrometer(object):
         delta_t_min=0, dark_correct=True, int_trigger=True, auto_dark=True,
         dark_time=60*60, take_ref=True, ref_avgs=1, drift_correct=True,
         wait_for_trig=False):
-        if self._live_update and not self._taking_series:
-            self._live_update_evt.clear()
-            self._live_update_paused.wait()
-            while self.is_busy():
-                time.sleep(0.1)
+        if self._live_update:
+            self.set_live_update(False, self._live_update_period)
+            restart_live_update = True
+        else:
+            restart_live_update = False
 
         if self.is_busy():
             raise RuntimeError('A spectrum or series of spectrum is already being '
@@ -776,7 +786,8 @@ class Spectrometer(object):
                 'dark_correct' : dark_correct, 'int_trigger' : int_trigger,
                 'auto_dark' : auto_dark, 'dark_time' : dark_time,
                 'take_ref' : take_ref, 'ref_avgs' : ref_avgs,
-                'drift_correct': drift_correct, 'wait_for_trig': wait_for_trig})
+                'drift_correct': drift_correct, 'wait_for_trig': wait_for_trig,
+                'restart_live_update': restart_live_update})
 
             self._series_thread.daemon = True
             self._series_thread.start()
@@ -784,7 +795,7 @@ class Spectrometer(object):
     def _collect_spectra_series(self, num_spectra, return_q=None, spec_type='abs',
         delta_t_min=0, dark_correct=True, int_trigger=True, auto_dark=True,
         dark_time=60*60, take_ref=True, ref_avgs=1, drift_correct=True,
-        wait_for_trig=False):
+        wait_for_trig=False, restart_live_update=True):
         if self.is_busy():
             raise RuntimeError('A spectrum or series of spectrum is already being '
                 'collected, cannot collect a new spectrum.')
@@ -913,8 +924,8 @@ class Spectrometer(object):
             self._taking_series = False
             self.series_ready_event.clear()
 
-            if self._live_update:
-                self._live_update_evt.set()
+            if restart_live_update:
+                self.set_live_update(True, self._live_update_period)
 
             logger.info('Spectrometer %s: Finished Collecting a series of '
                 '%s spectra', self.name, num_spectra)
@@ -1526,7 +1537,7 @@ class StellarnetUVVis(Spectrometer):
             spectrum = sn.array_spectrum(self.spectrometer, self.wav)
 
             if int_trigger and not trigger_status:
-                    self.set_int_trigger(False)
+                self.set_int_trigger(False)
 
             if trigger_ext:
                 self.set_external_trigger(True)
@@ -1636,12 +1647,21 @@ class StellarnetUVVis(Spectrometer):
         logger.info('Spectrometer %s: Aborting collection', self.name)
         self._series_abort_event.set()
 
-        int_trig = self.get_int_trigger()
+        self.set_int_trigger_abort(True)
 
-        if not int_trig:
-            self.set_int_trigger_abort(True)
-            time.sleep(1)
-            self.set_int_trigger_abort(False)
+        while self.is_busy():
+            time.sleep(0.1)
+
+        self.set_int_trigger_abort(False)
+
+        # int_trig = self.get_int_trigger()
+
+        # if not int_trig:
+        #     self.set_int_trigger_abort(True)
+        #     time.sleep(1)
+        #     self.set_int_trigger_abort(False)
+
+
 
 
 class UVCommThread(utils.CommManager):
@@ -1864,17 +1884,7 @@ class UVCommThread(utils.CommManager):
 
         device = self._connected_devices[name]
 
-        live_update, _ = device.get_live_update()
-
-        if live_update:
-            device.set_live_update(False)
-            while device.is_busy():
-                time.sleep(0.1)
-
         val = device.collect_dark(**kwargs)
-
-        if live_update:
-            device.set_live_update(True)
 
         self._return_value((name, cmd, val), comm_name)
         self._return_value((name, cmd, val), 'status')
@@ -1918,17 +1928,7 @@ class UVCommThread(utils.CommManager):
 
         device = self._connected_devices[name]
 
-        live_update, _ = device.get_live_update()
-
-        if live_update:
-            device.set_live_update(False)
-            while device.is_busy():
-                time.sleep(0.1)
-
         val = device.collect_reference_spectrum(**kwargs)
-
-        if live_update:
-            device.set_live_update(True)
 
         self._return_value((name, cmd, val), comm_name)
         self._return_value((name, cmd, val), 'status')
@@ -1943,17 +1943,7 @@ class UVCommThread(utils.CommManager):
 
         device = self._connected_devices[name]
 
-        live_update, _ = device.get_live_update()
-
-        if live_update:
-            device.set_live_update(False)
-            while device.is_busy():
-                time.sleep(0.1)
-
         val = device.collect_spectrum(**kwargs)
-
-        if live_update:
-            device.set_live_update(True)
 
         self._return_value((name, cmd, val), comm_name)
         self._return_value((name, cmd, val), 'status')
