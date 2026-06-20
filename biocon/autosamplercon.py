@@ -3274,7 +3274,7 @@ default_autosampler_settings = {
     'inject_connect_rate'   : 100, #Rate to eject the inject connect volume at, in uL/min
     'reserve_vol'           : 3, #Volume to reserve from dispensing when measuring sample, to avoid bubbles, uL
     'inline_panel'          : False,
-    'load_pos_y_offset'     : 0.25,
+    'load_pos_y_offset'     : 3,
     }
 
 
