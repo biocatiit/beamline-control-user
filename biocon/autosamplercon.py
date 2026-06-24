@@ -74,6 +74,7 @@ class WellPlate(object):
         self.row_step = self.plate_params[self.plate_type]['row_step']
         self.height = self.plate_params[self.plate_type]['height']
         self.plate_height = self.plate_params[self.plate_type]['plate_height']
+        self.load_pos_y_offset = self.plate_params[self.plate_type]['load_pos_y_offset']
 
     def get_relative_well_position(self, row, column):
         """
@@ -91,7 +92,8 @@ class WellPlate(object):
         row = int(row)-1
 
         return np.array([column*(self.col_step), row*(self.row_step),
-            (self.height+column*self.x_slope+row*self.y_slope)], dtype=np.float64)
+            (self.height + self.load_pos_y_offset + column*self.x_slope + row*self.y_slope)],
+            dtype=np.float64)
 
     def set_well_volume(self, volume, row, column):
         """
@@ -137,6 +139,7 @@ known_well_plates = {
         'row_step'      : 9.00, # mm
         'height'        : 1, # bottom of well from chiller base plate
         'plate_height'  : 10, # top of plate from chiller base plate
+        'load_pos_y_offset' : 1,
         },
 
     'Thermo-Fast 96 well PCR' : {
@@ -147,6 +150,7 @@ known_well_plates = {
         'row_step'      : 9.00, # mm
         'height'        : 0.5, # bottom of well from chiller base plate
         'plate_height'  : 15.5, # top of plate from chiller base plate
+        'load_pos_y_offset' : 3,
         },
 
     'Greiner 96 well cell culture, uClear, chimney well' : {
@@ -157,6 +161,7 @@ known_well_plates = {
         'row_step'      : 9.00, # mm
         'height'        : 3.5, # bottom of well from chiller base plate
         'plate_height'  : 14.4, # top of plate from chiller base plate
+        'load_pos_y_offset' : 1,
         },
 
     'Falcon 96 well clear round bottom (PN# 353077)' : {
@@ -167,6 +172,18 @@ known_well_plates = {
         'row_step'      : 8.99, # mm
         'height'        : 3.71, # bottom of well from chiller base plate
         'plate_height'  : 14.3, # top of plate from chiller base plate
+        'load_pos_y_offset' : 0.25,
+        },
+
+    'Axygen 96 well PCR (PN# PCR-96-FS-C)' : {
+        'max_volume'    : 250, # uL
+        'num_columns'   : 12,
+        'num_rows'      : 8,
+        'col_step'      : 9.00, # mm
+        'row_step'      : 9.00, # mm
+        'height'        : 0.61, # bottom of well from chiller base plate
+        'plate_height'  : 15.748, # top of plate from chiller base plate
+        'load_pos_y_offset' : 3,
         },
 }
 
@@ -297,8 +314,6 @@ class Autosampler(object):
             self.settings['plate_load_position']['plate_z'])
 
         self.set_coflow_y_ref_position(self.settings['coflow_y_ref_position'])
-
-        self.set_load_pos_y_offset(self.settings['load_pos_y_offset'])
 
 
     def _init_valves(self):
@@ -658,9 +673,6 @@ class Autosampler(object):
     def set_coflow_y_ref_position(self, coflow_ref):
         self.coflow_y_ref = coflow_ref
 
-    def set_load_pos_y_offset(self, load_pos_y_offset):
-        self.load_pos_y_offset = load_pos_y_offset
-
     def set_well_plate(self, plate_type):
         self.well_plate = WellPlate(plate_type)
 
@@ -700,8 +712,6 @@ class Autosampler(object):
     def get_well_position(self, row, column):
         delta_position = self.well_plate.get_relative_well_position(row, column)
         well_position = self.base_position + delta_position
-
-        well_position[2] += self.load_pos_y_offset
 
         return well_position
 
@@ -3274,7 +3284,6 @@ default_autosampler_settings = {
     'inject_connect_rate'   : 100, #Rate to eject the inject connect volume at, in uL/min
     'reserve_vol'           : 3, #Volume to reserve from dispensing when measuring sample, to avoid bubbles, uL
     'inline_panel'          : False,
-    'load_pos_y_offset'     : 3,
     }
 
 
