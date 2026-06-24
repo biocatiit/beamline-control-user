@@ -2384,6 +2384,18 @@ class AutosamplerPanel(utils.DevicePanel):
         self._send_cmd(dwell_cmd, False)
         self._send_cmd(load_cmd, False)
 
+    def _load_sample(self, row, col, volume, vol_units, rate_units, draw_rate,
+        dwell_time):
+        rate_cmd = ['set_sample_draw_rate', [self.name, draw_rate, rate_units], {}]
+        dwell_cmd = ['set_sample_dwell_time', [self.name, dwell_time,], {}]
+
+        load_cmd = ['load_sample', [self.name, volume, row, col,
+            vol_units, rate_units], {}]
+
+        self._send_cmd(rate_cmd, False)
+        self._send_cmd(dwell_cmd, False)
+        self._send_cmd(load_cmd, False)
+
     def _on_aspirate_sample(self, evt):
         self._prepare_aspirate(True)
 
@@ -2559,6 +2571,9 @@ class AutosamplerPanel(utils.DevicePanel):
         self._send_cmd(['move_to_clean', [self.name,], {}], False)
 
     def _on_move_to_inject(self, evt):
+        self._move_to_inject()
+
+    def _move_to_inject(self):
         self._send_cmd(['move_to_inject', [self.name,], {}], False)
 
     def _on_inject_sample(self, evt):
@@ -2860,6 +2875,8 @@ class AutosamplerPanel(utils.DevicePanel):
             status = 'move_to_clean'
         elif self._current_status == 'Moving needle in':
             status = 'move_needle_in'
+        elif self._current_status == 'Moving to inject':
+            status = 'move_to_inject'
         else:
             status = 'busy'
 
@@ -2919,6 +2936,10 @@ class AutosamplerPanel(utils.DevicePanel):
             self._move_needle_in()
             state = 'move_needle_in'
 
+        elif cmd_name == 'move_to_inject':
+            self._move_to_inject()
+            state = 'move_to_inject'
+
         elif cmd_name == 'load_and_move_to_inject':
             volume = cmd_kwargs['volume']
             row = cmd_kwargs['row']
@@ -2930,6 +2951,20 @@ class AutosamplerPanel(utils.DevicePanel):
 
             self._load_and_move_to_inject(row, col, volume, vol_units,
                 rate_units, draw_rate, dwell_time)
+
+            state = 'load'
+
+        elif cmd_name == 'load_sample':
+            volume = cmd_kwargs['volume']
+            row = cmd_kwargs['row']
+            col = cmd_kwargs['column']
+            vol_units = cmd_kwargs['vol_units']
+            rate_units = cmd_kwargs['rate_units']
+            draw_rate = cmd_kwargs['draw_rate']
+            dwell_time = cmd_kwargs['dwell_time']
+
+            self._load_sample(row, col, volume, vol_units, rate_units,
+                draw_rate, dwell_time)
 
             state = 'load'
 
@@ -3277,7 +3312,7 @@ default_autosampler_settings = {
     'loop_volume'           : 50, #Loop volume in uL
     'min_load_volume'       : 2.0,
     'default_load_vol'      : 30.0,
-    'default_start_delay_time': 30.0,
+    'default_start_delay_time': 0.0,
     'default_end_delay_time': 5.0,
     'load_dwell_time'       : 10.0, #Time to wait in well after aspirating
     'inject_connect_vol'    : 0, #Volume to eject from the needle after loading before re-entering the cell, to ensure a wet-to-wet entry for the needle and prevent bubbles, uL
