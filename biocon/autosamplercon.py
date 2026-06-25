@@ -131,7 +131,7 @@ class WellPlate(object):
 
 
 known_well_plates = {
-    'Abgene 96 well deepwell storage' : {
+    'Abgene 96 well deepwell storage (PN# AB0859)' : {
         'max_volume'    : 800, # uL
         'num_columns'   : 12,
         'num_rows'      : 8,
@@ -142,7 +142,7 @@ known_well_plates = {
         'load_pos_y_offset' : 1,
         },
 
-    'Thermo-Fast 96 well PCR' : {
+    'Thermo 96 well PCR (inc. SuperPlate) (PN# AB0800L/AB2800)' : {
         'max_volume'    : 200, # uL
         'num_columns'   : 12,
         'num_rows'      : 8,
@@ -153,7 +153,7 @@ known_well_plates = {
         'load_pos_y_offset' : 3,
         },
 
-    'Greiner 96 well cell culture, uClear, chimney well' : {
+    'Greiner 96 well cell culture, uClear, chimney well (PN# 655090)' : {
         'max_volume'    : 340, # uL
         'num_columns'   : 12,
         'num_rows'      : 8,
@@ -184,6 +184,39 @@ known_well_plates = {
         'height'        : 0.61, # bottom of well from chiller base plate
         'plate_height'  : 15.748, # top of plate from chiller base plate
         'load_pos_y_offset' : 3,
+        },
+
+    'Nunc 96 well 1 mL round bottom (PN# 26025X)' : {
+        'max_volume'    : 1300, # uL
+        'num_columns'   : 12,
+        'num_rows'      : 8,
+        'col_step'      : 9.00, # mm
+        'row_step'      : 9.00, # mm
+        'height'        : 2.5, # bottom of well from chiller base plate
+        'plate_height'  : 31.6, # top of plate from chiller base plate
+        'load_pos_y_offset' : 1,
+        },
+
+    'Nunc 96 well 0.45 mL v-bottom (PN# 2499XX)' : {
+        'max_volume'    : 450, # uL
+        'num_columns'   : 12,
+        'num_rows'      : 8,
+        'col_step'      : 9.00, # mm
+        'row_step'      : 9.00, # mm
+        'height'        : 3.4, # bottom of well from chiller base plate
+        'plate_height'  : 14.4, # top of plate from chiller base plate
+        'load_pos_y_offset' : 1,
+        },
+
+    'Nunc 384 well 0.1 mL v-bottom (PN# 2645XX)' : {
+        'max_volume'    : 100, # uL
+        'num_columns'   : 24,
+        'num_rows'      : 16,
+        'col_step'      : 4.50, # mm
+        'row_step'      : 4.50, # mm
+        'height'        : 2.7, # bottom of well from chiller base plate
+        'plate_height'  : 14.4, # top of plate from chiller base plate
+        'load_pos_y_offset' : 2,
         },
 }
 
@@ -3461,7 +3494,7 @@ default_autosampler_settings = {
     'plate_out_position'    : {'plate_x': -31, 'plate_z': 0}, # Relative
     'plate_load_position'   : {'plate_x': 0, 'plate_z': -80.4}, # Absolute
     'coflow_y_ref_position' : 0, # Position for coflow y motor when base position was set
-    'plate_type'            : 'Thermo-Fast 96 well PCR',
+    'plate_type'            : 'Thermo 96 well PCR (inc. SuperPlate) (PN# AB0800L/AB2800)',
     # 'plate_type'            : 'Abgene 96 well deepwell storage',
     'clean_valve_positions' : {'empty': 5, 'clean1': 1, 'clean2': 2, 'clean3': 3, 'clean4': 4, 'clean5': 5,},
     'syringe_valve_positions': {'sample': 'Output', 'clean': 'Bypass', 'purge': 'Input'},
