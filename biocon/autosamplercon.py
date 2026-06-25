@@ -74,6 +74,7 @@ class WellPlate(object):
         self.row_step = self.plate_params[self.plate_type]['row_step']
         self.height = self.plate_params[self.plate_type]['height']
         self.plate_height = self.plate_params[self.plate_type]['plate_height']
+        self.load_pos_y_offset = self.plate_params[self.plate_type]['load_pos_y_offset']
 
     def get_relative_well_position(self, row, column):
         """
@@ -91,7 +92,8 @@ class WellPlate(object):
         row = int(row)-1
 
         return np.array([column*(self.col_step), row*(self.row_step),
-            (self.height+column*self.x_slope+row*self.y_slope)], dtype=np.float64)
+            (self.height + self.load_pos_y_offset + column*self.x_slope + row*self.y_slope)],
+            dtype=np.float64)
 
     def set_well_volume(self, volume, row, column):
         """
@@ -137,6 +139,7 @@ known_well_plates = {
         'row_step'      : 9.00, # mm
         'height'        : 1, # bottom of well from chiller base plate
         'plate_height'  : 10, # top of plate from chiller base plate
+        'load_pos_y_offset' : 1,
         },
 
     'Thermo-Fast 96 well PCR' : {
@@ -147,6 +150,7 @@ known_well_plates = {
         'row_step'      : 9.00, # mm
         'height'        : 0.5, # bottom of well from chiller base plate
         'plate_height'  : 15.5, # top of plate from chiller base plate
+        'load_pos_y_offset' : 3,
         },
 
     'Greiner 96 well cell culture, uClear, chimney well' : {
@@ -157,6 +161,7 @@ known_well_plates = {
         'row_step'      : 9.00, # mm
         'height'        : 3.5, # bottom of well from chiller base plate
         'plate_height'  : 14.4, # top of plate from chiller base plate
+        'load_pos_y_offset' : 1,
         },
 
     'Falcon 96 well clear round bottom (PN# 353077)' : {
@@ -167,6 +172,18 @@ known_well_plates = {
         'row_step'      : 8.99, # mm
         'height'        : 3.71, # bottom of well from chiller base plate
         'plate_height'  : 14.3, # top of plate from chiller base plate
+        'load_pos_y_offset' : 0.25,
+        },
+
+    'Axygen 96 well PCR (PN# PCR-96-FS-C)' : {
+        'max_volume'    : 250, # uL
+        'num_columns'   : 12,
+        'num_rows'      : 8,
+        'col_step'      : 9.00, # mm
+        'row_step'      : 9.00, # mm
+        'height'        : 0.61, # bottom of well from chiller base plate
+        'plate_height'  : 15.748, # top of plate from chiller base plate
+        'load_pos_y_offset' : 3,
         },
 }
 
@@ -197,6 +214,9 @@ class Autosampler(object):
         self._cmd_thread.daemon = True
         self._cmd_thread.start()
         self._cmd_errors = 0
+
+        self._last_sample_load_params = {}
+        self._last_sample_inject_params = {}
 
     def _inc_active(self):
         with self._active_lock:
@@ -297,8 +317,6 @@ class Autosampler(object):
             self.settings['plate_load_position']['plate_z'])
 
         self.set_coflow_y_ref_position(self.settings['coflow_y_ref_position'])
-
-        self.set_load_pos_y_offset(self.settings['load_pos_y_offset'])
 
 
     def _init_valves(self):
@@ -658,9 +676,6 @@ class Autosampler(object):
     def set_coflow_y_ref_position(self, coflow_ref):
         self.coflow_y_ref = coflow_ref
 
-    def set_load_pos_y_offset(self, load_pos_y_offset):
-        self.load_pos_y_offset = load_pos_y_offset
-
     def set_well_plate(self, plate_type):
         self.well_plate = WellPlate(plate_type)
 
@@ -679,6 +694,21 @@ class Autosampler(object):
         Expects column and row to be 1 indexed, like on a plate!
         """
         self.well_plate.set_well_volume(volume, row, column)
+
+    def get_draw_rate(self):
+        return self._sample_draw_rate
+
+    def get_sample_dwell_time(self):
+        return self._sample_dwell_time
+
+    def get_last_sample_load_params(self):
+        return self._last_sample_load_params
+
+    def get_last_sample_inject_params(self):
+        return self._last_sample_inject_params
+
+    def get_well_plate(self):
+        return self.well_plate.plate_type
 
     def get_well_volume(self, row, column):
         """
@@ -700,8 +730,6 @@ class Autosampler(object):
     def get_well_position(self, row, column):
         delta_position = self.well_plate.get_relative_well_position(row, column)
         well_position = self.base_position + delta_position
-
-        well_position[2] += self.load_pos_y_offset
 
         return well_position
 
@@ -1091,6 +1119,13 @@ class Autosampler(object):
     def _inner_load_sample(self, volume, row, column, units='uL'):
         self._inc_active()
 
+        self._last_sample_load_params = {
+            'volume'    : volume,
+            'row'       : row,
+            'column'    : column,
+            'vol_units' : units,
+        }
+
         logger.info("Starting sample load of %s %s from %s%s", volume, units, row, column)
 
         self._status = 'Loading sample'
@@ -1180,6 +1215,16 @@ class Autosampler(object):
         vol_units='uL', rate_units='uL/min'):
         #Flow rates ideally 100-200 uL/min?
         logger.info('Injecting sample')
+
+        self._last_sample_inject_params = {
+            'volume'    : volume,
+            'rate'      : rate,
+            'trigger'   : trigger,
+            'start_delay'   : start_delay,
+            'end_delay' : end_delay,
+            'vol_units' : vol_units,
+            'rate_units': rate_units,
+        }
 
         self._inc_active()
 
@@ -1403,6 +1448,11 @@ class ASCommThread(utils.CommManager):
         self._commands = {
             'connect'               : self._connect_device,
             'disconnect'            : self._disconnect_device,
+            'get_draw_rate'         : self._get_draw_rate,
+            'get_sample_dwell_time' : self._get_sample_dwell_time,
+            'get_last_load_params'  : self._get_last_load_params,
+            'get_last_inject_params': self._get_last_inject_params,
+            'get_well_plate'        : self._get_well_plate,
             'get_well_volume'       : self._get_well_volume,
             'get_all_well_volumes'  : self._get_all_well_volumes,
             'set_well_plate'        : self._set_well_plate,
@@ -1451,6 +1501,76 @@ class ASCommThread(utils.CommManager):
     def _cleanup_devices(self):
         for device in self._connected_devices.values():
             device.on_disconnect()
+
+    def _get_draw_rate(self, name, **kwargs):
+
+        logger.debug("Getting %s sample draw rate", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        val = device.get_draw_rate()
+
+        self._return_value((name, cmd, val), comm_name)
+
+        logger.debug("%s sample draw rate is %s", name, val)
+
+    def _get_sample_dwell_time(self, name, **kwargs):
+
+        logger.debug("Getting %s sample dwell time", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        val = device.get_sample_dwell_time()
+
+        self._return_value((name, cmd, val), comm_name)
+
+        logger.debug("%s sample dwell time is %s", name, val)
+
+    def _get_last_load_params(self, name, **kwargs):
+
+        logger.debug("Getting %s last sample load parameters", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        val = device.get_last_sample_load_params()
+
+        self._return_value((name, cmd, val), comm_name)
+
+        logger.debug("%s last sample load parameters %s", name, val)
+
+    def _get_last_inject_params(self, name, **kwargs):
+
+        logger.debug("Getting %s last sample inject parameters", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        val = device.get_last_sample_inject_params()
+
+        self._return_value((name, cmd, val), comm_name)
+
+        logger.debug("%s last sample inject parameters %s", name, val)
+
+    def _get_well_plate(self, name, **kwargs):
+
+        logger.debug("Getting %s well plate type", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        val = device.get_well_plate()
+
+        self._return_value((name, cmd, val), comm_name)
+
+        logger.debug("%s well plate type is %s", name, val)
 
     def _get_well_volume(self, name, row, column, **kwargs):
 
@@ -2374,6 +2494,18 @@ class AutosamplerPanel(utils.DevicePanel):
         self._send_cmd(dwell_cmd, False)
         self._send_cmd(load_cmd, False)
 
+    def _load_sample(self, row, col, volume, vol_units, rate_units, draw_rate,
+        dwell_time):
+        rate_cmd = ['set_sample_draw_rate', [self.name, draw_rate, rate_units], {}]
+        dwell_cmd = ['set_sample_dwell_time', [self.name, dwell_time,], {}]
+
+        load_cmd = ['load_sample', [self.name, volume, row, col,
+            vol_units, rate_units], {}]
+
+        self._send_cmd(rate_cmd, False)
+        self._send_cmd(dwell_cmd, False)
+        self._send_cmd(load_cmd, False)
+
     def _on_aspirate_sample(self, evt):
         self._prepare_aspirate(True)
 
@@ -2549,6 +2681,9 @@ class AutosamplerPanel(utils.DevicePanel):
         self._send_cmd(['move_to_clean', [self.name,], {}], False)
 
     def _on_move_to_inject(self, evt):
+        self._move_to_inject()
+
+    def _move_to_inject(self):
         self._send_cmd(['move_to_inject', [self.name,], {}], False)
 
     def _on_inject_sample(self, evt):
@@ -2667,6 +2802,68 @@ class AutosamplerPanel(utils.DevicePanel):
             {'settings': settings}]
 
         self._send_cmd(connect_cmd, True)
+
+        plate_cmd = ['get_well_plate', [self.name,], {}]
+        plate = self._send_cmd(plate_cmd, True)
+        self.plate_types.SetStringSelection(plate)
+        self._current_well_plate_type = plate
+
+        draw_rate_cmd = ['get_draw_rate', [self.name,], {}]
+        draw_rate = self._send_cmd(draw_rate_cmd, True)
+        self.draw_rate.SetValue(str(draw_rate))
+        self._current_draw_rate = draw_rate
+
+        dwell_time_cmd = ['get_sample_dwell_time', [self.name,], {}]
+        dwell_time = self._send_cmd(dwell_time_cmd, True)
+        self.dwell_time.SetValue(str(dwell_time))
+        self._current_dwell_time = dwell_time
+
+        load_params_cmd = ['get_last_load_params', [self.name,], {}]
+        load_params = self._send_cmd(load_params_cmd, True)
+
+        if len(load_params) > 0:
+            vol = val['volume']
+            vol_units = val['vol_units']
+            row = val['row']
+            column = val['column']
+            well = '{}{}'.format(row, column)
+
+            vol = pumpcon.convert_volume(vol, vol_units, 'uL')
+
+            self.load_volume.ChangeValue(str(vol))
+            self._current_load_volume = vol
+
+            self._set_selected_well(well)
+
+        inject_params_cmd = ['get_last_inject_params', [self.name,], {}]
+        inject_params = self._send_cmd(inject_params_cmd, True)
+
+        if len(inject_params) > 0:
+            vol = val['volume']
+            rate = val['rate']
+            trigger = val['trigger']
+            start_delay = val['start_delay']
+            end_delay = val['end_delay']
+            vol_units = val['vol_units']
+            rate_units = val['rate_units']
+
+            vol = pumpcon.convert_volume(vol, vol_units, 'uL')
+            rate = pumpcon.convert_flow_rate(rate, rate_units, 'uL/min')
+
+            self.load_volume.ChangeValue(str(vol))
+            self._current_load_volume = vol
+
+            self.inj_rate.ChangeValue(str(rate))
+            self._current_inj_rate = rate
+
+            self.trigger_on_inject.ChangeValue(trigger)
+            self._current_trigger_on_inject = trigger
+
+            self.buffer_start_delay.ChangeValue(str(start_delay))
+            self._current_buffer_start_delay = start_delay
+
+            self.buffer_end_delay.ChangeValue(str(end_delay))
+            self._current_buffer_end_delay = end_delay
 
         self._set_status_commands()
 
@@ -2850,6 +3047,8 @@ class AutosamplerPanel(utils.DevicePanel):
             status = 'move_to_clean'
         elif self._current_status == 'Moving needle in':
             status = 'move_needle_in'
+        elif self._current_status == 'Moving to inject':
+            status = 'move_to_inject'
         else:
             status = 'busy'
 
@@ -2909,6 +3108,10 @@ class AutosamplerPanel(utils.DevicePanel):
             self._move_needle_in()
             state = 'move_needle_in'
 
+        elif cmd_name == 'move_to_inject':
+            self._move_to_inject()
+            state = 'move_to_inject'
+
         elif cmd_name == 'load_and_move_to_inject':
             volume = cmd_kwargs['volume']
             row = cmd_kwargs['row']
@@ -2920,6 +3123,20 @@ class AutosamplerPanel(utils.DevicePanel):
 
             self._load_and_move_to_inject(row, col, volume, vol_units,
                 rate_units, draw_rate, dwell_time)
+
+            state = 'load'
+
+        elif cmd_name == 'load_sample':
+            volume = cmd_kwargs['volume']
+            row = cmd_kwargs['row']
+            col = cmd_kwargs['column']
+            vol_units = cmd_kwargs['vol_units']
+            rate_units = cmd_kwargs['rate_units']
+            draw_rate = cmd_kwargs['draw_rate']
+            dwell_time = cmd_kwargs['dwell_time']
+
+            self._load_sample(row, col, volume, vol_units, rate_units,
+                draw_rate, dwell_time)
 
             state = 'load'
 
@@ -3267,14 +3484,13 @@ default_autosampler_settings = {
     'loop_volume'           : 50, #Loop volume in uL
     'min_load_volume'       : 2.0,
     'default_load_vol'      : 30.0,
-    'default_start_delay_time': 30.0,
+    'default_start_delay_time': 0.0,
     'default_end_delay_time': 5.0,
     'load_dwell_time'       : 10.0, #Time to wait in well after aspirating
     'inject_connect_vol'    : 0, #Volume to eject from the needle after loading before re-entering the cell, to ensure a wet-to-wet entry for the needle and prevent bubbles, uL
     'inject_connect_rate'   : 100, #Rate to eject the inject connect volume at, in uL/min
     'reserve_vol'           : 3, #Volume to reserve from dispensing when measuring sample, to avoid bubbles, uL
     'inline_panel'          : False,
-    'load_pos_y_offset'     : 3,
     }
 
 

@@ -768,12 +768,37 @@ class BatchSampleCommand(AutoCommand):
         check_conds = [['autosampler', [check_wait_cmd,]],['exp', [check_wait_cmd,]],
             ['coflow', [check_wait_cmd,]],]
 
+        if cmd_info['pre_buf_exp']:
+            buffer_wait_id = self.automator.get_wait_id()
+            buffer_wait_cmd = 'wait_sync_{}'.format(buffer_wait_id)
+            buffer_conds = [['autosampler', [buffer_wait_cmd,]], ['exp', [buffer_wait_cmd,]],]
+            buffer_exp_info = copy.deepcopy(cmd_info)
+            buffer_exp_info['filename'] += '_sheath'
+            buffer_exp_info['num_frames'] = int(round(
+                buffer_exp_info['pre_buf_exp_time']/buffer_exp_info['exp_period']))
+            buffer_exp_info['wait_for_trig'] = False
+            buffer_exp_info['is_buf'] = True
+            buffer_exp_info['separate_buf'] = False
+
+
         self._add_automator_cmd('autosampler', sample_wait_cmd, [],
             {'condition': 'status', 'inst_conds': sample_conds})
         self._add_automator_cmd('autosampler', check_wait_cmd, [], {'condition': 'check',
             'inst_conds': check_conds})
-        self._add_automator_cmd('autosampler', 'load_and_move_to_inject',
-            [], cmd_info)
+
+        if cmd_info['pre_buf_exp']:
+            # Collect sheath buffer exposure prior to measuring samples
+            self._add_automator_cmd('autosampler', 'load_sample', [],
+                cmd_info)
+            self._add_automator_cmd('autosampler', buffer_wait_cmd, [],
+                {'condition': 'status', 'inst_conds': buffer_conds})
+            self._add_automator_cmd('autosampler', 'move_to_inject', [],
+                cmd_info)
+
+         else:
+            self._add_automator_cmd('autosampler', 'load_and_move_to_inject',
+                [], cmd_info)
+
         self._add_automator_cmd('autosampler', batch_wait_cmd, [],
             {'condition': 'status', 'inst_conds': [['autosampler',
             [batch_wait_cmd,]], ['exp', ['exposing',]]]})
@@ -790,8 +815,15 @@ class BatchSampleCommand(AutoCommand):
         self._add_automator_cmd('exp', check_wait_cmd, [], {'condition': 'check',
             'inst_conds': check_conds})
         self._add_automator_cmd('exp', exp_wait_cmd, [],
-            {'condition': 'status', 'inst_conds': [['autosampler',
-            ['load',]], ['exp', [exp_wait_cmd,]]]})
+                {'condition': 'status', 'inst_conds': [['autosampler',
+                ['load',]], ['exp', [exp_wait_cmd,]]]})
+
+        if cmd_info['pre_buf_exp']:
+            # Collect sheath buffer exposure prior to measuring samples
+            self._add_automator_cmd('exp', 'expose', [], buffer_exp_info)
+            self._add_automator_cmd('exp', buffer_wait_cmd, [],
+                {'condition': 'status', 'inst_conds': buffer_conds})
+
         self._add_automator_cmd('exp', 'expose', [], cmd_info)
         self._add_automator_cmd('exp', finish_wait_cmd, [], {'condition': 'status',
             'inst_conds': finish_conds})
@@ -2108,6 +2140,9 @@ default_batch_saxs_settings = {
     'filename'      : '',
     'wait_for_trig' : True,
     'num_trig'      : 0,
+    'pre_buf_exp'   : True,
+    'pre_buf_exp_time'  : 15., # Collect sheath buffer exposure prior to sample measurement
+
     #Not used, for completeness
     'struck_measurement_time' : 0.,
 
@@ -2617,6 +2652,10 @@ def make_batch_saxs_info_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
         'num_frames'    : ['Number of frames:', ctrl_ids['num_frames'], 'int'],
         'wait_for_trig' : ['Wait for external trigger', ctrl_ids['wait_for_trig'], 'bool'],
         'num_trig'      : ['Number of triggers:', ctrl_ids['num_trig'], 'int'],
+        'pre_buf_exp'   : ['Measure sheath buffer prior to sample injection',
+                            ctrl_ids['pre_buf_exp'], 'bool'],
+        'pre_buf_exp_time'  : ['Total Sheath Buffer Exposure time [s]:',
+                            ctrl_ids['pre_buf_exp_time'], 'float'],
         }
 
     exp_box = wx.StaticBox(parent, label='Exposure Settings')
@@ -4185,6 +4224,18 @@ class AutoList(utils.ItemList):
 
             cmd_settings, exp_valid, exp_errors = self._validate_exp_params(
                 cmd_settings, sec_saxs=False)
+
+            if cmd_settings['pre_buf_exp']:
+                try:
+                    cmd_settings['pre_buf_exp_time'] = float(cmd_settings['pre_buf_exp_time'])
+
+                    if cmd_settings['pre_buf_exp_time'] <= 0:
+                        exp_valid = False
+                        exp_errors.append('Total sheath buffer measurement time must be >0')
+
+                except Exception:
+                    exp_valid = False
+                    exp_errors.append('Total sheath buffer measurement time must be a number')
 
             cmd_settings, coflow_valid, coflow_errors = self._validate_coflow_params(
                 cmd_settings)
