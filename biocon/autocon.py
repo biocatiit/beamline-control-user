@@ -795,7 +795,7 @@ class BatchSampleCommand(AutoCommand):
             self._add_automator_cmd('autosampler', 'move_to_inject', [],
                 cmd_info)
 
-         else:
+        else:
             self._add_automator_cmd('autosampler', 'load_and_move_to_inject',
                 [], cmd_info)
 
@@ -2550,45 +2550,48 @@ def make_sec_saxs_info_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
     return cmd_sizer
 
 def make_batch_saxs_info_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
-    well_bmp, well_callback, read_only=False):
-    ################ Metadata #################
+    well_bmp, well_callback, read_only=False, multi_load=False):
 
-    metadata_settings = {
-        'sample_name'   : ['Sample:', ctrl_ids['sample_name'], 'text'],
-        'buf'           : ['Buffer:', ctrl_ids['buf'], 'text'],
-        'conc'          : ['Concentration [mg/ml]:', ctrl_ids['conc'], 'float'],
-        'is_buf'        : ['Is buffer', ctrl_ids['is_buf'], 'bool'],
-        'separate_buf'  : ['Use separate buffer measurement',
-                            ctrl_ids['separate_buf'], 'bool']
-        }
+    if not multi_load:
+        ################ Metadata #################
 
-    metadata_box = wx.StaticBox(parent, label='Metadata')
-    md_sizer1 = create_info_sizer(metadata_settings, top_level, metadata_box,
-        read_only)
+        metadata_settings = {
+            'sample_name'   : ['Sample:', ctrl_ids['sample_name'], 'text'],
+            'buf'           : ['Buffer:', ctrl_ids['buf'], 'text'],
+            'conc'          : ['Concentration [mg/ml]:', ctrl_ids['conc'], 'float'],
+            'is_buf'        : ['Is buffer', ctrl_ids['is_buf'], 'bool'],
+            'separate_buf'  : ['Use separate buffer measurement',
+                                ctrl_ids['separate_buf'], 'bool']
+            }
 
-    notes = wx.TextCtrl(metadata_box, ctrl_ids['notes'],
-        style=wx.TE_MULTILINE, size=top_level._FromDIP((100, 100)))
+        metadata_box = wx.StaticBox(parent, label='Metadata')
+        md_sizer1 = create_info_sizer(metadata_settings, top_level, metadata_box,
+            read_only)
 
-    if read_only:
-        notes.SetEditable(False)
+        notes = wx.TextCtrl(metadata_box, ctrl_ids['notes'],
+            style=wx.TE_MULTILINE, size=top_level._FromDIP((100, 100)))
 
-    md_sizer2 = wx.BoxSizer(wx.HORIZONTAL)
-    md_sizer2.Add(wx.StaticText(metadata_box, label='Notes:'),
-        border=top_level._FromDIP(5), flag=wx.TOP|wx.BOTTOM|wx.LEFT)
-    md_sizer2.Add(notes, proportion=1, border=top_level._FromDIP(5),
-        flag=wx.EXPAND|wx.ALL)
+        if read_only:
+            notes.SetEditable(False)
 
-    metadata_sizer = wx.StaticBoxSizer(metadata_box, wx.VERTICAL)
-    metadata_sizer.Add(md_sizer1, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
-        border=top_level._FromDIP(5))
-    metadata_sizer.Add(md_sizer2, proportion=1, flag=wx.EXPAND|wx.ALL,
-        border=top_level._FromDIP(5))
+        md_sizer2 = wx.BoxSizer(wx.HORIZONTAL)
+        md_sizer2.Add(wx.StaticText(metadata_box, label='Notes:'),
+            border=top_level._FromDIP(5), flag=wx.TOP|wx.BOTTOM|wx.LEFT)
+        md_sizer2.Add(notes, proportion=1, border=top_level._FromDIP(5),
+            flag=wx.EXPAND|wx.ALL)
+
+        metadata_sizer = wx.StaticBoxSizer(metadata_box, wx.VERTICAL)
+        metadata_sizer.Add(md_sizer1, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
+            border=top_level._FromDIP(5))
+        metadata_sizer.Add(md_sizer2, proportion=1, flag=wx.EXPAND|wx.ALL,
+            border=top_level._FromDIP(5))
 
     ################ Autosampler #################
 
-    as_settings = {
-        'volume'        : ['Injection volume [ul]:', ctrl_ids['volume'], 'float'],
-        }
+    if not multi_load:
+        as_settings = {
+            'volume'        : ['Injection volume [ul]:', ctrl_ids['volume'], 'float'],
+            }
 
     as_adv_settings = {
         'draw_rate'     : ['Sample draw rate [ul/min]:', ctrl_ids['draw_rate'], 'float'],
@@ -2605,23 +2608,25 @@ def make_batch_saxs_info_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
     as_adv_pane.Bind(wx.EVT_COLLAPSIBLEPANE_CHANGED, top_level.on_collapse)
     as_adv_win = as_adv_pane.GetPane()
 
-    if not read_only:
+    if not read_only and not multi_load:
         well_sizer, well_ids_96, reverse_well_ids_96 = autosamplercon.make_well_plate_layout(
             top_level, as_box, well_bmp, well_callback)
     else:
         well_ids_96 = None
         reverse_well_ids_96 = None
 
-    sample_well = wx.StaticText(as_box, size=top_level._FromDIP((40,-1)),
-        style=wx.ST_NO_AUTORESIZE, id=ctrl_ids['sample_well'])
+    if not multi_load:
+        sample_well = wx.StaticText(as_box, size=top_level._FromDIP((40,-1)),
+            style=wx.ST_NO_AUTORESIZE, id=ctrl_ids['sample_well'])
 
-    sample_sizer = wx.BoxSizer(wx.HORIZONTAL)
-    sample_sizer.Add(wx.StaticText(as_box, label='Sample well:'),
-        flag=wx.ALIGN_CENTER_VERTICAL)
-    sample_sizer.Add(sample_well, flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT,
-        border=top_level._FromDIP(5))
+        sample_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        sample_sizer.Add(wx.StaticText(as_box, label='Sample well:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        sample_sizer.Add(sample_well, flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT,
+            border=top_level._FromDIP(5))
 
-    as_sizer1 = create_info_sizer(as_settings, top_level, as_box, read_only)
+        as_sizer1 = create_info_sizer(as_settings, top_level, as_box, read_only)
+
     as_sizer2 = create_info_sizer(as_adv_settings, top_level, as_adv_win,
         read_only)
 
@@ -2629,22 +2634,33 @@ def make_batch_saxs_info_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
     as_adv_pane.Collapse()
 
     as_sizer = wx.StaticBoxSizer(as_box, wx.VERTICAL)
-    if not read_only:
+    if not read_only and not multi_load:
         as_sizer.Add(well_sizer, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
             border=top_level._FromDIP(5))
-    as_sizer.Add(sample_sizer, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
-        border=top_level._FromDIP(5))
+
+    if not multi_load:
+        as_sizer.Add(sample_sizer, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
+            border=top_level._FromDIP(5))
+
     as_sizer.Add(as_sizer1, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
         border=top_level._FromDIP(5))
     as_sizer.Add(as_adv_pane, flag=wx.EXPAND|wx.ALL, border=top_level._FromDIP(5))
 
 
     ################ Exposure #################
-    exp_settings = {
-        'filename'      : ['File prefix:', ctrl_ids['filename'], 'text'],
-        'exp_time'      : ['Exposure time [s]:', ctrl_ids['exp_time'], 'float'],
-        'exp_period'    : ['Exposure period [s]:', ctrl_ids['exp_period'], 'float'],
-        }
+    if not multi_load:
+        exp_settings = {
+            'filename'      : ['File prefix:', ctrl_ids['filename'], 'text'],
+            'exp_time'      : ['Exposure time [s]:', ctrl_ids['exp_time'], 'float'],
+            'exp_period'    : ['Exposure period [s]:', ctrl_ids['exp_period'], 'float'],
+            }
+    else:
+        exp_settings = {
+            'filename'      : ['Filename prefix:', ctrl_ids['filename'], 'text'],
+            'filenumber'    : ['Starting number:', ctrl_ids['filenumber'], 'int'],
+            'exp_time'      : ['Exposure time [s]:', ctrl_ids['exp_time'], 'float'],
+            'exp_period'    : ['Exposure period [s]:', ctrl_ids['exp_period'], 'float'],
+            }
 
     exp_adv_settings = {
         'frames_by_inj' : ['Set number of frames from injection time',
@@ -3609,27 +3625,9 @@ class AutoList(utils.ItemList):
                 file = None
 
         if file is not None:
-            with wx.TextEntryDialog(self, 'Enter filename prefix',
-                'Filename Prefix') as dialog:
+            self._add_spreadsheet(file)
 
-                if dialog.ShowModal() == wx.ID_OK:
-                    fname = dialog.GetValue()
-                else:
-                    fname = None
-
-        if file is not None and fname is not None:
-            with wx.NumberEntryDialog(self, 'Enter starting filename number',
-                'Starting number:', 'Filename Number', 1, 1, 100000) as dialog:
-
-                if dialog.ShowModal() == wx.ID_OK:
-                    fnum = dialog.GetValue()
-                else:
-                    fnum = None
-
-        if file is not None and fname is not None and fnum is not None:
-            self._add_spreadsheet(file, fname, fnum)
-
-    def _add_spreadsheet(self, file, fname, fnum):
+    def _add_spreadsheet(self, file):
         df = pd.read_excel(file)
 
         # Find starting well
@@ -3646,6 +3644,45 @@ class AutoList(utils.ItemList):
         final_df = df[df['Injection volume (uL)'].notnull()]
 
         default_settings = self._get_default_batch_autosampler_settings()
+        default_settings['filenumber'] = 1
+
+        while True:
+            cmd_dialog = BatchSampleCmdDialog(self, default_settings,
+                        multi_load=True, title='Batch SAXS Sample Settings')
+
+            res = cmd_dialog.ShowModal()
+
+            if res == wx.ID_OK:
+                default_settings = cmd_dialog.get_settings()
+
+            else:
+                return
+
+            valid, err_msg = self._validate_cmd(default_settings)
+
+            if valid:
+                break
+
+            else:
+                with wx.MessageDialog(self, err_msg,
+                    caption='Action Parameter Errors',
+                    style=wx.YES_NO|wx.CANCEL|wx.YES_DEFAULT) as err_dialog:
+
+                    err_dialog.SetYesNoLabels('Fix errors', 'Continue without fixing')
+
+                    ret = err_dialog.ShowModal()
+
+                    if ret == wx.ID_YES:
+                        continue
+                    elif ret == wx.ID_NO:
+                        break
+                    elif ret == wx.ID_CANCEL:
+                        return
+
+        fname = copy.deepcopy(default_settings['filename'])
+        fnum = copy.deepcopy(default_settings['filenumber'])
+
+        del default_settings['filenumber']
 
         sample_list_ordered = []
         sample_list_unordered = []
@@ -5379,8 +5416,10 @@ class BatchSampleCmdDialog(AutoCmdDialog):
     """
     Allows addition/editing of the buffer info in the buffer list
     """
-    def __init__(self, parent, default_settings, *args, **kwargs):
+    def __init__(self, parent, default_settings, *args, multi_load=False, **kwargs):
         self._selected_well = ''
+        self._multi_load = multi_load
+
         AutoCmdDialog.__init__(self, parent, default_settings, *args, **kwargs)
 
     def _create_layout(self):
@@ -5394,7 +5433,8 @@ class BatchSampleCmdDialog(AutoCmdDialog):
 
         (cmd_sizer, self.sample_well, self.well_ids_96,
             self.reverse_well_ids_96) =  make_batch_saxs_info_panel(top_level,
-            parent, self.ctrl_ids, 'horiz', self.well_bmp, self._on_well_button)
+            parent, self.ctrl_ids, 'horiz', self.well_bmp, self._on_well_button,
+            multi_load=True)
 
         button_sizer = self.CreateButtonSizer(wx.OK | wx.CANCEL)
 

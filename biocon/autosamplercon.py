@@ -2855,10 +2855,10 @@ class AutosamplerPanel(utils.DevicePanel):
         load_params = self._send_cmd(load_params_cmd, True)
 
         if len(load_params) > 0:
-            vol = val['volume']
-            vol_units = val['vol_units']
-            row = val['row']
-            column = val['column']
+            vol = load_params['volume']
+            vol_units = load_params['vol_units']
+            row = load_params['row']
+            column = load_params['column']
             well = '{}{}'.format(row, column)
 
             vol = pumpcon.convert_volume(vol, vol_units, 'uL')
@@ -2872,13 +2872,13 @@ class AutosamplerPanel(utils.DevicePanel):
         inject_params = self._send_cmd(inject_params_cmd, True)
 
         if len(inject_params) > 0:
-            vol = val['volume']
-            rate = val['rate']
-            trigger = val['trigger']
-            start_delay = val['start_delay']
-            end_delay = val['end_delay']
-            vol_units = val['vol_units']
-            rate_units = val['rate_units']
+            vol = inject_params['volume']
+            rate = inject_params['rate']
+            trigger = inject_params['trigger']
+            start_delay = inject_params['start_delay']
+            end_delay = inject_params['end_delay']
+            vol_units = inject_params['vol_units']
+            rate_units = inject_params['rate_units']
 
             vol = pumpcon.convert_volume(vol, vol_units, 'uL')
             rate = pumpcon.convert_flow_rate(rate, rate_units, 'uL/min')
