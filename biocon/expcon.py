@@ -2439,7 +2439,7 @@ class ExpCommThread(threading.Thread):
 
                 exp_status = det.get_status()
 
-                if exp_status > 1 and not returned_motors:
+                if exp_status > 1 and num_frames == 1 and not returned_motors:
                     returned_motors = True
                     if 'airshot' in kwargs:
                         logger.debug('Moving in-air shot motors back to starting position')

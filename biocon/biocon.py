@@ -219,17 +219,6 @@ class BioFrame(wx.Frame):
         component_sizers = self._generate_component_sizers(self.top_notebook,
             notebook=True)
 
-        # if 'exposure' in component_sizers and 'metadata' in component_sizers:
-        #     exp_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        #     msizer = component_sizers.pop('metadata')
-        #     esizer = component_sizers.pop('exposure')
-        #     exp_sizer.Add(msizer, proportion=1,
-        #         border=self._FromDIP(10), flag=wx.EXPAND|wx.ALL)
-        #     exp_sizer.Add(esizer, proportion=2,
-        #         border=self._FromDIP(10), flag=wx.EXPAND|wx.ALL)
-
-        #     component_sizers['exposure'] = exp_sizer
-
         # Make automator sizer at the end, because automator settings need the callbacks
         # from the other panels
         logger.info('Setting up automator panel')
@@ -305,59 +294,47 @@ class BioFrame(wx.Frame):
 
         component_sizers = self._generate_component_sizers(top_panel)
 
-        if ('exposure' in component_sizers or 'coflow' in component_sizers
-            or 'trsaxs_scan' in component_sizers or 'scan' in component_sizers):
-            exp_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        exp_sizer = wx.BoxSizer(wx.HORIZONTAL)
 
-            if ('exposure' in component_sizers
-                and 'metadata' in component_sizers):
-                sub_sub_sizer1 = wx.BoxSizer(wx.HORIZONTAL)
-                sub_sub_sizer1.Add(component_sizers['metadata'], proportion=1,
-                    border=self._FromDIP(5), flag=wx.EXPAND|wx.ALL)
-                sub_sub_sizer1.Add(component_sizers['exposure'], proportion=2,
-                    border=self._FromDIP(5), flag=wx.EXPAND|wx.ALL)
+        if ('exposure' in component_sizers and 'metadata' in component_sizers):
+            sub_sub_sizer1 = wx.BoxSizer(wx.HORIZONTAL)
+            sub_sub_sizer1.Add(component_sizers['metadata'], proportion=1,
+                border=self._FromDIP(5), flag=wx.EXPAND|wx.ALL)
+            sub_sub_sizer1.Add(component_sizers['exposure'], proportion=2,
+                border=self._FromDIP(5), flag=wx.EXPAND|wx.ALL)
 
-                sub_sub_sizer2 = wx.BoxSizer(wx.HORIZONTAL)
-                sub_sub_sizer2.Add(component_sizers['airshot'], proportion=1,
-                    border=self._FromDIP(5), flag=wx.EXPAND|wx.ALL)
+            sub_sub_sizer2 = wx.BoxSizer(wx.HORIZONTAL)
+            sub_sub_sizer2.Add(component_sizers['airshot'], proportion=1,
+                border=self._FromDIP(5), flag=wx.EXPAND|wx.ALL)
 
-                sub_sizer = wx.BoxSizer(wx.VERTICAL)
-                sub_sizer.Add(sub_sub_sizer1, flag=wx.EXPAND)
-                sub_sizer.Add(sub_sub_sizer2, proportion=1,
-                    border=self._FromDIP(5), flag=wx.EXPAND|wx.ALL)
+            sub_sizer = wx.BoxSizer(wx.VERTICAL)
+            sub_sizer.Add(sub_sub_sizer1, flag=wx.EXPAND)
+            sub_sizer.Add(sub_sub_sizer2, proportion=1,
+                border=self._FromDIP(5), flag=wx.EXPAND|wx.ALL)
 
-                exp_sizer.Add(sub_sizer, flag=wx.EXPAND, proportion=1)
+            exp_sizer.Add(sub_sizer, flag=wx.EXPAND, proportion=1)
 
-            # elif ('exposure' in component_sizers and 'uv' in component_sizers and
-            #     'metadata' in component_sizers and 'coflow' in component_sizers):
-            #     sub_sizer = wx.BoxSizer(wx.VERTICAL)
+        elif 'exposure' in component_sizers:
+            sub_sub_sizer1 = wx.BoxSizer(wx.HORIZONTAL)
+            sub_sub_sizer1.Add(component_sizers['exposure'], proportion=1,
+                border=self._FromDIP(5), flag=wx.EXPAND|wx.ALL)
 
-            #     sub_sub_sizer1 = wx.BoxSizer(wx.HORIZONTAL)
-            #     sub_sub_sizer1.Add(component_sizers['metadata'],
-            #         border=self._FromDIP(5), flag=wx.EXPAND|wx.ALL, proportion=1)
-            #     sub_sub_sizer1.Add(component_sizers['exposure'],
-            #         border=self._FromDIP(5), flag=wx.EXPAND|wx.ALL, proportion=2)
+            sub_sub_sizer2 = wx.BoxSizer(wx.HORIZONTAL)
+            sub_sub_sizer2.Add(component_sizers['airshot'], proportion=1,
+                border=self._FromDIP(5), flag=wx.EXPAND|wx.ALL)
 
-            # elif ('exposure' in component_sizers
-            #     and 'metadata' in component_sizers):
-            #     exp_sizer.Add(component_sizers['metadata'], proportion=1,
-            #         border=self._FromDIP(5), flag=wx.EXPAND|wx.ALL)
-            #     exp_sizer.Add(component_sizers['exposure'], proportion=2,
-            #         border=self._FromDIP(5), flag=wx.EXPAND|wx.ALL)
+            sub_sizer = wx.BoxSizer(wx.VERTICAL)
+            sub_sizer.Add(sub_sub_sizer1, flag=wx.EXPAND)
+            sub_sizer.Add(sub_sub_sizer2, proportion=1,
+                border=self._FromDIP(5), flag=wx.EXPAND|wx.ALL)
 
-            # elif 'exposure' in component_sizers:
-            #     exp_sizer.Add(component_sizers['exposure'], proportion=1,
-            #         border=self._FromDIP(5), flag=wx.EXPAND|wx.ALL)
+            exp_sizer.Add(sub_sizer, flag=wx.EXPAND, proportion=1)
 
-            if 'toaster' in component_sizers:
-                exp_sizer.Add(component_sizers['toaster'], border=self._FromDIP(5),
-                    flag=wx.EXPAND|wx.ALL)
+        if 'toaster' in component_sizers:
+            exp_sizer.Add(component_sizers['toaster'], border=self._FromDIP(5),
+                flag=wx.EXPAND|wx.ALL)
 
-            # if 'airshot' in component_sizers:
-            #     exp_sizer.Add(component_sizers['airshot'], border=self._FromDIP(5),
-            #         flag=wx.EXPAND|wx.ALL)
-
-            panel_sizer.Add(exp_sizer, flag=wx.EXPAND)
+        panel_sizer.Add(exp_sizer, flag=wx.EXPAND)
 
         top_panel.SetSizer(panel_sizer)
 
