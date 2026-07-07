@@ -96,8 +96,8 @@ class ScanProcess(multiprocessing.Process):
 
         self.np_motor = None
 
-        self.shutter1_name = 'do_9'
-        self.shutter2_name =  'do_6'
+        self.shutter1_name = '18ID:LJT4:2:Bo9'
+        self.shutter2_name =  '18ID:HUBER1:A1Out'
 
         self.shutter1 = None
         self.shutter2 = None
@@ -269,7 +269,7 @@ class ScanProcess(multiprocessing.Process):
 
     def _set_scan_params(self, device, start, stop, step, device2, start2,
         stop2, step2, scalers, dwell_time, timer, scan_dim='1D', detector=None,
-        file_name=None, dir_path=None):
+        file_name=None, dir_path=None, scalers_raw='', open_shutter=True, **kwargs):
         """
         Sets the parameters for the scan.
 
@@ -320,28 +320,62 @@ class ScanProcess(multiprocessing.Process):
             self.stop2 = stop
             self.step2 = step
 
+        self.open_shutter = open_shutter
 
+        self.scalers_raw = scalers_raw
 
         self.scalers = scalers
         self.dwell_time = dwell_time
         self.timer = timer
+
+        old_detector = copy.copy(self.detector)
         self.detector = detector
 
+        if old_detector != self.detector:
+            self._get_detector()
+
+    def _get_detector(self):
         if self.detector is not None:
-            self.det = self.mx_database.get_record(self.detector)
-            self.det.set_trigger_mode(1)
+            if self.detector == 'Eiger2 XE 9M':
+                self.det = devices.EPICSEigerDetector('18ID:EIG2:',
+                    use_tiff_writer=False, use_file_writer=True,
+                    photon_energy=12.0, images_per_file=1)
 
-            server_record_name = self.det.get_field('server_record')
-            remote_det_name = self.det.get_field('remote_record_name')
-            server_record = self.mx_database.get_record(server_record_name)
-            det_datadir_name = '{}.datafile_directory'.format(remote_det_name)
-            det_datafile_name = '{}.datafile_pattern'.format(remote_det_name)
+                self.ab_burst = self.mx_database.get_record('ab_burst')
+                self.cd_burst = self.mx_database.get_record('cd_burst')
+                self.ef_burst = self.mx_database.get_record('ef_burst')
+                self.gh_burst = self.mx_database.get_record('gh_burst')
+                self.srs_trig = self.mx_database.get_record('do_10')
 
-            self.det_datadir = mp.Net(server_record, det_datadir_name)
-            self.det_filename = mp.Net(server_record, det_datafile_name)
+            elif self.detector == 'Pilatus3 X 1M':
+                self.det = devices.EPICSPilatusDetector('18IDpil1M:')
+
+                self.ab_burst = self.mx_database.get_record('ab_burst')
+                self.cd_burst = self.mx_database.get_record('cd_burst')
+                self.ef_burst = self.mx_database.get_record('ef_burst')
+                self.gh_burst = self.mx_database.get_record('gh_burst')
+                self.srs_trig = self.mx_database.get_record('do_10')
+
+            else:
+                self.det = self.mx_database.get_record(self.detector)
+                self.det.set_trigger_mode(1)
+
+                server_record_name = self.det.get_field('server_record')
+                remote_det_name = self.det.get_field('remote_record_name')
+                server_record = self.mx_database.get_record(server_record_name)
+                det_datadir_name = '{}.datafile_directory'.format(remote_det_name)
+                det_datafile_name = '{}.datafile_pattern'.format(remote_det_name)
+
+                self.det_datadir = mp.Net(server_record, det_datadir_name)
+                self.det_filename = mp.Net(server_record, det_datafile_name)
+        else:
+            self.det = None
 
     def _get_det_params(self):
-        self.return_queue.put((self.det_datadir.get(), ))
+        if self.detector == 'Eiger2 XE 9M' or self.detector == 'Pilatus3 X 1M':
+            self.return_queue.put((self.det.get_data_dir(), ))
+        else:
+            self.return_queue.put((self.det_datadir.get(), ))
 
     def _scan(self):
         """
@@ -397,7 +431,76 @@ class ScanProcess(multiprocessing.Process):
 
         self.return_queue.put_nowait(('dummy',))
 
+        if ((self.detector == 'Eiger2 XE 9M' or self.detector == 'Pilatus3 X 1M')
+            and self.scan_dim == '1D'):
+            image_name = 'scan'
+
+            #Internally triggered, multiple images per file
+            # # self.det.set_filename(image_name)
+            # # self.det.set_trigger_mode('int_enable')
+            # # self.det.set_manual_trigger(1)
+            # # self.det.set_num_frames(len(mtr1_positions))
+
+            # Internally tiggered, single image per file
+            # self.det.set_trigger_mode('int_trig')
+            # self.det.set_num_frames(1)
+            # self.det.set_exp_time(self.dwell_time)
+            # self.det.set_exp_period(self.dwell_time+0.0001)
+            # # self.det.arm()
+
+            #Externally triggered
+            image_name = 'scan'
+
+            self.det.set_filename(image_name)
+            self.det.set_trigger_mode('ext_enable')
+            self.det.set_num_frames(len(mtr1_positions))
+            self.det.set_exp_time(self.dwell_time)
+            self.det.set_exp_period(self.dwell_time+0.001)
+
+            self.ab_burst.setup(0.000001, 0.000000, 1, 0, 1, 2)
+            self.cd_burst.setup(0.000001, 0.000000, 1, 0, 1, 2)
+            self.ef_burst.setup(0.000001, 0.000000, 1, 0, 1, 2)
+            self.gh_burst.setup(0.000001, 0.000000, 1, 0, 1, 2)
+
+            self.ab_burst.arm()
+
+            self.srs_trig.write( 1 )
+            time.sleep(0.01)
+            self.srs_trig.write( 0 )
+
+            while (self.ab_burst.get_status() & 0x1) != 0:
+                time.sleep(0.01)
+
+            self.ab_burst.setup(self.dwell_time+0.0001, (self.dwell_time+0.0001)*(1.-1./1000.), 1, 0, 1, 2)
+            self.cd_burst.setup(self.dwell_time+0.0001, (self.dwell_time+0.0001-self.dwell_time)/10.,
+                1, self.dwell_time+(self.dwell_time+0.0001-self.dwell_time)/10., 1, 2)
+            self.ef_burst.setup(self.dwell_time+0.0001, self.dwell_time, 1, 0, 1, 2)
+            self.gh_burst.setup(self.dwell_time+0.0001, (self.dwell_time+0.0001)/1.1, 1, 0, 1, 2)
+
+            self.ab_burst.stop()
+            self.srs_trig.write( 0 )
+
+            self.ab_burst.get_status() #Maybe need to clear this status?
+            time.sleep(0.1)
+            self.det.arm()
+            self.ab_burst.arm()
+
+        if self.open_shutter:
+            self._open_shutters()
+
         for num, mtr1_pos in enumerate(mtr1_positions):
+
+            if self.detector == 'Eiger2 XE 9M' and self.scan_dim == '2D':
+                image_name = 'scan_{:03}'.format(num+1)
+
+                self.det.set_filename(image_name)
+                self.det.set_trigger_mode('int_trig')
+                self.det.set_manual_trigger(1)
+                self.det.set_num_frames(len(mtr2_positions))
+                self.det.set_exp_time(self.dwell_time)
+                self.det.set_exp_period(self.dwell_time+0.0001)
+                self.det.arm()
+
             if mtr1_pos != mtr1_positions[0]:
                 # logger.info('Moving motor 1 position to {}'.format(mtr1_pos))
                 self.np_motor.move_positioner_absolute(self.device, m1_index, mtr1_pos)
@@ -405,12 +508,20 @@ class ScanProcess(multiprocessing.Process):
             while self.np_motor.positioner_is_moving(self.positioner):
                 time.sleep(0.01)
                 if self._abort_event.is_set():
+                    if self.detector == 'Eiger2 XE 9M' or self.detector == 'Pilatus3 X 1M':
+                        self.det.abort()
                     self.np_motor.stop()
                     self.return_queue.put_nowait(['stop_live_plotting'])
                     return
 
             if self.scan_dim == '1D':
                 self._measure(scalers, timer, mtr1_pos, num)
+
+                if self._abort_event.is_set():
+                    if self.detector == 'Eiger2 XE 9M' or self.detector == 'Pilatus3 X 1M':
+                        self.det.abort()
+                    self.return_queue.put_nowait(['stop_live_plotting'])
+                    return
 
             elif self.scan_dim == '2D':
 
@@ -424,6 +535,8 @@ class ScanProcess(multiprocessing.Process):
                     while self.np_motor.positioner_is_moving(self.positioner):
                         time.sleep(0.01)
                         if self._abort_event.is_set():
+                            if self.detector == 'Eiger2 XE 9M' or self.detector == 'Pilatus3 X 1M':
+                                self.det.abort()
                             self.np_motor.stop()
                             self.return_queue.put_nowait(['stop_live_plotting'])
                             return
@@ -431,41 +544,98 @@ class ScanProcess(multiprocessing.Process):
                     self._measure(scalers, timer, mtr1_pos, num, mtr2_pos, num2)
 
                     if self._abort_event.is_set():
+                        if self.detector == 'Eiger2 XE 9M' or self.detector == 'Pilatus3 X 1M':
+                            self.det.abort()
+
                         self.return_queue.put_nowait(['stop_live_plotting'])
                         return
 
 
             if self._abort_event.is_set():
+                if self.detector == 'Eiger2 XE 9M' or self.detector == 'Pilatus3 X 1M':
+                    self.det.abort()
                 self.return_queue.put_nowait(['stop_live_plotting'])
                 return
+
+        if self.open_shutter:
+            self._close_shutters()
+
+        if self.detector == 'Eiger2 XE 9M' or self.detector == 'Pilatus3 X 1M':
+            while self.det.get_status() != 0:
+                time.sleep(.01)
+                if self._abort_event.is_set():
+                    if self.detector == 'Eiger2 XE 9M' or self.detector == 'Pilatus3 X 1M':
+                        self.det.abort()
+                    # self.return_queue.put_nowait(['stop_live_plotting'])
+                    return
 
         self.return_queue.put_nowait(['stop_live_plotting'])
         return
 
     def _measure(self, scalers, timer, mtr1_pos, num, mtr2_pos=0, num2=0):
 
-        if self.detector is not None:
-            if self.scan_dim == '1D':
-                image_name = 'scan_{:03}.tif'.format(num)
-                self.det_filename.put(image_name)
-            elif self.scan_dim == '2D':
-                image_name = 'scan_{:03}_{:03}.tif'.format(num, num2)
-                self.det_filename.put(image_name)
+        if self.scan_dim == '1D':
+            image_name = 'scan_{:03}.tif'.format(num+1)
+
+        elif self.scan_dim == '2D':
+            image_name = 'scan_{:03}_{:03}.tif'.format(num+1, num2+1)
+
+        if self.detector != 'Eiger2 XE 9M' and self.detector != 'Pilatus3 X 1M':
+            self.det_filename.put(image_name)
+        else:
+            image_name = image_name.rstrip('.tif')
 
         for scaler in scalers:
             scaler.clear()
+
         timer.clear()
+
         if timer.is_busy():
             timer.stop()
+
+        if self.detector == 'Eiger2 XE 9M' or self.detector == 'Pilatus3 X 1M':
+            # Internally triggered
+            # Sending manual triggers, multiple images per series
+            # # self.det.trigger(wait=False)
+
+            # Internally triggered, one image per series
+            # self.det.set_filename(image_name)
+            # self.det.arm()
+
+            #Externally triggered
+            self.srs_trig.write(1)
+            time.sleep(0.01)
+            self.srs_trig.write(0)
+
         timer.start(self.dwell_time)
 
         while timer.is_busy() != 0:
             time.sleep(.01)
             if self._abort_event.is_set():
+                if self.detector == 'Eiger2 XE 9M' or self.detector == 'Pilatus3 X 1M':
+                    self.det.abort()
                 timer.stop()
                 return
 
+        # Externally triggered
+        while True:
+            status = self.ab_burst.get_status()
+            if (status & 0x1) == 0:
+                break
+            else:
+                time.sleep(0.1)
+
+            if self._abort_event.is_set():
+                if self.detector == 'Eiger2 XE 9M' or self.detector == 'Pilatus3 X 1M':
+                    self.det.abort()
+                return
+
         result = [str(scaler.read()) for scaler in scalers]
+
+        if self.scalers_raw == 'i1/i0':
+            ret_val = float(result[1])/float(result[0])
+        else:
+            ret_val = float(result[0])
 
         if self.scan_dim == '1D':
             self.return_val_q.put_nowait((mtr1_pos, float(result[0])))
@@ -1006,8 +1176,8 @@ class ScanPanel(wx.Panel):
                     self.initial_position2 = float(self.pos2.GetLabel())
                 self.scan_timer.Start(10)
 
-                if self.shutter.IsChecked():
-                    self.cmd_q.put_nowait(['open_shutters', [], {}])
+                # if self.shutter.IsChecked():
+                #     self.cmd_q.put_nowait(['open_shutters', [], {}])
 
                 self.cmd_q.put_nowait(['scan', [], {}])
 
@@ -1382,10 +1552,13 @@ class ScanPanel(wx.Panel):
             self.der_plot.draw_artist(self.der_com_line)
 
 
-        self.canvas.blit(self.plot.bbox)
+        try:
+            self.canvas.blit(self.plot.bbox)
 
-        if self.show_der.GetValue():
-            self.canvas.blit(self.der_plot.bbox)
+            if self.show_der.GetValue():
+                self.canvas.blit(self.der_plot.bbox)
+        except Exception:
+            pass # Prevents a weird error on startup
 
     def _update_plot_2d(self, rescale=True):
 
