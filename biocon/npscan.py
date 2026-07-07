@@ -250,22 +250,73 @@ class ScanProcess(multiprocessing.Process):
         self.np_motor.move_positioner_absolute(self.motor_name2, index, position)
 
     def _open_shutters(self):
+        """
+        WARNING: Can't open/close mx device shutters (or send any mx commands) after
+        doing a scan in MX, becauseof mx related bugs. We can work around this
+        by using EPICS if the shutters are in EPICS, which is the case for now.
+        Need to revisit, this is probably why shutters were closed in the main
+        thread after the scan
+        """
         if self.shutter1 is None:
-            self.shutter1 = self.mx_database.get_record(self.shutter1_name)
-        if self.shutter2 is None:
-            self.shutter2 = self.mx_database.get_record(self.shutter2_name)
+            # self.shutter1 = self.mx_database.get_record(self.shutter1_name)
+            # shutter1_type = self.shutter1.get_field('mx_type')
+            # if shutter1_type.startswith('epics'):
+            #     self.shutter1_is_epics = True
+            #     pv_name = self.shutter1.get_field('epics_variable_name')
+            #     self.shutter1_pv = epics.get_pv(pv_name)
+            self.shutter1_is_epics = True
+            self.shutter1_pv = epics.get_pv(self.shutter1_name)
 
-        self.shutter1.write(1)
-        self.shutter2.write(0)
+        if self.shutter2 is None:
+            # self.shutter2 = self.mx_database.get_record(self.shutter2_name)
+            # shutter2_type = self.shutter2.get_field('mx_type')
+            # if shutter2_type.startswith('epics'):
+            #     self.shutter2_is_epics = True
+            #     pv_name = self.shutter2.get_field('epics_variable_name')
+            #     self.shutter2_pv = epics.get_pv(pv_name)
+            self.shutter2_is_epics = True
+            self.shutter2_pv = epics.get_pv(self.shutter2_name)
+
+        if self.shutter1_is_epics:
+            self.shutter1_pv.put(1, wait=True)
+        else:
+            self.shutter1.write(1)
+
+        if self.shutter2_is_epics:
+            self.shutter2_pv.put(0, wait=True)
+        else:
+            self.shutter2.write(0)
 
     def _close_shutters(self):
         if self.shutter1 is None:
-            self.shutter1 = self.mx_database.get_record(self.shutter1_name)
-        if self.shutter2 is None:
-            self.shutter2 = self.mx_database.get_record(self.shutter2_name)
+            # self.shutter1 = self.mx_database.get_record(self.shutter1_name)
+            # shutter1_type = self.shutter1.get_field('mx_type')
+            # if shutter1_type.startswith('epics'):
+            #     self.shutter1_is_epics = True
+            #     pv_name = self.shutter1.get_field('epics_variable_name')
+            #     self.shutter1_pv = epics.get_pv(pv_name)
+            self.shutter1_is_epics = True
+            self.shutter1_pv = epics.get_pv(self.shutter1_name)
 
-        self.shutter1.write(0)
-        self.shutter2.write(1)
+        if self.shutter2 is None:
+            # self.shutter2 = self.mx_database.get_record(self.shutter2_name)
+            # shutter2_type = self.shutter2.get_field('mx_type')
+            # if shutter2_type.startswith('epics'):
+            #     self.shutter2_is_epics = True
+            #     pv_name = self.shutter2.get_field('epics_variable_name')
+            #     self.shutter2_pv = epics.get_pv(pv_name)
+            self.shutter2_is_epics = True
+            self.shutter2_pv = epics.get_pv(self.shutter2_name)
+
+        if self.shutter1_is_epics:
+            self.shutter1_pv.put(0, wait=True)
+        else:
+            self.shutter1.write(0)
+
+        if self.shutter2_is_epics:
+            self.shutter2_pv.put(1, wait=True)
+        else:
+            self.shutter2.write(1)
 
     def _set_scan_params(self, device, start, stop, step, device2, start2,
         stop2, step2, scalers, dwell_time, timer, scan_dim='1D', detector=None,
