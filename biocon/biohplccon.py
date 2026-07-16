@@ -8520,7 +8520,7 @@ default_hplc_2pump_settings = {
     'sp_method'                 : '',
     'wait_for_flow_ramp'        : True,
     'settle_time'               : 0.0,
-    'use_mals_valve'            : False,
+    'use_mals_valve'            : True,
     }
 
 if __name__ == '__main__':

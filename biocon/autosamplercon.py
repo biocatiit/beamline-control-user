@@ -1139,17 +1139,18 @@ class Autosampler(object):
 
         return not abort
 
-    def load_sample(self, volume, row, column, units='uL', thread=True):
+    def load_sample(self, volume, row, column, units='uL', rate_units='uL/min',
+        thread=True):
         if not thread:
-            success = self._inner_load_sample(volume, row, column, units)
+            success = self._inner_load_sample(volume, row, column, units, rate_units)
         else:
             self._cmd_queue.append([self._inner_load_sample, [volume, row, column],
-                {'units': units}])
+                {'units': units, 'rate_units': rate_units}])
             success = True
 
         return success
 
-    def _inner_load_sample(self, volume, row, column, units='uL'):
+    def _inner_load_sample(self, volume, row, column, units='uL', rate_units='uL/min'):
         self._inc_active()
 
         self._last_sample_load_params = {
@@ -1157,6 +1158,7 @@ class Autosampler(object):
             'row'       : row,
             'column'    : column,
             'vol_units' : units,
+            'rate_units': rate_units,
         }
 
         logger.info("Starting sample load of %s %s from %s%s", volume, units, row, column)
@@ -1174,7 +1176,7 @@ class Autosampler(object):
         success = self.move_to_load(row, column, False)
 
         if success:
-            self.set_pump_aspirate_rates(self._sample_draw_rate, 'uL/min', 'sample')
+            self.set_pump_aspirate_rates(self._sample_draw_rate, rate_units, 'sample')
             success = self.aspirate(volume, 'sample', units, thread=False)
 
         if success:
@@ -1319,7 +1321,7 @@ class Autosampler(object):
 
         self._inc_active()
 
-        success = self.load_sample(initial_vol, row, column, 'uL', False)
+        success = self.load_sample(initial_vol, row, column, 'uL', rate_units, False)
 
         if success:
             success = self.move_to_inject(False)
@@ -1356,7 +1358,7 @@ class Autosampler(object):
 
         self._inc_active()
 
-        success = self.load_sample(initial_vol, row, column, 'uL', False)
+        success = self.load_sample(initial_vol, row, column, 'uL', rate_units, False)
 
         if success:
             success = self.move_to_inject(False)
@@ -1900,14 +1902,14 @@ class ASCommThread(utils.CommManager):
 
         logger.debug("%s pump %s dispense stated", name, pump)
 
-    def _load_sample(self, name, val, row, column, units, **kwargs):
+    def _load_sample(self, name, val, row, column, units, rate_units, **kwargs):
         logger.debug("%s loading %s %s from %s%s", name, val, units, row, column)
 
         comm_name = kwargs.pop('comm_name', None)
         cmd = kwargs.pop('cmd', None)
 
         device = self._connected_devices[name]
-        success = device.load_sample(val, row, column, units, **kwargs)
+        success = device.load_sample(val, row, column, units, rate_units, **kwargs)
 
         self._return_value((name, cmd, success), comm_name)
 
@@ -1916,6 +1918,7 @@ class ASCommThread(utils.CommManager):
             'row'       : row,
             'column'    : column,
             'vol_units' : units,
+            'rate_units': rate_units,
             }
 
         self._return_value((name, cmd, load_settings), 'status')
