@@ -4573,6 +4573,20 @@ class ExpPanel(wx.Panel):
             for key, value in as_metadata.items():
                 metadata[key] = value
 
+        if 'toaster' in self.settings['components']:
+            toast_panel = wx.FindWindowByName('toaster')
+            toast_metadata = toast_panel.metadata()
+
+            for key, value in toast_metadata.items():
+                metadata[key] = value
+
+        if 'airshot' in self.settings['components']:
+            air_panel = wx.FindWindowByName('airshot')
+            air_metadata = air_panel.metadata()
+
+            for key, value in air_metadata.items():
+                metadata[key] = value
+
         if ('coflow' in self.settings['components']
             and 'metadata' in self.settings['components']):
             if metadata['Coflow on:']:

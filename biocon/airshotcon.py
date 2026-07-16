@@ -18,12 +18,12 @@
 #
 #    You should have received a copy of the GNU General Public License
 #    along with this software.  If not, see <http://www.gnu.org/licenses/>.
-import threading
 import time
 import logging
 import sys
 import copy
-import statistics
+from collections import OrderedDict
+
 
 if __name__ != '__main__':
     logger = logging.getLogger(__name__)
@@ -32,25 +32,19 @@ import wx
 try:
     import epics
     import epics.wx
-    from epics.wx.wxlib import EpicsFunction
 except Exception:
     pass
+
 try:
     import motorcon
 except Exception:
     pass
 
 import utils
-import custom_epics_widgets
 
 class AirShotMotorPanel(utils.DevicePanel):
 
     def __init__(self, parent, panel_id, settings, *args, **kwargs):
-        try:
-            biocon = wx.FindWindowByName('biocon')
-        except Exception:
-            biocon = None
-
         self.top_settings = settings
 
         if settings['device_communication'] == 'remote':
@@ -99,7 +93,7 @@ class AirShotMotorPanel(utils.DevicePanel):
         air_box = wx.StaticBox(parent, label='{} Controls'.format(
             self.settings['device_data']['name']))
 
-        egu_ctrl1 = epics.wx.PVText(air_box, self.motor_egu_pv)
+        self.egu_ctrl1 = epics.wx.PVText(air_box, self.motor_egu_pv)
         egu_ctrl2 = epics.wx.PVText(air_box, self.motor_egu_pv)
         pos_ctrl1 = epics.wx.PVText(air_box, self.motor_pos_pv,
             size=self._FromDIP((80,-1)))
@@ -113,7 +107,7 @@ class AirShotMotorPanel(utils.DevicePanel):
         move_ctrl.Add(wx.StaticText(air_box, label='Position:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
         move_ctrl.Add(pos_ctrl1, flag=wx.ALIGN_CENTER_VERTICAL)
-        move_ctrl.Add(egu_ctrl1, flag=wx.ALIGN_CENTER_VERTICAL)
+        move_ctrl.Add(self.egu_ctrl1, flag=wx.ALIGN_CENTER_VERTICAL)
         move_ctrl.Add(wx.StaticText(air_box, label='Move distance:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
         move_ctrl.Add(self.relative_move, flag=wx.ALIGN_CENTER_VERTICAL)
@@ -177,6 +171,16 @@ class AirShotMotorPanel(utils.DevicePanel):
             in_pos = self.motor.position
 
         return valid, auto_move, out_pos, in_pos, self.motor
+
+    def metadata(self):
+        metadata = OrderedDict()
+
+        name = self.settings['device_data']['name']
+
+        units = self.egu_ctrl1.GetValue()
+
+        metadata['{} move with exposure:'.format(name)] = self.auto_move.GetValue()
+        metadata['{} move distance ({}):'.format(name, units)] = self.relative_move.GetValue()
 
     def _on_close(self):
         """Device specific stuff goes here"""
@@ -282,6 +286,15 @@ class AirShotPanel(wx.Panel):
             all_valid = all_valid and valid
 
         return air_shot_values, all_valid
+
+    def metadata(self):
+        metadata = OrderedDict()
+
+        for device in self.devices:
+            dev_md = device.metadata()
+            metadata.update(dev_md)
+
+        return metadata
 
     def on_exit(self):
         for device in self.devices:

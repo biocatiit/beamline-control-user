@@ -24,6 +24,7 @@ import logging
 import sys
 import copy
 import statistics
+from collections import OrderedDict
 
 if __name__ != '__main__':
     logger = logging.getLogger(__name__)
@@ -46,10 +47,6 @@ import custom_epics_widgets
 class ToastMotorPanel(utils.DevicePanel):
 
     def __init__(self, parent, panel_id, settings, *args, **kwargs):
-        try:
-            biocon = wx.FindWindowByName('biocon')
-        except Exception:
-            biocon = None
 
         self.top_settings = settings
 
@@ -87,6 +84,9 @@ class ToastMotorPanel(utils.DevicePanel):
             ['motor']['args'][0]))
         self.start_lnk2.put('{} CA'.format(settings['device_data']['kwargs']
             ['motor']['args'][0]))
+
+        self.status_pv = self._initialize_pv('{}.BUSY'.format(
+            settings['device_data']['kwargs']['start_pv']))
 
         self.motor = motorcon.EpicsMotor('toast', settings['device_data']['kwargs']
             ['motor']['args'][0])
@@ -145,19 +145,16 @@ class ToastMotorPanel(utils.DevicePanel):
         toast_box = wx.StaticBox(parent, label='{} Controls'.format(
             self.settings['device_data']['name']))
 
-        # high_ctrl = epics.wx.PVTextCtrl(toast_box, self.settings['device_data']['kwargs']['high_pv'], size=self._FromDIP((80,-1)))
-        # low_ctrl = epics.wx.PVTextCtrl(toast_box, self.low_pv, size=self._FromDIP((80,-1)))
-        low_ctrl = custom_epics_widgets.PVTextCtrl2(toast_box, self.low_pv,
+        self.low_ctrl = custom_epics_widgets.PVTextCtrl2(toast_box, self.low_pv,
                 dirty_timeout=None, validator=utils.CharValidator('float_te'),
                 size=self._FromDIP((80, -1)))
-        high_ctrl = custom_epics_widgets.PVTextCtrl2(toast_box, self.high_pv,
+        self.high_ctrl = custom_epics_widgets.PVTextCtrl2(toast_box, self.high_pv,
                 dirty_timeout=None, validator=utils.CharValidator('float_te'),
                 size=self._FromDIP((80, -1)))
 
-        status_ctrl = custom_epics_widgets.PVTextLabeled(toast_box,
-            '{}.BUSY'.format(self.settings['device_data']['kwargs']['start_pv']),
-            fg='forest green')
-        egu_ctrl1 = epics.wx.PVText(toast_box, self.motor_egu_pv)
+        self.status_ctrl = custom_epics_widgets.PVTextLabeled(toast_box,
+            self.status_pv, fg='forest green')
+        self.egu_ctrl1 = epics.wx.PVText(toast_box, self.motor_egu_pv)
         egu_ctrl2 = epics.wx.PVText(toast_box, self.motor_egu_pv)
         egu_ctrl3 = epics.wx.PVText(toast_box, self.motor_egu_pv,
             size=self._FromDIP((25,-1)))
@@ -170,8 +167,8 @@ class ToastMotorPanel(utils.DevicePanel):
         self.speed_ctrl = utils.ValueEntry(self._on_speed_ctrl, toast_box,
             size=self._FromDIP((80,-1)), validator=utils.CharValidator('float_pos_te'))
 
-        status_ctrl.SetTranslations({'0': 'Not Toasting', '1': 'Toasting'})
-        status_ctrl.SetForegroundColourTranslations({'Toasting': 'forest green',
+        self.status_ctrl.SetTranslations({'0': 'Not Toasting', '1': 'Toasting'})
+        self.status_ctrl.SetForegroundColourTranslations({'Toasting': 'forest green',
             'Not Toasting': 'red'})
 
         self.stop_point_ctrl = wx.TextCtrl(toast_box, size=self._FromDIP((80,-1)),
@@ -181,15 +178,15 @@ class ToastMotorPanel(utils.DevicePanel):
             vgap=self._FromDIP(5))
         toast_ctrl_sizer.Add(wx.StaticText(toast_box, label='Status:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
-        toast_ctrl_sizer.Add(status_ctrl, flag=wx.ALIGN_CENTER_VERTICAL)
+        toast_ctrl_sizer.Add(self.status_ctrl, flag=wx.ALIGN_CENTER_VERTICAL)
         toast_ctrl_sizer.AddSpacer(1)
         toast_ctrl_sizer.Add(wx.StaticText(toast_box, label='High endpoint:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
-        toast_ctrl_sizer.Add(high_ctrl, flag=wx.ALIGN_CENTER_VERTICAL)
-        toast_ctrl_sizer.Add(egu_ctrl1, flag=wx.ALIGN_CENTER_VERTICAL)
+        toast_ctrl_sizer.Add(self.high_ctrl, flag=wx.ALIGN_CENTER_VERTICAL)
+        toast_ctrl_sizer.Add(self.egu_ctrl1, flag=wx.ALIGN_CENTER_VERTICAL)
         toast_ctrl_sizer.Add(wx.StaticText(toast_box, label='Low endpoint:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
-        toast_ctrl_sizer.Add(low_ctrl, flag=wx.ALIGN_CENTER_VERTICAL)
+        toast_ctrl_sizer.Add(self.low_ctrl, flag=wx.ALIGN_CENTER_VERTICAL)
         toast_ctrl_sizer.Add(egu_ctrl2, flag=wx.ALIGN_CENTER_VERTICAL)
         toast_ctrl_sizer.Add(wx.StaticText(toast_box, label='Stop point:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
@@ -530,6 +527,19 @@ class ToastMotorPanel(utils.DevicePanel):
 
         return lim_pos
 
+    def metadata(self):
+        metadata = OrderedDict()
+
+        name = self.settings['device_data']['name']
+
+        units = self.egu_ctrl1.GetValue()
+
+        metadata['{} state:'.format(name)] = self.status_ctrl.GetValue()
+        metadata['{} high endpoint ({}):'.format(name, units)] = self.high_ctrl.GetValue()
+        metadata['{} low endpoint ({}):'.format(name, units)] = self.low_ctrl.GetValue()
+        metadata['{} speed ({}/s):'.format(name, units)] = self.high_ctrl.GetValue()
+
+
     def _on_close(self):
         """Device specific stuff goes here"""
         self.stop_toast()
@@ -569,7 +579,6 @@ class ToasterPanel(wx.Panel):
             return self.FromDIP(size)
         except Exception:
             return size
-
 
     def _create_layout(self):
         """Creates the layout"""
@@ -641,6 +650,15 @@ class ToasterPanel(wx.Panel):
     def auto_stop(self):
         for device in self.devices:
             device.auto_stop()
+
+    def metadata(self):
+        metadata = OrderedDict()
+
+        for device in self.devices:
+            dev_md = device.metadata()
+            metadata.update(dev_md)
+
+        return metadata
 
     def on_exit(self):
         for device in self.devices:
