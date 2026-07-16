@@ -3787,7 +3787,7 @@ default_coflow_settings = {
         'coflow_inc_TSetpoint_pv'   : '18ID:Memmert:CoflowInc:TempSetpoint',
         'hplc_inc_T_pv'             : '18ID:Memmert:HPLCInc:Temp',
         'hplc_inc_TSetpoint_pv'     : '18ID:Memmert:HPLCInc:TempSetpoint',
-        'use_incubator_pvs'         : False,
+        'use_incubator_pvs'         : True,
         }}],
     }
 
