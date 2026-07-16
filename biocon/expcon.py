@@ -195,9 +195,9 @@ class ExpCommThread(threading.Thread):
             'scaler'    : scaler,
             # 'joerger': mx_database.get_record('joerger_timer'),
             # 'joerger_ctrs':[mx_database.get_record('j2')] + [mx_database.get_record(log['mx_record']) for log in self._settings['scaler_log_vals']],
-            'ki1'   : mx_database.get_record('ki1'),
-            'ki2'   : mx_database.get_record('ki2'),
-            'ki3'   : mx_database.get_record('ki3'),
+            # 'ki1'   : mx_database.get_record('ki1'),
+            # 'ki2'   : mx_database.get_record('ki2'),
+            # 'ki3'   : mx_database.get_record('ki3'),
             'mx_db' : mx_database,
             'motors'  : {},
             'attenuator' : attenuator,
@@ -2429,11 +2429,25 @@ class ExpCommThread(threading.Thread):
                     return False
                 time.sleep(0.1)
 
-            while True:
-                exp_done = not det.scan.get_status()
+            returned_motors = False
 
-                if exp_done:
+            while True:
+                scan_done = not det.scan.get_status()
+
+                if scan_done:
                     break
+
+                exp_status = det.get_status()
+
+                if exp_status > 1 and num_frames == 1 and not returned_motors:
+                    returned_motors = True
+                    if 'airshot' in kwargs:
+                        logger.debug('Moving in-air shot motors back to starting position')
+                        for vals in kwargs['airshot']:
+                            auto_move, out_pos, in_pos, motor = vals
+
+                            if auto_move:
+                                motor.move_absolute(in_pos)
 
                 if self._abort_event.is_set():
                     self.mar_abort_cleanup(det, dio_out9, slow_shutter,
@@ -4559,6 +4573,20 @@ class ExpPanel(wx.Panel):
             for key, value in as_metadata.items():
                 metadata[key] = value
 
+        if 'toaster' in self.settings['components']:
+            toast_panel = wx.FindWindowByName('toaster')
+            toast_metadata = toast_panel.metadata()
+
+            for key, value in toast_metadata.items():
+                metadata[key] = value
+
+        if 'airshot' in self.settings['components']:
+            air_panel = wx.FindWindowByName('airshot')
+            air_metadata = air_panel.metadata()
+
+            for key, value in air_metadata.items():
+                metadata[key] = value
+
         if ('coflow' in self.settings['components']
             and 'metadata' in self.settings['components']):
             if metadata['Coflow on:']:
@@ -5137,7 +5165,7 @@ default_exposure_settings = {
     # 'monitor_dark'          : False,
     # 'scan_rearm'            : False, #Rearm the detector between scans. If True may slow down scans
 
-    # # #Eiger2 XE 9M
+    #Eiger2 XE 9M
     'exp_time_min'          : 0.000000050,
     'exp_time_max'          : 3600,
     'exp_period_min'        : 0.001785714286, #There's an 8bit undocumented mode that can go faster, in theory
@@ -5246,8 +5274,8 @@ default_exposure_settings = {
         'channels':[
         {'sc_chan': 3, 'name': 'I0', 'scale': 1, 'offset': 0, 'use_dark': False,
             'norm_time': False},
-        {'sc_chan': 4, 'name': 'I1', 'scale': 1, 'offset': 0, 'use_dark': False,
-            'norm_time': False},
+        # {'sc_chan': 4, 'name': 'I1', 'scale': 1, 'offset': 0, 'use_dark': False,
+        #     'norm_time': False},
         ],},
     'warnings'              : {'shutter' : True, 'col_vac' : {'check': True,
         'thresh': 0.04}, 'guard_vac' : {'check': True, 'thresh': 0.04},
