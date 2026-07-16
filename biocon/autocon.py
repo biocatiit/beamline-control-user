@@ -2642,8 +2642,9 @@ def make_batch_saxs_info_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
         as_sizer.Add(sample_sizer, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
             border=top_level._FromDIP(5))
 
-    as_sizer.Add(as_sizer1, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
-        border=top_level._FromDIP(5))
+        as_sizer.Add(as_sizer1, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
+            border=top_level._FromDIP(5))
+
     as_sizer.Add(as_adv_pane, flag=wx.EXPAND|wx.ALL, border=top_level._FromDIP(5))
 
 
@@ -5434,7 +5435,7 @@ class BatchSampleCmdDialog(AutoCmdDialog):
         (cmd_sizer, self.sample_well, self.well_ids_96,
             self.reverse_well_ids_96) =  make_batch_saxs_info_panel(top_level,
             parent, self.ctrl_ids, 'horiz', self.well_bmp, self._on_well_button,
-            multi_load=True)
+            multi_load=self._multi_load)
 
         button_sizer = self.CreateButtonSizer(wx.OK | wx.CANCEL)
 

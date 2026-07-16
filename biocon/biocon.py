@@ -473,8 +473,8 @@ if __name__ == '__main__':
         # scale, offset, use_dark_current, normalize_by_exp_time)
         {'mx_record': 'mcs3', 'channel': 2, 'name': 'I0',
         'scale': 1, 'offset': 0, 'dark': True, 'norm_time': False},
-        # {'mx_record': 'mcs4', 'channel': 3, 'name': 'I1', 'scale': 1,
-        # 'offset': 0, 'dark': True, 'norm_time': False},
+        {'mx_record': 'mcs4', 'channel': 3, 'name': 'I1', 'scale': 1,
+        'offset': 0, 'dark': True, 'norm_time': False},
         # {'mx_record': 'mcs5', 'channel': 4, 'name': 'I2', 'scale': 1,
         # 'offset': 0, 'dark': True, 'norm_time': False},
         # {'mx_record': 'mcs6', 'channel': 5, 'name': 'I3', 'scale': 1,
@@ -490,7 +490,7 @@ if __name__ == '__main__':
         ]
     exposure_settings['warnings'] = {'shutter' : True, 'col_vac' : {'check': True,
         'thresh': 0.04}, 'guard_vac' : {'check': True, 'thresh': 0.04},
-        'sample_vac': {'check': False, 'thresh': 0.04}, 'sc_vac':
+        'sample_vac': {'check': True, 'thresh': 0.04}, 'sc_vac':
         {'check': True, 'thresh':0.04}}
     exposure_settings['base_data_dir'] = '/nas_data/Eiger2x/2026_Run2/' #CHANGE ME and pipeline local_basedir
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']
@@ -618,18 +618,18 @@ if __name__ == '__main__':
 
     components = OrderedDict([
         ('exposure', expcon.ExpPanel),
-        # ('coflow', coflowcon.CoflowPanel),
+        ('coflow', coflowcon.CoflowPanel),
         # ('trsaxs_scan', trcon.TRScanPanel),
         # ('trsaxs_flow', trcon.TRFlowPanel),
         # ('scan',    scancon.ScanPanel),
-        # ('metadata', metadata.ParamPanel),
-        # ('pipeline', pipeline_ctrl.PipelineControl),
-        # ('uv', spectrometercon.UVPanel),
-        # ('hplc', biohplccon.HPLCPanel),
-        # ('automator', autocon.AutoPanel),
-        # ('autosampler', autosamplercon.AutosamplerPanel),
+        ('metadata', metadata.ParamPanel),
+        ('pipeline', pipeline_ctrl.PipelineControl),
+        ('uv', spectrometercon.UVPanel),
+        ('hplc', biohplccon.HPLCPanel),
+        ('automator', autocon.AutoPanel),
+        ('autosampler', autosamplercon.AutosamplerPanel),
         # ('toaster', toastcon.ToasterPanel),
-        # ('mono_auto_tune', monotunecon.MonoAutoTune),
+        ('mono_auto_tune', monotunecon.MonoAutoTune),
         # ('airshot', airshotcon.AirShotPanel),
         ])
 
