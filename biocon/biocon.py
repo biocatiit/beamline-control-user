@@ -459,7 +459,7 @@ if __name__ == '__main__':
     # # # EIGER2 XE 9M
     exposure_settings['det_args'] =  {'use_tiff_writer': False,
         'use_file_writer': True, 'photon_energy' : 12.0,
-        'images_per_file': 1} #1 image/file for TR, 300 for eq SAXS, 1000 for muscle
+        'images_per_file': 300} #1 image/file for TR, 300 for eq SAXS, 1000 for muscle
 
     # Muscle settings
     exposure_settings['struck_measurement_time'] = '0.001'
