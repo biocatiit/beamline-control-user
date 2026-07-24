@@ -1977,6 +1977,7 @@ class AutoSettings(scrolled.ScrolledPanel):
             acq_methods = []
             sample_methods = []
             num_flow_paths = 1
+            use_mals_valve = False
 
         self.cmd_info_panels = {}
         self.top_sizer = wx.BoxSizer(wx.VERTICAL)
@@ -2627,6 +2628,9 @@ def make_batch_saxs_info_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
 
         as_sizer1 = create_info_sizer(as_settings, top_level, as_box, read_only)
 
+    else:
+        sample_well = None
+
     as_sizer2 = create_info_sizer(as_adv_settings, top_level, as_adv_win,
         read_only)
 
@@ -2734,16 +2738,18 @@ def make_batch_saxs_info_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
 
     if cmd_sizer_dir == 'horiz':
         cmd_sizer=wx.BoxSizer(wx.HORIZONTAL)
-        cmd_sizer.Add(metadata_sizer, proportion=1, flag=wx.RIGHT|wx.EXPAND,
-            border=top_level._FromDIP(5))
+        if not multi_load:
+            cmd_sizer.Add(metadata_sizer, proportion=1, flag=wx.RIGHT|wx.EXPAND,
+                border=top_level._FromDIP(5))
         cmd_sizer.Add(as_sizer, flag=wx.RIGHT|wx.EXPAND,
             border=top_level._FromDIP(5))
         cmd_sizer.Add(exp_coflow_sizer, flag=wx.EXPAND,
             border=top_level._FromDIP(5))
     else:
         cmd_sizer=wx.BoxSizer(wx.VERTICAL)
-        cmd_sizer.Add(metadata_sizer, flag=wx.BOTTOM|wx.EXPAND,
-            border=top_level._FromDIP(5))
+        if not multi_load:
+            cmd_sizer.Add(metadata_sizer, flag=wx.BOTTOM|wx.EXPAND,
+                border=top_level._FromDIP(5))
         cmd_sizer.Add(as_sizer, flag=wx.BOTTOM|wx.EXPAND,
             border=top_level._FromDIP(5))
         cmd_sizer.Add(exp_coflow_sizer, flag=wx.EXPAND,
@@ -3659,6 +3665,8 @@ class AutoList(utils.ItemList):
             else:
                 return
 
+            default_settings['sample_well'] = 'A1' # Just for validation
+
             valid, err_msg = self._validate_cmd(default_settings)
 
             if valid:
@@ -3681,7 +3689,7 @@ class AutoList(utils.ItemList):
                         return
 
         fname = copy.deepcopy(default_settings['filename'])
-        fnum = copy.deepcopy(default_settings['filenumber'])
+        fnum = int(copy.deepcopy(default_settings['filenumber']))
 
         del default_settings['filenumber']
 
