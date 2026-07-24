@@ -3666,8 +3666,11 @@ class AutoList(utils.ItemList):
                 return
 
             default_settings['sample_well'] = 'A1' # Just for validation
+            data_dir = copy.deepcopy(default_settings['data_dir'])
 
             valid, err_msg = self._validate_cmd(default_settings)
+
+            default_settings['data_dir'] = data_dir #validation adds the extra folder, which we shouldn't do yet
 
             if valid:
                 break
