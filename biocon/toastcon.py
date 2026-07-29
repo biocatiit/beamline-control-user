@@ -85,7 +85,7 @@ class ToastMotorPanel(utils.DevicePanel):
         self.start_lnk2.put('{} CA'.format(settings['device_data']['kwargs']
             ['motor']['args'][0]))
 
-        self.status_pv = self._initialize_pv('{}.BUSY'.format(
+        self.status_pv, connected = self._initialize_pv('{}.BUSY'.format(
             settings['device_data']['kwargs']['start_pv']))
 
         self.motor = motorcon.EpicsMotor('toast', settings['device_data']['kwargs']
@@ -98,6 +98,8 @@ class ToastMotorPanel(utils.DevicePanel):
             settings['device_data']['kwargs']['motor']['args'][0]))
         self.motor_accelu_pv, connected = self._initialize_pv('{}.ACCU'.format(
             settings['device_data']['kwargs']['motor']['args'][0]))
+
+        self._status_pv_trans = {'0': 'Not Toasting', '1': 'Toasting'}
 
     def _initialize_pv(self, pv_name):
         pv = epics.get_pv(pv_name)
@@ -153,7 +155,7 @@ class ToastMotorPanel(utils.DevicePanel):
                 size=self._FromDIP((80, -1)))
 
         self.status_ctrl = custom_epics_widgets.PVTextLabeled(toast_box,
-            self.status_pv, fg='forest green')
+            pv=self.status_pv, fg='forest green')
         self.egu_ctrl1 = epics.wx.PVText(toast_box, self.motor_egu_pv)
         egu_ctrl2 = epics.wx.PVText(toast_box, self.motor_egu_pv)
         egu_ctrl3 = epics.wx.PVText(toast_box, self.motor_egu_pv,
@@ -167,7 +169,7 @@ class ToastMotorPanel(utils.DevicePanel):
         self.speed_ctrl = utils.ValueEntry(self._on_speed_ctrl, toast_box,
             size=self._FromDIP((80,-1)), validator=utils.CharValidator('float_pos_te'))
 
-        self.status_ctrl.SetTranslations({'0': 'Not Toasting', '1': 'Toasting'})
+        self.status_ctrl.SetTranslations(self._status_pv_trans)
         self.status_ctrl.SetForegroundColourTranslations({'Toasting': 'forest green',
             'Not Toasting': 'red'})
 
@@ -532,13 +534,17 @@ class ToastMotorPanel(utils.DevicePanel):
 
         name = self.settings['device_data']['name']
 
-        units = self.egu_ctrl1.GetValue()
+        units = self.motor_egu_pv.get(as_string=True)
 
-        metadata['{} state:'.format(name)] = self.status_ctrl.GetValue()
-        metadata['{} high endpoint ({}):'.format(name, units)] = self.high_ctrl.GetValue()
-        metadata['{} low endpoint ({}):'.format(name, units)] = self.low_ctrl.GetValue()
-        metadata['{} speed ({}/s):'.format(name, units)] = self.high_ctrl.GetValue()
+        status_val = self.status_pv.get(as_string=True)
+        status = self._status_pv_trans[status_val]
 
+        metadata['{} state:'.format(name)] = status
+        metadata['{} high endpoint ({}):'.format(name, units)] = self.high_pv.get(as_string=True)
+        metadata['{} low endpoint ({}):'.format(name, units)] = self.low_pv.get(as_string=True)
+        metadata['{} speed ({}/s):'.format(name, units)] = self.motor_speed_pv.get(as_string=True)
+
+        return metadata
 
     def _on_close(self):
         """Device specific stuff goes here"""

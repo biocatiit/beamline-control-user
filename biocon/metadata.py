@@ -414,6 +414,10 @@ class MusclePanel(wx.Panel):
         self.muscle_type.SetStringSelection(defaults['muscle_type'])
         self.muscle.SetValue(defaults['muscle'])
         self.preparation.SetStringSelection(defaults['preparation'])
+        self.genotype.SetStringSelection(defaults['genotype'])
+        self.pca.SetValue(defaults['pca'])
+        self.treatment.SetValue(defaults['treatment'])
+        self.solution.SetValue(defaults['solution'])
         self.notes.SetValue(defaults['notes'])
 
 
@@ -468,7 +472,7 @@ class MusclePanel(wx.Panel):
         exp_const_sizer.Add(self.treatment, flag=wx.ALIGN_CENTER_VERTICAL)
         exp_const_sizer.Add(wx.StaticText(ctrl_parent, label='Solution:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
-        exp_const_sizer.Add(self.solution, flag=wx.ALIGN_CENTER_VERTICAL)
+        exp_const_sizer.Add(self.solution, flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
 
         exp_const_sizer.AddGrowableCol(1)
 
@@ -556,6 +560,32 @@ class ParamFrame(wx.Frame):
         # self.scan_panel.exit()
         self.Destroy()
 
+default_metadata_settings = {
+    'components'        : ['metadata'],
+    'saxs_defaults'     : {'exp_type'   : 'SEC-SAXS',
+                            'buffer'    : '',
+                            'sample'    : '',
+                            'temp'      : 22,
+                            'volume'    : '',
+                            'conc'      : '',
+                            'column'    : 'Superdex 200 10/300 Increase',
+                            'is_buffer' : False,
+                            'mixer'     : 'Chaotic S-bend (90 ms)',
+                            'notes'     : '',
+                            'separate_buffer'   : False,
+                            },
+    'muscle_defaults'   : {'system'         : 'Mouse',
+                            'muscle_type'   : 'Cardiac',
+                            'muscle'        : '',
+                            'preparation'   : 'Intact',
+                            'genotype'      : 'Wild Type',
+                            'pca'           : '',
+                            'treatment'     : 'False',
+                            'solution'      : '',
+                            'notes'         : '',
+                            },
+    'metadata_type'     : 'auto',
+    }
 
 if __name__ == '__main__':
     logger = logging.getLogger()
@@ -567,28 +597,7 @@ if __name__ == '__main__':
     h1.setFormatter(formatter)
     logger.addHandler(h1)
 
-    settings = {
-        'components'        : ['metadata'],
-        'saxs_defaults'     : {'exp_type'   : 'SEC-SAXS',
-                                'buffer'    : '',
-                                'sample'    : '',
-                                'temp'      : 22,
-                                'volume'    : '',
-                                'conc'      : '',
-                                'column'    : 'Superdex 200 10/300 Increase',
-                                'is_buffer' : False,
-                                'mixer'     : 'Chaotic S-bend (90 ms)',
-                                'notes'     : '',
-                                'separate_buffer'   : False,
-                                },
-        'muscle_defaults'   : {'system'         : 'Mouse',
-                                'muscle_type'   : 'Cardiac',
-                                'muscle'        : '',
-                                'preparation'   : 'Intact',
-                                'notes'         : '',
-                                },
-        'metadata_type'     : 'auto',
-        }
+
 
     app = wx.App()
 

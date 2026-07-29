@@ -177,10 +177,12 @@ class AirShotMotorPanel(utils.DevicePanel):
 
         name = self.settings['device_data']['name']
 
-        units = self.egu_ctrl1.GetValue()
+        units = self.motor_egu_pv.get(as_string=True)
 
         metadata['{} move with exposure:'.format(name)] = self.auto_move.GetValue()
         metadata['{} move distance ({}):'.format(name, units)] = self.relative_move.GetValue()
+
+        return metadata
 
     def _on_close(self):
         """Device specific stuff goes here"""
@@ -325,12 +327,12 @@ default_airshot_settings = {
             'default_dist'      : -7.0, # Default move distance
             }},
         {'name': 'Air Middle', 'args': [], 'kwargs': {
-            'motor'             : {'name': 'air_inboard', 'args': ['18ID_DMC_E03:21'],
+            'motor'             : {'name': 'air_middle', 'args': ['18ID_DMC_E01:8'],
                                         'kwargs': {}},
             'default_dist'      : -7.0, # Default move distance
             }},
         {'name': 'Air Outboard', 'args': [], 'kwargs': {
-            'motor'             : {'name': 'air_outboard', 'args': ['18ID_DMC_E03:24'],
+            'motor'             : {'name': 'air_outboard', 'args': ['18ID_DMC_E02:14'],
                                         'kwargs': {}},
             'default_dist'      : -7.0, # Default move distance
             }},

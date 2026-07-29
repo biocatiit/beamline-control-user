@@ -456,10 +456,10 @@ if __name__ == '__main__':
     exposure_settings['shutter_pad'] = 0.002
     exposure_settings['shutter_cycle'] = 0.1
 
-    # # # EIGER2 XE 9M
-    exposure_settings['det_args'] =  {'use_tiff_writer': False,
-        'use_file_writer': True, 'photon_energy' : 12.0,
-        'images_per_file': 1000} #1 image/file for TR, 300 for eq SAXS, 1000 for muscle
+    # # EIGER2 XE 9M
+    # exposure_settings['det_args'] =  {'use_tiff_writer': False,
+    #     'use_file_writer': True, 'photon_energy' : 12.0,
+    #     'images_per_file': 1000} #1 image/file for TR, 300 for eq SAXS, 1000 for muscle
 
     # Muscle settings
     exposure_settings['struck_measurement_time'] = '0.001'
@@ -519,29 +519,9 @@ if __name__ == '__main__':
 
     ###################################################################
     # Metadata Settings
-    metadata_settings = {
-        'components'        : ['metadata'],
-        'saxs_defaults'     : {'exp_type'   : 'SEC-SAXS',
-                                'buffer'    : '',
-                                'sample'    : '',
-                                'temp'      : 22,
-                                'volume'    : '',
-                                'conc'      : '',
-                                'column'    : 'Superdex 200 10/300 Increase',
-                                'is_buffer' : False,
-                                'mixer'     : 'Chaotic S-bend (90 ms)',
-                                'notes'     : '',
-                                'separate_buffer'   : False,
-                                },
-        'muscle_defaults'   : {'system'         : 'Mouse',
-                                'muscle_type'   : 'Cardiac',
-                                'muscle'        : '',
-                                'preparation'   : 'Intact',
-                                'notes'         : '',
-                                },
-        # 'metadata_type'     : 'auto',
-        'metadata_type'     : 'muscle',
-        }
+    metadata_settings = metadata.default_metadata_settings
+    # metadata_settings['metadata_type'] = 'auto'
+    metadata_settings['metadata_type'] = 'muscle'
 
 
     ###################################################################
