@@ -1094,9 +1094,9 @@ if __name__ == '__main__':
     #         'kwargs': {'positions' : 2}},
     #     {'name': 'Outlet', 'args': ['Cheminert', 'COM3'],
     #         'kwargs': {'positions' : 2}},
-    #     {'name': 'Purge 1', 'args': ['Cheminert', 'COM9'],
+    #     {'name': 'Purge 1', 'args': ['Cheminert', 'COM6'],
     #         'kwargs': {'positions' : 4}},
-    #     {'name': 'Purge 2', 'args': ['Cheminert', 'COM6'],
+    #     {'name': 'Purge 2', 'args': ['Cheminert', 'COM9'],
     #         'kwargs': {'positions' : 4}},
     #     {'name': 'Buffer 1', 'args': ['Cheminert', 'COM7'],
     #         'kwargs': {'positions' : 10}},
@@ -1126,13 +1126,10 @@ if __name__ == '__main__':
     #     ]
 
     # MALS switching
-    # setup_devices = [
-    #     {'name': 'MALS', 'args': ['Cheminert', 'COM8'],
-    #         'kwargs': {'positions': 2}},
-    #     ]
-
-    #
-
+    setup_devices = [
+        {'name': 'MALS', 'args': ['Cheminert', 'COM8'],
+            'kwargs': {'positions': 2}},
+        ]
 
     # setup_devices = [
     #     {'name': 'Sheath', 'args': ['Multi', None], 'kwargs': {'positions': 6,

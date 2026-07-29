@@ -55,9 +55,8 @@ try:
     sys.path.append('C:\\Users\\biocat\\Stellarnet\\stellarnet_driverLibs')#add the path of the stellarnet_demo.py
     import stellarnet_driver3 as sn
 except ImportError:
-    traceback.print_exc()
+    print('Failed to import stellarnet_driver3')
     sn = None
-    pass
 
 import client
 import utils
@@ -485,10 +484,10 @@ class Spectrometer(object):
     def collect_dark(self, averages=1, set_dark_conditions=True):
         logger.info('Spectrometer %s: Collecting dark spectrum', self.name)
         if self._live_update:
-            self._live_update_evt.clear()
-            self._live_update_paused.wait()
-            while self.is_busy():
-                time.sleep(0.1)
+            self.set_live_update(False, self._live_update_period)
+            restart_live_update = True
+        else:
+            restart_live_update = False
 
         if not self.is_busy():
             is_dark = self._check_dark_conditions(
@@ -498,6 +497,7 @@ class Spectrometer(object):
                 all_spectra = []
 
                 for i in range(averages):
+
                     spectrum = self._collect_spectrum(True)
                     timestamp = datetime.datetime.now()
 
@@ -527,8 +527,8 @@ class Spectrometer(object):
             raise RuntimeError('A spectrum or series of spectrum is already being '
                 'collected, cannot collect a new spectrum.')
 
-        if self._live_update:
-            self._live_update_evt.set()
+        if restart_live_update:
+            self.set_live_update(True, self._live_update_period)
 
         return self.get_dark()
 
@@ -548,10 +548,10 @@ class Spectrometer(object):
     def collect_reference_spectrum(self, averages=1, dark_correct=True,
         int_trigger=True, auto_dark=True, dark_time=60*60):
         if self._live_update:
-            self._live_update_evt.clear()
-            self._live_update_paused.wait()
-            while self.is_busy():
-                time.sleep(0.1)
+            self.set_live_update(False, self._live_update_period)
+            restart_live_update = True
+        else:
+            restart_live_update = False
 
         if not self.is_busy():
             if auto_dark:
@@ -565,8 +565,8 @@ class Spectrometer(object):
             raise RuntimeError('A spectrum or series of spectrum is already being '
                 'collected, cannot collect a new spectrum.')
 
-        if self._live_update:
-            self._live_update_evt.set()
+        if restart_live_update:
+            self.set_live_update(True, self._live_update_period)
 
         return self.get_reference_spectrum()
 
@@ -609,7 +609,7 @@ class Spectrometer(object):
             self.collect_dark()
 
     def collect_spectrum(self, spec_type='abs', dark_correct=True, int_trigger=True,
-        auto_dark=True, dark_time=60*60, drift_correct=True):
+        auto_dark=True, dark_time=60*60, drift_correct=True, check_live_update=True):
         """
         Parameters
         ----------
@@ -617,6 +617,12 @@ class Spectrometer(object):
             Spectrum type. Can be 'abs' - absorbance, 'trans' - transmission,
             'raw' - uncorrected (except for dark correction).
         """
+        if self._live_update and check_live_update:
+            self.set_live_update(False, self._live_update_period)
+            restart_live_update = True
+        else:
+            restart_live_update = False
+
         if not self.is_busy():
             if auto_dark:
                 self._auto_dark(dark_time)
@@ -637,6 +643,9 @@ class Spectrometer(object):
         else:
             raise RuntimeError('A spectrum or series of spectrum is already being '
                 'collected, cannot collect a new spectrum.')
+
+        if restart_live_update:
+            self.set_live_update(True, self._live_update_period)
 
         return spectrum
 
@@ -724,7 +733,8 @@ class Spectrometer(object):
             if time.monotonic() - start_time > self._live_update_period:
                 self._live_update_paused.clear()
                 try:
-                    self.collect_spectrum(drift_correct=False)
+                    self.collect_spectrum(drift_correct=False,
+                        check_live_update=False)
                 except Exception:
                     # traceback.print_exc()
                     pass
@@ -758,11 +768,11 @@ class Spectrometer(object):
         delta_t_min=0, dark_correct=True, int_trigger=True, auto_dark=True,
         dark_time=60*60, take_ref=True, ref_avgs=1, drift_correct=True,
         wait_for_trig=False):
-        if self._live_update and not self._taking_series:
-            self._live_update_evt.clear()
-            self._live_update_paused.wait()
-            while self.is_busy():
-                time.sleep(0.1)
+        if self._live_update:
+            self.set_live_update(False, self._live_update_period)
+            restart_live_update = True
+        else:
+            restart_live_update = False
 
         if self.is_busy():
             raise RuntimeError('A spectrum or series of spectrum is already being '
@@ -776,7 +786,8 @@ class Spectrometer(object):
                 'dark_correct' : dark_correct, 'int_trigger' : int_trigger,
                 'auto_dark' : auto_dark, 'dark_time' : dark_time,
                 'take_ref' : take_ref, 'ref_avgs' : ref_avgs,
-                'drift_correct': drift_correct, 'wait_for_trig': wait_for_trig})
+                'drift_correct': drift_correct, 'wait_for_trig': wait_for_trig,
+                'restart_live_update': restart_live_update})
 
             self._series_thread.daemon = True
             self._series_thread.start()
@@ -784,7 +795,7 @@ class Spectrometer(object):
     def _collect_spectra_series(self, num_spectra, return_q=None, spec_type='abs',
         delta_t_min=0, dark_correct=True, int_trigger=True, auto_dark=True,
         dark_time=60*60, take_ref=True, ref_avgs=1, drift_correct=True,
-        wait_for_trig=False):
+        wait_for_trig=False, restart_live_update=True):
         if self.is_busy():
             raise RuntimeError('A spectrum or series of spectrum is already being '
                 'collected, cannot collect a new spectrum.')
@@ -797,7 +808,6 @@ class Spectrometer(object):
             self._calculate_all_abs_single_wavelength()
 
             dt_delta_t = datetime.timedelta(seconds=delta_t_min)
-
             if self._series_abort_event.is_set():
                 self._taking_series = False
                 self.series_ready_event.clear()
@@ -914,8 +924,8 @@ class Spectrometer(object):
             self._taking_series = False
             self.series_ready_event.clear()
 
-            if self._live_update:
-                self._live_update_evt.set()
+            if restart_live_update:
+                self.set_live_update(True, self._live_update_period)
 
             logger.info('Spectrometer %s: Finished Collecting a series of '
                 '%s spectra', self.name, num_spectra)
@@ -1527,7 +1537,7 @@ class StellarnetUVVis(Spectrometer):
             spectrum = sn.array_spectrum(self.spectrometer, self.wav)
 
             if int_trigger and not trigger_status:
-                    self.set_int_trigger(False)
+                self.set_int_trigger(False)
 
             if trigger_ext:
                 self.set_external_trigger(True)
@@ -1637,12 +1647,21 @@ class StellarnetUVVis(Spectrometer):
         logger.info('Spectrometer %s: Aborting collection', self.name)
         self._series_abort_event.set()
 
-        int_trig = self.get_int_trigger()
+        self.set_int_trigger_abort(True)
 
-        if not int_trig:
-            self.set_int_trigger_abort(True)
-            time.sleep(1)
-            self.set_int_trigger_abort(False)
+        while self.is_busy():
+            time.sleep(0.1)
+
+        self.set_int_trigger_abort(False)
+
+        # int_trig = self.get_int_trigger()
+
+        # if not int_trig:
+        #     self.set_int_trigger_abort(True)
+        #     time.sleep(1)
+        #     self.set_int_trigger_abort(False)
+
+
 
 
 class UVCommThread(utils.CommManager):
@@ -1865,17 +1884,7 @@ class UVCommThread(utils.CommManager):
 
         device = self._connected_devices[name]
 
-        live_update, _ = device.get_live_update()
-
-        if live_update:
-            device.set_live_update(False)
-            while device.is_busy():
-                time.sleep(0.1)
-
         val = device.collect_dark(**kwargs)
-
-        if live_update:
-            device.set_live_update(True)
 
         self._return_value((name, cmd, val), comm_name)
         self._return_value((name, cmd, val), 'status')
@@ -1919,17 +1928,7 @@ class UVCommThread(utils.CommManager):
 
         device = self._connected_devices[name]
 
-        live_update, _ = device.get_live_update()
-
-        if live_update:
-            device.set_live_update(False)
-            while device.is_busy():
-                time.sleep(0.1)
-
         val = device.collect_reference_spectrum(**kwargs)
-
-        if live_update:
-            device.set_live_update(True)
 
         self._return_value((name, cmd, val), comm_name)
         self._return_value((name, cmd, val), 'status')
@@ -1944,17 +1943,7 @@ class UVCommThread(utils.CommManager):
 
         device = self._connected_devices[name]
 
-        live_update, _ = device.get_live_update()
-
-        if live_update:
-            device.set_live_update(False)
-            while device.is_busy():
-                time.sleep(0.1)
-
         val = device.collect_spectrum(**kwargs)
-
-        if live_update:
-            device.set_live_update(True)
 
         self._return_value((name, cmd, val), comm_name)
         self._return_value((name, cmd, val), 'status')
@@ -1962,8 +1951,8 @@ class UVCommThread(utils.CommManager):
         logger.debug("Device %s spectrum: %s", name, val)
 
     def _collect_series(self, name, val, **kwargs):
-        logger.debug("Collecting device %s spectra series of %s spectra", name, val)
-
+        logger.info("Collecting device %s spectra series of %s spectra", name, val)
+        logger.info(kwargs)
         comm_name = kwargs.pop('comm_name', None)
         cmd = kwargs.pop('cmd', None)
 
@@ -3152,17 +3141,21 @@ class UVPanel(utils.DevicePanel):
 
         # Need some kind of delay or I get a USB error message from the stellarnet driver?
 
-        if self.inline:
-            cmd = ['set_hist_time', [self.name, float(self._history_length)], {}]
-            self._send_cmd(cmd, get_response=False)
-
         is_busy = self._get_busy()
 
-        self._get_full_history()
-
         if not is_busy:
+            self._set_wavelength_range()
+
             self._set_abs_params()
             self._set_ao_params()
+
+            cmd = ['set_int_time', [self.name, float(self.int_time.GetValue())], {}]
+            self._send_cmd(cmd, get_response=False)
+
+            cmd = ['set_hist_time', [self.name, float(self.history_time.GetValue())], {}]
+            self._send_cmd(cmd, get_response=False)
+
+        self._get_full_history()
 
         cmd = ['get_spec_settings', [self.name,], {}]
         ret = self._send_cmd(cmd, True)
@@ -3255,7 +3248,6 @@ class UVPanel(utils.DevicePanel):
                 self.abs_window.SafeChangeValue('{}'.format(self.settings['abs_window']))
             except Exception:
                 pass
-
 
     def _on_settings_change(self, obj, val):
         if obj == self.int_time:
@@ -3545,10 +3537,13 @@ class UVPanel(utils.DevicePanel):
                 int_trigger = False
                 wait_for_trig = False
 
-                uv_time = max(int_time*self.settings['int_t_scale'], 0.05)*scan_avgs
+                uv_time = (max(int_time+self.settings['int_t_readout'],
+                    self.settings['int_t_min'])*scan_avgs)
 
-                # delta_t_min = (exp_time-uv_time)*1.05
-                delta_t_min = (exp_period-0.5-uv_time)*1.05
+                if exp_period - 0.5 > 0:
+                    delta_t_min = max(0.25, (exp_time-uv_time)*1.05)
+                else:
+                    delta_t_min = (exp_time-uv_time)*1.05
 
                 if delta_t_min < 0.01:
                     delta_t_min = 0
@@ -4212,13 +4207,14 @@ class UVPanel(utils.DevicePanel):
 
                 # int_time = min(exp_time/2, max_int_t)
 
-                # spec_t = max(int_time*self.settings['int_t_scale'], 0.05)
+                # spec_t = max(int_time+self.settings['int_t_readout'], 0.05)
 
                 # scan_avgs = exp_time // spec_t
 
                 int_time = min((exp_period-0.5)/2, max_int_t)
 
-                spec_t = max(int_time*self.settings['int_t_scale'], 0.05)
+                spec_t = max(int_time+self.settings['int_t_readout'],
+                    self.settings['int_t_min'])
 
                 scan_avgs = (exp_period-0.5) // spec_t
 
@@ -4269,11 +4265,12 @@ class UVPanel(utils.DevicePanel):
                                 exp_panel.pipeline_ctrl.settings['output_basedir'], 1)
 
                 self._set_autosave_parameters(prefix, data_dir)
-                valid = self._collect_series(num_frames, int_time, scan_avgs, exp_period, exp_time)
+                valid = self._collect_series(num_frames, int_time, scan_avgs,
+                    exp_period, exp_time)
 
                 if valid:
                     while not self._get_busy():
-                        time.sleep(0.01)
+                        time.sleep(0.05)
 
         return uv_values, uv_valid
 
@@ -4941,12 +4938,14 @@ class UVFrame(utils.DeviceFrame):
         self._init_devices()
 
 
-
-
+# Some values based on testing for the stellarnet black comet spectrometer
+STELLARNET_MIN_TIME = 0.030 # Minimum collection time for a single spectra with 1 ms exposure time, in s
+STELLARNET_READOUT_TIME = 0.020 # Readout time for exposures > 10 ms, regardless of averaging, in s
+STELLARNET_MAX_INT_TIME = STELLARNET_READOUT_TIME # Optimize amount of light you can use vs. duty cycle by setting them equal
 
 default_spectrometer_settings = {
         'device_init'           : [{'name': 'CoflowUV', 'args': ['StellarNet', None],
-                                    'kwargs': {'shutter_pv_name': '18ID:USB1608G_2:Bo1', # Was 18ID:E1608:Bo1
+                                    'kwargs': {'shutter_pv_name': '18ID:E1608:Bo1', # Was 18ID:E1608:Bo1
                                     'trigger_pv_name' : '18ID:LJT4:2:Bo12',
                                     'out1_pv_name' : '18ID:E1608:Ao1',
                                     'out2_pv_name' : '18ID:E1608:Ao2',
@@ -4955,7 +4954,7 @@ default_spectrometer_settings = {
                                     'hal_lamp_ctrl_pv_name' : '18ID:E1608:Bo3',
                                     'deut_lamp_status_pv_name' : '18ID:E1608:Bi4',
                                     'hal_lamp_status_pv_name' : '18ID:E1608:Bi5',}},],
-        'max_int_t'             : 0.025, # in s
+        'max_int_t'             : STELLARNET_MAX_INT_TIME, # in s
         'scan_avg'              : 1,
         'smoothing'             : 0,
         'xtiming'               : 3,
@@ -4965,7 +4964,7 @@ default_spectrometer_settings = {
         'auto_dark_t'           : 60*60, #in s
         'dark_avgs'             : 3,
         'ref_avgs'              : 2,
-        'history_t'             : 60*60, #in s
+        'history_t'             : 60*30, #in s
         'save_subdir'           : 'UV',
         'save_type'             : 'Absorbance',
         'series_ref_at_start'   : True,
@@ -4973,7 +4972,8 @@ default_spectrometer_settings = {
         'drift_window'          : [750, 800],
         'abs_wav'               : [280, 260],
         'abs_window'            : 3,
-        'int_t_scale'           : 2,
+        'int_t_readout'         : STELLARNET_READOUT_TIME, # Standard readout time for typical exposure times (or max_int_t)
+        'int_t_min'             : STELLARNET_MIN_TIME, # Minimum integration time regardless of exposure time
         'wavelength_range'      : [225, 838.39],
         'analog_out_v_max'      : 10.,
         'analog_out_v_offset'   : -9.5,
@@ -4988,7 +4988,7 @@ default_spectrometer_settings = {
         'com_thread'            : None,
         'remote_dir_prefix'     : {'local' : '/nas_data', 'remote' : 'Z:\\'},
         'inline_panel'          : False,
-        'plot_refresh_t'        : 0.1, #in s
+        'plot_refresh_t'        : 1, #in s
     }
 
 
@@ -5003,7 +5003,11 @@ if __name__ == '__main__':
     h1.setFormatter(formatter)
     logger.addHandler(h1)
 
-    # spec = StellarnetUVVis('Test')
+    spec = StellarnetUVVis('Test', None,
+        **default_spectrometer_settings['device_init'][0]['kwargs'])
+    spec.set_integration_time(0.025)
+    spec.set_scan_avg(1)
+    spec.set_int_trigger(True)
     # spec.collect_dark()
     # spec.collect_reference_spectrum()
     # spec.disconnect()
@@ -5254,31 +5258,31 @@ if __name__ == '__main__':
     # get_int_status_cmd = ['get_int_time', ['Test2',], {}]
     # com_thread.add_status_cmd(get_int_status_cmd, 10)
 
-    # Local
-    com_thread = UVCommThread('UvComm')
-    com_thread.start()
+    # # Local
+    # com_thread = UVCommThread('UvComm')
+    # com_thread.start()
 
-    # Remote
-    # com_thread = None
+    # # Remote
+    # # com_thread = None
 
-    spectrometer_settings = default_spectrometer_settings
-    spectrometer_settings['components'] = ['uv']
-    spectrometer_settings['com_thread'] = com_thread
+    # spectrometer_settings = default_spectrometer_settings
+    # spectrometer_settings['components'] = ['uv']
+    # spectrometer_settings['com_thread'] = com_thread
 
 
-    #initialized epics ca context in the main thread first as recommended
-    # epics.get_pv(spectrometer_settings['device_init'][0]['kwargs']['shutter_pv_name'])
+    # #initialized epics ca context in the main thread first as recommended
+    # # epics.get_pv(spectrometer_settings['device_init'][0]['kwargs']['shutter_pv_name'])
 
-    app = wx.App()
-    logger.debug('Setting up wx app')
-    frame = UVFrame('UVFrame', spectrometer_settings, parent=None,
-        title='UV Spectrometer Control')
-    frame.Show()
-    app.MainLoop()
+    # app = wx.App()
+    # logger.debug('Setting up wx app')
+    # frame = UVFrame('UVFrame', spectrometer_settings, parent=None,
+    #     title='UV Spectrometer Control')
+    # frame.Show()
+    # app.MainLoop()
 
-    if com_thread is not None:
-        com_thread.stop()
-        com_thread.join()
+    # if com_thread is not None:
+    #     com_thread.stop()
+    #     com_thread.join()
 
     """
     To do:

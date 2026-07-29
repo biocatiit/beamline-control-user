@@ -768,12 +768,37 @@ class BatchSampleCommand(AutoCommand):
         check_conds = [['autosampler', [check_wait_cmd,]],['exp', [check_wait_cmd,]],
             ['coflow', [check_wait_cmd,]],]
 
+        if cmd_info['pre_buf_exp']:
+            buffer_wait_id = self.automator.get_wait_id()
+            buffer_wait_cmd = 'wait_sync_{}'.format(buffer_wait_id)
+            buffer_conds = [['autosampler', [buffer_wait_cmd,]], ['exp', [buffer_wait_cmd,]],]
+            buffer_exp_info = copy.deepcopy(cmd_info)
+            buffer_exp_info['filename'] += '_sheath'
+            buffer_exp_info['num_frames'] = int(round(
+                buffer_exp_info['pre_buf_exp_time']/buffer_exp_info['exp_period']))
+            buffer_exp_info['wait_for_trig'] = False
+            buffer_exp_info['is_buf'] = True
+            buffer_exp_info['separate_buf'] = False
+
+
         self._add_automator_cmd('autosampler', sample_wait_cmd, [],
             {'condition': 'status', 'inst_conds': sample_conds})
         self._add_automator_cmd('autosampler', check_wait_cmd, [], {'condition': 'check',
             'inst_conds': check_conds})
-        self._add_automator_cmd('autosampler', 'load_and_move_to_inject',
-            [], cmd_info)
+
+        if cmd_info['pre_buf_exp']:
+            # Collect sheath buffer exposure prior to measuring samples
+            self._add_automator_cmd('autosampler', 'load_sample', [],
+                cmd_info)
+            self._add_automator_cmd('autosampler', buffer_wait_cmd, [],
+                {'condition': 'status', 'inst_conds': buffer_conds})
+            self._add_automator_cmd('autosampler', 'move_to_inject', [],
+                cmd_info)
+
+        else:
+            self._add_automator_cmd('autosampler', 'load_and_move_to_inject',
+                [], cmd_info)
+
         self._add_automator_cmd('autosampler', batch_wait_cmd, [],
             {'condition': 'status', 'inst_conds': [['autosampler',
             [batch_wait_cmd,]], ['exp', ['exposing',]]]})
@@ -790,8 +815,15 @@ class BatchSampleCommand(AutoCommand):
         self._add_automator_cmd('exp', check_wait_cmd, [], {'condition': 'check',
             'inst_conds': check_conds})
         self._add_automator_cmd('exp', exp_wait_cmd, [],
-            {'condition': 'status', 'inst_conds': [['autosampler',
-            ['load',]], ['exp', [exp_wait_cmd,]]]})
+                {'condition': 'status', 'inst_conds': [['autosampler',
+                ['load',]], ['exp', [exp_wait_cmd,]]]})
+
+        if cmd_info['pre_buf_exp']:
+            # Collect sheath buffer exposure prior to measuring samples
+            self._add_automator_cmd('exp', 'expose', [], buffer_exp_info)
+            self._add_automator_cmd('exp', buffer_wait_cmd, [],
+                {'condition': 'status', 'inst_conds': buffer_conds})
+
         self._add_automator_cmd('exp', 'expose', [], cmd_info)
         self._add_automator_cmd('exp', finish_wait_cmd, [], {'condition': 'status',
             'inst_conds': finish_conds})
@@ -1112,12 +1144,14 @@ class SwitchPumpsCommand(AutoCommand):
             'purge_rate'    : cmd_info['purge_rate'],
             'purge_volume'  : cmd_info['purge_volume'],
             'purge_accel'   : cmd_info['purge_accel'],
-            'restore_flow_after_switch' : cmd_info['restore_flow_after_switch'],
+            'restore_flow1' : cmd_info['restore_flow1'],
+            'restore_flow2' : cmd_info['restore_flow2'],
             'switch_with_sample'    : cmd_info['switch_with_sample'],
             'stop_flow1'    : cmd_info['stop_flow1'],
             'stop_flow2'    : cmd_info['stop_flow2'],
             'purge_active'  : cmd_info['purge_active'],
             'flow_path'     : cmd_info['flow_path'],
+            'mals_valve_pos': cmd_info['mals_valve_pos'],
             }
 
         num_paths = cmd_info['num_flow_paths']
@@ -1567,6 +1601,7 @@ class AutoStatusPanel(wx.Panel):
 
         if 'hplc' in self.settings['instruments']:
             num_paths = self.settings['instruments']['hplc']['num_paths']
+            hplc_panel = self.settings['instruments']['hplc']['hplc_panel']
 
             hplc_status_box = wx.StaticBox(ctrl_parent, label='HPLC')
 
@@ -1586,6 +1621,12 @@ class AutoStatusPanel(wx.Panel):
                 style=wx.ST_NO_AUTORESIZE)
 
             num_cols = 11
+
+            if hplc_panel.settings['use_mals_valve']:
+                self.hplc_mals_state = wx.StaticText(hplc_status_box, size=self._FromDIP((60,-1)),
+                    style=wx.ST_NO_AUTORESIZE)
+
+                num_cols = 13
 
             if num_paths == 2:
                 self.pump2_state = wx.StaticText(hplc_status_box, size=self._FromDIP((100,-1)),
@@ -1615,9 +1656,15 @@ class AutoStatusPanel(wx.Panel):
                 flag=wx.ALIGN_CENTER_VERTICAL)
             hplc_sub_status_sizer.Add(self.pump1_pressure, flag=wx.ALIGN_CENTER_VERTICAL)
 
+            if hplc_panel.settings['use_mals_valve']:
+                hplc_sub_status_sizer.Add(wx.StaticText(hplc_status_box, label='MALS:'),
+                    flag=wx.ALIGN_CENTER_VERTICAL)
+                hplc_sub_status_sizer.Add(self.hplc_mals_state, flag=wx.ALIGN_CENTER_VERTICAL)
+
             if num_paths == 2:
-                hplc_sub_status_sizer.AddSpacer(1)
-                hplc_sub_status_sizer.AddSpacer(1)
+                if not hplc_panel.settings['use_mals_valve']:
+                    hplc_sub_status_sizer.AddSpacer(1)
+                    hplc_sub_status_sizer.AddSpacer(1)
                 # hplc_sub_status_sizer.Add(hplc_stop_btn, flag=wx.ALIGN_CENTER_VERTICAL)
                 hplc_sub_status_sizer.Add(wx.StaticText(hplc_status_box, label='Flow path:'),
                     flag=wx.ALIGN_CENTER_VERTICAL)
@@ -1783,6 +1830,9 @@ class AutoStatusPanel(wx.Panel):
                     self.pump2_fr.SetLabel(status['pump2_fr'])
                     self.pump2_pressure.SetLabel(status['pump2_pressure'])
 
+                if status['mals_state'] != '':
+                    self.hplc_mals_state.SetLabel(status['mals_state'])
+
 
         if 'exp' in self.settings['instruments']:
             exp_callback = self.settings['instruments']['exp']['automator_callback']
@@ -1921,11 +1971,13 @@ class AutoSettings(scrolled.ScrolledPanel):
             sample_methods.insert(0, 'None')
             inst = self.auto_panel.settings['hplc_inst']
             num_flow_paths = self.auto_panel.settings['instruments'][inst]['num_paths']
+            use_mals_valve = hplc_panel.settings['use_mals_valve']
 
         else:
             acq_methods = []
             sample_methods = []
             num_flow_paths = 1
+            use_mals_valve = False
 
         self.cmd_info_panels = {}
         self.top_sizer = wx.BoxSizer(wx.VERTICAL)
@@ -1950,6 +2002,11 @@ class AutoSettings(scrolled.ScrolledPanel):
             elif cmd_key == 'af4_sample':
                 panel_rets = panel_func(top_level, parent,
                     self.ctrl_ids[cmd_key], 'vert', read_only=True)
+
+            elif cmd_key == 'switch_pumps':
+                panel_rets = panel_func(top_level, parent,
+                    self.ctrl_ids[cmd_key], 'vert', num_flow_paths, use_mals_valve,
+                    read_only=True)
 
             else:
                 panel_rets = panel_func(top_level, parent,
@@ -1999,6 +2056,9 @@ class AutoSettings(scrolled.ScrolledPanel):
         else:
             for key in self.cmd_info_panels:
                 self.top_sizer.Hide(self.cmd_info_panels[key], recursive=True)
+
+    def clear_settings(self):
+        self.on_item_selection({'item_type': None})
 
 default_sec_saxs_settings = {
     # General parameters
@@ -2081,6 +2141,9 @@ default_batch_saxs_settings = {
     'filename'      : '',
     'wait_for_trig' : True,
     'num_trig'      : 0,
+    'pre_buf_exp'   : True,
+    'pre_buf_exp_time'  : 15., # Collect sheath buffer exposure prior to sample measurement
+
     #Not used, for completeness
     'struck_measurement_time' : 0.,
 
@@ -2187,11 +2250,13 @@ default_switch_pump_settings = {
     'purge_rate'    : 0.,
     'purge_volume'  : 0.,
     'purge_accel'   : 0.,
-    'restore_flow_after_switch' : True,
+    'restore_flow1' : True,
+    'restore_flow2' : True,
     'switch_with_sample'    : False,
     'stop_flow1'    : True,
     'stop_flow2'    : True,
     'purge_active'  : True,
+    'mals_valve_pos': 1,
     'flow_path'     : 1,
 
     #Coflow switch parameters
@@ -2486,45 +2551,48 @@ def make_sec_saxs_info_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
     return cmd_sizer
 
 def make_batch_saxs_info_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
-    well_bmp, well_callback, read_only=False):
-    ################ Metadata #################
+    well_bmp, well_callback, read_only=False, multi_load=False):
 
-    metadata_settings = {
-        'sample_name'   : ['Sample:', ctrl_ids['sample_name'], 'text'],
-        'buf'           : ['Buffer:', ctrl_ids['buf'], 'text'],
-        'conc'          : ['Concentration [mg/ml]:', ctrl_ids['conc'], 'float'],
-        'is_buf'        : ['Is buffer', ctrl_ids['is_buf'], 'bool'],
-        'separate_buf'  : ['Use separate buffer measurement',
-                            ctrl_ids['separate_buf'], 'bool']
-        }
+    if not multi_load:
+        ################ Metadata #################
 
-    metadata_box = wx.StaticBox(parent, label='Metadata')
-    md_sizer1 = create_info_sizer(metadata_settings, top_level, metadata_box,
-        read_only)
+        metadata_settings = {
+            'sample_name'   : ['Sample:', ctrl_ids['sample_name'], 'text'],
+            'buf'           : ['Buffer:', ctrl_ids['buf'], 'text'],
+            'conc'          : ['Concentration [mg/ml]:', ctrl_ids['conc'], 'float'],
+            'is_buf'        : ['Is buffer', ctrl_ids['is_buf'], 'bool'],
+            'separate_buf'  : ['Use separate buffer measurement',
+                                ctrl_ids['separate_buf'], 'bool']
+            }
 
-    notes = wx.TextCtrl(metadata_box, ctrl_ids['notes'],
-        style=wx.TE_MULTILINE, size=top_level._FromDIP((100, 100)))
+        metadata_box = wx.StaticBox(parent, label='Metadata')
+        md_sizer1 = create_info_sizer(metadata_settings, top_level, metadata_box,
+            read_only)
 
-    if read_only:
-        notes.SetEditable(False)
+        notes = wx.TextCtrl(metadata_box, ctrl_ids['notes'],
+            style=wx.TE_MULTILINE, size=top_level._FromDIP((100, 100)))
 
-    md_sizer2 = wx.BoxSizer(wx.HORIZONTAL)
-    md_sizer2.Add(wx.StaticText(metadata_box, label='Notes:'),
-        border=top_level._FromDIP(5), flag=wx.TOP|wx.BOTTOM|wx.LEFT)
-    md_sizer2.Add(notes, proportion=1, border=top_level._FromDIP(5),
-        flag=wx.EXPAND|wx.ALL)
+        if read_only:
+            notes.SetEditable(False)
 
-    metadata_sizer = wx.StaticBoxSizer(metadata_box, wx.VERTICAL)
-    metadata_sizer.Add(md_sizer1, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
-        border=top_level._FromDIP(5))
-    metadata_sizer.Add(md_sizer2, proportion=1, flag=wx.EXPAND|wx.ALL,
-        border=top_level._FromDIP(5))
+        md_sizer2 = wx.BoxSizer(wx.HORIZONTAL)
+        md_sizer2.Add(wx.StaticText(metadata_box, label='Notes:'),
+            border=top_level._FromDIP(5), flag=wx.TOP|wx.BOTTOM|wx.LEFT)
+        md_sizer2.Add(notes, proportion=1, border=top_level._FromDIP(5),
+            flag=wx.EXPAND|wx.ALL)
+
+        metadata_sizer = wx.StaticBoxSizer(metadata_box, wx.VERTICAL)
+        metadata_sizer.Add(md_sizer1, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
+            border=top_level._FromDIP(5))
+        metadata_sizer.Add(md_sizer2, proportion=1, flag=wx.EXPAND|wx.ALL,
+            border=top_level._FromDIP(5))
 
     ################ Autosampler #################
 
-    as_settings = {
-        'volume'        : ['Injection volume [ul]:', ctrl_ids['volume'], 'float'],
-        }
+    if not multi_load:
+        as_settings = {
+            'volume'        : ['Injection volume [ul]:', ctrl_ids['volume'], 'float'],
+            }
 
     as_adv_settings = {
         'draw_rate'     : ['Sample draw rate [ul/min]:', ctrl_ids['draw_rate'], 'float'],
@@ -2541,23 +2609,28 @@ def make_batch_saxs_info_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
     as_adv_pane.Bind(wx.EVT_COLLAPSIBLEPANE_CHANGED, top_level.on_collapse)
     as_adv_win = as_adv_pane.GetPane()
 
-    if not read_only:
+    if not read_only and not multi_load:
         well_sizer, well_ids_96, reverse_well_ids_96 = autosamplercon.make_well_plate_layout(
             top_level, as_box, well_bmp, well_callback)
     else:
         well_ids_96 = None
         reverse_well_ids_96 = None
 
-    sample_well = wx.StaticText(as_box, size=top_level._FromDIP((40,-1)),
-        style=wx.ST_NO_AUTORESIZE, id=ctrl_ids['sample_well'])
+    if not multi_load:
+        sample_well = wx.StaticText(as_box, size=top_level._FromDIP((40,-1)),
+            style=wx.ST_NO_AUTORESIZE, id=ctrl_ids['sample_well'])
 
-    sample_sizer = wx.BoxSizer(wx.HORIZONTAL)
-    sample_sizer.Add(wx.StaticText(as_box, label='Sample well:'),
-        flag=wx.ALIGN_CENTER_VERTICAL)
-    sample_sizer.Add(sample_well, flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT,
-        border=top_level._FromDIP(5))
+        sample_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        sample_sizer.Add(wx.StaticText(as_box, label='Sample well:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        sample_sizer.Add(sample_well, flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT,
+            border=top_level._FromDIP(5))
 
-    as_sizer1 = create_info_sizer(as_settings, top_level, as_box, read_only)
+        as_sizer1 = create_info_sizer(as_settings, top_level, as_box, read_only)
+
+    else:
+        sample_well = None
+
     as_sizer2 = create_info_sizer(as_adv_settings, top_level, as_adv_win,
         read_only)
 
@@ -2565,22 +2638,34 @@ def make_batch_saxs_info_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
     as_adv_pane.Collapse()
 
     as_sizer = wx.StaticBoxSizer(as_box, wx.VERTICAL)
-    if not read_only:
+    if not read_only and not multi_load:
         as_sizer.Add(well_sizer, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
             border=top_level._FromDIP(5))
-    as_sizer.Add(sample_sizer, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
-        border=top_level._FromDIP(5))
-    as_sizer.Add(as_sizer1, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
-        border=top_level._FromDIP(5))
+
+    if not multi_load:
+        as_sizer.Add(sample_sizer, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
+            border=top_level._FromDIP(5))
+
+        as_sizer.Add(as_sizer1, flag=wx.EXPAND|wx.TOP|wx.LEFT|wx.RIGHT,
+            border=top_level._FromDIP(5))
+
     as_sizer.Add(as_adv_pane, flag=wx.EXPAND|wx.ALL, border=top_level._FromDIP(5))
 
 
     ################ Exposure #################
-    exp_settings = {
-        'filename'      : ['File prefix:', ctrl_ids['filename'], 'text'],
-        'exp_time'      : ['Exposure time [s]:', ctrl_ids['exp_time'], 'float'],
-        'exp_period'    : ['Exposure period [s]:', ctrl_ids['exp_period'], 'float'],
-        }
+    if not multi_load:
+        exp_settings = {
+            'filename'      : ['File prefix:', ctrl_ids['filename'], 'text'],
+            'exp_time'      : ['Exposure time [s]:', ctrl_ids['exp_time'], 'float'],
+            'exp_period'    : ['Exposure period [s]:', ctrl_ids['exp_period'], 'float'],
+            }
+    else:
+        exp_settings = {
+            'filename'      : ['Filename prefix:', ctrl_ids['filename'], 'text'],
+            'filenumber'    : ['Starting number:', ctrl_ids['filenumber'], 'int'],
+            'exp_time'      : ['Exposure time [s]:', ctrl_ids['exp_time'], 'float'],
+            'exp_period'    : ['Exposure period [s]:', ctrl_ids['exp_period'], 'float'],
+            }
 
     exp_adv_settings = {
         'frames_by_inj' : ['Set number of frames from injection time',
@@ -2588,6 +2673,10 @@ def make_batch_saxs_info_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
         'num_frames'    : ['Number of frames:', ctrl_ids['num_frames'], 'int'],
         'wait_for_trig' : ['Wait for external trigger', ctrl_ids['wait_for_trig'], 'bool'],
         'num_trig'      : ['Number of triggers:', ctrl_ids['num_trig'], 'int'],
+        'pre_buf_exp'   : ['Measure sheath buffer prior to sample injection',
+                            ctrl_ids['pre_buf_exp'], 'bool'],
+        'pre_buf_exp_time'  : ['Total Sheath Buffer Exposure time [s]:',
+                            ctrl_ids['pre_buf_exp_time'], 'float'],
         }
 
     exp_box = wx.StaticBox(parent, label='Exposure Settings')
@@ -2649,16 +2738,18 @@ def make_batch_saxs_info_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
 
     if cmd_sizer_dir == 'horiz':
         cmd_sizer=wx.BoxSizer(wx.HORIZONTAL)
-        cmd_sizer.Add(metadata_sizer, proportion=1, flag=wx.RIGHT|wx.EXPAND,
-            border=top_level._FromDIP(5))
+        if not multi_load:
+            cmd_sizer.Add(metadata_sizer, proportion=1, flag=wx.RIGHT|wx.EXPAND,
+                border=top_level._FromDIP(5))
         cmd_sizer.Add(as_sizer, flag=wx.RIGHT|wx.EXPAND,
             border=top_level._FromDIP(5))
         cmd_sizer.Add(exp_coflow_sizer, flag=wx.EXPAND,
             border=top_level._FromDIP(5))
     else:
         cmd_sizer=wx.BoxSizer(wx.VERTICAL)
-        cmd_sizer.Add(metadata_sizer, flag=wx.BOTTOM|wx.EXPAND,
-            border=top_level._FromDIP(5))
+        if not multi_load:
+            cmd_sizer.Add(metadata_sizer, flag=wx.BOTTOM|wx.EXPAND,
+                border=top_level._FromDIP(5))
         cmd_sizer.Add(as_sizer, flag=wx.BOTTOM|wx.EXPAND,
             border=top_level._FromDIP(5))
         cmd_sizer.Add(exp_coflow_sizer, flag=wx.EXPAND,
@@ -3021,7 +3112,7 @@ def make_equilibrate_info_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
     return cmd_sizer
 
 def make_switch_info_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
-    num_flow_paths, read_only=False):
+    num_flow_paths, use_mals_valve, read_only=False):
     ################ HPLC #################
     fp_choices = ['{}'.format(i+1) for i in range(int(num_flow_paths))]
 
@@ -3031,8 +3122,10 @@ def make_switch_info_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
     }
 
     switch_adv_settings = {
-        'restore_flow_after_switch' : ['Restore flow to current rate after switching',
-                                ctrl_ids['restore_flow_after_switch'], 'bool'],
+        'restore_flow1' : ['Restore flow on path 1 to current rate after switching',
+                                ctrl_ids['restore_flow1'], 'bool'],
+        'restore_flow2' : ['Restore flow on path 1 to current rate after switching',
+                                ctrl_ids['restore_flow2'], 'bool'],
         'stop_flow1'     : ['Ramp pump 1 flow to 0 before switching',
                                 ctrl_ids['stop_flow1'], 'bool'],
         'stop_flow2'     : ['Ramp pump 2 flow to 0 before switching',
@@ -3044,6 +3137,10 @@ def make_switch_info_panel(top_level, parent, ctrl_ids, cmd_sizer_dir,
         'purge_accel'   : ['Purge acceleration [mL/min^2]:',
                             ctrl_ids['purge_accel'], 'float'],
     }
+
+    if use_mals_valve:
+        switch_adv_settings['mals_valve_pos'] = ['MALS valve:',
+            ctrl_ids['mals_valve_pos'], 'choice', ['1', '2']]
 
     switch_box = wx.StaticBox(parent, label='HPLC Settings')
 
@@ -3535,27 +3632,9 @@ class AutoList(utils.ItemList):
                 file = None
 
         if file is not None:
-            with wx.TextEntryDialog(self, 'Enter filename prefix',
-                'Filename Prefix') as dialog:
+            self._add_spreadsheet(file)
 
-                if dialog.ShowModal() == wx.ID_OK:
-                    fname = dialog.GetValue()
-                else:
-                    fname = None
-
-        if file is not None and fname is not None:
-            with wx.NumberEntryDialog(self, 'Enter starting filename number',
-                'Starting number:', 'Filename Number', 1, 1, 100000) as dialog:
-
-                if dialog.ShowModal() == wx.ID_OK:
-                    fnum = dialog.GetValue()
-                else:
-                    fnum = None
-
-        if file is not None and fname is not None and fnum is not None:
-            self._add_spreadsheet(file, fname, fnum)
-
-    def _add_spreadsheet(self, file, fname, fnum):
+    def _add_spreadsheet(self, file):
         df = pd.read_excel(file)
 
         # Find starting well
@@ -3572,6 +3651,50 @@ class AutoList(utils.ItemList):
         final_df = df[df['Injection volume (uL)'].notnull()]
 
         default_settings = self._get_default_batch_autosampler_settings()
+        default_settings['filenumber'] = 1
+
+        while True:
+            cmd_dialog = BatchSampleCmdDialog(self, default_settings,
+                        multi_load=True, title='Batch SAXS Sample Settings')
+
+            res = cmd_dialog.ShowModal()
+
+            if res == wx.ID_OK:
+                default_settings = cmd_dialog.get_settings()
+
+            else:
+                return
+
+            default_settings['sample_well'] = 'A1' # Just for validation
+            data_dir = copy.deepcopy(default_settings['data_dir'])
+
+            valid, err_msg = self._validate_cmd(default_settings)
+
+            default_settings['data_dir'] = data_dir #validation adds the extra folder, which we shouldn't do yet
+
+            if valid:
+                break
+
+            else:
+                with wx.MessageDialog(self, err_msg,
+                    caption='Action Parameter Errors',
+                    style=wx.YES_NO|wx.CANCEL|wx.YES_DEFAULT) as err_dialog:
+
+                    err_dialog.SetYesNoLabels('Fix errors', 'Continue without fixing')
+
+                    ret = err_dialog.ShowModal()
+
+                    if ret == wx.ID_YES:
+                        continue
+                    elif ret == wx.ID_NO:
+                        break
+                    elif ret == wx.ID_CANCEL:
+                        return
+
+        fname = copy.deepcopy(default_settings['filename'])
+        fnum = int(copy.deepcopy(default_settings['filenumber']))
+
+        del default_settings['filenumber']
 
         sample_list_ordered = []
         sample_list_unordered = []
@@ -3812,7 +3935,7 @@ class AutoList(utils.ItemList):
                     default_settings['equil_accel'] = default_equil_settings['equil_accel']
                     default_settings['purge']      = default_equil_settings['purge']
                     default_settings['purge_rate'] = default_equil_settings['purge_rate']
-                    default_settings['purge_volume'] = default_equil_settings['purge_vol']
+                    default_settings['purge_volume'] = default_equil_settings['purge_volume']
                     default_settings['purge_accel'] = default_equil_settings['purge_accel']
                     default_settings['stop_after_equil'] = default_equil_settings['stop_after_equil']
 
@@ -3853,12 +3976,14 @@ class AutoList(utils.ItemList):
 
                     #Switch parameters
                     default_settings['purge_rate'] = default_switch_settings['purge_rate']
-                    default_settings['purge_volume'] = default_switch_settings['purge_vol']
+                    default_settings['purge_volume'] = default_switch_settings['purge_volume']
                     default_settings['purge_accel'] = default_switch_settings['purge_accel']
-                    default_settings['restore_flow_after_switch'] = default_switch_settings['restore_flow_after_switch']
+                    default_settings['restore_flow1'] = default_switch_settings['restore_flow1']
+                    default_settings['restore_flow2'] = default_switch_settings['restore_flow2']
                     default_settings['stop_flow1'] = default_switch_settings['stop_flow1']
                     default_settings['stop_flow2'] = default_switch_settings['stop_flow2']
                     default_settings['purge_active'] = default_switch_settings['purge_active']
+                    default_settings['mals_valve_pos'] = default_switch_settings['mals_valve_pos']
 
                     #Coflow switch parameters
                     default_settings['coflow_rate'] = coflow_fr
@@ -4148,6 +4273,18 @@ class AutoList(utils.ItemList):
 
             cmd_settings, exp_valid, exp_errors = self._validate_exp_params(
                 cmd_settings, sec_saxs=False)
+
+            if cmd_settings['pre_buf_exp']:
+                try:
+                    cmd_settings['pre_buf_exp_time'] = float(cmd_settings['pre_buf_exp_time'])
+
+                    if cmd_settings['pre_buf_exp_time'] <= 0:
+                        exp_valid = False
+                        exp_errors.append('Total sheath buffer measurement time must be >0')
+
+                except Exception:
+                    exp_valid = False
+                    exp_errors.append('Total sheath buffer measurement time must be a number')
 
             cmd_settings, coflow_valid, coflow_errors = self._validate_coflow_params(
                 cmd_settings)
@@ -4660,6 +4797,8 @@ class AutoList(utils.ItemList):
 
         self.remove_selected_items()
 
+        self.auto_panel.auto_settings.clear_settings()
+
     def _on_move_item_up(self, evt):
         sel_items = self.get_selected_items()
 
@@ -4693,7 +4832,10 @@ class AutoList(utils.ItemList):
                     move_up = False
 
             if move_up:
-                self.auto_panel.automator.set_automator_state('pause')
+                state = self.auto_panel.automator.get_automator_state()
+
+                if state == 'run':
+                    self.auto_panel.automator.set_automator_state('pause')
 
                 do_move = self._check_move_status(sel_items, 'up')
 
@@ -4701,7 +4843,8 @@ class AutoList(utils.ItemList):
                     for item in sel_items:
                         self._do_move_item(item, 'up')
 
-                self.auto_panel.automator.set_automator_state('run')
+                if state == 'run':
+                    self.auto_panel.automator.set_automator_state('run')
 
     def _on_move_item_down(self, evt):
         sel_items = self.get_selected_items()
@@ -4726,7 +4869,10 @@ class AutoList(utils.ItemList):
                     move_down = False
 
             if move_down:
-                self.auto_panel.automator.set_automator_state('pause')
+                state = self.auto_panel.automator.get_automator_state()
+
+                if state == 'run':
+                    self.auto_panel.automator.set_automator_state('pause')
 
                 do_move = self._check_move_status(sel_items, 'down')
 
@@ -4734,7 +4880,8 @@ class AutoList(utils.ItemList):
                     for item in sel_items:
                         self._do_move_item(item, 'down')
 
-                self.auto_panel.automator.set_automator_state('run')
+                if state == 'run':
+                    self.auto_panel.automator.set_automator_state('run')
 
     def _check_move_status(self, sel_items, move):
         do_move = True
@@ -4789,8 +4936,17 @@ class AutoList(utils.ItemList):
     def _get_shared_cmd_number(self, cmd_name, item):
         return item.command.auto_names.count(cmd_name)
 
-    def item_selected(self, item):
-        self.auto_panel.auto_settings.on_item_selection(item.item_info)
+    def item_selected(self, item, selected):
+        if selected:
+            self.auto_panel.auto_settings.on_item_selection(item.item_info)
+        else:
+            sel_items = self.get_selected_items()
+
+            if len(sel_items) > 0:
+                top_item = sel_items[0]
+                self.auto_panel.auto_settings.on_item_selection(top_item.item_info)
+            else:
+                self.auto_panel.auto_settings.clear_settings()
 
     def abort_item(self, aid):
         for item in self.all_items:
@@ -5150,13 +5306,15 @@ class AutoListItem(utils.ListItem):
                 text_item.SetForegroundColour(self.highlight_text_color)
                 text_item.SetBackgroundColour(self.highlight_list_bkg_color)
 
-            self.item_list.item_selected(self)
+            self.item_list.item_selected(self, True)
 
         else:
             self.SetBackgroundColour(self.list_bkg_color)
             for text_item in self.text_list:
                 text_item.SetForegroundColour(self.general_text_color)
                 text_item.SetBackgroundColour(self.list_bkg_color)
+
+            self.item_list.item_selected(self, False)
 
         self.Refresh()
 
@@ -5270,8 +5428,10 @@ class BatchSampleCmdDialog(AutoCmdDialog):
     """
     Allows addition/editing of the buffer info in the buffer list
     """
-    def __init__(self, parent, default_settings, *args, **kwargs):
+    def __init__(self, parent, default_settings, *args, multi_load=False, **kwargs):
         self._selected_well = ''
+        self._multi_load = multi_load
+
         AutoCmdDialog.__init__(self, parent, default_settings, *args, **kwargs)
 
     def _create_layout(self):
@@ -5285,7 +5445,8 @@ class BatchSampleCmdDialog(AutoCmdDialog):
 
         (cmd_sizer, self.sample_well, self.well_ids_96,
             self.reverse_well_ids_96) =  make_batch_saxs_info_panel(top_level,
-            parent, self.ctrl_ids, 'horiz', self.well_bmp, self._on_well_button)
+            parent, self.ctrl_ids, 'horiz', self.well_bmp, self._on_well_button,
+            multi_load=self._multi_load)
 
         button_sizer = self.CreateButtonSizer(wx.OK | wx.CANCEL)
 
@@ -5384,8 +5545,13 @@ class SwitchDialog(AutoCmdDialog):
 
         num_flow_paths = self._default_settings['num_flow_paths']
 
+        if self._default_settings['mals_valve_pos'] is None:
+            use_mals_valve = False
+        else:
+            use_mals_valve = True
+
         cmd_sizer = make_switch_info_panel(top_level, parent, self.ctrl_ids,
-            'horiz', num_flow_paths)
+            'horiz', num_flow_paths, use_mals_valve)
 
         button_sizer = self.CreateButtonSizer(wx.OK | wx.CANCEL)
 

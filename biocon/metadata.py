@@ -437,6 +437,12 @@ class MusclePanel(wx.Panel):
         self.muscle = wx.TextCtrl(ctrl_parent)
         self.preparation = wx.ComboBox(ctrl_parent, choices=['Intact', 'Skinned'],
             size=(150, -1))
+        self.pca = wx.TextCtrl(ctrl_parent, validator=utils.CharValidator('float'))
+        self.genotype = wx.ComboBox(ctrl_parent, choices=['Wild Type', 'Mutant'],
+            size=(150, -1))
+        self.treatment = wx.ComboBox(ctrl_parent, choices=['True', 'False'],
+            size=(150, -1))
+        self.solution = wx.TextCtrl(ctrl_parent, style=wx.TE_MULTILINE, size=(100, 50))
 
         exp_const_sizer = wx.FlexGridSizer(cols=2, vgap=5, hgap=5)
         exp_const_sizer.Add(wx.StaticText(ctrl_parent, label='System:'),
@@ -451,6 +457,18 @@ class MusclePanel(wx.Panel):
         exp_const_sizer.Add(wx.StaticText(ctrl_parent, label='Preparation:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
         exp_const_sizer.Add(self.preparation, flag=wx.ALIGN_CENTER_VERTICAL)
+        exp_const_sizer.Add(wx.StaticText(ctrl_parent, label='Genotype:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        exp_const_sizer.Add(self.genotype, flag=wx.ALIGN_CENTER_VERTICAL)
+        exp_const_sizer.Add(wx.StaticText(ctrl_parent, label='pCa:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        exp_const_sizer.Add(self.pca, flag=wx.ALIGN_CENTER_VERTICAL)
+        exp_const_sizer.Add(wx.StaticText(ctrl_parent, label='Treatment:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        exp_const_sizer.Add(self.treatment, flag=wx.ALIGN_CENTER_VERTICAL)
+        exp_const_sizer.Add(wx.StaticText(ctrl_parent, label='Solution:'),
+            flag=wx.ALIGN_CENTER_VERTICAL)
+        exp_const_sizer.Add(self.solution, flag=wx.ALIGN_CENTER_VERTICAL)
 
         exp_const_sizer.AddGrowableCol(1)
 
@@ -478,6 +496,10 @@ class MusclePanel(wx.Panel):
         metadata['Muscle type:'] = self.muscle_type.GetValue()
         metadata['Muscle:'] = self.muscle.GetValue()
         metadata['Preparation:'] = self.preparation.GetValue()
+        metadata['Genotype:'] = self.genotype.GetValue()
+        metadata['pCa:'] = self.pca.GetValue()
+        metadata['Treatment:'] = self.treatment.GetValue()
+        metadata['Solution:'] = self.solution.GetValue()
         metadata['Notes:'] = self.notes.GetValue()
 
         return metadata

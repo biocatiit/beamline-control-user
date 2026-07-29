@@ -44,6 +44,7 @@ import autocon
 import autosamplercon
 import toastcon
 import monotunecon
+import airshotcon
 
 class BioFrame(wx.Frame):
     """
@@ -81,11 +82,15 @@ class BioFrame(wx.Frame):
     def _create_layout(self):
         """Creates the layout"""
 
-        if 'automator' not in self.settings['components']:
-            self._create_standard_layout()
+        if 'automator' in self.settings['components']:
+            self._create_auto_layout()
+
+        elif 'airshot' in self.settings['components']:
+            self._create_airshot_layout()
 
         else:
-            self._create_auto_layout()
+            self._create_standard_layout()
+
 
         if ('exposure' in self.component_panels
             and 'pipeline' in self.component_controls):
@@ -193,6 +198,10 @@ class BioFrame(wx.Frame):
                 exp_sizer.Add(component_sizers['toaster'], border=self._FromDIP(5),
                     flag=wx.EXPAND|wx.ALL)
 
+            if 'airshot' in component_sizers:
+                exp_sizer.Add(component_sizers['airshot'], border=self._FromDIP(5),
+                    flag=wx.EXPAND|wx.ALL)
+
             panel_sizer.Add(exp_sizer, flag=wx.EXPAND)
 
         top_panel.SetSizer(panel_sizer)
@@ -203,24 +212,12 @@ class BioFrame(wx.Frame):
         self.SetSizer(top_sizer)
 
 
-
     def _create_auto_layout(self):
         top_panel = wx.Panel(self)
         self.top_notebook = wx.Notebook(top_panel, style=wx.NB_TOP)
 
         component_sizers = self._generate_component_sizers(self.top_notebook,
             notebook=True)
-
-        # if 'exposure' in component_sizers and 'metadata' in component_sizers:
-        #     exp_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        #     msizer = component_sizers.pop('metadata')
-        #     esizer = component_sizers.pop('exposure')
-        #     exp_sizer.Add(msizer, proportion=1,
-        #         border=self._FromDIP(10), flag=wx.EXPAND|wx.ALL)
-        #     exp_sizer.Add(esizer, proportion=2,
-        #         border=self._FromDIP(10), flag=wx.EXPAND|wx.ALL)
-
-        #     component_sizers['exposure'] = exp_sizer
 
         # Make automator sizer at the end, because automator settings need the callbacks
         # from the other panels
@@ -283,6 +280,62 @@ class BioFrame(wx.Frame):
 
         panel_sizer = wx.BoxSizer(wx.VERTICAL)
         panel_sizer.Add(self.top_notebook, flag=wx.EXPAND, proportion=1)
+        top_panel.SetSizer(panel_sizer)
+
+        top_sizer = wx.BoxSizer(wx.VERTICAL)
+        top_sizer.Add(top_panel, flag=wx.EXPAND, proportion=1)
+
+        self.SetSizer(top_sizer)
+
+    def _create_airshot_layout(self):
+        top_panel = wx.Panel(self)
+
+        panel_sizer = wx.BoxSizer(wx.VERTICAL)
+
+        component_sizers = self._generate_component_sizers(top_panel)
+
+        exp_sizer = wx.BoxSizer(wx.HORIZONTAL)
+
+        if ('exposure' in component_sizers and 'metadata' in component_sizers):
+            sub_sub_sizer1 = wx.BoxSizer(wx.HORIZONTAL)
+            sub_sub_sizer1.Add(component_sizers['metadata'], proportion=1,
+                border=self._FromDIP(5), flag=wx.EXPAND|wx.ALL)
+            sub_sub_sizer1.Add(component_sizers['exposure'], proportion=2,
+                border=self._FromDIP(5), flag=wx.EXPAND|wx.ALL)
+
+            sub_sub_sizer2 = wx.BoxSizer(wx.HORIZONTAL)
+            sub_sub_sizer2.Add(component_sizers['airshot'], proportion=1,
+                border=self._FromDIP(5), flag=wx.EXPAND|wx.ALL)
+
+            sub_sizer = wx.BoxSizer(wx.VERTICAL)
+            sub_sizer.Add(sub_sub_sizer1, flag=wx.EXPAND)
+            sub_sizer.Add(sub_sub_sizer2, proportion=1,
+                border=self._FromDIP(5), flag=wx.EXPAND|wx.ALL)
+
+            exp_sizer.Add(sub_sizer, flag=wx.EXPAND, proportion=1)
+
+        elif 'exposure' in component_sizers:
+            sub_sub_sizer1 = wx.BoxSizer(wx.HORIZONTAL)
+            sub_sub_sizer1.Add(component_sizers['exposure'], proportion=1,
+                border=self._FromDIP(5), flag=wx.EXPAND|wx.ALL)
+
+            sub_sub_sizer2 = wx.BoxSizer(wx.HORIZONTAL)
+            sub_sub_sizer2.Add(component_sizers['airshot'], proportion=1,
+                border=self._FromDIP(5), flag=wx.EXPAND|wx.ALL)
+
+            sub_sizer = wx.BoxSizer(wx.VERTICAL)
+            sub_sizer.Add(sub_sub_sizer1, flag=wx.EXPAND)
+            sub_sizer.Add(sub_sub_sizer2, proportion=1,
+                border=self._FromDIP(5), flag=wx.EXPAND|wx.ALL)
+
+            exp_sizer.Add(sub_sizer, flag=wx.EXPAND, proportion=1)
+
+        if 'toaster' in component_sizers:
+            exp_sizer.Add(component_sizers['toaster'], border=self._FromDIP(5),
+                flag=wx.EXPAND|wx.ALL)
+
+        panel_sizer.Add(exp_sizer, flag=wx.EXPAND)
+
         top_panel.SetSizer(panel_sizer)
 
         top_sizer = wx.BoxSizer(wx.VERTICAL)
@@ -403,10 +456,10 @@ if __name__ == '__main__':
     exposure_settings['shutter_pad'] = 0.002
     exposure_settings['shutter_cycle'] = 0.1
 
-    # # EIGER2 XE 9M
-    # exposure_settings['det_args'] =  {'use_tiff_writer': False,
-    #     'use_file_writer': True, 'photon_energy' : 12.0,
-    #     'images_per_file': 100} #1 image/file for TR, 300 for eq SAXS, 1000 for muscle
+    # # # EIGER2 XE 9M
+    exposure_settings['det_args'] =  {'use_tiff_writer': False,
+        'use_file_writer': True, 'photon_energy' : 12.0,
+        'images_per_file': 1000} #1 image/file for TR, 300 for eq SAXS, 1000 for muscle
 
     # Muscle settings
     exposure_settings['struck_measurement_time'] = '0.001'
@@ -415,7 +468,7 @@ if __name__ == '__main__':
 
     #Other settings
     exposure_settings['wait_for_trig'] = True
-    exposure_settings['struck_log_vals'] = [
+    exposure_settings['mcs_log_vals'] = [
         # Format: (mx_record_name, struck_channel, header_name,
         # scale, offset, use_dark_current, normalize_by_exp_time)
         {'mx_record': 'mcs3', 'channel': 2, 'name': 'I0',
@@ -437,9 +490,9 @@ if __name__ == '__main__':
         ]
     exposure_settings['warnings'] = {'shutter' : True, 'col_vac' : {'check': True,
         'thresh': 0.04}, 'guard_vac' : {'check': True, 'thresh': 0.04},
-        'sample_vac': {'check': False, 'thresh': 0.04}, 'sc_vac':
+        'sample_vac': {'check': True, 'thresh': 0.04}, 'sc_vac':
         {'check': True, 'thresh':0.04}}
-    exposure_settings['base_data_dir'] = '/nas_data/Pilatus1M/2026_1M/2026_Run1/' #CHANGE ME and pipeline local_basedir
+    exposure_settings['base_data_dir'] = '/nas_data/MarCCD/2026_Run2/' #CHANGE ME and pipeline local_basedir
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']
 
 
@@ -486,8 +539,8 @@ if __name__ == '__main__':
                                 'preparation'   : 'Intact',
                                 'notes'         : '',
                                 },
-        'metadata_type'     : 'auto',
-        # 'metadata_type'     : 'muscle',
+        # 'metadata_type'     : 'auto',
+        'metadata_type'     : 'muscle',
         }
 
 
@@ -500,17 +553,17 @@ if __name__ == '__main__':
         'server_ip'     : '164.54.204.142', #EPU
         # 'server_ip'     : '164.54.204.144', #Marvin
 
-        # EIGER settings
-        # 'local_basedir' : '/nas_data/Eiger2x',
-        # 'data_basedir'  : '/nas_data/Eiger2x',
-        # 'data_source'   : 'Stream', #File or stream
-        # 'detector'      : 'Eiger',
+        # # EIGER settings
+        'local_basedir' : '/nas_data/Eiger2x',
+        'data_basedir'  : '/nas_data/Eiger2x',
+        'data_source'   : 'Stream', #File or stream
+        'detector'      : 'Eiger',
 
         # Pilatus settings
-        'local_basedir' : '/nas_data/Pilatus1M/2026_1M',
-        'data_basedir'  : '/nas_data/Pilatus1M/2026_1M',
-        'data_source'   : 'File', #File or stream
-        'detector'      : 'Pilatus',
+        # 'local_basedir' : '/nas_data/Pilatus1M/2026_1M',
+        # 'data_basedir'  : '/nas_data/Pilatus1M/2026_1M',
+        # 'data_source'   : 'File', #File or stream
+        # 'detector'      : 'Pilatus',
         }
 
 
@@ -557,13 +610,17 @@ if __name__ == '__main__':
     # Mono Auto Tune Settings
     mono_auto_tune_settings = monotunecon.default_mono_tune_settings
 
+    ###################################################################
+    # Air Shot Settings
+    airshot_settings = airshotcon.default_airshot_settings
+
     biocon_settings = {}
 
     components = OrderedDict([
         ('exposure', expcon.ExpPanel),
         # ('coflow', coflowcon.CoflowPanel),
-        ('trsaxs_scan', trcon.TRScanPanel),
-        ('trsaxs_flow', trcon.TRFlowPanel),
+        # ('trsaxs_scan', trcon.TRScanPanel),
+        # ('trsaxs_flow', trcon.TRFlowPanel),
         # ('scan',    scancon.ScanPanel),
         ('metadata', metadata.ParamPanel),
         # ('pipeline', pipeline_ctrl.PipelineControl),
@@ -571,8 +628,9 @@ if __name__ == '__main__':
         # ('hplc', biohplccon.HPLCPanel),
         # ('automator', autocon.AutoPanel),
         # ('autosampler', autosamplercon.AutosamplerPanel),
-        # ('toaster', toastcon.ToasterPanel),
-        ('mono_auto_tune', monotunecon.MonoAutoTune)
+        ('toaster', toastcon.ToasterPanel),
+        ('mono_auto_tune', monotunecon.MonoAutoTune),
+        ('airshot', airshotcon.AirShotPanel),
         ])
 
     settings = {
@@ -589,6 +647,7 @@ if __name__ == '__main__':
         'autosampler'   : autosampler_settings,
         'toaster'       : toaster_settings,
         'mono_auto_tune': mono_auto_tune_settings,
+        'airshot'       : airshot_settings,
         'components'    : components,
         'biocon'        : biocon_settings,
         }
