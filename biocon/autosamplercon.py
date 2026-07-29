@@ -183,7 +183,7 @@ known_well_plates = {
         'row_step'      : 9.00, # mm
         'height'        : 0.61, # bottom of well from chiller base plate
         'plate_height'  : 15.748, # top of plate from chiller base plate
-        'load_pos_y_offset' : 3,
+        'load_pos_y_offset' : 1,
         },
 
     'Nunc 96 well 1 mL round bottom (PN# 26025X)' : {
@@ -3490,7 +3490,7 @@ default_autosampler_settings = {
     'home_settings'         : {'plate_x': {'dir': -1, 'step': 0.1, 'pos': 0},
                                 'plate_z': {'dir': 1, 'step': 0.1, 'pos': 0},
                                 'needle_y': {'dir': -1, 'step': 0.01, 'pos': -2.70}}, #Direction 1/-1 for positive/negative. step is step size off limit, pos is what to set the home position as.
-    'base_position'         : {'plate_x': 328.5, 'plate_z': -66.5, 'needle_y': 114.0}, # A1 well position, needle height at chiller plate top
+    'base_position'         : {'plate_x': 328.5, 'plate_z': -68.0, 'needle_y': 114.0}, # A1 well position, needle height at chiller plate top
     'clean_offsets'         : {'plate_x': 99.4, 'plate_z': -21.4, 'needle_y': -10}, # Relative to base position
     'needle_out_offset'     : 5, # mm
     'needle_in_position'    : -2.3,
