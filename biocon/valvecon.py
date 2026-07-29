@@ -1045,6 +1045,15 @@ if __name__ == '__main__':
     #         'kwargs': {'positions' : 6}},
     #     ]
 
+    # TR-SAXS dual inject TTL
+    setup_devices = [
+        # {'name': 'Injection', 'args': ['Rheodyne', 'COM16'],
+        #     'kwargs': {'positions' : 2}},
+        {'name': 'Injection 1', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo15'],
+            'kwargs': {'positions' : 2}},
+        {'name': 'Injection 2', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo15'],
+            'kwargs': {'positions' : 2}},
+        ]
     # TR-SAXS continuous pump chaotic flow
     # setup_devices = [
     #     # {'name': 'Injection', 'args': ['Rheodyne', 'COM6'],

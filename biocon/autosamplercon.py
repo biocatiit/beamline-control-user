@@ -2892,7 +2892,7 @@ class AutosamplerPanel(utils.DevicePanel):
             self.inj_rate.ChangeValue(str(rate))
             self._current_inj_rate = rate
 
-            self.trigger_on_inject.ChangeValue(trigger)
+            self.trigger_on_inject.SetValue(trigger)
             self._current_trigger_on_inject = trigger
 
             self.buffer_start_delay.ChangeValue(str(start_delay))
@@ -2957,7 +2957,7 @@ class AutosamplerPanel(utils.DevicePanel):
                 self._current_inj_rate = rate
 
             if trigger != self._current_trigger_on_inject:
-                wx.CallAfter(self.trigger_on_inject.ChangeValue, trigger)
+                wx.CallAfter(self.trigger_on_inject.SetValue, trigger)
                 self._current_trigger_on_inject = trigger
 
             if start_delay != self._current_buffer_start_delay:
@@ -2993,7 +2993,7 @@ class AutosamplerPanel(utils.DevicePanel):
                 self._current_inj_rate = rate
 
             if trigger != self._current_trigger_on_inject:
-                wx.CallAfter(self.trigger_on_inject.ChangeValue, trigger)
+                wx.CallAfter(self.trigger_on_inject.SetValue, trigger)
                 self._current_trigger_on_inject = trigger
 
             if start_delay != self._current_buffer_start_delay:
