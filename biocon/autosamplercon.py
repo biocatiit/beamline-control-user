@@ -183,7 +183,7 @@ known_well_plates = {
         'row_step'      : 9.00, # mm
         'height'        : 0.61, # bottom of well from chiller base plate
         'plate_height'  : 15.748, # top of plate from chiller base plate
-        'load_pos_y_offset' : 3,
+        'load_pos_y_offset' : 1,
         },
 
     'Nunc 96 well 1 mL round bottom (PN# 26025X)' : {

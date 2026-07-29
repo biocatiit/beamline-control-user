@@ -459,7 +459,7 @@ if __name__ == '__main__':
     # # # EIGER2 XE 9M
     exposure_settings['det_args'] =  {'use_tiff_writer': False,
         'use_file_writer': True, 'photon_energy' : 12.0,
-        'images_per_file': 300} #1 image/file for TR, 300 for eq SAXS, 1000 for muscle
+        'images_per_file': 1000} #1 image/file for TR, 300 for eq SAXS, 1000 for muscle
 
     # Muscle settings
     exposure_settings['struck_measurement_time'] = '0.001'
@@ -468,7 +468,7 @@ if __name__ == '__main__':
 
     #Other settings
     exposure_settings['wait_for_trig'] = True
-    exposure_settings['struck_log_vals'] = [
+    exposure_settings['mcs_log_vals'] = [
         # Format: (mx_record_name, struck_channel, header_name,
         # scale, offset, use_dark_current, normalize_by_exp_time)
         {'mx_record': 'mcs3', 'channel': 2, 'name': 'I0',
@@ -492,7 +492,7 @@ if __name__ == '__main__':
         'thresh': 0.04}, 'guard_vac' : {'check': True, 'thresh': 0.04},
         'sample_vac': {'check': True, 'thresh': 0.04}, 'sc_vac':
         {'check': True, 'thresh':0.04}}
-    exposure_settings['base_data_dir'] = '/nas_data/Eiger2x/2026_Run2/' #CHANGE ME and pipeline local_basedir
+    exposure_settings['base_data_dir'] = '/nas_data/MarCCD/2026_Run2/' #CHANGE ME and pipeline local_basedir
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']
 
 
@@ -539,8 +539,8 @@ if __name__ == '__main__':
                                 'preparation'   : 'Intact',
                                 'notes'         : '',
                                 },
-        'metadata_type'     : 'auto',
-        # 'metadata_type'     : 'muscle',
+        # 'metadata_type'     : 'auto',
+        'metadata_type'     : 'muscle',
         }
 
 
@@ -618,19 +618,19 @@ if __name__ == '__main__':
 
     components = OrderedDict([
         ('exposure', expcon.ExpPanel),
-        ('coflow', coflowcon.CoflowPanel),
+        # ('coflow', coflowcon.CoflowPanel),
         # ('trsaxs_scan', trcon.TRScanPanel),
         # ('trsaxs_flow', trcon.TRFlowPanel),
         # ('scan',    scancon.ScanPanel),
         ('metadata', metadata.ParamPanel),
-        ('pipeline', pipeline_ctrl.PipelineControl),
+        # ('pipeline', pipeline_ctrl.PipelineControl),
         # ('uv', spectrometercon.UVPanel),
-        ('hplc', biohplccon.HPLCPanel),
-        ('automator', autocon.AutoPanel),
-        ('autosampler', autosamplercon.AutosamplerPanel),
-        # ('toaster', toastcon.ToasterPanel),
+        # ('hplc', biohplccon.HPLCPanel),
+        # ('automator', autocon.AutoPanel),
+        # ('autosampler', autosamplercon.AutosamplerPanel),
+        ('toaster', toastcon.ToasterPanel),
         ('mono_auto_tune', monotunecon.MonoAutoTune),
-        # ('airshot', airshotcon.AirShotPanel),
+        ('airshot', airshotcon.AirShotPanel),
         ])
 
     settings = {
