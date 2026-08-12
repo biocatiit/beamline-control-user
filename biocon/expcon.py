@@ -5165,7 +5165,7 @@ default_exposure_settings = {
     # 'monitor_dark'          : False,
     # 'scan_rearm'            : False, #Rearm the detector between scans. If True may slow down scans
 
-    # #Eiger2 XE 9M
+    # # #Eiger2 XE 9M
     # 'exp_time_min'          : 0.000000050,
     # 'exp_time_max'          : 3600,
     # 'exp_period_min'        : 0.001785714286, #There's an 8bit undocumented mode that can go faster, in theory
@@ -5274,8 +5274,8 @@ default_exposure_settings = {
         'channels':[
         {'sc_chan': 3, 'name': 'I0', 'scale': 1, 'offset': 0, 'use_dark': False,
             'norm_time': False},
-        # {'sc_chan': 4, 'name': 'I1', 'scale': 1, 'offset': 0, 'use_dark': False,
-        #     'norm_time': False},
+        {'sc_chan': 4, 'name': 'I1', 'scale': 1, 'offset': 0, 'use_dark': False,
+            'norm_time': False},
         ],},
     'warnings'              : {'shutter' : True, 'col_vac' : {'check': True,
         'thresh': 0.04}, 'guard_vac' : {'check': True, 'thresh': 0.04},
