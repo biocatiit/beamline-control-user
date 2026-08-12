@@ -44,11 +44,11 @@ import wx
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_03_00\\python_32')#add the path of the LoadElveflow.py
 # elve_version = '3.03.00'
 
-sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\DLL64\\DLL64') #add the path of the library here
-sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\Python_64')#add the path of the LoadElveflow.py
-sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\DLL32\\DLL32') #add the path of the library here
-sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\Python_32')#add the path of the LoadElveflow.py
-elve_version = '3.07.02'
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\DLL64\\DLL64') #add the path of the library here
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\Python_64')#add the path of the LoadElveflow.py
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\DLL32\\DLL32') #add the path of the library here
+# sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_02\\Python_32')#add the path of the LoadElveflow.py
+# elve_version = '3.07.02'
 
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_03\\DLL64\\DLL64') #add the path of the library here
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_07_03\\Python_64')#add the path of the LoadElveflow.py
@@ -73,6 +73,12 @@ elve_version = '3.07.02'
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_10_03\\DLL\\DLL32') #add the path of the library here
 # sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_10_03\\DLL\\Python\\Python_32')#add the path of the LoadElveflow.py
 # elve_version = '3.10.03'
+
+sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_10_05\\DLL\\DLL64') #add the path of the library here
+sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_10_05\\DLL\\Python\\Python_64')#add the path of the LoadElveflow.py
+sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_10_05\\DLL\\DLL32') #add the path of the library here
+sys.path.append('C:\\Users\\biocat\\Elveflow_SDK_V3_10_05\\DLL\\Python\\Python_32')#add the path of the LoadElveflow.py
+elve_version = '3.10.05'
 
 try:
     import Elveflow64 as Elveflow
@@ -2869,6 +2875,11 @@ class OB1(object):
 
         self.calib = None
 
+        version = elve_version.split('.')
+        self.major = int(version[0])
+        self.minor = int(version[1])
+        self.point = int(version[2])
+
         if calib_path is not None:
             self.load_calibration(calib_path)
 
@@ -2918,8 +2929,12 @@ class OB1(object):
         path = os.path.abspath(os.path.expanduser(path))
         calib = (ctypes.c_double*1000)()
 
-        error = Elveflow.Elveflow_Calibration_Load(path.encode('ascii'),
-            ctypes.byref(calib), 1000)
+        if (self.major > 3 or (self.major == 3 and self.minor >= 10)):
+            error = Elveflow.OB1_Calib_Load(self.instr_ID.value, path.encode('ascii'))
+            calib = True
+        else:
+            error = Elveflow.Elveflow_Calibration_Load(path.encode('ascii'),
+                ctypes.byref(calib), 1000)
 
         self.calib = calib
         self._check_error(error)
@@ -3222,8 +3237,12 @@ class OB1Pump(Pump):
                 set_pressure = float(pressure) #mbarr
                 set_pressure = ctypes.c_double(set_pressure)#convert to c_double
 
-                error = Elveflow.OB1_Set_Press(self.instr_ID.value, self._ob1_chan,
-                    set_pressure, ctypes.byref(self.calib), 1000)
+                if (self._ob1.major > 3 or (self._ob1.major == 3 and self._ob1.minor >= 10)):
+                    error = Elveflow.OB1_Set_Press(self.instr_ID.value, self._ob1_chan,
+                        set_pressure)
+                else:
+                    error = Elveflow.OB1_Set_Press(self.instr_ID.value, self._ob1_chan,
+                        set_pressure, ctypes.byref(self.calib), 1000)
 
                 self._check_error(error)
             else:
@@ -3245,8 +3264,13 @@ class OB1Pump(Pump):
             if not self._ob1.remote:
                 get_pressure = ctypes.c_double()
 
-                error = Elveflow.OB1_Get_Press(self.instr_ID.value, self._ob1_chan,
-                    1, ctypes.byref(self.calib), ctypes.byref(get_pressure), 1000)
+                if (self._ob1.major > 3 or (self._ob1.major == 3 and self._ob1.minor >= 10)):
+                    sensor = ctypes.c_double()
+                    error = Elveflow.OB1_Get_Data(self.instr_ID.value, self._ob1_chan,
+                        ctypes.byref(get_pressure), ctypes.byref(sensor))
+                else:
+                    error = Elveflow.OB1_Get_Press(self.instr_ID.value, self._ob1_chan,
+                        1, ctypes.byref(self.calib), ctypes.byref(get_pressure), 1000)
 
                 self._check_error(error)
 
@@ -5250,25 +5274,27 @@ class PumpPanel(utils.DevicePanel):
 
         self.pump_type = device_data['args'][0]
 
+        info_box = wx.StaticBox(self, label='Info')
+
         self.status = wx.StaticText(self, label='Not connected')
-        self.syringe_volume = wx.StaticText(self, label='0', size=self._FromDIP((40,-1)),
+        self.syringe_volume = wx.StaticText(info_box, label='0', size=self._FromDIP((40,-1)),
             style=wx.ST_NO_AUTORESIZE)
-        self.syringe_volume_label = wx.StaticText(self, label='Current volume:')
-        self.syringe_volume_units = wx.StaticText(self, label='mL')
-        self.set_syringe_volume = wx.Button(self, label='Set Current Volume')
+        self.syringe_volume_label = wx.StaticText(info_box, label='Current volume:')
+        self.syringe_volume_units = wx.StaticText(info_box, label='mL')
+        self.set_syringe_volume = wx.Button(info_box, label='Set Current Volume')
         self.set_syringe_volume.Bind(wx.EVT_BUTTON, self._on_set_volume)
-        self.syringe_vol_gauge = wx.Gauge(self, size=self._FromDIP((40, -1)),
+        self.syringe_vol_gauge = wx.Gauge(info_box, size=self._FromDIP((40, -1)),
             style=wx.GA_HORIZONTAL|wx.GA_SMOOTH)
-        self.syringe_vol_gauge_low = wx.StaticText(self, label='0')
-        self.syringe_vol_gauge_high = wx.StaticText(self, label='')
-        self.pressure_label = wx.StaticText(self, label='Pressure:')
-        self.pressure = wx.StaticText(self, label='0', size=self._FromDIP((40, -1)),
+        self.syringe_vol_gauge_low = wx.StaticText(info_box, label='0')
+        self.syringe_vol_gauge_high = wx.StaticText(info_box, label='')
+        self.pressure_label = wx.StaticText(info_box, label='Pressure:')
+        self.pressure = wx.StaticText(info_box, label='0', size=self._FromDIP((40, -1)),
             style=wx.ST_NO_AUTORESIZE)
-        self.pressure_units_lbl = wx.StaticText(self, label='psi')
-        self.flow_readback_label = wx.StaticText(self, label='Flow Rate:')
-        self.flow_readback = wx.StaticText(self, label='0', size=self._FromDIP((40, -1)),
+        self.pressure_units_lbl = wx.StaticText(info_box, label='psi')
+        self.flow_readback_label = wx.StaticText(info_box, label='Flow Rate:')
+        self.flow_readback = wx.StaticText(info_box, label='0', size=self._FromDIP((40, -1)),
             style=wx.ST_NO_AUTORESIZE)
-        self.flow_readback_units = wx.StaticText(self, label='mL/min')
+        self.flow_readback_units = wx.StaticText(info_box, label='mL/min')
 
         self.vol_gauge = wx.BoxSizer(wx.HORIZONTAL)
         self.vol_gauge.Add(self.syringe_vol_gauge_low,
@@ -5279,11 +5305,11 @@ class PumpPanel(utils.DevicePanel):
             flag=wx.LEFT|wx.ALIGN_CENTER_VERTICAL)
 
         status_grid = wx.GridBagSizer(vgap=self._FromDIP(5), hgap=self._FromDIP(5))
-        status_grid.Add(wx.StaticText(self, label='Pump name:'), (0,0),
+        status_grid.Add(wx.StaticText(info_box, label='Pump name:'), (0,0),
             flag=wx.ALIGN_CENTER_VERTICAL)
-        status_grid.Add(wx.StaticText(self, label=self.name), (0,1), span=(1,2),
+        status_grid.Add(wx.StaticText(info_box, label=self.name), (0,1), span=(1,2),
             flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
-        status_grid.Add(wx.StaticText(self, label='Status: '), (1,0),
+        status_grid.Add(wx.StaticText(info_box, label='Status: '), (1,0),
             flag=wx.ALIGN_CENTER_VERTICAL)
         status_grid.Add(self.status, (1,1), span=(1,2),
             flag=wx.ALIGN_CENTER_VERTICAL|wx.EXPAND)
@@ -5304,8 +5330,6 @@ class PumpPanel(utils.DevicePanel):
         status_grid.AddGrowableCol(1)
         status_grid.AddGrowableCol(2)
 
-
-
         self.ssi_status_sizer = wx.FlexGridSizer(cols=3, vgap=self._FromDIP(5),
             hgap=self._FromDIP(5))
         self.ssi_status_sizer.Add(self.pressure_label, flag=wx.ALIGN_CENTER_VERTICAL)
@@ -5313,31 +5337,33 @@ class PumpPanel(utils.DevicePanel):
         self.ssi_status_sizer.Add(self.pressure_units_lbl, flag=wx.ALIGN_CENTER_VERTICAL)
 
 
-        self.status_sizer = wx.StaticBoxSizer(wx.StaticBox(self, label='Info'),
-            wx.VERTICAL)
+        self.status_sizer = wx.StaticBoxSizer(info_box, wx.VERTICAL)
         self.status_sizer.Add(status_grid, 1, wx.EXPAND)
         self.status_sizer.Add(self.ssi_status_sizer, flag=wx.EXPAND)
 
-        self.mode_ctrl = wx.Choice(self, choices=['Continuous flow', 'Fixed volume'])
+
+        ctrl_box = wx.StaticBox(self, label='Controls')
+
+        self.mode_ctrl = wx.Choice(ctrl_box, choices=['Continuous flow', 'Fixed volume'])
         self.mode_ctrl.SetSelection(0)
-        self.direction_lbl = wx.StaticText(self, label='Direction:')
-        self.direction_ctrl = wx.Choice(self, choices=['Dispense', 'Aspirate'])
+        self.direction_lbl = wx.StaticText(ctrl_box, label='Direction:')
+        self.direction_ctrl = wx.Choice(ctrl_box, choices=['Dispense', 'Aspirate'])
         self.direction_ctrl.SetSelection(0)
-        self.flow_rate_ctrl = wx.TextCtrl(self, value=flow_rate,
+        self.flow_rate_ctrl = wx.TextCtrl(ctrl_box, value=flow_rate,
             size=self._FromDIP((60,-1)), validator=utils.CharValidator('float'))
-        self.flow_units_lbl = wx.StaticText(self, label='mL/min')
-        self.flow_accel_lbl = wx.StaticText(self, label='Flow accel.:')
-        self.flow_accel_ctrl = wx.TextCtrl(self, value=flow_accel,
+        self.flow_units_lbl = wx.StaticText(ctrl_box, label='mL/min')
+        self.flow_accel_lbl = wx.StaticText(ctrl_box, label='Flow accel.:')
+        self.flow_accel_ctrl = wx.TextCtrl(ctrl_box, value=flow_accel,
             size=self._FromDIP((60,-1)), validator=utils.CharValidator('float'))
-        self.flow_accel_units_lbl = wx.StaticText(self, label='mL/min^2')
-        self.refill_rate_lbl = wx.StaticText(self, label='Refill rate:')
-        self.refill_rate_ctrl = wx.TextCtrl(self, value=refill_rate,
+        self.flow_accel_units_lbl = wx.StaticText(ctrl_box, label='mL/min^2')
+        self.refill_rate_lbl = wx.StaticText(ctrl_box, label='Refill rate:')
+        self.refill_rate_ctrl = wx.TextCtrl(ctrl_box, value=refill_rate,
             size=self._FromDIP((60,-1)), validator=utils.CharValidator('float'))
-        self.refill_units_lbl = wx.StaticText(self, label='mL/min')
-        self.volume_lbl = wx.StaticText(self, label='Volume:')
-        self.volume_ctrl = wx.TextCtrl(self, size=self._FromDIP((60,-1)),
+        self.refill_units_lbl = wx.StaticText(ctrl_box, label='mL/min')
+        self.volume_lbl = wx.StaticText(ctrl_box, label='Volume:')
+        self.volume_ctrl = wx.TextCtrl(ctrl_box, size=self._FromDIP((60,-1)),
             validator=utils.CharValidator('float'))
-        self.vol_units_lbl = wx.StaticText(self, label='mL')
+        self.vol_units_lbl = wx.StaticText(ctrl_box, label='mL')
 
         #Only turn on for the SSI pump
         self.flow_accel_lbl.Hide()
@@ -5349,7 +5375,7 @@ class PumpPanel(utils.DevicePanel):
 
         basic_ctrl_sizer = wx.GridBagSizer(vgap=self._FromDIP(2),
             hgap=self._FromDIP(2))
-        basic_ctrl_sizer.Add(wx.StaticText(self, label='Mode:'), (0,0),
+        basic_ctrl_sizer.Add(wx.StaticText(ctrl_box, label='Mode:'), (0,0),
             flag=wx.ALIGN_CENTER_VERTICAL)
         basic_ctrl_sizer.Add(self.mode_ctrl, (0,1), span=(1,2),
             flag=wx.ALIGN_CENTER_VERTICAL)
@@ -5357,7 +5383,7 @@ class PumpPanel(utils.DevicePanel):
             flag=wx.ALIGN_CENTER_VERTICAL)
         basic_ctrl_sizer.Add(self.direction_ctrl, (1,1), span=(1,2),
             flag=wx.ALIGN_CENTER_VERTICAL)
-        basic_ctrl_sizer.Add(wx.StaticText(self, label='Flow rate:'), (2,0),
+        basic_ctrl_sizer.Add(wx.StaticText(ctrl_box, label='Flow rate:'), (2,0),
             flag=wx.ALIGN_CENTER_VERTICAL)
         basic_ctrl_sizer.Add(self.flow_rate_ctrl, (2,1),
             flag=wx.ALIGN_CENTER_VERTICAL)
@@ -5385,8 +5411,8 @@ class PumpPanel(utils.DevicePanel):
         basic_ctrl_sizer.SetEmptyCellSize((0,0))
 
 
-        self.run_button = wx.Button(self, label='Start')
-        self.fr_button = wx.Button(self, label='Change flow rate')
+        self.run_button = wx.Button(ctrl_box, label='Start')
+        self.fr_button = wx.Button(ctrl_box, label='Change flow rate')
 
         self.run_button.Bind(wx.EVT_BUTTON, self._on_run)
         self.fr_button.Bind(wx.EVT_BUTTON, self._on_fr_change)
@@ -5395,24 +5421,27 @@ class PumpPanel(utils.DevicePanel):
         button_ctrl_sizer.Add(self.run_button, 0, wx.ALIGN_CENTER_VERTICAL)
         button_ctrl_sizer.Add(self.fr_button, 0, wx.ALIGN_CENTER_VERTICAL|wx.RESERVE_SPACE_EVEN_IF_HIDDEN)
 
-        self.pressure_ctrl = utils.ValueEntry(self._on_set_pressure, self,
+        self.pressure_ctrl = utils.ValueEntry(self._on_set_pressure, ctrl_box,
             size=self._FromDIP((60, -1)), validator=utils.CharValidator('float_te'))
         self.ob1_ctrl_sizer = wx.BoxSizer()
-        self.ob1_ctrl_sizer.Add(wx.StaticText(self, label='Pressure:'),
+        self.ob1_ctrl_sizer.Add(wx.StaticText(ctrl_box, label='Pressure:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
         self.ob1_ctrl_sizer.Add(self.pressure_ctrl, border=self._FromDIP(2),
             flag=wx.ALIGN_CENTER_VERTICAL|wx.LEFT)
 
 
-        self.valve_ctrl = wx.Choice(self, choices=['Input', 'Output', 'Bypass'])
+        self.valve_ctrl = wx.Choice(ctrl_box, choices=['Input', 'Output', 'Bypass'])
         self.valve_ctrl.Bind(wx.EVT_CHOICE, self._on_valve_change)
         self.hamilton_ctrl_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        self.hamilton_ctrl_sizer.Add(wx.StaticText(self, label='Valve position:'))
+        self.hamilton_ctrl_sizer.Add(wx.StaticText(ctrl_box, label='Valve position:'))
         self.hamilton_ctrl_sizer.Add(self.valve_ctrl)
 
-        self.vol_unit_ctrl = wx.Choice(self, choices=['nL', 'uL', 'mL'])
+
+        settings_box = wx.StaticBox(self, label='Settings')
+
+        self.vol_unit_ctrl = wx.Choice(settings_box, choices=['nL', 'uL', 'mL'])
         self.vol_unit_ctrl.SetStringSelection(units.split('/')[0])
-        self.time_unit_ctrl = wx.Choice(self, choices=['s', 'min'])
+        self.time_unit_ctrl = wx.Choice(settings_box, choices=['s', 'min'])
         self.time_unit_ctrl.SetStringSelection(units.split('/')[1])
 
         self.vol_unit_ctrl.Bind(wx.EVT_CHOICE, self._on_units)
@@ -5421,81 +5450,81 @@ class PumpPanel(utils.DevicePanel):
         gen_settings_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(2),
             hgap=self._FromDIP(2))
         gen_settings_sizer.AddGrowableCol(1)
-        gen_settings_sizer.Add(wx.StaticText(self, label='Volume unit:'),
+        gen_settings_sizer.Add(wx.StaticText(settings_box, label='Volume unit:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
         gen_settings_sizer.Add(self.vol_unit_ctrl,
             flag=wx.ALIGN_CENTER_VERTICAL)
-        gen_settings_sizer.Add(wx.StaticText(self, label='Time unit:'),
+        gen_settings_sizer.Add(wx.StaticText(settings_box, label='Time unit:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
         gen_settings_sizer.Add(self.time_unit_ctrl,
             flag=wx.ALIGN_CENTER_VERTICAL)
 
 
         syr_types = sorted(self.known_syringes.keys(), key=lambda x: float(x.split()[0]))
-        self.syringe_type = wx.Choice(self, choices=syr_types)
+        self.syringe_type = wx.Choice(settings_box, choices=syr_types)
         self.syringe_type.SetSelection(0)
         self.syringe_type.Bind(wx.EVT_CHOICE, self._on_syringe_type)
-        self.dual_syringe = wx.Choice(self, choices=['True', 'False'])
+        self.dual_syringe = wx.Choice(settings_box, choices=['True', 'False'])
         self.dual_syringe.SetStringSelection('False')
 
         self.phd4400_settings_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(2),
             hgap=self._FromDIP(2))
-        self.phd4400_settings_sizer.Add(wx.StaticText(self, label='Syringe type:'),
+        self.phd4400_settings_sizer.Add(wx.StaticText(settings_box, label='Syringe type:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
         self.phd4400_settings_sizer.Add(self.syringe_type,
             flag=wx.ALIGN_CENTER_VERTICAL)
-        self.phd4400_settings_sizer.Add(wx.StaticText(self, label='Dual syr. joined:'),
+        self.phd4400_settings_sizer.Add(wx.StaticText(settings_box, label='Dual syr. joined:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
         self.phd4400_settings_sizer.Add(self.dual_syringe,
             flag=wx.ALIGN_CENTER_VERTICAL)
 
 
-        # self.force = utils.ValueEntry(self._on_force_change, self,
+        # self.force = utils.ValueEntry(self._on_force_change, settings_box,
         #     size=self._FromDIP((60, -1)), validator=utils.CharValidator('int_te'))
 
         # self.picoplus_settings_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(2),
         #     hgap=self._FromDIP(2))
-        # self.picoplus_settings_sizer.Add(wx.StaticText(self, label='Force (%):'),
+        # self.picoplus_settings_sizer.Add(wx.StaticText(settings_box, label='Force (%):'),
         #     flag=wx.ALIGN_CENTER_VERTICAL)
         # self.picoplus_settings_sizer.Add(self.force, flag=wx.ALIGN_CENTER_VERTICAL)
 
 
-        self.max_pressure = utils.ValueEntry(self._on_max_pressure_change, self,
+        self.max_pressure = utils.ValueEntry(self._on_max_pressure_change, settings_box,
             size=self._FromDIP((60, -1)), validator=utils.CharValidator('float_te'))
-        self.max_pressure_units_lbl = wx.StaticText(self, label='psi')
-        self.min_pressure = utils.ValueEntry(self._on_min_pressure_change, self,
+        self.max_pressure_units_lbl = wx.StaticText(settings_box, label='psi')
+        self.min_pressure = utils.ValueEntry(self._on_min_pressure_change, settings_box,
             size=self._FromDIP((60, -1)), validator=utils.CharValidator('float_te'))
-        self.min_pressure_units_lbl = wx.StaticText(self, label='psi')
-        self.pressure_units = wx.Choice(self, choices=['psi', 'MPa', 'bar'])
+        self.min_pressure_units_lbl = wx.StaticText(settings_box, label='psi')
+        self.pressure_units = wx.Choice(settings_box, choices=['psi', 'MPa', 'bar'])
         self.pressure_units.SetSelection(0)
         self.pressure_units.Bind(wx.EVT_CHOICE, self._on_pressure_units)
 
 
         self.ssi_settings_sizer = wx.FlexGridSizer(cols=3, vgap=self._FromDIP(2),
             hgap=self._FromDIP(2))
-        self.ssi_settings_sizer.Add(wx.StaticText(self, label='Max pressure:'),
+        self.ssi_settings_sizer.Add(wx.StaticText(settings_box, label='Max pressure:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
         self.ssi_settings_sizer.Add(self.max_pressure,
             flag=wx.ALIGN_CENTER_VERTICAL)
         self.ssi_settings_sizer.Add(self.max_pressure_units_lbl,
             flag=wx.ALIGN_CENTER_VERTICAL)
-        self.ssi_settings_sizer.Add(wx.StaticText(self, label='Min. pressure:'),
+        self.ssi_settings_sizer.Add(wx.StaticText(settings_box, label='Min. pressure:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
         self.ssi_settings_sizer.Add(self.min_pressure,
             flag=wx.ALIGN_CENTER_VERTICAL)
         self.ssi_settings_sizer.Add(self.min_pressure_units_lbl,
             flag=wx.ALIGN_CENTER_VERTICAL)
-        self.ssi_settings_sizer.Add(wx.StaticText(self, label='Pressure units:'),
+        self.ssi_settings_sizer.Add(wx.StaticText(settings_box, label='Pressure units:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
         self.ssi_settings_sizer.Add(self.pressure_units,
             flag=wx.ALIGN_CENTER_VERTICAL)
 
 
-        self.feedback_p = utils.ValueEntry(self._on_pid_change, self,
+        self.feedback_p = utils.ValueEntry(self._on_pid_change, settings_box,
             size=self._FromDIP((60, -1)), validator=utils.CharValidator('float_te'))
-        self.feedback_i = utils.ValueEntry(self._on_pid_change, self,
+        self.feedback_i = utils.ValueEntry(self._on_pid_change, settings_box,
             size=self._FromDIP((60, -1)), validator=utils.CharValidator('float_te'))
-        self.feedback_d = utils.ValueEntry(self._on_pid_change, self,
+        self.feedback_d = utils.ValueEntry(self._on_pid_change, settings_box,
             size=self._FromDIP((60, -1)), validator=utils.CharValidator('float_te'))
 
         self.feedback_p.SafeChangeValue('0')
@@ -5504,18 +5533,18 @@ class PumpPanel(utils.DevicePanel):
 
         self.ob1_settings_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(2),
             hgap=self._FromDIP(2))
-        self.ob1_settings_sizer.Add(wx.StaticText(self, label='P:'),
+        self.ob1_settings_sizer.Add(wx.StaticText(settings_box, label='P:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
         self.ob1_settings_sizer.Add(self.feedback_p, flag=wx.ALIGN_CENTER_VERTICAL)
-        self.ob1_settings_sizer.Add(wx.StaticText(self, label='I:'),
+        self.ob1_settings_sizer.Add(wx.StaticText(settings_box, label='I:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
         self.ob1_settings_sizer.Add(self.feedback_i, flag=wx.ALIGN_CENTER_VERTICAL)
-        self.ob1_settings_sizer.Add(wx.StaticText(self, label='D:'),
+        self.ob1_settings_sizer.Add(wx.StaticText(settings_box, label='D:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
         self.ob1_settings_sizer.Add(self.feedback_d, flag=wx.ALIGN_CENTER_VERTICAL)
 
 
-        self.control_box_sizer = wx.StaticBoxSizer(wx.StaticBox(self, label='Controls'),
+        self.control_box_sizer = wx.StaticBoxSizer(ctrl_box,
             wx.VERTICAL)
         self.control_box_sizer.Add(basic_ctrl_sizer, flag=wx.EXPAND)
         self.control_box_sizer.Add(button_ctrl_sizer, flag=wx.ALIGN_CENTER_HORIZONTAL|wx.TOP,
@@ -5525,7 +5554,7 @@ class PumpPanel(utils.DevicePanel):
         self.control_box_sizer.Add(self.hamilton_ctrl_sizer, flag=wx.EXPAND|wx.TOP,
             border=self._FromDIP(2))
 
-        self.settings_box_sizer = wx.StaticBoxSizer(wx.StaticBox(self, label='Settings'),
+        self.settings_box_sizer = wx.StaticBoxSizer(settings_box,
             wx.VERTICAL)
         self.settings_box_sizer.Add(gen_settings_sizer, flag=wx.EXPAND)
         self.settings_box_sizer.Add(self.phd4400_settings_sizer,
