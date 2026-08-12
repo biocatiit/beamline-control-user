@@ -488,10 +488,10 @@ if __name__ == '__main__':
         # {'mx_record': 'mcs14', 'channel': 13, 'name': 'Length',
         # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
         ]
-    exposure_settings['warnings'] = {'shutter' : True, 'col_vac' : {'check': True,
-        'thresh': 0.04}, 'guard_vac' : {'check': True, 'thresh': 0.04},
-        'sample_vac': {'check': True, 'thresh': 0.04}, 'sc_vac':
-        {'check': True, 'thresh':0.04}}
+    exposure_settings['warnings'] = {'shutter' : False, 'col_vac' : {'check': False,
+        'thresh': 0.04}, 'guard_vac' : {'check': False, 'thresh': 0.04},
+        'sample_vac': {'check': False, 'thresh': 0.04}, 'sc_vac':
+        {'check': False, 'thresh':0.04}}
     exposure_settings['base_data_dir'] = '/nas_data/MarCCD/2026_Run2/' #CHANGE ME and pipeline local_basedir
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']
 
@@ -602,15 +602,15 @@ if __name__ == '__main__':
         # ('trsaxs_scan', trcon.TRScanPanel),
         # ('trsaxs_flow', trcon.TRFlowPanel),
         # ('scan',    scancon.ScanPanel),
-        ('metadata', metadata.ParamPanel),
+        # ('metadata', metadata.ParamPanel),
         # ('pipeline', pipeline_ctrl.PipelineControl),
         # ('uv', spectrometercon.UVPanel),
         # ('hplc', biohplccon.HPLCPanel),
         # ('automator', autocon.AutoPanel),
         # ('autosampler', autosamplercon.AutosamplerPanel),
-        ('toaster', toastcon.ToasterPanel),
-        ('mono_auto_tune', monotunecon.MonoAutoTune),
-        ('airshot', airshotcon.AirShotPanel),
+        # ('toaster', toastcon.ToasterPanel),
+        # ('mono_auto_tune', monotunecon.MonoAutoTune),
+        # ('airshot', airshotcon.AirShotPanel),
         ])
 
     settings = {
