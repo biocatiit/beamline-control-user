@@ -143,14 +143,14 @@ class ExpCommThread(threading.Thread):
 
         logger.debug("Got detector records")
 
-        ab_burst = mx_database.get_record('ab_burst')
-        ab_burst_server_record_name = ab_burst.get_field('server_record')
-        ab_burst_server_record = mx_database.get_record(ab_burst_server_record_name)
+        # ab_burst = mx_database.get_record('ab_burst')
+        # ab_burst_server_record_name = ab_burst.get_field('server_record')
+        # ab_burst_server_record = mx_database.get_record(ab_burst_server_record_name)
         # dg645_trigger_source = mp.Net(ab_burst_server_record, 'dg645.trigger_source')
 
-        ab_burst_2 = mx_database.get_record('ab_burst_2')
-        ab_burst_server_record_name2 = ab_burst_2.get_field('server_record')
-        ab_burst_server_record2 = mx_database.get_record(ab_burst_server_record_name2)
+        # ab_burst_2 = mx_database.get_record('ab_burst_2')
+        # ab_burst_server_record_name2 = ab_burst_2.get_field('server_record')
+        # ab_burst_server_record2 = mx_database.get_record(ab_burst_server_record_name2)
         # dg645_trigger_source2 = mp.Net(ab_burst_server_record2, 'dg645.trigger_source')
 
         logger.debug("Got dg645 records")
@@ -180,15 +180,15 @@ class ExpCommThread(threading.Thread):
             'struck': mx_database.get_record('sis3820'),
             'struck_ctrs': [mx_database.get_record(log['mx_record']) for log in self._settings['mcs_log_vals']],
             'struck_pv': '18ID:mcs',
-            'ab_burst': mx_database.get_record('ab_burst'),
-            'cd_burst': mx_database.get_record('cd_burst'),
-            'ef_burst': mx_database.get_record('ef_burst'),
-            'gh_burst': mx_database.get_record('gh_burst'),
+            # 'ab_burst': mx_database.get_record('ab_burst'),
+            # 'cd_burst': mx_database.get_record('cd_burst'),
+            # 'ef_burst': mx_database.get_record('ef_burst'),
+            # 'gh_burst': mx_database.get_record('gh_burst'),
             # 'dg645_trigger_source': dg645_trigger_source,
-            'ab_burst_2': mx_database.get_record('ab_burst_2'),
-            'cd_burst_2': mx_database.get_record('cd_burst_2'),
-            'ef_burst_2': mx_database.get_record('ef_burst_2'),
-            'gh_burst_2': mx_database.get_record('gh_burst_2'),
+            # 'ab_burst_2': mx_database.get_record('ab_burst_2'),
+            # 'cd_burst_2': mx_database.get_record('cd_burst_2'),
+            # 'ef_burst_2': mx_database.get_record('ef_burst_2'),
+            # 'gh_burst_2': mx_database.get_record('gh_burst_2'),
             # 'dg645_trigger_source2': dg645_trigger_source2,
             'ab': mx_database.get_record('ab'),
             'dio': [mx_database.get_record('do_{}'.format(i)) for i in range(16)],
@@ -218,6 +218,34 @@ class ExpCommThread(threading.Thread):
             mx_data['slow_shutter'] = devices.EPICSPVWrapper('18ID:HUBER1:A1Out')
         else:
             mx_data['slow_shutter'] = mx_data['dio'][6]
+
+        if self._settings['use_epics_dg645']:
+            mx_data['dg645_1'] = devices.EPICSSRSDG645('18ID:DG645:1:')
+            mx_data['ab_burst'] = mx_data['dg645_1'].ab_burst
+            mx_data['cd_burst'] = mx_data['dg645_1'].cd_burst
+            mx_data['ef_burst'] = mx_data['dg645_1'].ef_burst
+            mx_data['gh_burst'] = mx_data['dg645_1'].gh_burst
+
+            mx_data['dg645_2'] = devices.EPICSSRSDG645('18ID:DG645:2:')
+            mx_data['ab_burst_2'] = mx_data['dg645_2'].ab_burst
+            mx_data['cd_burst_2'] = mx_data['dg645_2'].cd_burst
+            mx_data['ef_burst_2'] = mx_data['dg645_2'].ef_burst
+            mx_data['gh_burst_2'] = mx_data['dg645_2'].gh_burst
+
+            mx_data['dg645_1'].set_trigger(1) #Sets external rising edge trigger
+            mx_data['dg645_2'].set_trigger(1)
+        else:
+            mx_data['ab_burst'] = mx_database.get_record('ab_burst')
+            mx_data['cd_burst'] = mx_database.get_record('cd_burst')
+            mx_data['ef_burst'] = mx_database.get_record('ef_burst')
+            mx_data['gh_burst'] = mx_database.get_record('gh_burst')
+
+            mx_data['ab_burst_2'] = mx_database.get_record('ab_burst_2')
+            mx_data['cd_burst_2'] = mx_database.get_record('cd_burst_2')
+            mx_data['ef_burst_2'] = mx_database.get_record('ef_burst_2')
+            mx_data['gh_burst_2'] = mx_database.get_record('gh_burst_2')
+
+
 
         logger.debug("Generated mx_data")
 
@@ -1839,13 +1867,13 @@ class ExpCommThread(threading.Thread):
             # gh_burst.setup(exp_period, (exp_period-exp_time)/10.,
             #     num_frames, exp_time+(exp_period-exp_time)/10., 1, 2) # For testing CTR08 only
 
-            if exp_period*num_frames <= 1999:
+            if exp_period*num_frames <= 5:
                 ab_burst_2.setup(1, exp_period*num_frames, 1, 0, 1, 2)
                 cd_burst_2.setup(1, 0, 1, 0, 1, 2) #Irrelevant
                 ef_burst_2.setup(1, 0, 1, 0, 1, 2) #Irrelevant
                 gh_burst_2.setup(1, 0, 1, 0, 1, 2) #Irrelevant
             else:
-                ab_burst_2.setup(1, 1999, 1, 0, 1, 2)
+                ab_burst_2.setup(1, 5, 1, 0, 1, 2)
                 cd_burst_2.setup(1, 0, 1, 0, 1, 2) #Irrelevant
                 ef_burst_2.setup(1, 0, 1, 0, 1, 2) #Irrelevant
                 gh_burst_2.setup(1, 0, 1, 0, 1, 2) #Irrelevant
@@ -2219,7 +2247,7 @@ class ExpCommThread(threading.Thread):
             det.set_frame_type('bg')
             det.set_file_auto_save(False)
 
-            time.sleep(0.15) #Wait to be sure slow shutter is closed
+            time.sleep(0.2) #Wait to be sure slow shutter is closed
             det.arm()
 
             while det.get_status():
@@ -2378,6 +2406,9 @@ class ExpCommThread(threading.Thread):
                         scaler, kwargs)
                     aborted = True
                     break
+
+        else:
+            time.sleep(0.2) #Make sure slow shutter is open
 
         if self._abort_event.is_set():
             if not aborted:
@@ -5242,6 +5273,7 @@ default_exposure_settings = {
     'd_hutch_H_pv'          : '18ID:EnvMon:D:Humid',
     'use_keithley_amps'     : False, #Use old Keithley amps or new SRS amps for metadata
     'use_huber_atten'       : True, #Use new Huber attenuator or old XIA atten. for slow shutter and metadata
+    'use_epics_dg645'       : True, #Use EPICS or MX control of DG645s
     'c_hutch_beam_ready_pv' : 'PA:18ID:STA_C_BEAMREADY_PL',
     'a_hutch_beam_ready_pv' : 'PA:18ID:STA_A_BEAMREADY_PL',
     'shutter_permit_pv'     : 'XFD:ShutterPermit',

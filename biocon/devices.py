@@ -1107,6 +1107,146 @@ class EPICSSRSAmplifier(object):
 
         return gain
 
+class SRSDG645(Device):
+    """
+    Basic SRS DG645 delay generator
+    """
+    attrs = ('ADelayAO', 'BDelayAO', 'CDelayAO', 'DDelayAO',
+        'EDelayAO', 'FDelayAO', 'GDelayAO', 'HDelayAO', 'TriggerSourceMO',
+        'BurstModeBO', 'BurstCountLO', 'BurstDelayAO', 'BurstPeriodAO',
+        'EventStatusLI', 'EventStatusLI.PROC', 'TriggerInhibitMO',
+        'TriggerHoldoffAO')
+
+    _nonpvs = ('_prefix', '_pvs', '_delim', '_nchan', '_chans')
+
+    def __init__(self, prefix):
+        Device.__init__(self, prefix, delim='', mutable=False,
+                              attrs=self.attrs)
+
+class EPICSSRSDG645(object):
+    def __init__(self, pv_prefix):
+        logger.debug('Connecting EPICSSRSDG645 %s', pv_prefix)
+        self.dg = SRSDG645(pv_previx)
+
+        self.a_delay_pv = self.dg.PV('ADelayAO')
+        self.b_delay_pv = self.dg.PV('BDelayAO')
+        self.c_delay_pv = self.dg.PV('CDelayAO')
+        self.d_delay_pv = self.dg.PV('DDelayAO')
+        self.e_delay_pv = self.dg.PV('EDelayAO')
+        self.f_delay_pv = self.dg.PV('FDelayAO')
+        self.g_delay_pv = self.dg.PV('GDelayAO')
+        self.h_delay_pv = self.dg.PV('HDelayAO')
+
+        self.status_pv = self.dg.PV('EventStatusLI')
+        self.status_update_pv = self.dg.PV('EventStatusLI.PROC')
+
+        self.burst_active_pv = self.dg.PV('BurstModeBO')
+        self.burst_count_pv = self.dg.PV('BurstCountLO')
+        self.burst_delay_pv = self.dg.PV('BurstDelayAO')
+        self.burst_period_pv = self.dg.PV('BurstPeriodAO')
+
+        self.trig_source_pv = self.dg.PV('TriggerSourceMO')
+        self.trig_source_inhib_pv = self.dg.PV('TriggerInhibitMO')
+        self.trig_delay_pv = self.dg.PV('TriggerHoldoffAO')
+
+        self.trig_source_inhib_pv.put(0) # Sets inhibit input to off
+
+        self.ab_burst = EPICSSRSDG645Burst(self, 'ab')
+        self.cd_burst = EPICSSRSDG645Burst(self, 'cd')
+        self.ef_burst = EPICSSRSDG645Burst(self, 'ef')
+        self.gh_burst = EPICSSRSDG645Burst(self, 'gh')
+
+    def status(self):
+        self.status_update_pv.put(1, wait=True)
+        return self.status_pv.get(use_monitor=False)
+
+    def set_trigger(self, mode):
+        """
+        Expect mode as an enum value.
+
+        Enum values:
+        0 - Internal
+        1 - Ext. rising edge
+        2 - Ext. falling edge
+        3 - SS ext. rise edge (single shot external)
+        4 - SS ext. fall edge (single shot external)
+        5 - Single shot
+        6 - Line
+        """
+        self.trig_source_pv.set(mode, wait=True)
+
+    def set_trigger_delay(self, delay):
+        delay = float(delay)
+        self.trig_delay_pv.put(delay, wait=True)
+
+    def arm(self):
+        self.burst_active_pv.put(1, wait=True)
+
+    def stop(self):
+        self.burst_active_pv.put(0)
+        """
+        Do I need more here?
+        """
+
+    def set_up_pulse(self, width, delay):
+        width = float(width)
+        delay = float(delay)
+
+        if pulse == 'ab':
+            start = self.a_delay_pv
+            end = self.b_delay_pv
+        elif pulse == 'cd':
+            start = self.c_delay_pv
+            end = self.d_delay_pv
+        elif pulse == 'ef':
+            start = self.e_delay_pv
+            end = self.f_delay_pv
+        elif pulse == 'gh':
+            start = self.g_delay_pv
+            end = self.h_delay_pv
+
+        start.put(delay)
+        end.put(delay+width, wait=True)
+
+    def set_up_burst(self, pulses, period, delay_after_trig=0):
+        pulses = int(pulses)
+        period = float(period)
+        delay_after_trig = float(delay_after_trig)
+        self.burst_count_pv.put(pulses, wait=True)
+        self.burst_period_pv.put(period, wait=True)
+        self.burst_delay_pv.put(delay_after_trig, wait=True)
+
+
+class EPICSSRSDG645Burst(object):
+    """
+    Compatiblity with MX controls
+    """
+    def __init__(self, dg, pulse):
+        self.dg = dg
+        self.pulse = pulse
+
+    def setup(self, period, width, pulses, delay, function=None, trigger=None):
+        """
+        function and triger are not used, but are simply to accept those values
+        as MX would. Note that the trigger value for MX does not correspond to the
+        trigger value for EPICS.
+        """
+        self.dg.set_up_pulse(self.pulse, width, delay)
+        self.dg.set_up_burst(pulses, period)
+
+    def arm(self):
+        self.dg.arm()
+
+    def stop(self):
+        self.dg.stop()
+
+    def get_status(self):
+        return self.dg.status()
+
+    def set_trigger_delay(self, delay):
+        self.dg.set_trigger_delay(delay)
+
+
 class EPICSPVWrapper(object):
     """
     Wraps a pyepics PV in syntax compatible with MP records
