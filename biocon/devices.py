@@ -1158,9 +1158,10 @@ class EPICSSRSDG645(object):
 
     def status(self):
         self.status_update_pv.put(1, wait=True)
-        status = int(self.status_pv.get(use_monitor=False))
-        print(status)
-        return status
+        return int(self.status_pv.get(use_monitor=False))
+
+    def get_burst_active(self):
+        return int(self.burst_active_pv.get())
 
     def set_trigger(self, mode):
         """
@@ -1247,6 +1248,9 @@ class EPICSSRSDG645Burst(object):
 
     def set_trigger_delay(self, delay):
         self.dg.set_trigger_delay(delay)
+
+    def get_burst_active(self):
+        return self.dg.get_burst_active()
 
 
 class EPICSPVWrapper(object):

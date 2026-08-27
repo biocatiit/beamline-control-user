@@ -1927,7 +1927,10 @@ class ExpCommThread(threading.Thread):
             waiting = True
             while waiting:
                 # logger.debug(ab_burst.get_status())
-                waiting = np.any([ab_burst.get_status() == 16777216 for i in range(5)])
+                if self._settings['use_epics_dg645']:
+                    waiting = not ab_burst.get_status() & 1
+                else:
+                    waiting = np.any([ab_burst.get_status() == 16777216 for i in range(5)])
                 time.sleep(0.01)
 
                 if self._abort_event.is_set():
@@ -1961,43 +1964,51 @@ class ExpCommThread(threading.Thread):
                 timeouts = timeouts + 1
                 logger.debug('Timed out getting detector status')
 
-        # Works for MX
-        # if (status & 0x1) == 0:
-        #     ret_status_1 = True
+        if self._settings['use_epics_dg645']:
+            # Works for EPICS
+            if (status >> 3 & 1) or (status >> 5 & 1):
+                ret_status_1 = True
+            elif (status == 0 and not ab_burst.get_burst_active()):
+                ret_status_1 = True
+            else:
+                ret_status_1 = False
+
+        else:
+            # Works for MX
+            if (status & 0x1) == 0:
+                ret_status_1 = True
+            else:
+                ret_status_1 = False
+
+        # if ab_burst_2 is not None:
+        #     try:
+        #         status_2 = ab_burst_2.get_status()
+
+        #         if self._settings['use_epics_dg645']:
+        #             # Works for EPICS
+        #             if (status_2 >> 3 & 1) or (status_2 >> 5 & 1):
+        #                 ret_status_2 = True
+        #             elif (status_2 == 0 and not ab_burst_2.get_burst_active()):
+        #                 ret_status_2 = True
+        #             else:
+        #                 ret_status_2 = False
+
+        #         else:
+        #             # Works for MX
+        #             if (status_2 & 0x1) == 0:
+        #                 ret_status_2 = True
+        #             else:
+        #                 ret_status_2 = False
+
+        #     except Exception:
+        #         ret_status_2 = True
+
         # else:
-        #     ret_status_1 = False
+        #     ret_status_2 = True
 
-        # Works for EPICS?
-        if (status >> 3 & 1) or (status >> 5 & 1):
-            ret_status_1 = True
-        else:
-            ret_status_1 = False
+        # ret_status = ret_status_1 and ret_status_2
 
-        if ab_burst_2 is not None:
-            try:
-                status_2 = ab_burst_2.get_status()
-
-                # Works for MX
-                # if (status_2 & 0x1) == 0:
-                #     ret_status_2 = True
-                # else:
-                #     ret_status_2 = False
-
-                # Works for EPICS?
-                if (status >> 3 & 1) or (status >> 5 & 1):
-                    ret_status_1 = True
-                else:
-                    ret_status_1 = False
-
-            except Exception:
-                ret_status_2 = True
-
-        else:
-            ret_status_2 = True
-
-        ret_status = ret_status_1 and ret_status_2
-
-        logger.debug('Experiment status: %s', ret_status)
+        ret_status = ret_status_1
 
         return ret_status, timeouts
 
@@ -2161,6 +2172,7 @@ class ExpCommThread(threading.Thread):
 
             time.sleep(0.1)
 
+        logger.debug('Out of exposure loop')
 
         if continuous_exp:
             dio_out9.write(0)
@@ -2176,6 +2188,7 @@ class ExpCommThread(threading.Thread):
                     motor.move_absolute(in_pos)
 
         if exp_type != 'muscle':
+            logger.debug('Getting counters')
             current_meas = struck.get_last_measurement_number()
             if current_meas != last_meas or (current_meas == last_meas and current_meas == 0):
                 cvals = struck.read_all()
@@ -2205,6 +2218,8 @@ class ExpCommThread(threading.Thread):
 
         start = time.monotonic()
         timeout = 3*60
+
+        logger.debug('Waiting for detector to finish')
 
         while det.get_status() !=0:
             time.sleep(0.01)
