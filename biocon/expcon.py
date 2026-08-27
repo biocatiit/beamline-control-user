@@ -1961,7 +1961,14 @@ class ExpCommThread(threading.Thread):
                 timeouts = timeouts + 1
                 logger.debug('Timed out getting detector status')
 
-        if (status & 0x1) == 0:
+        # Works for MX
+        # if (status & 0x1) == 0:
+        #     ret_status_1 = True
+        # else:
+        #     ret_status_1 = False
+
+        # Works for EPICS?
+        if (status >> 3 & 1) or (status >> 5 & 1):
             ret_status_1 = True
         else:
             ret_status_1 = False
@@ -1970,10 +1977,17 @@ class ExpCommThread(threading.Thread):
             try:
                 status_2 = ab_burst_2.get_status()
 
-                if (status_2 & 0x1) == 0:
-                    ret_status_2 = True
+                # Works for MX
+                # if (status_2 & 0x1) == 0:
+                #     ret_status_2 = True
+                # else:
+                #     ret_status_2 = False
+
+                # Works for EPICS?
+                if (status >> 3 & 1) or (status >> 5 & 1):
+                    ret_status_1 = True
                 else:
-                    ret_status_2 = False
+                    ret_status_1 = False
 
             except Exception:
                 ret_status_2 = True
