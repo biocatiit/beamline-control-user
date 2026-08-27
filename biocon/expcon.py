@@ -1983,6 +1983,8 @@ class ExpCommThread(threading.Thread):
 
         ret_status = ret_status_1 and ret_status_2
 
+        logger.debug('Experiment status: %s', ret_status)
+
         return ret_status, timeouts
 
     def _inner_fast_exp(self, det, struck, ab_burst,

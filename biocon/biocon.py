@@ -433,7 +433,7 @@ if __name__ == '__main__':
 
     h1 = logging.StreamHandler(sys.stdout)
     h1.setLevel(logging.INFO)
-    # h1.setLevel(logging.DEBUG)
+    h1.setLevel(logging.DEBUG)
     formatter = logging.Formatter('%(asctime)s - %(message)s')
     h1.setFormatter(formatter)
 
@@ -492,7 +492,7 @@ if __name__ == '__main__':
         'thresh': 0.04}, 'guard_vac' : {'check': False, 'thresh': 0.04},
         'sample_vac': {'check': False, 'thresh': 0.04}, 'sc_vac':
         {'check': False, 'thresh':0.04}}
-    exposure_settings['base_data_dir'] = '/nas_data/Eiger2x/2026_Run2/' #CHANGE ME and pipeline local_basedir
+    exposure_settings['base_data_dir'] = '/nas_data/Eiger2x/2026_Run3/' #CHANGE ME and pipeline local_basedir
     exposure_settings['data_dir'] = exposure_settings['base_data_dir']
 
 

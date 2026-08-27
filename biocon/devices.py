@@ -1126,7 +1126,7 @@ class SRSDG645(Device):
 class EPICSSRSDG645(object):
     def __init__(self, pv_prefix):
         logger.debug('Connecting EPICSSRSDG645 %s', pv_prefix)
-        self.dg = SRSDG645(pv_previx)
+        self.dg = SRSDG645(pv_prefix)
 
         self.a_delay_pv = self.dg.PV('ADelayAO')
         self.b_delay_pv = self.dg.PV('BDelayAO')
@@ -1158,7 +1158,9 @@ class EPICSSRSDG645(object):
 
     def status(self):
         self.status_update_pv.put(1, wait=True)
-        return self.status_pv.get(use_monitor=False)
+        status = int(self.status_pv.get(use_monitor=False))
+        print(status)
+        return status
 
     def set_trigger(self, mode):
         """
@@ -1173,7 +1175,7 @@ class EPICSSRSDG645(object):
         5 - Single shot
         6 - Line
         """
-        self.trig_source_pv.set(mode, wait=True)
+        self.trig_source_pv.put(mode, wait=True)
 
     def set_trigger_delay(self, delay):
         delay = float(delay)
@@ -1188,7 +1190,7 @@ class EPICSSRSDG645(object):
         Do I need more here?
         """
 
-    def set_up_pulse(self, width, delay):
+    def set_up_pulse(self, pulse, width, delay):
         width = float(width)
         delay = float(delay)
 
@@ -1206,7 +1208,7 @@ class EPICSSRSDG645(object):
             end = self.h_delay_pv
 
         start.put(delay)
-        end.put(delay+width, wait=True)
+        end.put(width, wait=True)
 
     def set_up_burst(self, pulses, period, delay_after_trig=0):
         pulses = int(pulses)
