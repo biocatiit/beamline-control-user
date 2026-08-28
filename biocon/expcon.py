@@ -155,17 +155,7 @@ class ExpCommThread(threading.Thread):
 
         logger.debug("Got dg645 records")
 
-        if self._settings['use_huber_atten']:
-            attenuator = devices.Attenuator()
-        else:
-            attenuator = {
-                    1   : mx_database.get_record('di_0'),
-                    2   : mx_database.get_record('di_1'),
-                    4   : mx_database.get_record('di_2'),
-                    8   : mx_database.get_record('di_3'),
-                    16  : mx_database.get_record('di_4'),
-                    32  : mx_database.get_record('di_5'),
-                }
+        attenuator = devices.Attenuator()
 
         logger.debug("Got attenuator records.")
 
@@ -203,21 +193,13 @@ class ExpCommThread(threading.Thread):
             'attenuator' : attenuator,
             }
 
-        if self._settings['use_keithley_amps']:
-            mx_data['i0'] = mx_database.get_record('ki0')
-            mx_data['i1'] = mx_database.get_record('ki1')
-            mx_data['i2'] = mx_database.get_record('ki2')
-            mx_data['i3'] = mx_database.get_record('ki3')
-        else:
-            mx_data['i0'] = devices.EPICSSRSAmplifier('18ID:SR570:1:asyn_1')
-            mx_data['i1'] = devices.EPICSSRSAmplifier('18ID:SR570:2:asyn_2')
-            mx_data['i2'] = devices.EPICSSRSAmplifier('18ID:SR570:3:asyn_3')
-            mx_data['i3'] = devices.EPICSSRSAmplifier('18ID:SR570:4:asyn_4')
 
-        if self._settings['use_huber_atten']:
-            mx_data['slow_shutter'] = devices.EPICSPVWrapper('18ID:HUBER1:A1Out')
-        else:
-            mx_data['slow_shutter'] = mx_data['dio'][6]
+        mx_data['i0'] = devices.EPICSSRSAmplifier('18ID:SR570:1:asyn_1')
+        mx_data['i1'] = devices.EPICSSRSAmplifier('18ID:SR570:2:asyn_2')
+        mx_data['i2'] = devices.EPICSSRSAmplifier('18ID:SR570:3:asyn_3')
+        mx_data['i3'] = devices.EPICSSRSAmplifier('18ID:SR570:4:asyn_4')
+
+        mx_data['slow_shutter'] = devices.EPICSPVWrapper('18ID:HUBER1:A1Out')
 
         if self._settings['use_epics_dg645']:
             mx_data['dg645_1'] = devices.EPICSSRSDG645('18ID:DG645:1:')
@@ -2862,40 +2844,21 @@ class ExpCommThread(threading.Thread):
         metadata['I2 gain:'] = '{:.0e}'.format(self._mx_data['i2'].get_gain())
         metadata['I3 gain:'] = '{:.0e}'.format(self._mx_data['i3'].get_gain())
 
-        if self._settings['use_huber_atten']:
-            att = self._mx_data['attenuator']
+        att = self._mx_data['attenuator']
 
-            for i in range(2,9):
-                mat, thick = att.get_attenuator_def(i)
-                atten_in = att.get_attenuator_status(i)
+        for i in range(2,9):
+            mat, thick = att.get_attenuator_def(i)
+            atten_in = att.get_attenuator_status(i)
 
-                if atten_in:
-                    atten_str = 'In'
-                else:
-                    atten_str = 'Out'
+            if atten_in:
+                atten_str = 'In'
+            else:
+                atten_str = 'Out'
 
-                metadata['Attenuator {}, {} um {}:'.format(i, thick, mat)] = atten_str
+            metadata['Attenuator {}, {} um {}:'.format(i, thick, mat)] = atten_str
 
-            atten = att.get_attenuation()
+        atten = att.get_attenuation()
 
-
-        else:
-            atten_length = 0
-            for att in sorted(self._mx_data['attenuator'].keys()):
-                atten_in = not self._mx_data['attenuator'][att].read()
-                if atten_in:
-                    atten_str = 'In'
-                else:
-                    atten_str = 'Out'
-
-                metadata['Attenuator, {} foil:'.format(att)] = atten_str
-
-                if atten_in:
-                    atten_length = atten_length + att
-
-            atten_length = 20*atten_length
-
-            atten = np.exp(-atten_length/256.568) #256.568 is Al attenuation length at 12 keV
 
         if atten > 0.1:
             atten = '{}'.format(round(atten, 3))
@@ -5312,8 +5275,6 @@ default_exposure_settings = {
     'c_hutch_H_pv'          : '18ID:EnvMon:C:Humid',
     'd_hutch_T_pv'          : '18ID:EnvMon:D:TempC',
     'd_hutch_H_pv'          : '18ID:EnvMon:D:Humid',
-    'use_keithley_amps'     : False, #Use old Keithley amps or new SRS amps for metadata
-    'use_huber_atten'       : True, #Use new Huber attenuator or old XIA atten. for slow shutter and metadata
     'use_epics_dg645'       : True, #Use EPICS or MX control of DG645s
     'c_hutch_beam_ready_pv' : 'PA:18ID:STA_C_BEAMREADY_PL',
     'a_hutch_beam_ready_pv' : 'PA:18ID:STA_A_BEAMREADY_PL',
