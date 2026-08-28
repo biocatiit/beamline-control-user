@@ -1863,7 +1863,7 @@ class ExpCommThread(threading.Thread):
             cd_burst.setup(exp_period, (exp_period-exp_time)/10.,
                 num_frames, exp_time+(exp_period-exp_time)/10., 1, 2)
             ef_burst.setup(exp_period, exp_time, num_frames, offset, 1, 2)
-            gh_burst.setup(exp_period, uv_time/1.1, num_frames, 0, 1, 2) #Reenable after CTR08 testing!!!!!
+            gh_burst.setup(exp_period, uv_time/1.1, num_frames, offset, 1, 2) #Reenable after CTR08 testing!!!!!
             # gh_burst.setup(exp_period, (exp_period-exp_time)/10.,
             #     num_frames, exp_time+(exp_period-exp_time)/10., 1, 2) # For testing CTR08 only
 
@@ -1883,6 +1883,15 @@ class ExpCommThread(threading.Thread):
         #     cd_burst_2.setup(struck_meas_time, struck_meas_time/2., struck_num_meas+1, 0, 1, 2)
         #     ef_burst_2.setup(struck_meas_time, 0, struck_num_meas+1, 0, 1, 2) #Irrelevant
         #     gh_burst_2.setup(struck_meas_time, 0, struck_num_meas+1, 0, 1, 2) #Irrelevant
+
+        if self._settings['use_epics_dg645']
+            if self._settings['delay_cont_shutter'] and continuous_exp:
+                # Delays exposure start for continuous exposure by the shutter opening time
+                ab_burst.set_trigger_delay(s_open_time)
+                ab_burst_2.set_trigger_delay(0)
+            else:
+                ab_burst.set_trigger_delay(0)
+                ab_burst_2.set_trigger_delay(0)
 
         for cur_trig in range(1,num_trig+1):
             #Runs a loop for each expected trigger signal (internal or external)
@@ -5289,6 +5298,7 @@ default_exposure_settings = {
     'num_trig'              : '1',
     'show_advanced_options' : True,
     'open_shutter_before_trig_cont_exp' : True,
+    'delay_cont_shutter'    : True, # Delays start of exposure sequence by shutter opening time for continuously open shutter experiments. Ensures full exposure on each frame.
     'beam_current_pv'       : 'XFD:srCurrent',
     'fe_shutter_pv'         : 'PA:18ID:STA_A_FES_OPEN_PL',
     'd_shutter_pv'          : 'PA:18ID:STA_D_SDS_OPEN_PL.VAL',
