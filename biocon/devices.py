@@ -1147,7 +1147,6 @@ class EPICSSRSDG645(object):
 
         self.trig_source_pv = self.dg.PV('TriggerSourceMO')
         self.trig_source_inhib_pv = self.dg.PV('TriggerInhibitMO')
-        self.trig_delay_pv = self.dg.PV('TriggerHoldoffAO')
 
         self.trig_source_inhib_pv.put(0) # Sets inhibit input to off
 
@@ -1180,7 +1179,7 @@ class EPICSSRSDG645(object):
 
     def set_trigger_delay(self, delay):
         delay = float(delay)
-        self.trig_delay_pv.put(delay, wait=True)
+        self.burst_delay_pv.put(delay, wait=True)
 
     def arm(self):
         self.burst_active_pv.put(1, wait=True)

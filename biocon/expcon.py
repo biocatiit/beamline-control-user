@@ -143,18 +143,6 @@ class ExpCommThread(threading.Thread):
 
         logger.debug("Got detector records")
 
-        # ab_burst = mx_database.get_record('ab_burst')
-        # ab_burst_server_record_name = ab_burst.get_field('server_record')
-        # ab_burst_server_record = mx_database.get_record(ab_burst_server_record_name)
-        # dg645_trigger_source = mp.Net(ab_burst_server_record, 'dg645.trigger_source')
-
-        # ab_burst_2 = mx_database.get_record('ab_burst_2')
-        # ab_burst_server_record_name2 = ab_burst_2.get_field('server_record')
-        # ab_burst_server_record2 = mx_database.get_record(ab_burst_server_record_name2)
-        # dg645_trigger_source2 = mp.Net(ab_burst_server_record2, 'dg645.trigger_source')
-
-        logger.debug("Got dg645 records")
-
         attenuator = devices.Attenuator()
 
         logger.debug("Got attenuator records.")
@@ -163,31 +151,11 @@ class ExpCommThread(threading.Thread):
         logger.debug('Got scaler records.')
 
         mx_data = {'det': det,
-            # 'det_datadir': det_datadir,
-            # 'det_filename': det_filename,
-            # 'det_exp_time'      : det_exp_time,
-            # 'det_exp_period'    : det_exp_period,
             'struck': mx_database.get_record('sis3820'),
             'struck_ctrs': [mx_database.get_record(log['mx_record']) for log in self._settings['mcs_log_vals']],
             'struck_pv': '18ID:mcs',
-            # 'ab_burst': mx_database.get_record('ab_burst'),
-            # 'cd_burst': mx_database.get_record('cd_burst'),
-            # 'ef_burst': mx_database.get_record('ef_burst'),
-            # 'gh_burst': mx_database.get_record('gh_burst'),
-            # 'dg645_trigger_source': dg645_trigger_source,
-            # 'ab_burst_2': mx_database.get_record('ab_burst_2'),
-            # 'cd_burst_2': mx_database.get_record('cd_burst_2'),
-            # 'ef_burst_2': mx_database.get_record('ef_burst_2'),
-            # 'gh_burst_2': mx_database.get_record('gh_burst_2'),
-            # 'dg645_trigger_source2': dg645_trigger_source2,
-            'ab': mx_database.get_record('ab'),
             'dio': [mx_database.get_record('do_{}'.format(i)) for i in range(16)],
             'scaler'    : scaler,
-            # 'joerger': mx_database.get_record('joerger_timer'),
-            # 'joerger_ctrs':[mx_database.get_record('j2')] + [mx_database.get_record(log['mx_record']) for log in self._settings['scaler_log_vals']],
-            # 'ki1'   : mx_database.get_record('ki1'),
-            # 'ki2'   : mx_database.get_record('ki2'),
-            # 'ki3'   : mx_database.get_record('ki3'),
             'mx_db' : mx_database,
             'motors'  : {},
             'attenuator' : attenuator,
@@ -198,6 +166,8 @@ class ExpCommThread(threading.Thread):
         mx_data['i1'] = devices.EPICSSRSAmplifier('18ID:SR570:2:asyn_2')
         mx_data['i2'] = devices.EPICSSRSAmplifier('18ID:SR570:3:asyn_3')
         mx_data['i3'] = devices.EPICSSRSAmplifier('18ID:SR570:4:asyn_4')
+
+        logger.debug('Got amplifier records')
 
         mx_data['slow_shutter'] = devices.EPICSPVWrapper('18ID:HUBER1:A1Out')
 
@@ -227,7 +197,7 @@ class ExpCommThread(threading.Thread):
             mx_data['ef_burst_2'] = mx_database.get_record('ef_burst_2')
             mx_data['gh_burst_2'] = mx_database.get_record('gh_burst_2')
 
-
+        logger.debug('Got DG645 records')
 
         logger.debug("Generated mx_data")
 
@@ -1866,7 +1836,7 @@ class ExpCommThread(threading.Thread):
         #     ef_burst_2.setup(struck_meas_time, 0, struck_num_meas+1, 0, 1, 2) #Irrelevant
         #     gh_burst_2.setup(struck_meas_time, 0, struck_num_meas+1, 0, 1, 2) #Irrelevant
 
-        if self._settings['use_epics_dg645']
+        if self._settings['use_epics_dg645']:
             if self._settings['delay_cont_shutter'] and continuous_exp:
                 # Delays exposure start for continuous exposure by the shutter opening time
                 ab_burst.set_trigger_delay(s_open_time)
@@ -5260,7 +5230,7 @@ default_exposure_settings = {
     'wait_for_trig'         : True,
     'num_trig'              : '1',
     'show_advanced_options' : True,
-    'open_shutter_before_trig_cont_exp' : True,
+    'open_shutter_before_trig_cont_exp' : False,
     'delay_cont_shutter'    : True, # Delays start of exposure sequence by shutter opening time for continuously open shutter experiments. Ensures full exposure on each frame.
     'beam_current_pv'       : 'XFD:srCurrent',
     'fe_shutter_pv'         : 'PA:18ID:STA_A_FES_OPEN_PL',
