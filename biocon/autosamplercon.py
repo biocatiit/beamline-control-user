@@ -814,6 +814,7 @@ class Autosampler(object):
             self._status = 'Moving to clean'
 
         success = self.move_motors_absolute(self.needle_out_position, 'needle_y')
+
         if success:
             abort = self._sleep(1)
             if not abort:
@@ -874,10 +875,15 @@ class Autosampler(object):
         if self._active_count == 1:
             self._status = 'Moving needle in'
 
-        self.move_plate_out(False)
+        success = self.move_plate_out(False)
 
-        success = self.move_motors_absolute(self.needle_in_position, 'needle_y',
-            y_offset=False)
+        if success:
+            abort = self._sleep(1)
+            if not abort:
+                success = self.move_motors_absolute(self.needle_in_position,
+                    'needle_y', y_offset=False)
+            else:
+                success = False
 
         self._dec_active()
 
@@ -939,15 +945,16 @@ class Autosampler(object):
 
         if cur_plate_x != self.plate_x_out:
             success = self.move_motors_absolute(self.needle_out_position, 'needle_y')
-            if success:
-                abort = self._sleep(1)
-                success = not abort
         else:
             success = True
 
         if success:
-            success = self.move_motors_absolute([self.plate_x_load,
-                self.plate_z_load, self.needle_y_motor.position])
+            abort = self._sleep(1)
+            if not abort:
+                success = self.move_motors_absolute([self.plate_x_load,
+                    self.plate_z_load, self.needle_y_motor.position])
+            else:
+                success = False
 
         self._dec_active()
 
@@ -974,11 +981,12 @@ class Autosampler(object):
         success = self.move_motors_absolute(self.needle_out_position, 'needle_y')
 
         if success:
-            abort = self._check_abort()
-            success = not abort
-            if success:
+            abort = self._sleep(1)
+            if not abort:
                 success = self.move_motors_absolute([well_position[0],
                     well_position[1], self.needle_out_position])
+            else:
+                success = False
 
         self._dec_active()
 
@@ -1173,7 +1181,10 @@ class Autosampler(object):
             if abort:
                 break
 
-        success = self.move_to_load(row, column, False)
+        if not abort:
+            success = self.move_to_load(row, column, False)
+        else:
+            success = False
 
         if success:
             self.set_pump_aspirate_rates(self._sample_draw_rate, rate_units, 'sample')
@@ -1216,13 +1227,16 @@ class Autosampler(object):
             if abort:
                 break
 
-        if self.settings['inject_connect_vol'] > 0:
-            self.set_pump_dispense_rates(self.settings['inject_connect_rate'],
-                'uL/min', 'sample')
-            success = self.dispense(self.settings['inject_connect_vol'],
-                'sample', units='uL')
+        if not abort:
+            if self.settings['inject_connect_vol'] > 0:
+                self.set_pump_dispense_rates(self.settings['inject_connect_rate'],
+                    'uL/min', 'sample')
+                success = self.dispense(self.settings['inject_connect_vol'],
+                    'sample', units='uL')
+            else:
+                success = True
         else:
-            success = True
+            success = False
 
         if success:
             success = self.move_needle_in(False)
@@ -1268,33 +1282,36 @@ class Autosampler(object):
         self.sample_pump.set_valve_position(
             self.settings['syringe_valve_positions']['sample'])
 
+        abort = False
+
         while self.sample_pump.is_moving():
             abort = self._sleep(0.02)
             if abort:
                 break
+
         self.set_pump_dispense_rates(rate, rate_units, 'sample')
 
         load_vol = pumpcon.convert_volume(volume, vol_units, 'uL')
 
-        self.dispense(load_vol - self.settings['reserve_vol'], 'sample',
-            trigger=trigger, delay=start_delay, units='uL', blocking=False)
+        if not abort:
+            self.dispense(load_vol - self.settings['reserve_vol'], 'sample',
+                trigger=trigger, delay=start_delay, units='uL', blocking=False)
 
-        abort = False
+            while not self.sample_pump.is_moving():
+                self._sleep(0.02)
 
-        while not self.sample_pump.is_moving():
-            self._sleep(0.02)
+            while self.sample_pump.is_moving():
+                abort = self._sleep(0.02)
+                if abort:
+                    break
 
-        while self.sample_pump.is_moving():
-            abort = self._sleep(0.02)
-            if abort:
-                break
+        if not abort:
+            start_time = time.monotonic()
 
-        start_time = time.monotonic()
-
-        while time.monotonic() - start_time < end_delay:
-            abort = self._sleep(0.02)
-            if abort:
-                break
+            while time.monotonic() - start_time < end_delay:
+                abort = self._sleep(0.02)
+                if abort:
+                    break
 
         self._dec_active()
 
@@ -1392,18 +1409,19 @@ class Autosampler(object):
             if abort:
                 break
 
-        rate = self.settings['pump_rates']['purge'][1]
-        self.set_pump_dispense_rates(rate, 'mL/min', 'sample')
-        self.sample_pump.dispense_all(blocking=False)
+        if success:
+            rate = self.settings['pump_rates']['purge'][1]
+            self.set_pump_dispense_rates(rate, 'mL/min', 'sample')
+            self.sample_pump.dispense_all(blocking=False)
 
-        while self.sample_pump.is_moving():
-            abort = self._sleep(0.02)
-            if abort:
-                success = not abort
-                break
+            while self.sample_pump.is_moving():
+                abort = self._sleep(0.02)
+                if abort:
+                    success = not abort
+                    break
 
-        self.sample_pump.set_valve_position(
-            self.settings['syringe_valve_positions']['clean'])
+            self.sample_pump.set_valve_position(
+                self.settings['syringe_valve_positions']['clean'])
 
         if success:
             for clean_step in self.settings['clean_seq']:
