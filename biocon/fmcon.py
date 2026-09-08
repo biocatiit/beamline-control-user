@@ -870,25 +870,29 @@ class FlowMeterPanel(utils.DevicePanel):
 
     def _create_layout(self):
         """Creates the layout for the panel."""
-        self.status = wx.StaticText(self, label='Not connected')
+        info_box = wx.StaticBox(self, label='Info')
+
+        self.status = wx.StaticText(info_box, label='Not connected')
 
         status_grid = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(2),
             hgap=self._FromDIP(5))
         status_grid.AddGrowableCol(1)
-        status_grid.Add(wx.StaticText(self, label='Flow meter name:'),
+        status_grid.Add(wx.StaticText(info_box, label='Flow meter name:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
-        status_grid.Add(wx.StaticText(self, label=self.name), 1,
+        status_grid.Add(wx.StaticText(info_box, label=self.name), 1,
             flag=wx.EXPAND|wx.ALIGN_CENTER_VERTICAL)
-        status_grid.Add(wx.StaticText(self, label='Status: '))
+        status_grid.Add(wx.StaticText(info_box, label='Status: '))
         status_grid.Add(self.status, 1, flag=wx.EXPAND|wx.ALIGN_CENTER_HORIZONTAL)
 
-        status_sizer = wx.StaticBoxSizer(wx.StaticBox(self, label='Info'),
-            wx.VERTICAL)
+        status_sizer = wx.StaticBoxSizer(info_box, wx.VERTICAL)
         status_sizer.Add(status_grid, 1, wx.EXPAND)
 
-        self.vol_unit_ctrl = wx.Choice(self, choices=['nL', 'uL', 'mL'])
+
+        settings_box = wx.StaticBox(self, label='Settings')
+
+        self.vol_unit_ctrl = wx.Choice(settings_box, choices=['nL', 'uL', 'mL'])
         self.vol_unit_ctrl.SetSelection(1)
-        self.time_unit_ctrl = wx.Choice(self, choices=['s', 'min'])
+        self.time_unit_ctrl = wx.Choice(settings_box, choices=['s', 'min'])
         self.time_unit_ctrl.SetSelection(1)
 
         self.vol_unit_ctrl.Bind(wx.EVT_CHOICE, self._on_units)
@@ -897,22 +901,24 @@ class FlowMeterPanel(utils.DevicePanel):
         gen_settings_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(2),
             hgap=self._FromDIP(5))
         gen_settings_sizer.AddGrowableCol(1)
-        gen_settings_sizer.Add(wx.StaticText(self, label='Volume unit:'),
+        gen_settings_sizer.Add(wx.StaticText(settings_box, label='Volume unit:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
         gen_settings_sizer.Add(self.vol_unit_ctrl, flag=wx.ALIGN_CENTER_VERTICAL)
-        gen_settings_sizer.Add(wx.StaticText(self, label='Time unit:'),
+        gen_settings_sizer.Add(wx.StaticText(settings_box, label='Time unit:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
         gen_settings_sizer.Add(self.time_unit_ctrl, flag=wx.ALIGN_CENTER_VERTICAL)
 
 
-        self.flow_rate = wx.StaticText(self, size=self._FromDIP((60, -1)),
+        results_box = wx.StaticBox(self, label='Readings')
+
+        self.flow_rate = wx.StaticText(results_box, size=self._FromDIP((60, -1)),
             style=wx.ST_NO_AUTORESIZE)
-        self.flow_units_lbl = wx.StaticText(self)
+        self.flow_units_lbl = wx.StaticText(results_box)
 
         self.gen_results_sizer = wx.FlexGridSizer(cols=3, vgap=self._FromDIP(2),
             hgap=self._FromDIP(5))
         self.gen_results_sizer.AddGrowableCol(1)
-        self.gen_results_sizer.Add(wx.StaticText(self, label='Flow rate:'),
+        self.gen_results_sizer.Add(wx.StaticText(results_box, label='Flow rate:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
         self.gen_results_sizer.Add(self.flow_rate, 1,
             flag=wx.EXPAND|wx.ALIGN_CENTER_VERTICAL)
@@ -920,26 +926,26 @@ class FlowMeterPanel(utils.DevicePanel):
 
 
         ###BFS specific stuff
-        self.bfs_filter = utils.ValueEntry(self._on_filter, self,
+        self.bfs_filter = utils.ValueEntry(self._on_filter, settings_box,
             validator=utils.CharValidator('float_pos_te'))
 
         self.bfs_settings_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(2),
             hgap=self._FromDIP(5))
         self.bfs_settings_sizer.AddGrowableCol(1)
-        self.bfs_settings_sizer.Add(wx.StaticText(self, label='Filter:'),
+        self.bfs_settings_sizer.Add(wx.StaticText(settings_box, label='Filter:'),
             flag=wx.ALIGN_CENTER_VERTICAL)
         self.bfs_settings_sizer.Add(self.bfs_filter,1,
             flag=wx.EXPAND|wx.ALIGN_CENTER_VERTICAL)
 
-        self.bfs_density = wx.StaticText(self, size=self._FromDIP((60, -1)),
+        self.bfs_density = wx.StaticText(results_box, size=self._FromDIP((60, -1)),
             style=wx.ST_NO_AUTORESIZE)
-        self.bfs_temperature = wx.StaticText(self, size=self._FromDIP((60, -1)),
+        self.bfs_temperature = wx.StaticText(results_box, size=self._FromDIP((60, -1)),
             style=wx.ST_NO_AUTORESIZE)
 
-        self.density_label = wx.StaticText(self, label='Density:')
-        self.density_units = wx.StaticText(self, label='g/L')
-        self.temperature_label = wx.StaticText(self, label='Temperature:')
-        self.temperature_units = wx.StaticText(self, label='°C')
+        self.density_label = wx.StaticText(results_box, label='Density:')
+        self.density_units = wx.StaticText(results_box, label='g/L')
+        self.temperature_label = wx.StaticText(results_box, label='Temperature:')
+        self.temperature_units = wx.StaticText(results_box, label='°C')
 
         self.gen_results_sizer.Add(self.density_label, flag=wx.ALIGN_CENTER_VERTICAL)
         self.gen_results_sizer.Add(self.bfs_density, flag=wx.ALIGN_CENTER_VERTICAL)
@@ -950,14 +956,12 @@ class FlowMeterPanel(utils.DevicePanel):
         ###End BFS specific stuff
 
 
-        self.settings_box_sizer = wx.StaticBoxSizer(wx.StaticBox(self, label='Settings'),
-            wx.VERTICAL)
+        self.settings_box_sizer = wx.StaticBoxSizer(settings_box, wx.VERTICAL)
         self.settings_box_sizer.Add(gen_settings_sizer, flag=wx.EXPAND)
         self.settings_box_sizer.Add(self.bfs_settings_sizer, flag=wx.EXPAND|wx.TOP,
             border=self._FromDIP(2))
 
-        self.results_box_sizer = wx.StaticBoxSizer(wx.StaticBox(self, label='Readings'),
-            wx.VERTICAL)
+        self.results_box_sizer = wx.StaticBoxSizer(results_box, wx.VERTICAL)
         self.results_box_sizer.Add(self.gen_results_sizer, flag=wx.EXPAND)
 
         top_sizer = wx.BoxSizer(wx.VERTICAL)
@@ -1205,16 +1209,16 @@ if __name__ == '__main__':
     # my_fmcon.stop()
 
     # # Coflow flow meters
-    # setup_devices = [
-    #     {'name': 'sheath', 'args' : ['BFS', 'COM5'], 'kwargs': {}},
-    #     {'name': 'outlet', 'args' : ['BFS', 'COM3'], 'kwargs': {}},
-    #     ]
+    setup_devices = [
+        {'name': 'sheath', 'args' : ['BFS', 'COM4'], 'kwargs': {}},
+        {'name': 'outlet', 'args' : ['BFS', 'COM5'], 'kwargs': {}},
+        ]
 
     # TR-SAXS flow meter
-    setup_devices = [
+    # setup_devices = [
         # {'name': 'laminar_outlet', 'args' : ['BFS', 'COM3'], 'kwargs': {}},
-        {'name': 'chaotic_outlet', 'args' : ['BFS', 'COM15'], 'kwargs': {}},
-        ]
+        # {'name': 'chaotic_outlet', 'args' : ['BFS', 'COM15'], 'kwargs': {}},
+        # ]
 
     # # Simulated flow meter
     # setup_devices = [

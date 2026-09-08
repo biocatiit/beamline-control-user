@@ -6460,36 +6460,35 @@ if __name__ == '__main__':
 
 
     # # Coflow with OB1
-    # bfs = fmcon.BFS('outlet_fm', 'COM3')
-    # bfs.start_remote()
-
-    # ob1_comm_lock = threading.RLock()
-
-    # setup_devices = [
-    #     {'name': 'sheath', 'args': ['VICI M50', 'COM6'],
-    #         'kwargs': {'flow_cal': '627.72', 'backlash_cal': '9.814'},
-    #         'ctrl_args': {'flow_rate': 1}},
-    #     {'name': 'outlet', 'args': ['OB1 Pump', 'COM14'],
-    #         'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
-    #         'min_pressure': -1000, 'max_pressure': 1000, 'P': -2, 'I': -0.15,
-    #         'D': 0, 'bfs_instr_ID': bfs.instr_ID, 'comm_lock': ob1_comm_lock,
-    #         'calib_path': './resources/ob1_calib.txt'},
-    #         'ctrl_args': {}}
-    #     ]
-
-    #OB1 by itself
-    bfs = fmcon.BFS('outlet_fm', 'COM6')
+    bfs = fmcon.BFS('outlet_fm', 'COM5')
 
     ob1_comm_lock = threading.RLock()
 
     setup_devices = [
-        {'name': 'outlet', 'args': ['OB1 Pump', 'COM7'],
+        # {'name': 'sheath', 'args': ['VICI M50', 'COM6'],
+        #     'kwargs': {'flow_cal': '627.72', 'backlash_cal': '9.814'},
+        #     'ctrl_args': {'flow_rate': 1}},
+        {'name': 'outlet', 'args': ['OB1 Pump', 'COM3'],
             'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
-            'min_pressure': -1000, 'max_pressure': 1000, 'P': 8, 'I': 2,
+            'min_pressure': -1000, 'max_pressure': 1000, 'P': -2, 'I': -0.15,
             'D': 0, 'bfs_instr_ID': bfs.instr_ID, 'comm_lock': ob1_comm_lock,
             'calib_path': './resources/ob1_calib.txt'},
             'ctrl_args': {}}
         ]
+
+    #OB1 by itself
+    # bfs = fmcon.BFS('outlet_fm', 'COM6')
+
+    # ob1_comm_lock = threading.RLock()
+
+    # setup_devices = [
+    #     {'name': 'outlet', 'args': ['OB1 Pump', 'COM3'],
+    #         'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
+    #         'min_pressure': -1000, 'max_pressure': 1000, 'P': 8, 'I': 2,
+    #         'D': 0, 'bfs_instr_ID': bfs.instr_ID, 'comm_lock': ob1_comm_lock,
+    #         'calib_path': './resources/ob1_calib.txt'},
+    #         'ctrl_args': {}}
+    #     ]
 
     # # TR-SAXS PHD 4400 pumps
     # setup_devices = [
