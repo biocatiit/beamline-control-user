@@ -3159,10 +3159,10 @@ class ExpPanel(wx.Panel):
         logger.debug('Initializing ExpPanel')
 
         self.settings = settings
-        self.settings.update(self.settings['det_settings']['use_detector'])
+        self.settings.update(detector_settings['use_detector'])
         self.settings['data_dir'] = os.path.join(self.settings['base_data_dir'],
             self.settings['data_dir'])
-        self.settings.update(self.settings['shutter_settings']['use_shutter'])
+        self.settings.update(shutter_settings['use_shutter'])
 
         print(self.settings)
 
@@ -5154,6 +5154,85 @@ class ExpFrame(wx.Frame):
 
 
 ############################################################################
+detector_settings = {
+    # For Pilatus3 X 1M
+    'pilatus3x_1m'      : {
+        'exp_time_min'      : 0.00105,
+        'exp_time_max'      : 5184000,
+        'exp_period_min'    : 0.002,
+        'exp_period_max'    : 5184000,
+        'nframes_max'       : 15000, # For Pilatus: 999999, for Struck: 15000 (set by maxChannels in the driver configuration)
+        'nparams_max'       : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
+        'exp_period_delta'  : 0.00095,
+        'local_dir_root'    : '/nas_data/Pilatus1M',
+        'remote_dir_root'   : '/nas_data_pilatus',
+        # 'detector'          : 'pilatus_mx',
+        'detector'          : '18IDpil1M:_epics',
+        'det_args'          : {}, #Allows detector specific keyword arguments
+        'add_file_postfix'  : False,
+        'monitor_dark'      : False,
+        'scan_rearm'        : False, #Rearm the detector between scans. If True may slow down scans
+        'base_data_dir'     : '/nas_data/Pilatus1M/2026_1M/2026_Run3', #CHANGE ME and pipeline local_basedir
+                            },
+
+    #Eiger2 XE 9M
+    'eiger2xe_9m'       : {
+        'exp_time_min'      : 0.000000050,
+        'exp_time_max'      : 3600,
+        'exp_period_min'    : 0.001785714286, #There's an 8bit undocumented mode that can go faster, in theory
+        'exp_period_max'    : 5184000, # Not clear there is a maximum, so left it at this
+        'nframes_max'       : 15000, # For Eiger: 2000000000, for Struck: 15000 (set by maxChannels in the driver configuration)
+        'nparams_max'       : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
+        'exp_period_delta'  : 0.000000200,
+        'local_dir_root'    : '/nas_data/Eiger2x',
+        'remote_dir_root'   : '/nas_data/Eiger2x',
+        'detector'          : '18ID:EIG2:_epics',
+        'det_args'          :  {'use_tiff_writer': False, 'use_file_writer': True,
+                                'photon_energy' : 12.0, 'images_per_file': 300}, #1 image/file for TR, 300 for equilibrium
+        'add_file_postfix'  : False,
+        'monitor_dark'      : False,
+        'scan_rearm'        : False, #Rearm the detector between scans. If True may slow down scans
+        'base_data_dir'     : '/nas_data/Eiger2x/2026_Run3', #CHANGE ME and pipeline local_basedir
+                            },
+
+    # For Mar165
+    'mar165_ccd'        : {
+        'exp_time_min'      : 0.001,
+        'exp_time_max'      : 5184000,
+        'exp_period_min'    : 4.5,
+        'exp_period_max'    : 5184000,
+        'nframes_max'       : 15000,
+        'exp_period_delta'  : 4.5,
+        'local_dir_root'    : '/nas_data/MarCCD',
+        'remote_dir_root'   : '/nas_data/MarCCD',
+        'detector'          : 'Mar165:_epics',
+        'det_args'          : {'scan_pv': '18ID:Scans:scan1'}, #Allows detector specific keyword arguments
+        'add_file_postfix'  : True,
+        'monitor_dark'      : True,
+        'dark_interval'     : 3600, #in s
+        'scan_rearm'        : False, #Rearm the detector between scans. If True may slow down scans
+        'base_data_dir'     : '/nas_data/MarCCD/2026_Run3', #CHANGE ME and pipeline local_basedir
+                            },
+    }
+
+shutter_settings = {
+    # Normal vacuum shutter (uniblitz)
+    'uniblitz_shutter'  : {
+        'shutter_speed_open'    : 0.0045, #in s
+        'shutter_speed_close'   : 0.004, # in s
+        'shutter_pad'           : 0.002, #padding for shutter related values
+        'shutter_cycle'         : 0.1, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
+                                },
+
+    # Fast in-air shutters
+    'fast_shutter'      : {
+        'shutter_speed_open'    : 0.001, #in s
+        'shutter_speed_close'   : 0.001, # in s
+        'shutter_pad'           : 0.00, #padding for shutter related values
+        'shutter_cycle'         : 0.002, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
+                                },
+    }
+
 default_exposure_settings = {
     'data_dir'              : '', # Use this to provide additional directories on top of the base_data_dir
     'filename'              : '',
@@ -5163,68 +5242,8 @@ default_exposure_settings = {
     'exp_num'               : '1',
 
     'use_detector'          : 'eiger2xe_9m'
-    'det_settings'          : {
-        # For Pilatus3 X 1M
-        'pilatus3x_1m'      : {
-            'exp_time_min'      : 0.00105,
-            'exp_time_max'      : 5184000,
-            'exp_period_min'    : 0.002,
-            'exp_period_max'    : 5184000,
-            'nframes_max'       : 15000, # For Pilatus: 999999, for Struck: 15000 (set by maxChannels in the driver configuration)
-            'nparams_max'       : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
-            'exp_period_delta'  : 0.00095,
-            'local_dir_root'    : '/nas_data/Pilatus1M',
-            'remote_dir_root'   : '/nas_data_pilatus',
-            # 'detector'          : 'pilatus_mx',
-            'detector'          : '18IDpil1M:_epics',
-            'det_args'          : {}, #Allows detector specific keyword arguments
-            'add_file_postfix'  : False,
-            'monitor_dark'      : False,
-            'scan_rearm'        : False, #Rearm the detector between scans. If True may slow down scans
-            'base_data_dir'     : '/nas_data/Pilatus1M/2026_1M/2026_Run3', #CHANGE ME and pipeline local_basedir
-                                },
 
-        #Eiger2 XE 9M
-        'eiger2xe_9m'       : {
-            'exp_time_min'      : 0.000000050,
-            'exp_time_max'      : 3600,
-            'exp_period_min'    : 0.001785714286, #There's an 8bit undocumented mode that can go faster, in theory
-            'exp_period_max'    : 5184000, # Not clear there is a maximum, so left it at this
-            'nframes_max'       : 15000, # For Eiger: 2000000000, for Struck: 15000 (set by maxChannels in the driver configuration)
-            'nparams_max'       : 15000, # For muscle experiments with Struck, in case it needs to be set separately from nframes_max
-            'exp_period_delta'  : 0.000000200,
-            'local_dir_root'    : '/nas_data/Eiger2x',
-            'remote_dir_root'   : '/nas_data/Eiger2x',
-            'detector'          : '18ID:EIG2:_epics',
-            'det_args'          :  {'use_tiff_writer': False, 'use_file_writer': True,
-                                    'photon_energy' : 12.0, 'images_per_file': 300}, #1 image/file for TR, 300 for equilibrium
-            'add_file_postfix'  : False,
-            'monitor_dark'      : False,
-            'scan_rearm'        : False, #Rearm the detector between scans. If True may slow down scans
-            'base_data_dir'     : '/nas_data/Eiger2x/2026_Run3', #CHANGE ME and pipeline local_basedir
-                                },
-
-        # For Mar165
-        'mar165_ccd'        : {
-            'exp_time_min'      : 0.001,
-            'exp_time_max'      : 5184000,
-            'exp_period_min'    : 4.5,
-            'exp_period_max'    : 5184000,
-            'nframes_max'       : 15000,
-            'exp_period_delta'  : 4.5,
-            'local_dir_root'    : '/nas_data/MarCCD',
-            'remote_dir_root'   : '/nas_data/MarCCD',
-            'detector'          : 'Mar165:_epics',
-            'det_args'          : {'scan_pv': '18ID:Scans:scan1'}, #Allows detector specific keyword arguments
-            'add_file_postfix'  : True,
-            'monitor_dark'      : True,
-            'dark_interval'     : 3600, #in s
-            'scan_rearm'        : False, #Rearm the detector between scans. If True may slow down scans
-            'base_data_dir'     : '/nas_data/MarCCD/2026_Run3', #CHANGE ME and pipeline local_basedir
-                                },
-        },
-
-    # These values are assigned from the 'det_settings' dictionary based on the 'use_detector' value
+    # These values are assigned from the 'detector_settings' dictionary based on the 'use_detector' value
     'exp_time_min'          : 0.,
     'exp_time_max'          : 0,
     'exp_period_min'        : 0.
@@ -5242,23 +5261,6 @@ default_exposure_settings = {
     'base_data_dir'         : '', #CHANGE ME and pipeline local_basedir
 
     'use_shutter'           : 'uniblitz_shutter'
-    'shutter_settings'      : {
-        # Normal vacuum shutter (uniblitz)
-        'uniblitz_shutter'  : {
-            'shutter_speed_open'    : 0.0045, #in s
-            'shutter_speed_close'   : 0.004, # in s
-            'shutter_pad'           : 0.002, #padding for shutter related values
-            'shutter_cycle'         : 0.1, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
-                                    },
-
-        # Fast in-air shutters
-        'fast_shutter'      : {
-            'shutter_speed_open'    : 0.001, #in s
-            'shutter_speed_close'   : 0.001, # in s
-            'shutter_pad'           : 0.00, #padding for shutter related values
-            'shutter_cycle'         : 0.002, #In 1/Hz, i.e. minimum time between shutter openings in a continuous duty cycle
-                                    },
-        },
 
     # These values are assigned from the 'shutter_settings' dictionary based on the 'use_shutter' value
     'shutter_speed_open'    : 0., #in s
