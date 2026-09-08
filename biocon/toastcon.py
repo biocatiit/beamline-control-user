@@ -59,10 +59,6 @@ class ToastMotorPanel(utils.DevicePanel):
 
         self._init_pvs(settings)
 
-        self._home_abort_evt = threading.Event()
-        self._home_abort_evt.clear()
-        self._home_motor_thread = None
-
         super(ToastMotorPanel, self).__init__(parent, panel_id, settings, *args, **kwargs)
 
     def _init_pvs(self, settings):
@@ -224,34 +220,8 @@ class ToastMotorPanel(utils.DevicePanel):
             wx.ALIGN_CENTER_HORIZONTAL, border=self._FromDIP(5))
 
 
-        home_box = wx.StaticBox(parent, label='{} Homing'.format(
-            self.settings['device_data']['name']))
-        self._home_status = wx.StaticText(home_box, label='No')
-
-        home_status_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        home_status_sizer.Add(wx.StaticText(home_box, label='Homing:'))
-        home_status_sizer.Add(self._home_status, proportion=1, flag=wx.LEFT,
-            border=self._FromDIP(5))
-
-        self._start_home_btn = wx.Button(home_box, label='Home motor')
-        self._start_home_btn.Bind(wx.EVT_BUTTON, self._on_home_motor)
-
-        self._abort_home_btn = wx.Button(home_box, label='Abort homing')
-        self._abort_home_btn.Bind(wx.EVT_BUTTON, self._on_home_abort)
-
-        home_btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        home_btn_sizer.Add(self._start_home_btn)
-        home_btn_sizer.Add(self._abort_home_btn, flag=wx.LEFT, border=self._FromDIP(5))
-
-        home_sizer = wx.StaticBoxSizer(home_box, wx.VERTICAL)
-        home_sizer.Add(home_status_sizer, flag=wx.EXPAND|wx.ALL, border=self._FromDIP(5))
-        home_sizer.Add(home_btn_sizer, flag=wx.ALIGN_CENTER_HORIZONTAL|
-            wx.LEFT|wx.RIGHT|wx.BOTTOM, border=self._FromDIP(5))
-
         top_sizer = wx.BoxSizer(wx.VERTICAL)
         top_sizer.Add(toast_sizer, flag=wx.EXPAND|wx.ALL,
-            border=self._FromDIP(5))
-        top_sizer.Add(home_sizer, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM,
             border=self._FromDIP(5))
         top_sizer.Add(motor_sizer, flag=wx.EXPAND|wx.LEFT|wx.RIGHT|wx.BOTTOM,
             border=self._FromDIP(5))
@@ -288,8 +258,6 @@ class ToastMotorPanel(utils.DevicePanel):
 
     def start_toast(self, wait=False):
         logger.info('Starting motor toasting')
-        self._start_home_btn.Disable()
-        self._abort_home_btn.Disable()
         self.start_pv.put(1, wait=wait)
 
     @EpicsFunction
@@ -302,8 +270,6 @@ class ToastMotorPanel(utils.DevicePanel):
         self.start_pv.put(0)
         self.stop_pv.put(1)
         self.motor.stop()
-        self._start_home_btn.Enable()
-        self._abort_home_btn.Enable()
 
         stop_pnt = self.stop_point_ctrl.GetValue()
 
@@ -334,201 +300,6 @@ class ToastMotorPanel(utils.DevicePanel):
         if auto:
             self.stop_toast()
 
-    def _on_home_motor(self, evt):
-        self._start_button.Disable()
-        self._stop_button.Disable()
-        self._start_home_btn.Disable()
-        self._home_status.SetLabel('Yes')
-        wx.CallAfter(self._start_home)
-
-    def _start_home(self):
-        self._home_abort_evt.clear()
-        self._home_motor_thread = threading.Thread(target=self.home_motor)
-        self._home_motor_thread.daemon = True
-        self._home_motor_thread.start()
-
-    def _on_home_abort(self, evt):
-        self._home_abort_evt.set()
-
-        if self._home_motor_thread is not None:
-            self.motor.stop()
-            self._home_motor_thread.join(5)
-
-        self._on_home_finish()
-
-    def _on_home_finish(self):
-        self._start_home_btn.Enable()
-        self._home_status.SetLabel('No')
-        self._start_button.Enable()
-        self._stop_button.Enable()
-
-    def home_motor(self):
-        logger.info('Starting motor homing')
-        home_to = self.settings['device_data']['kwargs']['home_settings']['home_to']
-        final_pos = self.settings['device_data']['kwargs']['home_settings']['final_pos']
-        home_offset = self.settings['device_data']['kwargs']['home_settings']['offset']
-
-        if home_to == 'center':
-            logger.debug('Home to center')
-            plus_lim = self._inner_home_to_limit(1)
-
-            if self._home_abort_evt.is_set():
-                return
-
-            minus_lim = self._inner_home_to_limit(-1)
-
-            if self._home_abort_evt.is_set():
-                return
-
-            if plus_lim is not None and minus_lim is not None:
-                home_pos = (plus_lim+minus_lim)/2
-            else:
-                home_pos = None
-
-        elif home_to == 'plus':
-            logger.debug('Home to positive limit')
-            home_pos = self._inner_home_to_limit(1)
-
-        elif home_to == 'minus':
-            logger.debug('Home to negative limit')
-            home_pos = self._inner_home_to_limit(-1)
-
-        else:
-            home_pos = None
-
-        if home_pos is not None:
-            logger.debug('Found new home position: %s', home_pos)
-
-            if self._home_abort_evt.is_set():
-                return
-
-            home_pos += home_offset
-
-            self.motor.move_absolute(home_pos)
-
-            start = time.monotonic()
-
-            while not self.motor.is_moving() and time.monotonic()-start < 1:
-                time.sleep(0.05)
-                abort = self._home_abort_evt.is_set()
-
-            abort = self._home_abort_evt.is_set()
-
-            while self.motor.is_moving() and not abort:
-                    time.sleep(0.05)
-                    abort = self._home_abort_evt.is_set()
-
-            if abort:
-                return
-
-            logger.info('Set home position: %s set to %s', home_pos, final_pos)
-
-            self.motor.position = final_pos
-
-        wx.CallAfter(self._on_home_finish)
-
-
-    def _inner_home_to_limit(self, direction):
-        abort = False
-
-        step = self.settings['device_data']['kwargs']['home_settings']['step']
-        speed = self.settings['device_data']['kwargs']['home_settings']['speed']
-        cycles = self.settings['device_data']['kwargs']['home_settings']['cycles']
-        move_off = self.settings['device_data']['kwargs']['home_settings']['move_off']
-
-        lim_pos_list = []
-
-        self.motor.set_jog_speed(speed)
-
-        if direction == 1:
-            jog_dir = 'positive'
-        else:
-            jog_dir = 'negative'
-
-        step_off = -1*direction*step
-        move_off = -1*direction*move_off
-
-        for i in range(cycles):
-            abort = self._home_abort_evt.is_set()
-
-            if abort:
-                break
-
-            if i != 0:
-                logger.debug('Moving off %s limit by %s', jog_dir, move_off)
-                self.motor.move_relative(move_off)
-
-                start = time.monotonic()
-
-                while not self.motor.is_moving() and time.monotonic() - start < 1:
-                    time.sleep(0.05)
-
-                while self.motor.is_moving() and not abort:
-                    time.sleep(0.05)
-                    abort = self._home_abort_evt.is_set()
-
-            abort = self._home_abort_evt.is_set()
-
-            if abort:
-                break
-
-            if direction == 1:
-                on_lim = self.motor.on_high_limit()
-            else:
-                on_lim = self.motor.on_low_limit()
-
-            if not on_lim and not abort:
-                logger.debug('Moving to %s limit', jog_dir)
-                self.motor.jog(jog_dir, True)
-
-            while not on_lim and not abort:
-                if direction == 1:
-                    on_lim = self.motor.on_high_limit()
-                else:
-                    on_lim = self.motor.on_low_limit()
-
-                time.sleep(0.05)
-                abort = self._home_abort_evt.is_set()
-
-            logger.debug('Hit %s limit', jog_dir)
-
-            self.motor.jog(jog_dir, False)
-
-            while on_lim and not abort:
-                logger.debug('Stepping off %s limit by %s', jog_dir, step_off)
-
-                self.motor.move_relative(step_off, wait=True)
-
-                time.sleep(0.05)
-
-                while self.motor.is_moving():
-                    time.sleep(0.05)
-                    abort = self._home_abort_evt.is_set()
-
-                if direction == 1:
-                    on_lim = self.motor.on_high_limit()
-                else:
-                    on_lim = self.motor.on_low_limit()
-
-            if not abort:
-                motor_pos = self.motor.position
-                logger.debug('%s limit position found: %s', jog_dir.capitalize(), motor_pos)
-            else:
-                motor_pos = None
-                logger.debug('%s limit position not found', jog_dir.capitalize())
-
-            if motor_pos is not None:
-                lim_pos_list.append(motor_pos)
-
-        lim_pos = None
-
-        if not abort:
-            if all([pos is not None for pos in lim_pos_list]):
-                lim_pos = statistics.mean(lim_pos_list)
-                logger.debug('%s average limit position: %s', jog_dir.capitalize(), lim_pos)
-
-        return lim_pos
-
     def metadata(self):
         metadata = OrderedDict()
 
@@ -549,12 +320,7 @@ class ToastMotorPanel(utils.DevicePanel):
     def _on_close(self):
         """Device specific stuff goes here"""
         self.stop_toast()
-        self._home_abort_evt.set()
         self.motor.stop()
-        try:
-            self._home_motor_thread.join(5)
-        except Exception:
-            pass
 
         for pv, cbid in self._callbacks:
             pv.remove_callback(cbid)
