@@ -444,57 +444,23 @@ if __name__ == '__main__':
     # Exposure settings
     exposure_settings = expcon.default_exposure_settings
 
+    ###### Set shutter being used
     # # Fast in-air shutters
-    # exposure_settings['shutter_speed_open'] = 0.001
-    # exposure_settings['shutter_speed_close'] = 0.001
-    # exposure_settings['shutter_pad'] = 0.00
-    # exposure_settings['shutter_cycle'] = 0.002
+    # exposure_settings['use_shutter'] = 'fast_shutter'
 
     # Normal vacuum shutter (uniblitz)
-    exposure_settings['shutter_speed_open'] = 0.0045
-    exposure_settings['shutter_speed_close'] = 0.004
-    exposure_settings['shutter_pad'] = 0.002
-    exposure_settings['shutter_cycle'] = 0.1
+    exposure_settings['use_shutter'] = 'uniblitz_shutter'
+
+
+    ###### Set detector being used
+    # # PILATUS3 X 1M
+    # exposure_settings['use_detector'] = 'pilatus3x_1m'
 
     # EIGER2 XE 9M
-    exposure_settings['det_args'] =  {'use_tiff_writer': False,
-        'use_file_writer': True, 'photon_energy' : 12.0,
-        'images_per_file': 1000} #1 image/file for TR, 300 for eq SAXS, 1000 for muscle
+    exposure_settings['use_detector'] = 'eiger2xe_9m'
 
-    # Muscle settings
-    exposure_settings['struck_measurement_time'] = '0.001'
-    exposure_settings['tr_muscle_exp'] = False
-    exposure_settings['open_shutter_before_trig_cont_exp'] = False
-
-    #Other settings
-    exposure_settings['wait_for_trig'] = True
-    exposure_settings['mcs_log_vals'] = [
-        # Format: (mx_record_name, struck_channel, header_name,
-        # scale, offset, use_dark_current, normalize_by_exp_time)
-        {'mx_record': 'mcs3', 'channel': 2, 'name': 'I0',
-        'scale': 1, 'offset': 0, 'dark': True, 'norm_time': False},
-        {'mx_record': 'mcs4', 'channel': 3, 'name': 'I1', 'scale': 1,
-        'offset': 0, 'dark': True, 'norm_time': False},
-        # {'mx_record': 'mcs5', 'channel': 4, 'name': 'I2', 'scale': 1,
-        # 'offset': 0, 'dark': True, 'norm_time': False},
-        # {'mx_record': 'mcs6', 'channel': 5, 'name': 'I3', 'scale': 1,
-        # 'offset': 0, 'dark': True, 'norm_time': False},
-        # {'mx_record': 'mcs7', 'channel': 6, 'name': 'Detector_Enable',
-        # 'scale': 2.5e6, 'offset': 0, 'dark': True, 'norm_time': True},
-        # {'mx_record': 'mcs12', 'channel': 11, 'name': 'Length_Out',
-        # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
-        # {'mx_record': 'mcs13', 'channel': 12, 'name': 'Force',
-        # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
-        # {'mx_record': 'mcs14', 'channel': 13, 'name': 'Length',
-        # 'scale': 10e6, 'offset': 0, 'dark': False, 'norm_time': True},
-        ]
-    exposure_settings['warnings'] = {'shutter' : False, 'col_vac' : {'check': False,
-        'thresh': 0.04}, 'guard_vac' : {'check': False, 'thresh': 0.04},
-        'sample_vac': {'check': False, 'thresh': 0.04}, 'sc_vac':
-        {'check': False, 'thresh':0.04}}
-    exposure_settings['base_data_dir'] = '/nas_data/Eiger2x/2026_Run3/' #CHANGE ME and pipeline local_basedir
-    exposure_settings['data_dir'] = exposure_settings['base_data_dir']
-
+    # # Mar165 CCD
+    # exposure_settings['use_detector'] = 'mar165_ccd'
 
     ###################################################################
     # Coflow settings
