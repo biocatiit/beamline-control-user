@@ -3159,12 +3159,10 @@ class ExpPanel(wx.Panel):
         logger.debug('Initializing ExpPanel')
 
         self.settings = settings
-        self.settings.update(detector_settings['use_detector'])
+        self.settings.update(detector_settings[self.settings['use_detector']])
         self.settings['data_dir'] = os.path.join(self.settings['base_data_dir'],
             self.settings['data_dir'])
-        self.settings.update(shutter_settings['use_shutter'])
-
-        print(self.settings)
+        self.settings.update(shutter_settings[self.settings['use_shutter']])
 
         self._exp_status = 'Ready'
         self._time_remaining = 0
@@ -3189,7 +3187,7 @@ class ExpPanel(wx.Panel):
 
         self.SetSizer(self.top_sizer)
 
-        self.SetMinSize(self._FromDIP((625, -1)))
+        self.SetMinSize(self._FromDIP((625, 325)))
 
         self._initialize()
 
@@ -5241,12 +5239,12 @@ default_exposure_settings = {
     'exp_period'            : '1',
     'exp_num'               : '1',
 
-    'use_detector'          : 'eiger2xe_9m'
+    'use_detector'          : 'eiger2xe_9m',
 
     # These values are assigned from the 'detector_settings' dictionary based on the 'use_detector' value
     'exp_time_min'          : 0.,
     'exp_time_max'          : 0,
-    'exp_period_min'        : 0.
+    'exp_period_min'        : 0.,
     'exp_period_max'        : 0,
     'nframes_max'           : 0,
     'nparams_max'           : 0,
@@ -5260,7 +5258,7 @@ default_exposure_settings = {
     'scan_rearm'            : False,
     'base_data_dir'         : '', #CHANGE ME and pipeline local_basedir
 
-    'use_shutter'           : 'uniblitz_shutter'
+    'use_shutter'           : 'uniblitz_shutter',
 
     # These values are assigned from the 'shutter_settings' dictionary based on the 'use_shutter' value
     'shutter_speed_open'    : 0., #in s
