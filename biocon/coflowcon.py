@@ -2307,18 +2307,19 @@ class CoflowPanel(utils.DevicePanel):
             esensor_sizer.Add(esensor_grid_sizer, flag=wx.EXPAND|wx.ALL, proportion=1,
                 border=self._FromDIP(5))
 
+        status_box = wx.StaticBox(status_panel, label='Coflow Status')
 
-        self.status = wx.StaticText(status_panel, label='Coflow off', style=wx.ST_NO_AUTORESIZE,
+        self.status = wx.StaticText(status_box, label='Coflow off', style=wx.ST_NO_AUTORESIZE,
             size=self._FromDIP((125, -1)))
         self.status.SetForegroundColour(wx.RED)
         fsize = self.GetFont().GetPointSize()
         font = wx.Font(fsize, wx.DEFAULT, wx.NORMAL, wx.BOLD)
         self.status.SetFont(font)
 
-        status_label = wx.StaticText(status_panel, label='Status:')
-        sheath_label = wx.StaticText(status_panel, label='Sheath flow [{}]:'.format(units))
-        outlet_label = wx.StaticText(status_panel, label='Outlet flow [{}]:'.format(units))
-        temp_label = wx.StaticText(status_panel, label='Cell Temp. [C]:')
+        status_label = wx.StaticText(status_box, label='Status:')
+        sheath_label = wx.StaticText(status_box, label='Sheath flow [{}]:'.format(units))
+        outlet_label = wx.StaticText(status_box, label='Outlet flow [{}]:'.format(units))
+        temp_label = wx.StaticText(status_box, label='Cell Temp. [C]:')
 
 
         status_grid_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(5), hgap=self._FromDIP(2))
@@ -2337,10 +2338,9 @@ class CoflowPanel(utils.DevicePanel):
         if self.settings['use_incubator_pvs']:
             status_sizer.Add(esensor_sizer, flag=wx.TOP, border=self._FromDIP(5))
 
-        coflow_buffer_sizer = self._create_buffer_ctrls(status_panel)
+        coflow_buffer_sizer = self._create_buffer_ctrls(status_box)
 
-        coflow_status_sizer = wx.StaticBoxSizer(wx.StaticBox(status_panel,
-            label='Coflow Status'), wx.HORIZONTAL)
+        coflow_status_sizer = wx.StaticBoxSizer(status_box, wx.HORIZONTAL)
         coflow_status_sizer.Add(status_sizer, border=self._FromDIP(5), flag=wx.ALL)
         coflow_status_sizer.Add(coflow_buffer_sizer, border=self._FromDIP(5),
             flag=wx.LEFT|wx.RIGHT|wx.BOTTOM|wx.EXPAND)
@@ -3707,7 +3707,7 @@ default_coflow_settings = {
         'remote_overflow_ip'        : '164.54.204.75',
         'flow_units'                : 'mL/min',
         'sheath_pump'
-                                    : {'name': 'sheath', 'args': ['Longer L100S2', 'COM5'],
+                                    : {'name': 'sheath', 'args': ['Longer L100S2', 'COM6'],
                                         'kwargs': {'pump_addr': 1, 'flow_cal': 0.0502},
                                         'ctrl_args': {'flow_rate': 1}},
         # 'sheath_pump'               : {'name': 'sheath', 'args': ['VICI M50', 'COM6'],
@@ -3722,18 +3722,18 @@ default_coflow_settings = {
         #                                 'kwargs': {'flow_cal': '628.68',
         #                                 'backlash_cal': '9.962'},
         #                                 'ctrl_args': {'flow_rate': 1}},
-        'outlet_pump'               : {'name': 'outlet', 'args': ['OB1 Pump', 'COM7'],
+        'outlet_pump'               : {'name': 'outlet', 'args': ['OB1 Pump', 'COM8'],
                                         'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
                                         'min_pressure': -1000, 'max_pressure': 1000, 'P': -2, 'I': -0.15,
                                         'D': 0, 'bfs_instr_ID': None, 'comm_lock': None,
                                         'calib_path': './resources/ob1_calib.txt'},
                                         'ctrl_args': {}},
-        'sheath_fm'                 : {'name': 'sheath', 'args': ['BFS', 'COM4'],
+        'sheath_fm'                 : {'name': 'sheath', 'args': ['BFS', 'COM5'],
                                         'kwargs':{}},
-        'outlet_fm'                 : {'name': 'outlet', 'args': ['BFS', 'COM6'],
+        'outlet_fm'                 : {'name': 'outlet', 'args': ['BFS', 'COM4'],
                                         'kwargs':{}},
         'sheath_valve'              : {'name': 'Coflow Sheath',
-                                        'args':['Cheminert', 'COM3'],
+                                        'args':['Cheminert', 'COM7'],
                                         'kwargs': {'positions' : 10}},
         # 'sheath_pump'               : {'name': 'sheath', 'args': ['Soft', None], # Simulated devices for testing
         #                                 'kwargs': {}},
@@ -3787,7 +3787,7 @@ default_coflow_settings = {
         'coflow_inc_TSetpoint_pv'   : '18ID:Memmert:CoflowInc:TempSetpoint',
         'hplc_inc_T_pv'             : '18ID:Memmert:HPLCInc:Temp',
         'hplc_inc_TSetpoint_pv'     : '18ID:Memmert:HPLCInc:TempSetpoint',
-        'use_incubator_pvs'         : True,
+        'use_incubator_pvs'         : False,
         }}],
     }
 

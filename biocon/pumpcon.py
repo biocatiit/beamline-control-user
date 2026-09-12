@@ -3289,9 +3289,7 @@ class OB1Pump(Pump):
 
             if self._pid_on_evt.is_set():
                 start_t = time.monotonic()
-
                 fr, dens, temp = self.get_fm_values()
-
                 delta_t = time.monotonic() - start_t
 
                 if dens > 700 and (prev_dens/dens < 1.05 and prev_dens/dens > 0.95):
@@ -3308,20 +3306,35 @@ class OB1Pump(Pump):
 
     def get_fm_values(self):
         with self._fm_comm_lock:
-            density = ctypes.c_double(-1)
-            error = Elveflow.BFS_Get_Density(self._bfs_instr_ID.value, ctypes.byref(density))
-            density = float(density.value)
-            self._check_error(error)
+            if (self._ob1.major > 3 or (self._ob1.major == 3
+                and self._ob1.minor >= 10)):
+                flow = ctypes.c_double(-1)
+                temperature = ctypes.c_double(-1)
+                dens = ctypes.c_double(-1)
+                error = Elveflow.BFS_Get_Remote_Data(self._bfs_instr_ID.value,
+                    ctypes.byref(flow), ctypes.byref(temperature),
+                    ctypes.byref(dens))
+                self._check_error(error)
 
-            temperature = ctypes.c_double(-1)
-            error = Elveflow.BFS_Get_Temperature(self._bfs_instr_ID.value, ctypes.byref(temperature))
-            temperature = float(temperature.value)
-            self._check_error(error)
+            else:
+                dens = ctypes.c_double(-1)
+                error = Elveflow.BFS_Get_Density(self._bfs_instr_ID.value,
+                    ctypes.byref(dens))
+                self._check_error(error)
 
-            flow = ctypes.c_double(-1)
-            error = Elveflow.BFS_Get_Flow(self._bfs_instr_ID.value, ctypes.byref(flow))
+                temperature = ctypes.c_double(-1)
+                error = Elveflow.BFS_Get_Temperature(self._bfs_instr_ID.value,
+                    ctypes.byref(temperature))
+                self._check_error(error)
+
+                flow = ctypes.c_double(-1)
+                error = Elveflow.BFS_Get_Flow(self._bfs_instr_ID.value,
+                    ctypes.byref(flow))
+                self._check_error(error)
+
+            density = float(dens.value)
             flow = float(flow.value)
-            self._check_error(error)
+            temperature = float(temperature.value)
 
         return flow, density, temperature
 
@@ -6468,7 +6481,7 @@ if __name__ == '__main__':
         # {'name': 'sheath', 'args': ['VICI M50', 'COM6'],
         #     'kwargs': {'flow_cal': '627.72', 'backlash_cal': '9.814'},
         #     'ctrl_args': {'flow_rate': 1}},
-        {'name': 'outlet', 'args': ['OB1 Pump', 'COM3'],
+        {'name': 'outlet', 'args': ['OB1 Pump', 'COM8'],
             'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
             'min_pressure': -1000, 'max_pressure': 1000, 'P': -2, 'I': -0.15,
             'D': 0, 'bfs_instr_ID': bfs.instr_ID, 'comm_lock': ob1_comm_lock,
