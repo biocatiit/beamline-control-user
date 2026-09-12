@@ -5259,6 +5259,7 @@ class PumpPanel(utils.DevicePanel):
         self._current_pressure_units = ''
         self._current_flow_dir = 1
         self._current_valve_position = ''
+        self._current_faults = []
 
     def _create_layout(self):
         """Creates the layout for the panel."""
@@ -6339,11 +6340,18 @@ class PumpPanel(utils.DevicePanel):
 
     def _check_faults(self, faults):
         fault_list = []
+        new_faults = False
+
         for fault, status in faults.items():
             if status:
                 fault_list.append(fault)
 
-        if len(fault_list) > 0:
+                if fault not in self._current_faults:
+                    new_faults = True
+
+        self._current_faults = fault_list
+
+        if len(fault_list) > 0 and new_faults:
             msg = ('Pump {} has the following faults:'.format(self.name))
 
             for fault in fault_list:
@@ -6359,6 +6367,7 @@ class PumpPanel(utils.DevicePanel):
             if ret == wx.ID_OK:
                 cmd = ['clear_faults', [self.name,], {}]
                 self._send_cmd(cmd, get_response=False)
+                self._current_faults = []
 
 class PumpFrame(utils.DeviceFrame):
     """

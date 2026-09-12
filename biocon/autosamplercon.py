@@ -400,74 +400,6 @@ class Autosampler(object):
         self.set_sample_draw_rate(self.settings['pump_rates']['sample'][0], 'mL/min')
         self.set_sample_dwell_time(self.settings['load_dwell_time'])
 
-    def home_motor(self, motor_name, thread=True):
-        if not thread:
-            success = self._inner_home_motor(motor_name)
-        else:
-            self._cmd_queue.append([self._inner_home_motor, [motor_name], {}])
-            success = True
-
-        return success
-
-    def _inner_home_motor(self, motor_name):
-        self._inc_active()
-        abort = False
-
-        if motor_name == 'needle_y':
-            motor = self.needle_y_motor
-        elif motor_name == 'plate_x':
-            motor = self.plate_x_motor
-        elif motor_name == 'plate_z':
-            motor = self.plate_z_motor
-
-        direction = self.settings['home_settings'][motor_name]['dir']
-        step = self.settings['home_settings'][motor_name]['step']
-        pos = self.settings['home_settings'][motor_name]['pos']
-
-        if direction == 1:
-            on_lim = motor.on_high_limit()
-        else:
-            on_lim = motor.on_low_limit()
-
-        abort = self._check_abort()
-
-        if not on_lim and not abort:
-            if direction == 1:
-                jog_dir = 'positive'
-            else:
-                jog_dir = 'negative'
-
-            motor.jog(jog_dir, True)
-
-        while not on_lim and not abort:
-            if direction == 1:
-                on_lim = motor.on_high_limit()
-            else:
-                on_lim = motor.on_low_limit()
-
-            abort = self._sleep(0.02)
-
-        motor.jog(jog_dir, False)
-
-        move_off = -1*direction*step
-
-        while on_lim and not abort:
-            cont = self.move_motors_relative(move_off, motor_name)
-            abort = not cont
-
-            if direction == 1:
-                on_lim = motor.on_high_limit()
-            else:
-                on_lim = motor.on_low_limit()
-
-        if not abort:
-            logger.info('Redefining motor %s position %s to %s', motor_name,
-                motor.position, pos)
-            motor.position = pos
-
-        self._dec_active()
-
-        return not abort
 
     def move_motors_absolute(self, position, motor='all', y_offset=True):
         self._inc_active()
@@ -1518,7 +1450,6 @@ class ASCommThread(utils.CommManager):
             'move_plate_out'        : self._move_plate_out,
             'move_plate_change'     : self._move_plate_change,
             'move_plate_load'       : self._move_plate_load,
-            'home_motor'            : self._home_motor,
             'set_valve_position'    : self._set_valve_position,
             'set_sample_pump_valve' : self._set_sample_pump_valve,
             'set_aspirate_rates'    : self._set_pump_aspirate_rates,
@@ -1786,19 +1717,6 @@ class ASCommThread(utils.CommManager):
 
         logger.debug("%s moved plate to well %s%s load position", name,
             row, col)
-
-    def _home_motor(self, name, motor_name, **kwargs):
-        logger.info("%s homing motor %s", name, motor_name)
-
-        comm_name = kwargs.pop('comm_name', None)
-        cmd = kwargs.pop('cmd', None)
-
-        device = self._connected_devices[name]
-        success = device.home_motor(motor_name, **kwargs)
-
-        self._return_value((name, cmd, success), comm_name)
-
-        logger.debug("%s homed motor %s", name, motor_name)
 
     def _set_valve_position(self, name, val, **kwargs):
         logger.info("Setting %s valve position to %s", name, val)
@@ -2835,9 +2753,6 @@ class AutosamplerPanel(utils.DevicePanel):
         if clean_needle:
             self._send_cmd(['clean', [self.name,], {}], False)
 
-    def home_motor(self, motor):
-        self._send_cmd(['home_motor', [self.name, motor], {}], False)
-
     def _on_staff_ctrl_btn(self, evt):
         if self._staff_ctrl_window is None:
             self._staff_ctrl_window = StaffControlsFrame(self, self.settings, self)
@@ -3297,23 +3212,8 @@ class StaffControlsFrame(wx.Frame):
         motor_sizer.AddGrowableCol(2)
         motor_sizer.AddGrowableCol(3)
 
-        self._home_needle_btn = wx.Button(motor_box, label='Home Needle Y')
-        self._home_plate_x_btn = wx.Button(motor_box, label='Home Plate X')
-        self._home_plate_z_btn = wx.Button(motor_box, label='Home Plate Z')
-
-        self._home_needle_btn.Bind(wx.EVT_BUTTON, self._on_home_btn)
-        self._home_plate_x_btn.Bind(wx.EVT_BUTTON, self._on_home_btn)
-        self._home_plate_z_btn.Bind(wx.EVT_BUTTON, self._on_home_btn)
-
-        home_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        home_sizer.Add(self._home_needle_btn, flag=wx.RIGHT, border=self._FromDIP(5))
-        home_sizer.Add(self._home_plate_x_btn, flag=wx.RIGHT, border=self._FromDIP(5))
-        home_sizer.Add(self._home_plate_z_btn)
-
         motor_top_sizer = wx.StaticBoxSizer(motor_box, wx.VERTICAL)
         motor_top_sizer.Add(motor_sizer, flag=wx.ALL|wx.EXPAND, border=self._FromDIP(5))
-        motor_top_sizer.Add(home_sizer, flag=wx.LEFT|wx.RIGHT|wx.BOTTOM,
-            border=self._FromDIP(5))
 
         return motor_top_sizer
 
@@ -3410,21 +3310,6 @@ class StaffControlsFrame(wx.Frame):
 
         return valve_top_sizer
 
-    def _on_home_btn(self, evt):
-        evt_obj = evt.GetEventObject()
-
-        motor = None
-
-        if evt_obj == self._home_needle_btn:
-            motor = 'needle_y'
-        elif evt_obj == self._home_plate_x_btn:
-            motor = 'plate_x'
-        elif evt_obj == self._home_plate_z_btn:
-            motor = 'plate_z'
-
-        if motor is not None:
-            self.as_panel.home_motor(motor)
-
     def OnClose(self, evt):
         self.as_panel._staff_ctrl_window = None
 
@@ -3502,9 +3387,6 @@ default_autosampler_settings = {
     'volume_units'          : 'uL',
     'components'            : [],
 
-    # 'motor_home_velocity'   : {'x': 10, 'y': 10, 'z': 10},
-    # 'motor_velocity'        : {'x': 75, 'y': 75, 'z': 75}, #112
-    # 'motor_acceleration'    : {'x': 500, 'y': 500, 'z': 500},
     'home_settings'         : {'plate_x': {'dir': -1, 'step': 0.1, 'pos': 0},
                                 'plate_z': {'dir': 1, 'step': 0.1, 'pos': 0},
                                 'needle_y': {'dir': -1, 'step': 0.01, 'pos': -2.70}}, #Direction 1/-1 for positive/negative. step is step size off limit, pos is what to set the home position as.
