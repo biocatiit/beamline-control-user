@@ -471,22 +471,7 @@ if __name__ == '__main__':
         # Coflow
         logger.info('Starting coflow server')
 
-        # if 'nouv' in exp_type:
-        #     has_uv = False
-        #     logger.info('No UV connected')
-        # else:
-        #     has_uv = True
-
         ip = '164.54.204.45'
-        # ip = '164.54.204.53'
-        # ip = '164.54.204.192'
-        # ip = '164.54.204.24'
-
-        # spectrometer_settings = spectrometercon.default_spectrometer_settings
-        # spectrometer_settings['remote'] = False
-        # spectrometer_settings['device_communication'] = 'local'
-        # spectrometer_settings['inline_panel'] = False
-        # spectrometer_settings['plot_refresh_t'] = 1
 
         coflow_settings = coflowcon.default_coflow_settings
 
@@ -500,7 +485,7 @@ if __name__ == '__main__':
     elif exp_type == 'uv':
         logger.info('Starting UV server')
 
-        ip = '164.54.204.53'
+        ip = '164.54.204.45'
 
         spectrometer_settings = spectrometercon.default_spectrometer_settings
         spectrometer_settings['remote'] = False
@@ -677,7 +662,7 @@ if __name__ == '__main__':
         # Autosampler control
         logger.info('Starting autosampler server')
 
-        ip = '164.54.204.53' # Coflow laptop
+        ip = '164.54.204.45' # Coflow laptop
 
         as_settings = autosamplercon.default_autosampler_settings
         as_settings['device_communication'] = 'local'
