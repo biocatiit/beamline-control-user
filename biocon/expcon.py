@@ -4996,7 +4996,10 @@ class ExpPanel(wx.Panel):
                 exp_type == 'IEC-SAXS' or exp_type == 'AF4-MALS-SAXS'):
                 vol = cmd_kwargs['inj_vol']
             elif exp_type == 'Batch mode SAXS':
-                vol = cmd_kwargs['volume']
+                try:
+                    vol = cmd_kwargs['volume']
+                except KeyError:
+                    vol = cmd_kwargs['inj_vol'] #standalone exposure could get flagged as batch but has a different key
             else:
                 vol = None
 
@@ -5028,19 +5031,25 @@ class ExpPanel(wx.Panel):
             if (exp_type == 'SEC-SAXS' or exp_type == 'SEC-MALS-SAXS' or
                 exp_type == 'IEC-SAXS'):
                 metadata['Column:'] = cmd_kwargs['column']
-                metadata['Sample Location:'] = cmd_kwargs['sample_loc']
-                metadata['HPLC flow rate [mL/min]:'] = cmd_kwargs['flow_rate']
-                metadata['Elution volume [mL]:'] = cmd_kwargs['elution_vol']
-                metadata['HPLC acquisition method:'] = cmd_kwargs['acq_method']
-                metadata['HPLC sample prep method:'] = cmd_kwargs['sp_method']
+                try:
+                    metadata['Sample Location:'] = cmd_kwargs['sample_loc']
+                    metadata['HPLC flow rate [mL/min]:'] = cmd_kwargs['flow_rate']
+                    metadata['Elution volume [mL]:'] = cmd_kwargs['elution_vol']
+                    metadata['HPLC acquisition method:'] = cmd_kwargs['acq_method']
+                    metadata['HPLC sample prep method:'] = cmd_kwargs['sp_method']
+                except KeyError:
+                    pass #standalone exposure doesn't have this data
             elif exp_type == 'Batch mode SAXS':
-                metadata['Well:'] = cmd_kwargs['sample_well']
-                metadata['Draw rate [uL/min]:'] = cmd_kwargs['draw_rate']
-                metadata['Wait time after draw [s]'] = cmd_kwargs['dwell_time']
-                metadata['Injection rate [uL/min]:'] = cmd_kwargs['rate']
-                metadata['Delay injection after trigger [s]:'] = cmd_kwargs['start_delay']
-                metadata['Delay after injection end [s]:'] = cmd_kwargs['end_delay']
-                metadata['Trigger on inject:'] = cmd_kwargs['trigger']
+                try:
+                    metadata['Well:'] = cmd_kwargs['sample_well']
+                    metadata['Draw rate [uL/min]:'] = cmd_kwargs['draw_rate']
+                    metadata['Wait time after draw [s]'] = cmd_kwargs['dwell_time']
+                    metadata['Injection rate [uL/min]:'] = cmd_kwargs['rate']
+                    metadata['Delay injection after trigger [s]:'] = cmd_kwargs['start_delay']
+                    metadata['Delay after injection end [s]:'] = cmd_kwargs['end_delay']
+                    metadata['Trigger on inject:'] = cmd_kwargs['trigger']
+                except KeyError:
+                    pass #standalone exposure doesn't have this data
             elif exp_type == 'AF4-MALS-SAXS':
                 metadata['Channel:'] = cmd_kwargs['channel']
                 metadata['Membrane:'] = cmd_kwargs['membrane']
@@ -5321,10 +5330,10 @@ default_exposure_settings = {
         {'sc_chan': 4, 'name': 'I1', 'scale': 1, 'offset': 0, 'use_dark': False,
             'norm_time': False},
         ],},
-    'warnings'              : {'shutter' : False, 'col_vac' : {'check': False,
-        'thresh': 0.04}, 'guard_vac' : {'check': False, 'thresh': 0.04},
-        'sample_vac': {'check': False, 'thresh': 0.04}, 'sc_vac':
-        {'check': False, 'thresh':0.04}},
+    'warnings'              : {'shutter' : True, 'col_vac' : {'check': True,
+        'thresh': 0.04}, 'guard_vac' : {'check': True, 'thresh': 0.04},
+        'sample_vac': {'check': True, 'thresh': 0.04}, 'sc_vac':
+        {'check': True, 'thresh':0.04}},
 
     }
 
