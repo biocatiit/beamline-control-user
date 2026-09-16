@@ -150,7 +150,7 @@ known_well_plates = {
         'row_step'      : 9.00, # mm
         'height'        : 0.5, # bottom of well from chiller base plate
         'plate_height'  : 15.5, # top of plate from chiller base plate
-        'load_pos_y_offset' : 3,
+        'load_pos_y_offset' : 1,
         },
 
     'Greiner 96 well cell culture, uClear, chimney well (PN# 655090)' : {
@@ -1153,6 +1153,8 @@ class Autosampler(object):
 
         self.sample_pump.set_valve_position(
             self.settings['syringe_valve_positions']['sample'])
+
+        abort = False
 
         while self.sample_pump.is_moving():
             abort = self._sleep(0.02)
@@ -3347,7 +3349,7 @@ class AutosamplerFrame(utils.DeviceFrame):
 #Settings
 default_autosampler_settings = {
     'device_init'           : [{'name': 'Autosampler', 'args': [], 'kwargs': {
-        'needle_motor'          : {'name': 'needle_y', 'args': ['18ID_DMC_E05:35'],
+        'needle_motor'          : {'name': 'needle_y', 'args': ['18ID_DMC_E05:40'],
                                     'kwargs': {}},
         'plate_x_motor'         : {'name': 'plate_x', 'args': ['18ID_DMC_E01:7'],
                                         'kwargs': {}},
@@ -3356,16 +3358,16 @@ default_autosampler_settings = {
         'coflow_y_motor'        : {'name': 'coflow_y', 'args': ['18ID_DMC_E01:6'],
                                         'kwargs': {}},
         'needle_valve'          : {'name': 'Needle',
-                                        'args':['Cheminert', 'COM11'],
+                                        'args':['Cheminert', 'COM10'],
                                         'kwargs': {'positions' : 6,
                                         'comm_lock': None}},
-        'sample_pump'           : {'name': 'sample', 'args': ['Hamilton PSD6', 'COM9'],
+        'sample_pump'           : {'name': 'sample', 'args': ['Hamilton PSD6', 'COM13'],
                                     'kwargs': {'syringe_id': '0.05 mL, Hamilton Glass',
                                     'pump_address': '1', 'dual_syringe': 'False',
                                     'comm_lock': None,},
                                     'ctrl_args': {'flow_rate' : 100,
                                     'refill_rate' : 100, 'units': 'uL/min'}},
-        'clean1_pump'           : {'name': 'water', 'args': ['KPHM100', 'COM10'],
+        'clean1_pump'           : {'name': 'water', 'args': ['KPHM100', 'COM11'],
                                     'kwargs': {'flow_cal': '319.2',
                                     'comm_lock': None},
                                     'ctrl_args': {'flow_rate': 1}},
@@ -3373,7 +3375,7 @@ default_autosampler_settings = {
                                     'kwargs': {'flow_cal': '319.2',
                                     'comm_lock': None},
                                     'ctrl_args': {'flow_rate': 1}},
-        'clean3_pump'           : {'name': 'hellmanex', 'args': ['KPHM100', 'COM8'],
+        'clean3_pump'           : {'name': 'hellmanex', 'args': ['KPHM100', 'COM9'],
                                     'kwargs': {'flow_cal': '319.2',
                                     'comm_lock': None},
                                     'ctrl_args': {'flow_rate': 1}},
@@ -3390,7 +3392,7 @@ default_autosampler_settings = {
     'home_settings'         : {'plate_x': {'dir': -1, 'step': 0.1, 'pos': 0},
                                 'plate_z': {'dir': 1, 'step': 0.1, 'pos': 0},
                                 'needle_y': {'dir': -1, 'step': 0.01, 'pos': -2.70}}, #Direction 1/-1 for positive/negative. step is step size off limit, pos is what to set the home position as.
-    'base_position'         : {'plate_x': 328.5, 'plate_z': -68.0, 'needle_y': 114.0}, # A1 well position, needle height at chiller plate top
+    'base_position'         : {'plate_x': 326.5, 'plate_z': -68.1, 'needle_y': 102.35}, # A1 well position, needle height at chiller plate top
     'clean_offsets'         : {'plate_x': 99.4, 'plate_z': -21.4, 'needle_y': -10}, # Relative to base position
     'needle_out_offset'     : 5, # mm
     'needle_in_position'    : -2.3,
