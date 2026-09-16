@@ -4980,7 +4980,7 @@ default_spectrometer_settings = {
         'analog_out_au_max'     : 10000, #mAu
         'analog_out_wav'        : {'out1': 280, 'out2': 260},
         'do_ao'                 : True,
-        'remote_ip'             : '164.54.204.53',
+        'remote_ip'             : '164.54.204.45',
         'remote_port'           : '5558',
         'device_communication'  : 'local',
         'remote'                : False,

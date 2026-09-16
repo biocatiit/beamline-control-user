@@ -3383,7 +3383,7 @@ default_autosampler_settings = {
         }},], # Compatibility with the standard format
     'device_communication'  : 'local',
     'remote_device'         : 'autosampler',
-    'remote_ip'             : '164.54.204.53',
+    'remote_ip'             : '164.54.204.45',
     'remote_port'           : '5557',
     'remote'                : False,
     'volume_units'          : 'uL',

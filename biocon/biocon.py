@@ -486,8 +486,8 @@ if __name__ == '__main__':
     ###################################################################
     # Metadata Settings
     metadata_settings = metadata.default_metadata_settings
-    # metadata_settings['metadata_type'] = 'auto'
-    metadata_settings['metadata_type'] = 'muscle'
+    metadata_settings['metadata_type'] = 'auto'
+    # metadata_settings['metadata_type'] = 'muscle'
 
 
     ###################################################################
@@ -543,7 +543,7 @@ if __name__ == '__main__':
     autosampler_settings['device_communication'] = 'remote'
     autosampler_settings['remote'] = True
     autosampler_settings['remote_device'] = 'autosampler'
-    autosampler_settings['remote_ip'] = '164.54.204.53'
+    autosampler_settings['remote_ip'] = '164.54.204.45'
     autosampler_settings['remote_port'] = '5557'
     autosampler_settings['device_data'] = autosampler_settings['device_init'][0]
     autosampler_settings['inline_panel'] = True
@@ -572,7 +572,7 @@ if __name__ == '__main__':
         ('pipeline', pipeline_ctrl.PipelineControl),
         ('uv', spectrometercon.UVPanel),
         ('hplc', biohplccon.HPLCPanel),
-        # ('automator', autocon.AutoPanel),
+        ('automator', autocon.AutoPanel),
         ('autosampler', autosamplercon.AutosamplerPanel),
         # ('toaster', toastcon.ToasterPanel),
         ('mono_auto_tune', monotunecon.MonoAutoTune),

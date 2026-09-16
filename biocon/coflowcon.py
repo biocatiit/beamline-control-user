@@ -2180,11 +2180,11 @@ class CoflowPanel(utils.DevicePanel):
         actions_box_sizer.AddStretchSpacer(1)
 
         adv_sub_sizer1 = wx.BoxSizer(wx.HORIZONTAL)
-        adv_sub_sizer1.Add(timer_box_sizer, flag=wx.ALL|wx.EXPAND, border=self._FromDIP(5))
-        adv_sub_sizer1.Add(actions_box_sizer, flag=wx.ALL|wx.EXPAND, border=self._FromDIP(2))
+        adv_sub_sizer1.Add(timer_box_sizer, flag=wx.RIGHT|wx.EXPAND, border=self._FromDIP(5))
+        adv_sub_sizer1.Add(actions_box_sizer, flag=wx.EXPAND, border=self._FromDIP(2))
 
 
-        adv_sizer.Add(adv_sub_sizer1, flag=wx.ALL|wx.EXPAND, border=self._FromDIP(5))
+        adv_sizer.Add(adv_sub_sizer1, flag=wx.ALL|wx.EXPAND, border=self._FromDIP(2))
 
         if self.top_settings['device_communication'] == 'local':
             show_pump_btn = wx.Button(adv_win, label='Pump Ctrl.')
@@ -2252,7 +2252,7 @@ class CoflowPanel(utils.DevicePanel):
                 border=self._FromDIP(5))
 
             adv_sizer.Add(inc_sizer, flag=wx.LEFT|wx.RIGHT|wx.BOTTOM|wx.EXPAND,
-                border=self._FromDIP(5))
+                border=self._FromDIP(2))
 
         adv_win.SetSizer(adv_sizer)
 
@@ -2264,17 +2264,19 @@ class CoflowPanel(utils.DevicePanel):
 
         status_panel = wx.Panel(self)
 
-        self.sheath_flow = wx.StaticText(status_panel, label='0', style=wx.ST_NO_AUTORESIZE,
+        status_box = wx.StaticBox(status_panel, label='Coflow Status')
+
+        self.sheath_flow = wx.StaticText(status_box, label='0', style=wx.ST_NO_AUTORESIZE,
             size=self._FromDIP((50,-1)))
-        self.outlet_flow = wx.StaticText(status_panel, label='0', style=wx.ST_NO_AUTORESIZE,
+        self.outlet_flow = wx.StaticText(status_box, label='0', style=wx.ST_NO_AUTORESIZE,
             size=self._FromDIP((50,-1)))
 
-        self.cell_temp = epics.wx.PVText(status_panel,
+        self.cell_temp = epics.wx.PVText(status_box,
             self.settings['coflow_cell_T_pv'], auto_units=False, fg='black',
             style=wx.ST_NO_AUTORESIZE, size=self._FromDIP((50,-1)))
 
         if self.settings['use_incubator_pvs']:
-            esensors_box = wx.StaticBox(status_panel, label='Incubator Sensors')
+            esensors_box = wx.StaticBox(status_box, label='Incubator Sensors')
             self.coflow_inc_esensor_temp = epics.wx.PVText(esensors_box,
                 self.settings['coflow_inc_esensor_T_pv'], auto_units=False,
                 fg='black', style=wx.ST_NO_AUTORESIZE, size=self._FromDIP((50,-1)))
@@ -2307,8 +2309,6 @@ class CoflowPanel(utils.DevicePanel):
             esensor_sizer.Add(esensor_grid_sizer, flag=wx.EXPAND|wx.ALL, proportion=1,
                 border=self._FromDIP(5))
 
-        status_box = wx.StaticBox(status_panel, label='Coflow Status')
-
         self.status = wx.StaticText(status_box, label='Coflow off', style=wx.ST_NO_AUTORESIZE,
             size=self._FromDIP((125, -1)))
         self.status.SetForegroundColour(wx.RED)
@@ -2321,8 +2321,8 @@ class CoflowPanel(utils.DevicePanel):
         outlet_label = wx.StaticText(status_box, label='Outlet flow [{}]:'.format(units))
         temp_label = wx.StaticText(status_box, label='Cell Temp. [C]:')
 
-
-        status_grid_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(5), hgap=self._FromDIP(2))
+        status_grid_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(5),
+            hgap=self._FromDIP(2))
         status_grid_sizer.Add(status_label, flag=wx.ALIGN_CENTER_VERTICAL)
         status_grid_sizer.Add(self.status, flag=wx.ALIGN_CENTER_VERTICAL)
         status_grid_sizer.Add(sheath_label, flag=wx.ALIGN_CENTER_VERTICAL)
@@ -2344,9 +2344,6 @@ class CoflowPanel(utils.DevicePanel):
         coflow_status_sizer.Add(status_sizer, border=self._FromDIP(5), flag=wx.ALL)
         coflow_status_sizer.Add(coflow_buffer_sizer, border=self._FromDIP(5),
             flag=wx.LEFT|wx.RIGHT|wx.BOTTOM|wx.EXPAND)
-
-
-
 
         coflow_status_sizer.AddStretchSpacer(1)
 
@@ -3694,13 +3691,7 @@ class CoflowFrame(utils.DeviceFrame):
 default_coflow_settings = {
     'show_advanced_options'     : False,
     'device_communication'      : 'remote',
-    # 'remote_pump_ip'            : '164.54.204.192',
-    # 'remote_pump_port'          : '5556',
-    # 'remote_fm_ip'              : '164.54.204.192',
-    # 'remote_fm_port'            : '5557'
-    # 'remote_valve_ip'           : '164.54.204.192',
-    # 'remote_valve_port'         : '5558',
-    'remote_ip'                 : '164.54.204.53',
+    'remote_ip'                 : '164.54.204.45',
     'remote_port'               : '5556',
     'remote_device'             : 'coflow',
     'device_init'               : [{'name': 'Coflow', 'args': [], 'kwargs': {
@@ -3787,7 +3778,7 @@ default_coflow_settings = {
         'coflow_inc_TSetpoint_pv'   : '18ID:Memmert:CoflowInc:TempSetpoint',
         'hplc_inc_T_pv'             : '18ID:Memmert:HPLCInc:Temp',
         'hplc_inc_TSetpoint_pv'     : '18ID:Memmert:HPLCInc:TempSetpoint',
-        'use_incubator_pvs'         : False,
+        'use_incubator_pvs'         : True,
         }}],
     }
 
