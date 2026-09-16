@@ -1210,8 +1210,8 @@ if __name__ == '__main__':
 
     # # Coflow flow meters
     setup_devices = [
-        {'name': 'sheath', 'args' : ['BFS', 'COM4'], 'kwargs': {}},
-        {'name': 'outlet', 'args' : ['BFS', 'COM5'], 'kwargs': {}},
+        {'name': 'sheath', 'args' : ['BFS', 'COM5'], 'kwargs': {}},
+        {'name': 'outlet', 'args' : ['BFS', 'COM4'], 'kwargs': {}},
         ]
 
     # TR-SAXS flow meter

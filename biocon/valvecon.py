@@ -1046,14 +1046,14 @@ if __name__ == '__main__':
     #     ]
 
     # TR-SAXS dual inject TTL
-    setup_devices = [
-        # {'name': 'Injection', 'args': ['Rheodyne', 'COM16'],
-        #     'kwargs': {'positions' : 2}},
-        {'name': 'Injection 1', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo15'],
-            'kwargs': {'positions' : 2}},
-        {'name': 'Injection 2', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo15'],
-            'kwargs': {'positions' : 2}},
-        ]
+    # setup_devices = [
+    #     # {'name': 'Injection', 'args': ['Rheodyne', 'COM16'],
+    #     #     'kwargs': {'positions' : 2}},
+    #     {'name': 'Injection 1', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo15'],
+    #         'kwargs': {'positions' : 2}},
+    #     {'name': 'Injection 2', 'args': ['RheodyneTTL', '18ID:LJT4:2:Bo15'],
+    #         'kwargs': {'positions' : 2}},
+    #     ]
     # TR-SAXS continuous pump chaotic flow
     # setup_devices = [
     #     # {'name': 'Injection', 'args': ['Rheodyne', 'COM6'],
@@ -1065,10 +1065,10 @@ if __name__ == '__main__':
     #     ]
 
     # # Coflow buffer valve
-    # setup_devices = [
-    #     {'name': 'Buffer', 'args': ['Cheminert', 'COM4'],
-    #         'kwargs': {'positions': 10}},
-    #     ]
+    setup_devices = [
+        {'name': 'Buffer', 'args': ['Cheminert', 'COM7'],
+            'kwargs': {'positions': 10}},
+        ]
 
     # TR-SAXS laminar flow
     # setup_devices = [
@@ -1126,10 +1126,10 @@ if __name__ == '__main__':
     #     ]
 
     # MALS switching
-    setup_devices = [
-        {'name': 'MALS', 'args': ['Cheminert', 'COM8'],
-            'kwargs': {'positions': 2}},
-        ]
+    # setup_devices = [
+    #     {'name': 'MALS', 'args': ['Cheminert', 'COM8'],
+    #         'kwargs': {'positions': 2}},
+    #     ]
 
     # setup_devices = [
     #     {'name': 'Sheath', 'args': ['Multi', None], 'kwargs': {'positions': 6,
