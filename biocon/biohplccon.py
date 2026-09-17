@@ -5385,7 +5385,7 @@ class HPLCPanel(utils.DevicePanel):
     def _create_buffer_ctrls(self):
         buffer_box = wx.StaticBox(self, label='Buffers')
 
-        buffer1_box = wx.StaticBox(self, label='Buffer 1')
+        buffer1_box = wx.StaticBox(buffer_box, label='Buffer 1')
 
         self._buffer1_list = utils.BufferList(buffer1_box,
             size=self._FromDIP((-1, 100)),style=wx.LC_REPORT|wx.BORDER_SUNKEN)
@@ -5408,7 +5408,7 @@ class HPLCPanel(utils.DevicePanel):
             border=self._FromDIP(5))
 
         if self._device_type == 'AgilentHPLC2Pumps':
-            buffer2_box = wx.StaticBox(self, label='Buffer 2')
+            buffer2_box = wx.StaticBox(buffer_box, label='Buffer 2')
 
             self._buffer2_list = utils.BufferList(buffer2_box,
                 size=self._FromDIP((-1, 100)),style=wx.LC_REPORT|wx.BORDER_SUNKEN)
@@ -8470,8 +8470,8 @@ default_hplc_2pump_settings = {
     'remote'        : False,
     'remote_device' : 'hplc',
     'device_init'   : setup_devices,
-    'remote_ip'     : '192.168.1.16',
-    'remote_port'   : '5558',
+    'remote_ip'     : '164.54.204.113',
+    'remote_port'   : '5556',
     'com_thread'    : None,
     # Default settings for hplc
     'purge_volume'              : 20,

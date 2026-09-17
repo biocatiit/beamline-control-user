@@ -2180,11 +2180,11 @@ class CoflowPanel(utils.DevicePanel):
         actions_box_sizer.AddStretchSpacer(1)
 
         adv_sub_sizer1 = wx.BoxSizer(wx.HORIZONTAL)
-        adv_sub_sizer1.Add(timer_box_sizer, flag=wx.ALL|wx.EXPAND, border=self._FromDIP(5))
-        adv_sub_sizer1.Add(actions_box_sizer, flag=wx.ALL|wx.EXPAND, border=self._FromDIP(2))
+        adv_sub_sizer1.Add(timer_box_sizer, flag=wx.RIGHT|wx.EXPAND, border=self._FromDIP(5))
+        adv_sub_sizer1.Add(actions_box_sizer, flag=wx.EXPAND, border=self._FromDIP(2))
 
 
-        adv_sizer.Add(adv_sub_sizer1, flag=wx.ALL|wx.EXPAND, border=self._FromDIP(5))
+        adv_sizer.Add(adv_sub_sizer1, flag=wx.ALL|wx.EXPAND, border=self._FromDIP(2))
 
         if self.top_settings['device_communication'] == 'local':
             show_pump_btn = wx.Button(adv_win, label='Pump Ctrl.')
@@ -2252,7 +2252,7 @@ class CoflowPanel(utils.DevicePanel):
                 border=self._FromDIP(5))
 
             adv_sizer.Add(inc_sizer, flag=wx.LEFT|wx.RIGHT|wx.BOTTOM|wx.EXPAND,
-                border=self._FromDIP(5))
+                border=self._FromDIP(2))
 
         adv_win.SetSizer(adv_sizer)
 
@@ -2264,17 +2264,19 @@ class CoflowPanel(utils.DevicePanel):
 
         status_panel = wx.Panel(self)
 
-        self.sheath_flow = wx.StaticText(status_panel, label='0', style=wx.ST_NO_AUTORESIZE,
+        status_box = wx.StaticBox(status_panel, label='Coflow Status')
+
+        self.sheath_flow = wx.StaticText(status_box, label='0', style=wx.ST_NO_AUTORESIZE,
             size=self._FromDIP((50,-1)))
-        self.outlet_flow = wx.StaticText(status_panel, label='0', style=wx.ST_NO_AUTORESIZE,
+        self.outlet_flow = wx.StaticText(status_box, label='0', style=wx.ST_NO_AUTORESIZE,
             size=self._FromDIP((50,-1)))
 
-        self.cell_temp = epics.wx.PVText(status_panel,
+        self.cell_temp = epics.wx.PVText(status_box,
             self.settings['coflow_cell_T_pv'], auto_units=False, fg='black',
             style=wx.ST_NO_AUTORESIZE, size=self._FromDIP((50,-1)))
 
         if self.settings['use_incubator_pvs']:
-            esensors_box = wx.StaticBox(status_panel, label='Incubator Sensors')
+            esensors_box = wx.StaticBox(status_box, label='Incubator Sensors')
             self.coflow_inc_esensor_temp = epics.wx.PVText(esensors_box,
                 self.settings['coflow_inc_esensor_T_pv'], auto_units=False,
                 fg='black', style=wx.ST_NO_AUTORESIZE, size=self._FromDIP((50,-1)))
@@ -2307,21 +2309,20 @@ class CoflowPanel(utils.DevicePanel):
             esensor_sizer.Add(esensor_grid_sizer, flag=wx.EXPAND|wx.ALL, proportion=1,
                 border=self._FromDIP(5))
 
-
-        self.status = wx.StaticText(status_panel, label='Coflow off', style=wx.ST_NO_AUTORESIZE,
+        self.status = wx.StaticText(status_box, label='Coflow off', style=wx.ST_NO_AUTORESIZE,
             size=self._FromDIP((125, -1)))
         self.status.SetForegroundColour(wx.RED)
         fsize = self.GetFont().GetPointSize()
         font = wx.Font(fsize, wx.DEFAULT, wx.NORMAL, wx.BOLD)
         self.status.SetFont(font)
 
-        status_label = wx.StaticText(status_panel, label='Status:')
-        sheath_label = wx.StaticText(status_panel, label='Sheath flow [{}]:'.format(units))
-        outlet_label = wx.StaticText(status_panel, label='Outlet flow [{}]:'.format(units))
-        temp_label = wx.StaticText(status_panel, label='Cell Temp. [C]:')
+        status_label = wx.StaticText(status_box, label='Status:')
+        sheath_label = wx.StaticText(status_box, label='Sheath flow [{}]:'.format(units))
+        outlet_label = wx.StaticText(status_box, label='Outlet flow [{}]:'.format(units))
+        temp_label = wx.StaticText(status_box, label='Cell Temp. [C]:')
 
-
-        status_grid_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(5), hgap=self._FromDIP(2))
+        status_grid_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(5),
+            hgap=self._FromDIP(2))
         status_grid_sizer.Add(status_label, flag=wx.ALIGN_CENTER_VERTICAL)
         status_grid_sizer.Add(self.status, flag=wx.ALIGN_CENTER_VERTICAL)
         status_grid_sizer.Add(sheath_label, flag=wx.ALIGN_CENTER_VERTICAL)
@@ -2337,16 +2338,12 @@ class CoflowPanel(utils.DevicePanel):
         if self.settings['use_incubator_pvs']:
             status_sizer.Add(esensor_sizer, flag=wx.TOP, border=self._FromDIP(5))
 
-        coflow_buffer_sizer = self._create_buffer_ctrls(status_panel)
+        coflow_buffer_sizer = self._create_buffer_ctrls(status_box)
 
-        coflow_status_sizer = wx.StaticBoxSizer(wx.StaticBox(status_panel,
-            label='Coflow Status'), wx.HORIZONTAL)
+        coflow_status_sizer = wx.StaticBoxSizer(status_box, wx.HORIZONTAL)
         coflow_status_sizer.Add(status_sizer, border=self._FromDIP(5), flag=wx.ALL)
         coflow_status_sizer.Add(coflow_buffer_sizer, border=self._FromDIP(5),
             flag=wx.LEFT|wx.RIGHT|wx.BOTTOM|wx.EXPAND)
-
-
-
 
         coflow_status_sizer.AddStretchSpacer(1)
 
@@ -3694,20 +3691,14 @@ class CoflowFrame(utils.DeviceFrame):
 default_coflow_settings = {
     'show_advanced_options'     : False,
     'device_communication'      : 'remote',
-    # 'remote_pump_ip'            : '164.54.204.192',
-    # 'remote_pump_port'          : '5556',
-    # 'remote_fm_ip'              : '164.54.204.192',
-    # 'remote_fm_port'            : '5557'
-    # 'remote_valve_ip'           : '164.54.204.192',
-    # 'remote_valve_port'         : '5558',
-    'remote_ip'                 : '164.54.204.53',
+    'remote_ip'                 : '164.54.204.45',
     'remote_port'               : '5556',
     'remote_device'             : 'coflow',
     'device_init'               : [{'name': 'Coflow', 'args': [], 'kwargs': {
         'remote_overflow_ip'        : '164.54.204.75',
         'flow_units'                : 'mL/min',
         'sheath_pump'
-                                    : {'name': 'sheath', 'args': ['Longer L100S2', 'COM5'],
+                                    : {'name': 'sheath', 'args': ['Longer L100S2', 'COM6'],
                                         'kwargs': {'pump_addr': 1, 'flow_cal': 0.0502},
                                         'ctrl_args': {'flow_rate': 1}},
         # 'sheath_pump'               : {'name': 'sheath', 'args': ['VICI M50', 'COM6'],
@@ -3722,18 +3713,18 @@ default_coflow_settings = {
         #                                 'kwargs': {'flow_cal': '628.68',
         #                                 'backlash_cal': '9.962'},
         #                                 'ctrl_args': {'flow_rate': 1}},
-        'outlet_pump'               : {'name': 'outlet', 'args': ['OB1 Pump', 'COM7'],
+        'outlet_pump'               : {'name': 'outlet', 'args': ['OB1 Pump', 'COM8'],
                                         'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
                                         'min_pressure': -1000, 'max_pressure': 1000, 'P': -2, 'I': -0.15,
                                         'D': 0, 'bfs_instr_ID': None, 'comm_lock': None,
                                         'calib_path': './resources/ob1_calib.txt'},
                                         'ctrl_args': {}},
-        'sheath_fm'                 : {'name': 'sheath', 'args': ['BFS', 'COM4'],
+        'sheath_fm'                 : {'name': 'sheath', 'args': ['BFS', 'COM5'],
                                         'kwargs':{}},
-        'outlet_fm'                 : {'name': 'outlet', 'args': ['BFS', 'COM6'],
+        'outlet_fm'                 : {'name': 'outlet', 'args': ['BFS', 'COM4'],
                                         'kwargs':{}},
         'sheath_valve'              : {'name': 'Coflow Sheath',
-                                        'args':['Cheminert', 'COM3'],
+                                        'args':['Cheminert', 'COM7'],
                                         'kwargs': {'positions' : 10}},
         # 'sheath_pump'               : {'name': 'sheath', 'args': ['Soft', None], # Simulated devices for testing
         #                                 'kwargs': {}},

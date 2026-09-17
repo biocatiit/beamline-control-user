@@ -150,7 +150,7 @@ known_well_plates = {
         'row_step'      : 9.00, # mm
         'height'        : 0.5, # bottom of well from chiller base plate
         'plate_height'  : 15.5, # top of plate from chiller base plate
-        'load_pos_y_offset' : 3,
+        'load_pos_y_offset' : 1,
         },
 
     'Greiner 96 well cell culture, uClear, chimney well (PN# 655090)' : {
@@ -400,74 +400,6 @@ class Autosampler(object):
         self.set_sample_draw_rate(self.settings['pump_rates']['sample'][0], 'mL/min')
         self.set_sample_dwell_time(self.settings['load_dwell_time'])
 
-    def home_motor(self, motor_name, thread=True):
-        if not thread:
-            success = self._inner_home_motor(motor_name)
-        else:
-            self._cmd_queue.append([self._inner_home_motor, [motor_name], {}])
-            success = True
-
-        return success
-
-    def _inner_home_motor(self, motor_name):
-        self._inc_active()
-        abort = False
-
-        if motor_name == 'needle_y':
-            motor = self.needle_y_motor
-        elif motor_name == 'plate_x':
-            motor = self.plate_x_motor
-        elif motor_name == 'plate_z':
-            motor = self.plate_z_motor
-
-        direction = self.settings['home_settings'][motor_name]['dir']
-        step = self.settings['home_settings'][motor_name]['step']
-        pos = self.settings['home_settings'][motor_name]['pos']
-
-        if direction == 1:
-            on_lim = motor.on_high_limit()
-        else:
-            on_lim = motor.on_low_limit()
-
-        abort = self._check_abort()
-
-        if not on_lim and not abort:
-            if direction == 1:
-                jog_dir = 'positive'
-            else:
-                jog_dir = 'negative'
-
-            motor.jog(jog_dir, True)
-
-        while not on_lim and not abort:
-            if direction == 1:
-                on_lim = motor.on_high_limit()
-            else:
-                on_lim = motor.on_low_limit()
-
-            abort = self._sleep(0.02)
-
-        motor.jog(jog_dir, False)
-
-        move_off = -1*direction*step
-
-        while on_lim and not abort:
-            cont = self.move_motors_relative(move_off, motor_name)
-            abort = not cont
-
-            if direction == 1:
-                on_lim = motor.on_high_limit()
-            else:
-                on_lim = motor.on_low_limit()
-
-        if not abort:
-            logger.info('Redefining motor %s position %s to %s', motor_name,
-                motor.position, pos)
-            motor.position = pos
-
-        self._dec_active()
-
-        return not abort
 
     def move_motors_absolute(self, position, motor='all', y_offset=True):
         self._inc_active()
@@ -814,6 +746,7 @@ class Autosampler(object):
             self._status = 'Moving to clean'
 
         success = self.move_motors_absolute(self.needle_out_position, 'needle_y')
+
         if success:
             abort = self._sleep(1)
             if not abort:
@@ -874,10 +807,15 @@ class Autosampler(object):
         if self._active_count == 1:
             self._status = 'Moving needle in'
 
-        self.move_plate_out(False)
+        success = self.move_plate_out(False)
 
-        success = self.move_motors_absolute(self.needle_in_position, 'needle_y',
-            y_offset=False)
+        if success:
+            abort = self._sleep(1)
+            if not abort:
+                success = self.move_motors_absolute(self.needle_in_position,
+                    'needle_y', y_offset=False)
+            else:
+                success = False
 
         self._dec_active()
 
@@ -939,15 +877,16 @@ class Autosampler(object):
 
         if cur_plate_x != self.plate_x_out:
             success = self.move_motors_absolute(self.needle_out_position, 'needle_y')
-            if success:
-                abort = self._sleep(1)
-                success = not abort
         else:
             success = True
 
         if success:
-            success = self.move_motors_absolute([self.plate_x_load,
-                self.plate_z_load, self.needle_y_motor.position])
+            abort = self._sleep(1)
+            if not abort:
+                success = self.move_motors_absolute([self.plate_x_load,
+                    self.plate_z_load, self.needle_y_motor.position])
+            else:
+                success = False
 
         self._dec_active()
 
@@ -974,11 +913,12 @@ class Autosampler(object):
         success = self.move_motors_absolute(self.needle_out_position, 'needle_y')
 
         if success:
-            abort = self._check_abort()
-            success = not abort
-            if success:
+            abort = self._sleep(1)
+            if not abort:
                 success = self.move_motors_absolute([well_position[0],
                     well_position[1], self.needle_out_position])
+            else:
+                success = False
 
         self._dec_active()
 
@@ -1173,7 +1113,10 @@ class Autosampler(object):
             if abort:
                 break
 
-        success = self.move_to_load(row, column, False)
+        if not abort:
+            success = self.move_to_load(row, column, False)
+        else:
+            success = False
 
         if success:
             self.set_pump_aspirate_rates(self._sample_draw_rate, rate_units, 'sample')
@@ -1211,18 +1154,23 @@ class Autosampler(object):
         self.sample_pump.set_valve_position(
             self.settings['syringe_valve_positions']['sample'])
 
+        abort = False
+
         while self.sample_pump.is_moving():
             abort = self._sleep(0.02)
             if abort:
                 break
 
-        if self.settings['inject_connect_vol'] > 0:
-            self.set_pump_dispense_rates(self.settings['inject_connect_rate'],
-                'uL/min', 'sample')
-            success = self.dispense(self.settings['inject_connect_vol'],
-                'sample', units='uL')
+        if not abort:
+            if self.settings['inject_connect_vol'] > 0:
+                self.set_pump_dispense_rates(self.settings['inject_connect_rate'],
+                    'uL/min', 'sample')
+                success = self.dispense(self.settings['inject_connect_vol'],
+                    'sample', units='uL')
+            else:
+                success = True
         else:
-            success = True
+            success = False
 
         if success:
             success = self.move_needle_in(False)
@@ -1268,33 +1216,36 @@ class Autosampler(object):
         self.sample_pump.set_valve_position(
             self.settings['syringe_valve_positions']['sample'])
 
+        abort = False
+
         while self.sample_pump.is_moving():
             abort = self._sleep(0.02)
             if abort:
                 break
+
         self.set_pump_dispense_rates(rate, rate_units, 'sample')
 
         load_vol = pumpcon.convert_volume(volume, vol_units, 'uL')
 
-        self.dispense(load_vol - self.settings['reserve_vol'], 'sample',
-            trigger=trigger, delay=start_delay, units='uL', blocking=False)
+        if not abort:
+            self.dispense(load_vol - self.settings['reserve_vol'], 'sample',
+                trigger=trigger, delay=start_delay, units='uL', blocking=False)
 
-        abort = False
+            while not self.sample_pump.is_moving():
+                self._sleep(0.02)
 
-        while not self.sample_pump.is_moving():
-            self._sleep(0.02)
+            while self.sample_pump.is_moving():
+                abort = self._sleep(0.02)
+                if abort:
+                    break
 
-        while self.sample_pump.is_moving():
-            abort = self._sleep(0.02)
-            if abort:
-                break
+        if not abort:
+            start_time = time.monotonic()
 
-        start_time = time.monotonic()
-
-        while time.monotonic() - start_time < end_delay:
-            abort = self._sleep(0.02)
-            if abort:
-                break
+            while time.monotonic() - start_time < end_delay:
+                abort = self._sleep(0.02)
+                if abort:
+                    break
 
         self._dec_active()
 
@@ -1392,18 +1343,19 @@ class Autosampler(object):
             if abort:
                 break
 
-        rate = self.settings['pump_rates']['purge'][1]
-        self.set_pump_dispense_rates(rate, 'mL/min', 'sample')
-        self.sample_pump.dispense_all(blocking=False)
+        if success:
+            rate = self.settings['pump_rates']['purge'][1]
+            self.set_pump_dispense_rates(rate, 'mL/min', 'sample')
+            self.sample_pump.dispense_all(blocking=False)
 
-        while self.sample_pump.is_moving():
-            abort = self._sleep(0.02)
-            if abort:
-                success = not abort
-                break
+            while self.sample_pump.is_moving():
+                abort = self._sleep(0.02)
+                if abort:
+                    success = not abort
+                    break
 
-        self.sample_pump.set_valve_position(
-            self.settings['syringe_valve_positions']['clean'])
+            self.sample_pump.set_valve_position(
+                self.settings['syringe_valve_positions']['clean'])
 
         if success:
             for clean_step in self.settings['clean_seq']:
@@ -1500,7 +1452,6 @@ class ASCommThread(utils.CommManager):
             'move_plate_out'        : self._move_plate_out,
             'move_plate_change'     : self._move_plate_change,
             'move_plate_load'       : self._move_plate_load,
-            'home_motor'            : self._home_motor,
             'set_valve_position'    : self._set_valve_position,
             'set_sample_pump_valve' : self._set_sample_pump_valve,
             'set_aspirate_rates'    : self._set_pump_aspirate_rates,
@@ -1768,19 +1719,6 @@ class ASCommThread(utils.CommManager):
 
         logger.debug("%s moved plate to well %s%s load position", name,
             row, col)
-
-    def _home_motor(self, name, motor_name, **kwargs):
-        logger.info("%s homing motor %s", name, motor_name)
-
-        comm_name = kwargs.pop('comm_name', None)
-        cmd = kwargs.pop('cmd', None)
-
-        device = self._connected_devices[name]
-        success = device.home_motor(motor_name, **kwargs)
-
-        self._return_value((name, cmd, success), comm_name)
-
-        logger.debug("%s homed motor %s", name, motor_name)
 
     def _set_valve_position(self, name, val, **kwargs):
         logger.info("Setting %s valve position to %s", name, val)
@@ -2817,9 +2755,6 @@ class AutosamplerPanel(utils.DevicePanel):
         if clean_needle:
             self._send_cmd(['clean', [self.name,], {}], False)
 
-    def home_motor(self, motor):
-        self._send_cmd(['home_motor', [self.name, motor], {}], False)
-
     def _on_staff_ctrl_btn(self, evt):
         if self._staff_ctrl_window is None:
             self._staff_ctrl_window = StaffControlsFrame(self, self.settings, self)
@@ -3279,23 +3214,8 @@ class StaffControlsFrame(wx.Frame):
         motor_sizer.AddGrowableCol(2)
         motor_sizer.AddGrowableCol(3)
 
-        self._home_needle_btn = wx.Button(motor_box, label='Home Needle Y')
-        self._home_plate_x_btn = wx.Button(motor_box, label='Home Plate X')
-        self._home_plate_z_btn = wx.Button(motor_box, label='Home Plate Z')
-
-        self._home_needle_btn.Bind(wx.EVT_BUTTON, self._on_home_btn)
-        self._home_plate_x_btn.Bind(wx.EVT_BUTTON, self._on_home_btn)
-        self._home_plate_z_btn.Bind(wx.EVT_BUTTON, self._on_home_btn)
-
-        home_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        home_sizer.Add(self._home_needle_btn, flag=wx.RIGHT, border=self._FromDIP(5))
-        home_sizer.Add(self._home_plate_x_btn, flag=wx.RIGHT, border=self._FromDIP(5))
-        home_sizer.Add(self._home_plate_z_btn)
-
         motor_top_sizer = wx.StaticBoxSizer(motor_box, wx.VERTICAL)
         motor_top_sizer.Add(motor_sizer, flag=wx.ALL|wx.EXPAND, border=self._FromDIP(5))
-        motor_top_sizer.Add(home_sizer, flag=wx.LEFT|wx.RIGHT|wx.BOTTOM,
-            border=self._FromDIP(5))
 
         return motor_top_sizer
 
@@ -3392,21 +3312,6 @@ class StaffControlsFrame(wx.Frame):
 
         return valve_top_sizer
 
-    def _on_home_btn(self, evt):
-        evt_obj = evt.GetEventObject()
-
-        motor = None
-
-        if evt_obj == self._home_needle_btn:
-            motor = 'needle_y'
-        elif evt_obj == self._home_plate_x_btn:
-            motor = 'plate_x'
-        elif evt_obj == self._home_plate_z_btn:
-            motor = 'plate_z'
-
-        if motor is not None:
-            self.as_panel.home_motor(motor)
-
     def OnClose(self, evt):
         self.as_panel._staff_ctrl_window = None
 
@@ -3444,7 +3349,7 @@ class AutosamplerFrame(utils.DeviceFrame):
 #Settings
 default_autosampler_settings = {
     'device_init'           : [{'name': 'Autosampler', 'args': [], 'kwargs': {
-        'needle_motor'          : {'name': 'needle_y', 'args': ['18ID_DMC_E05:35'],
+        'needle_motor'          : {'name': 'needle_y', 'args': ['18ID_DMC_E05:40'],
                                     'kwargs': {}},
         'plate_x_motor'         : {'name': 'plate_x', 'args': ['18ID_DMC_E01:7'],
                                         'kwargs': {}},
@@ -3453,16 +3358,16 @@ default_autosampler_settings = {
         'coflow_y_motor'        : {'name': 'coflow_y', 'args': ['18ID_DMC_E01:6'],
                                         'kwargs': {}},
         'needle_valve'          : {'name': 'Needle',
-                                        'args':['Cheminert', 'COM11'],
+                                        'args':['Cheminert', 'COM10'],
                                         'kwargs': {'positions' : 6,
                                         'comm_lock': None}},
-        'sample_pump'           : {'name': 'sample', 'args': ['Hamilton PSD6', 'COM9'],
+        'sample_pump'           : {'name': 'sample', 'args': ['Hamilton PSD6', 'COM13'],
                                     'kwargs': {'syringe_id': '0.05 mL, Hamilton Glass',
                                     'pump_address': '1', 'dual_syringe': 'False',
                                     'comm_lock': None,},
                                     'ctrl_args': {'flow_rate' : 100,
                                     'refill_rate' : 100, 'units': 'uL/min'}},
-        'clean1_pump'           : {'name': 'water', 'args': ['KPHM100', 'COM10'],
+        'clean1_pump'           : {'name': 'water', 'args': ['KPHM100', 'COM11'],
                                     'kwargs': {'flow_cal': '319.2',
                                     'comm_lock': None},
                                     'ctrl_args': {'flow_rate': 1}},
@@ -3470,7 +3375,7 @@ default_autosampler_settings = {
                                     'kwargs': {'flow_cal': '319.2',
                                     'comm_lock': None},
                                     'ctrl_args': {'flow_rate': 1}},
-        'clean3_pump'           : {'name': 'hellmanex', 'args': ['KPHM100', 'COM8'],
+        'clean3_pump'           : {'name': 'hellmanex', 'args': ['KPHM100', 'COM9'],
                                     'kwargs': {'flow_cal': '319.2',
                                     'comm_lock': None},
                                     'ctrl_args': {'flow_rate': 1}},
@@ -3478,19 +3383,16 @@ default_autosampler_settings = {
         }},], # Compatibility with the standard format
     'device_communication'  : 'local',
     'remote_device'         : 'autosampler',
-    'remote_ip'             : '164.54.204.53',
+    'remote_ip'             : '164.54.204.45',
     'remote_port'           : '5557',
     'remote'                : False,
     'volume_units'          : 'uL',
     'components'            : [],
 
-    # 'motor_home_velocity'   : {'x': 10, 'y': 10, 'z': 10},
-    # 'motor_velocity'        : {'x': 75, 'y': 75, 'z': 75}, #112
-    # 'motor_acceleration'    : {'x': 500, 'y': 500, 'z': 500},
     'home_settings'         : {'plate_x': {'dir': -1, 'step': 0.1, 'pos': 0},
                                 'plate_z': {'dir': 1, 'step': 0.1, 'pos': 0},
                                 'needle_y': {'dir': -1, 'step': 0.01, 'pos': -2.70}}, #Direction 1/-1 for positive/negative. step is step size off limit, pos is what to set the home position as.
-    'base_position'         : {'plate_x': 328.5, 'plate_z': -68.0, 'needle_y': 114.0}, # A1 well position, needle height at chiller plate top
+    'base_position'         : {'plate_x': 326.5, 'plate_z': -68.1, 'needle_y': 102.35}, # A1 well position, needle height at chiller plate top
     'clean_offsets'         : {'plate_x': 99.4, 'plate_z': -21.4, 'needle_y': -10}, # Relative to base position
     'needle_out_offset'     : 5, # mm
     'needle_in_position'    : -2.3,
