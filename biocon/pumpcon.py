@@ -6449,18 +6449,18 @@ if __name__ == '__main__':
     #     ]
 
     #OB1 by itself
-    bfs = fmcon.BFS('outlet_fm', 'COM6')
+    # bfs = fmcon.BFS('outlet_fm', 'COM6')
 
-    ob1_comm_lock = threading.RLock()
+    # ob1_comm_lock = threading.RLock()
 
-    setup_devices = [
-        {'name': 'outlet', 'args': ['OB1 Pump', 'COM7'],
-            'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
-            'min_pressure': -1000, 'max_pressure': 1000, 'P': 8, 'I': 2,
-            'D': 0, 'bfs_instr_ID': bfs.instr_ID, 'comm_lock': ob1_comm_lock,
-            'calib_path': './resources/ob1_calib.txt'},
-            'ctrl_args': {}}
-        ]
+    # setup_devices = [
+    #     {'name': 'outlet', 'args': ['OB1 Pump', 'COM7'],
+    #         'kwargs': {'ob1_device_name': 'Outlet OB1', 'channel': 1,
+    #         'min_pressure': -1000, 'max_pressure': 1000, 'P': 8, 'I': 2,
+    #         'D': 0, 'bfs_instr_ID': bfs.instr_ID, 'comm_lock': ob1_comm_lock,
+    #         'calib_path': './resources/ob1_calib.txt'},
+    #         'ctrl_args': {}}
+    #     ]
 
     # # TR-SAXS PHD 4400 pumps
     # setup_devices = [
@@ -6509,20 +6509,20 @@ if __name__ == '__main__':
     #      ]
 
     # # Teledyne SSI Reaxus pumps without scaling
-    # setup_devices = [
-    #     {'name': 'Pump 4', 'args': ['SSI Next Gen', 'COM9'],
-    #         'kwargs': {'flow_rate_scale': 1,
-    #         'flow_rate_offset': 0,'scale_type': 'up'},
-    #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-    #     {'name': 'Pump 3', 'args': ['SSI Next Gen', 'COM10'],
-    #         'kwargs': {'flow_rate_scale': 1,
-    #         'flow_rate_offset': 0,'scale_type': 'up'},
-    #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-    #     {'name': 'Pump 2', 'args': ['SSI Next Gen', 'COM11'],
-    #         'kwargs': {'flow_rate_scale': 1,
-    #         'flow_rate_offset': 0,'scale_type': 'up'},
-    #         'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
-    #     ]
+    setup_devices = [
+        {'name': 'Pump 4', 'args': ['SSI Next Gen', 'COM9'],
+            'kwargs': {'flow_rate_scale': 1,
+            'flow_rate_offset': 0,'scale_type': 'up'},
+            'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
+        {'name': 'Pump 3', 'args': ['SSI Next Gen', 'COM10'],
+            'kwargs': {'flow_rate_scale': 1,
+            'flow_rate_offset': 0,'scale_type': 'up'},
+            'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
+        {'name': 'Pump 2', 'args': ['SSI Next Gen', 'COM11'],
+            'kwargs': {'flow_rate_scale': 1,
+            'flow_rate_offset': 0,'scale_type': 'up'},
+            'ctrl_args': {'flow_rate': 0.1, 'flow_accel': 0.1}},
+        ]
 
     # # SEC-SAXS pump, Teledyne SSI Reaxus pumps without scaling
     # setup_devices = [
