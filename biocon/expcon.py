@@ -3603,6 +3603,11 @@ class ExpPanel(wx.Panel):
             trsaxs_panel.update_params()
 
     def _on_start_exp(self, evt):
+        self.start_exp_btn.Disable()
+        self.start_scan_btn.Disable()
+        self.dark_exp_btn.Disable()
+        self.stop_exp_btn.Enable()
+
         if (evt.GetEventObject() == self.start_exp_btn
             or evt.GetEventObject() == self.dark_exp_btn):
             exp_only = True
@@ -3640,6 +3645,7 @@ class ExpPanel(wx.Panel):
 
         if not warnings_valid:
             self._preparing_exposure = False
+            wx.CallAfter(self._enable_start_buttons)
             return
 
         if exp_values is None:
@@ -3651,6 +3657,7 @@ class ExpPanel(wx.Panel):
 
         if not exp_valid:
             self._preparing_exposure = False
+            wx.CallAfter(self._enable_start_buttons)
             return
 
         metadata, metadata_valid = self._get_metadata(metadata_vals, verbose)
@@ -3659,6 +3666,7 @@ class ExpPanel(wx.Panel):
             exp_values['metadata'] = metadata
         else:
             self._preparing_exposure = False
+            wx.CallAfter(self._enable_start_buttons)
             return
 
         if self.pipeline_ctrl is not None:
@@ -3669,12 +3677,14 @@ class ExpPanel(wx.Panel):
 
         if not overwrite_valid:
             self._preparing_exposure = False
+            wx.CallAfter(self._enable_start_buttons)
             return
 
         comp_valid, comp_settings = self._check_components(exp_only, verbose)
 
         if not comp_valid:
             self._preparing_exposure = False
+            wx.CallAfter(self._enable_start_buttons)
             return
 
         cont = True
@@ -3694,6 +3704,7 @@ class ExpPanel(wx.Panel):
 
         if not cont:
             self._preparing_exposure = False
+            wx.CallAfter(self._enable_start_buttons)
             return
 
         # Start trsaxs flow before centering scan (if appropriate)
@@ -3730,10 +3741,7 @@ class ExpPanel(wx.Panel):
         self._pipeline_start_exp()
 
         self.set_status('Preparing exposure')
-        wx.CallAfter(self.start_exp_btn.Disable)
-        wx.CallAfter(self.start_scan_btn.Disable)
-        wx.CallAfter(self.dark_exp_btn.Disable)
-        wx.CallAfter(self.stop_exp_btn.Enable)
+
         self.total_time = exp_values['num_frames']*exp_values['exp_period']
 
         if self.settings['tr_muscle_exp']:
@@ -3784,13 +3792,16 @@ class ExpPanel(wx.Panel):
         self.abort_event.set()
         self.set_status('Aborting')
 
-    def _on_exp_finish(self):
-        self.tr_timer.Stop()
-
+    def _enable_start_buttons(self):
         self.start_exp_btn.Enable()
         self.start_scan_btn.Enable()
         self.dark_exp_btn.Enable()
         self.stop_exp_btn.Disable()
+
+    def _on_exp_finish(self):
+        self.tr_timer.Stop()
+
+        self._enable_start_buttons()
         self.set_status('Ready')
         self.set_time_remaining(0)
         old_rn = self.run_num.GetLabel()
