@@ -3603,24 +3603,29 @@ class ExpPanel(wx.Panel):
             trsaxs_panel.update_params()
 
     def _on_start_exp(self, evt):
-        self.start_exp_btn.Disable()
-        self.start_scan_btn.Disable()
-        self.dark_exp_btn.Disable()
-        self.stop_exp_btn.Enable()
-
-        if (evt.GetEventObject() == self.start_exp_btn
-            or evt.GetEventObject() == self.dark_exp_btn):
-            exp_only = True
-        else:
-            exp_only = False
-
-        if evt.GetEventObject() == self.dark_exp_btn:
-            dark_only = True
-        else:
-            dark_only = False
-
         if not self._preparing_exposure:
             self._preparing_exposure = True
+            self.start_exp_btn.Disable()
+            self.start_scan_btn.Disable()
+            self.dark_exp_btn.Disable()
+            self.stop_exp_btn.Enable()
+            start_exp = True
+
+        else:
+            start_exp = False
+
+        if start_exp:
+            if (evt.GetEventObject() == self.start_exp_btn
+                or evt.GetEventObject() == self.dark_exp_btn):
+                exp_only = True
+            else:
+                exp_only = False
+
+            if evt.GetEventObject() == self.dark_exp_btn:
+                dark_only = True
+            else:
+                dark_only = False
+
             self.start_exp(exp_only, dark_only)
 
     def _on_stop_exp(self, evt):
@@ -3785,7 +3790,6 @@ class ExpPanel(wx.Panel):
         start_thread.daemon = True
         start_thread.start()
 
-        self._preparing_exposure = False
         return
 
     def stop_exp(self):
@@ -3800,6 +3804,8 @@ class ExpPanel(wx.Panel):
 
     def _on_exp_finish(self):
         self.tr_timer.Stop()
+
+        self._preparing_exposure = False
 
         self._enable_start_buttons()
         self.set_status('Ready')
