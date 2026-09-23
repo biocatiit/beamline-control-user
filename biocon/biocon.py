@@ -446,10 +446,10 @@ if __name__ == '__main__':
 
     ###### Set shutter being used
     # # Fast in-air shutters
-    # exposure_settings['use_shutter'] = 'fast_shutter'
+    exposure_settings['use_shutter'] = 'fast_shutter'
 
     # Normal vacuum shutter (uniblitz)
-    exposure_settings['use_shutter'] = 'uniblitz_shutter'
+    # exposure_settings['use_shutter'] = 'uniblitz_shutter'
 
 
     ###### Set detector being used
@@ -486,8 +486,8 @@ if __name__ == '__main__':
     ###################################################################
     # Metadata Settings
     metadata_settings = metadata.default_metadata_settings
-    metadata_settings['metadata_type'] = 'auto'
-    # metadata_settings['metadata_type'] = 'muscle'
+    # metadata_settings['metadata_type'] = 'auto'
+    metadata_settings['metadata_type'] = 'muscle'
 
 
     ###################################################################
@@ -564,17 +564,17 @@ if __name__ == '__main__':
 
     components = OrderedDict([
         ('exposure', expcon.ExpPanel),
-        ('coflow', coflowcon.CoflowPanel),
+        # ('coflow', coflowcon.CoflowPanel),
         # ('trsaxs_scan', trcon.TRScanPanel),
         # ('trsaxs_flow', trcon.TRFlowPanel),
         # ('scan',    scancon.ScanPanel),
         ('metadata', metadata.ParamPanel),
-        ('pipeline', pipeline_ctrl.PipelineControl),
-        ('uv', spectrometercon.UVPanel),
-        ('hplc', biohplccon.HPLCPanel),
-        ('automator', autocon.AutoPanel),
-        ('autosampler', autosamplercon.AutosamplerPanel),
-        # ('toaster', toastcon.ToasterPanel),
+        # ('pipeline', pipeline_ctrl.PipelineControl),
+        # ('uv', spectrometercon.UVPanel),
+        # ('hplc', biohplccon.HPLCPanel),
+        # ('automator', autocon.AutoPanel),
+        # ('autosampler', autosamplercon.AutosamplerPanel),
+        ('toaster', toastcon.ToasterPanel),
         ('mono_auto_tune', monotunecon.MonoAutoTune),
         # ('airshot', airshotcon.AirShotPanel),
         ])

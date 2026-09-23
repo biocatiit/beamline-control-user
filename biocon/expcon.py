@@ -5195,7 +5195,7 @@ detector_settings = {
         'remote_dir_root'   : '/nas_data/Eiger2x',
         'detector'          : '18ID:EIG2:_epics',
         'det_args'          :  {'use_tiff_writer': False, 'use_file_writer': True,
-                                'photon_energy' : 12.0, 'images_per_file': 300}, #1 image/file for TR, 300 for equilibrium
+                                'photon_energy' : 12.0, 'images_per_file': 1000}, #1 image/file for TR, 300 for equilibrium
         'add_file_postfix'  : False,
         'monitor_dark'      : False,
         'scan_rearm'        : False, #Rearm the detector between scans. If True may slow down scans
