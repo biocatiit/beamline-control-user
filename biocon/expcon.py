@@ -3603,19 +3603,29 @@ class ExpPanel(wx.Panel):
             trsaxs_panel.update_params()
 
     def _on_start_exp(self, evt):
-        if (evt.GetEventObject() == self.start_exp_btn
-            or evt.GetEventObject() == self.dark_exp_btn):
-            exp_only = True
-        else:
-            exp_only = False
-
-        if evt.GetEventObject() == self.dark_exp_btn:
-            dark_only = True
-        else:
-            dark_only = False
-
         if not self._preparing_exposure:
             self._preparing_exposure = True
+            self.start_exp_btn.Disable()
+            self.start_scan_btn.Disable()
+            self.dark_exp_btn.Disable()
+            self.stop_exp_btn.Enable()
+            start_exp = True
+
+        else:
+            start_exp = False
+
+        if start_exp:
+            if (evt.GetEventObject() == self.start_exp_btn
+                or evt.GetEventObject() == self.dark_exp_btn):
+                exp_only = True
+            else:
+                exp_only = False
+
+            if evt.GetEventObject() == self.dark_exp_btn:
+                dark_only = True
+            else:
+                dark_only = False
+
             self.start_exp(exp_only, dark_only)
 
     def _on_stop_exp(self, evt):
@@ -3640,6 +3650,7 @@ class ExpPanel(wx.Panel):
 
         if not warnings_valid:
             self._preparing_exposure = False
+            wx.CallAfter(self._enable_start_buttons)
             return
 
         if exp_values is None:
@@ -3651,6 +3662,7 @@ class ExpPanel(wx.Panel):
 
         if not exp_valid:
             self._preparing_exposure = False
+            wx.CallAfter(self._enable_start_buttons)
             return
 
         metadata, metadata_valid = self._get_metadata(metadata_vals, verbose)
@@ -3659,6 +3671,7 @@ class ExpPanel(wx.Panel):
             exp_values['metadata'] = metadata
         else:
             self._preparing_exposure = False
+            wx.CallAfter(self._enable_start_buttons)
             return
 
         if self.pipeline_ctrl is not None:
@@ -3669,12 +3682,14 @@ class ExpPanel(wx.Panel):
 
         if not overwrite_valid:
             self._preparing_exposure = False
+            wx.CallAfter(self._enable_start_buttons)
             return
 
         comp_valid, comp_settings = self._check_components(exp_only, verbose)
 
         if not comp_valid:
             self._preparing_exposure = False
+            wx.CallAfter(self._enable_start_buttons)
             return
 
         cont = True
@@ -3694,6 +3709,7 @@ class ExpPanel(wx.Panel):
 
         if not cont:
             self._preparing_exposure = False
+            wx.CallAfter(self._enable_start_buttons)
             return
 
         # Start trsaxs flow before centering scan (if appropriate)
@@ -3730,10 +3746,7 @@ class ExpPanel(wx.Panel):
         self._pipeline_start_exp()
 
         self.set_status('Preparing exposure')
-        wx.CallAfter(self.start_exp_btn.Disable)
-        wx.CallAfter(self.start_scan_btn.Disable)
-        wx.CallAfter(self.dark_exp_btn.Disable)
-        wx.CallAfter(self.stop_exp_btn.Enable)
+
         self.total_time = exp_values['num_frames']*exp_values['exp_period']
 
         if self.settings['tr_muscle_exp']:
@@ -3777,20 +3790,24 @@ class ExpPanel(wx.Panel):
         start_thread.daemon = True
         start_thread.start()
 
-        self._preparing_exposure = False
         return
 
     def stop_exp(self):
         self.abort_event.set()
         self.set_status('Aborting')
 
-    def _on_exp_finish(self):
-        self.tr_timer.Stop()
-
+    def _enable_start_buttons(self):
         self.start_exp_btn.Enable()
         self.start_scan_btn.Enable()
         self.dark_exp_btn.Enable()
         self.stop_exp_btn.Disable()
+
+    def _on_exp_finish(self):
+        self.tr_timer.Stop()
+
+        self._preparing_exposure = False
+
+        self._enable_start_buttons()
         self.set_status('Ready')
         self.set_time_remaining(0)
         old_rn = self.run_num.GetLabel()
@@ -4996,7 +5013,10 @@ class ExpPanel(wx.Panel):
                 exp_type == 'IEC-SAXS' or exp_type == 'AF4-MALS-SAXS'):
                 vol = cmd_kwargs['inj_vol']
             elif exp_type == 'Batch mode SAXS':
-                vol = cmd_kwargs['volume']
+                try:
+                    vol = cmd_kwargs['volume']
+                except KeyError:
+                    vol = cmd_kwargs['inj_vol'] #standalone exposure could get flagged as batch but has a different key
             else:
                 vol = None
 
@@ -5028,19 +5048,25 @@ class ExpPanel(wx.Panel):
             if (exp_type == 'SEC-SAXS' or exp_type == 'SEC-MALS-SAXS' or
                 exp_type == 'IEC-SAXS'):
                 metadata['Column:'] = cmd_kwargs['column']
-                metadata['Sample Location:'] = cmd_kwargs['sample_loc']
-                metadata['HPLC flow rate [mL/min]:'] = cmd_kwargs['flow_rate']
-                metadata['Elution volume [mL]:'] = cmd_kwargs['elution_vol']
-                metadata['HPLC acquisition method:'] = cmd_kwargs['acq_method']
-                metadata['HPLC sample prep method:'] = cmd_kwargs['sp_method']
+                try:
+                    metadata['Sample Location:'] = cmd_kwargs['sample_loc']
+                    metadata['HPLC flow rate [mL/min]:'] = cmd_kwargs['flow_rate']
+                    metadata['Elution volume [mL]:'] = cmd_kwargs['elution_vol']
+                    metadata['HPLC acquisition method:'] = cmd_kwargs['acq_method']
+                    metadata['HPLC sample prep method:'] = cmd_kwargs['sp_method']
+                except KeyError:
+                    pass #standalone exposure doesn't have this data
             elif exp_type == 'Batch mode SAXS':
-                metadata['Well:'] = cmd_kwargs['sample_well']
-                metadata['Draw rate [uL/min]:'] = cmd_kwargs['draw_rate']
-                metadata['Wait time after draw [s]'] = cmd_kwargs['dwell_time']
-                metadata['Injection rate [uL/min]:'] = cmd_kwargs['rate']
-                metadata['Delay injection after trigger [s]:'] = cmd_kwargs['start_delay']
-                metadata['Delay after injection end [s]:'] = cmd_kwargs['end_delay']
-                metadata['Trigger on inject:'] = cmd_kwargs['trigger']
+                try:
+                    metadata['Well:'] = cmd_kwargs['sample_well']
+                    metadata['Draw rate [uL/min]:'] = cmd_kwargs['draw_rate']
+                    metadata['Wait time after draw [s]'] = cmd_kwargs['dwell_time']
+                    metadata['Injection rate [uL/min]:'] = cmd_kwargs['rate']
+                    metadata['Delay injection after trigger [s]:'] = cmd_kwargs['start_delay']
+                    metadata['Delay after injection end [s]:'] = cmd_kwargs['end_delay']
+                    metadata['Trigger on inject:'] = cmd_kwargs['trigger']
+                except KeyError:
+                    pass #standalone exposure doesn't have this data
             elif exp_type == 'AF4-MALS-SAXS':
                 metadata['Channel:'] = cmd_kwargs['channel']
                 metadata['Membrane:'] = cmd_kwargs['membrane']
@@ -5186,7 +5212,7 @@ detector_settings = {
         'remote_dir_root'   : '/nas_data/Eiger2x',
         'detector'          : '18ID:EIG2:_epics',
         'det_args'          :  {'use_tiff_writer': False, 'use_file_writer': True,
-                                'photon_energy' : 12.0, 'images_per_file': 300}, #1 image/file for TR, 300 for equilibrium
+                                'photon_energy' : 12.0, 'images_per_file': 1000}, #1 image/file for TR, 300 for equilibrium
         'add_file_postfix'  : False,
         'monitor_dark'      : False,
         'scan_rearm'        : False, #Rearm the detector between scans. If True may slow down scans
@@ -5321,10 +5347,10 @@ default_exposure_settings = {
         {'sc_chan': 4, 'name': 'I1', 'scale': 1, 'offset': 0, 'use_dark': False,
             'norm_time': False},
         ],},
-    'warnings'              : {'shutter' : False, 'col_vac' : {'check': False,
-        'thresh': 0.04}, 'guard_vac' : {'check': False, 'thresh': 0.04},
-        'sample_vac': {'check': False, 'thresh': 0.04}, 'sc_vac':
-        {'check': False, 'thresh':0.04}},
+    'warnings'              : {'shutter' : True, 'col_vac' : {'check': True,
+        'thresh': 0.04}, 'guard_vac' : {'check': True, 'thresh': 0.04},
+        'sample_vac': {'check': True, 'thresh': 0.04}, 'sc_vac':
+        {'check': True, 'thresh':0.04}},
 
     }
 
