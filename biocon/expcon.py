@@ -1914,6 +1914,9 @@ class ExpCommThread(threading.Thread):
             status = ab_burst.get_status()
             timeouts=0
 
+            if status is None:
+                raise ValueError('DG645 status is None')
+
         except Exception:
             logger.debug('Timed out getting DG645 status')
 

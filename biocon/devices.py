@@ -1157,10 +1157,10 @@ class EPICSSRSDG645(object):
 
     def status(self):
         self.status_update_pv.put(1, wait=True)
-        return int(self.status_pv.get(use_monitor=False))
+        return int(self.status_pv.get(use_monitor=False, timeout=5))
 
     def get_burst_active(self):
-        return int(self.burst_active_pv.get())
+        return int(self.burst_active_pv.get(timeout=5))
 
     def set_trigger(self, mode):
         """
