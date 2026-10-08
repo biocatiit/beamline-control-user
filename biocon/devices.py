@@ -263,7 +263,7 @@ class EPICSEigerDetector(object):
         self.det.put("cam1:Trigger", 1, wait=wait, timeout=1)
 
     def get_status(self):
-        status = self.det.get("cam1:DetectorState_RBV")
+        status = self.det.get("cam1:DetectorState_RBV", timeout=1)
 
         if status == 10:
             status = 0
@@ -416,7 +416,7 @@ class EPICSPilatusDetector(object):
         self.det.put("cam1:Acquire", 1, wait=True, timeout=1)
 
     def get_status(self):
-        status = self.det.get("cam1:DetectorState_RBV")
+        status = self.det.get("cam1:DetectorState_RBV", timeout=1)
 
         if status == 10:
             status = 0
@@ -849,7 +849,7 @@ class Scan(Device):
         self.put('NPTS', pts, wait=True)
 
     def get_status(self):
-        val = self.get('FAZE')
+        val = self.get('FAZE', timeout=1)
 
         if val != 0:
             status = 1
@@ -909,7 +909,7 @@ class EPICSMarCCDDetector(object):
         self.det.put("cam1:Acquire", 1, wait=True, timeout=1)
 
     def get_status(self):
-        status = self.det.get("cam1:DetectorState_RBV")
+        status = self.det.get("cam1:DetectorState_RBV", timeout=1)
         return status
 
     def get_data_dir(self):
@@ -1157,10 +1157,10 @@ class EPICSSRSDG645(object):
 
     def status(self):
         self.status_update_pv.put(1, wait=True)
-        return int(self.status_pv.get(use_monitor=False, timeout=5))
+        return int(self.status_pv.get(use_monitor=False, timeout=1))
 
     def get_burst_active(self):
-        return int(self.burst_active_pv.get(timeout=5))
+        return int(self.burst_active_pv.get(timeout=1))
 
     def set_trigger(self, mode):
         """
