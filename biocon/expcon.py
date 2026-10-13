@@ -1787,7 +1787,7 @@ class ExpCommThread(threading.Thread):
             time.sleep(0.01)
 
         while True:
-            status = ab_burst2.get_status()
+            status = ab_burst_2.get_status()
             if status is not None and (status & 0x1) == 0:
                 break
             time.sleep(0.01)
@@ -1978,7 +1978,7 @@ class ExpCommThread(threading.Thread):
 
             ret_status_2 = False
 
-        exp_done = ret_status_1 and ret_status_2
+        exp_done = ret_status_1 or ret_status_2
 
         return exp_done, timeouts
 
@@ -2181,9 +2181,11 @@ class ExpCommThread(threading.Thread):
                 cur_fprefix, struck_meas_time, dark_counts, log_vals,
                 kwargs['metadata'])
 
+        ab_burst.stop() # In case detector aborts/stops before DG645
         ab_burst.get_status() #Maybe need to clear this status?
 
         if ab_burst_2 is not None:
+            ab_burst_2.stop() # In case detector aborts/stops before DG645
             ab_burst_2.get_status() #Maybe need to clear this status?
 
         start = time.monotonic()
