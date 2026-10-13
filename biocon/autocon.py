@@ -4727,7 +4727,7 @@ class AutoList(utils.ItemList):
 
             if ret == wx.ID_YES:
                 check_response = True
-            elif ret == wx.ID_NO:
+            else:
                 check_response = False
 
         self.automator.check_response_queue.append(check_response)

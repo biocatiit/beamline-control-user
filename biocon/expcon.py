@@ -5212,7 +5212,7 @@ detector_settings = {
         'remote_dir_root'   : '/nas_data/Eiger2x',
         'detector'          : '18ID:EIG2:_epics',
         'det_args'          :  {'use_tiff_writer': False, 'use_file_writer': True,
-                                'photon_energy' : 12.0, 'images_per_file': 1000}, #1 image/file for TR, 300 for equilibrium
+                                'photon_energy' : 12.0, 'images_per_file': 300}, #1 image/file for TR, 300 for equilibrium, 1000 for muscle
         'add_file_postfix'  : False,
         'monitor_dark'      : False,
         'scan_rearm'        : False, #Rearm the detector between scans. If True may slow down scans
@@ -5347,7 +5347,7 @@ default_exposure_settings = {
         {'sc_chan': 4, 'name': 'I1', 'scale': 1, 'offset': 0, 'use_dark': False,
             'norm_time': False},
         ],},
-    'warnings'              : {'shutter' : True, 'col_vac' : {'check': True,
+    'warnings'              : {'shutter' : False, 'col_vac' : {'check': True,
         'thresh': 0.04}, 'guard_vac' : {'check': True, 'thresh': 0.04},
         'sample_vac': {'check': True, 'thresh': 0.04}, 'sc_vac':
         {'check': True, 'thresh':0.04}},
