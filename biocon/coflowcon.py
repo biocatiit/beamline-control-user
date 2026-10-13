@@ -3719,7 +3719,7 @@ default_coflow_settings = {
                                         'D': 0, 'bfs_instr_ID': None, 'comm_lock': None,
                                         'calib_path': './resources/ob1_calib.txt'},
                                         'ctrl_args': {}},
-        'sheath_fm'                 : {'name': 'sheath', 'args': ['BFS', 'COM5'],
+        'sheath_fm'                 : {'name': 'sheath', 'args': ['BFS', 'COM14'],
                                         'kwargs':{}},
         'outlet_fm'                 : {'name': 'outlet', 'args': ['BFS', 'COM4'],
                                         'kwargs':{}},
