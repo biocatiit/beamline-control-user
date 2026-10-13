@@ -1922,79 +1922,65 @@ class ExpCommThread(threading.Thread):
     def get_experiment_status(self, ab_burst, ab_burst_2, det, timeouts):
         # logger.debug('getting experiment status')
         try:
-            status = ab_burst.get_status()
+            dg_status = ab_burst.get_status()
             timeouts=0
 
-            if status is None:
+            if dg_status is None:
                 raise ValueError('DG645 status is None')
+
+            if self._settings['use_epics_dg645']:
+                # Works for EPICS
+                if dg_status is not None:
+                    if (dg_status >> 3 & 1) or (dg_status >> 5 & 1):
+                        # DG645 done
+                        ret_status_1 = True
+                    elif (dg_status == 0 and not ab_burst.get_burst_active()):
+                        # DG645 done
+                        ret_status_1 = True
+                    else:
+                        # DG645 running
+                        ret_status_1 = False
+                else:
+                    ret_status_1 = False
+
+            else:
+                # Works for MX
+                if dg_status is not None:
+                    if (dg_status & 0x1) == 0:
+                        ret_status_1 = True
+                    else:
+                        ret_status_1 = False
+                else:
+                    ret_status_1 = False
 
         except Exception:
             logger.debug('Timed out getting DG645 status')
 
-            try:
-                status = det.get_status()
-                timeouts = 0
+            ret_status_1 = False
 
-                if status is None:
-                    raise ValueError('Detector status is None')
+        try:
+            det_status = det.get_status()
+            timeouts = 0
 
-            except Exception:
-                timeouts = timeouts + 1
-                logger.debug('Timed out getting detector status')
+            if det_status is None:
+                raise ValueError('Detector status is None')
 
-        if self._settings['use_epics_dg645']:
-            # Works for EPICS
-            if status is not None:
-                if (status >> 3 & 1) or (status >> 5 & 1):
-                    ret_status_1 = True
-                elif (status == 0 and not ab_burst.get_burst_active()):
-                    ret_status_1 = True
-                else:
-                    ret_status_1 = False
+            if det_status == 1:
+                # Detector running
+                ret_status_2 = False
             else:
-                ret_status_1 = False
+                # Detector done
+                ret_status_2 = True
 
-        else:
-            # Works for MX
-            if status is not None:
-                if (status & 0x1) == 0:
-                    ret_status_1 = True
-                else:
-                    ret_status_1 = False
-            else:
-                ret_status_1 = False
+        except Exception:
+            timeouts = timeouts + 1
+            logger.debug('Timed out getting detector status')
 
-        # if ab_burst_2 is not None:
-        #     try:
-        #         status_2 = ab_burst_2.get_status()
+            ret_status_2 = False
 
-        #         if self._settings['use_epics_dg645']:
-        #             # Works for EPICS
-        #             if (status_2 >> 3 & 1) or (status_2 >> 5 & 1):
-        #                 ret_status_2 = True
-        #             elif (status_2 == 0 and not ab_burst_2.get_burst_active()):
-        #                 ret_status_2 = True
-        #             else:
-        #                 ret_status_2 = False
+        exp_done = ret_status_1 and ret_status_2
 
-        #         else:
-        #             # Works for MX
-        #             if (status_2 & 0x1) == 0:
-        #                 ret_status_2 = True
-        #             else:
-        #                 ret_status_2 = False
-
-        #     except Exception:
-        #         ret_status_2 = True
-
-        # else:
-        #     ret_status_2 = True
-
-        # ret_status = ret_status_1 and ret_status_2
-
-        ret_status = ret_status_1
-
-        return ret_status, timeouts
+        return exp_done, timeouts
 
     def _inner_fast_exp(self, det, struck, ab_burst,
         ab_burst_2, slow_shutter, dio_out9, dio_out10, continuous_exp, wait_for_trig,
