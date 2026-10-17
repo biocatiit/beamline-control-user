@@ -322,12 +322,12 @@ class AirShotFrame(utils.DeviceFrame):
 default_airshot_settings = {
     'device_init'           : [
         {'name': 'Air Inboard', 'args': [], 'kwargs': {
-            'motor'             : {'name': 'air_inboard', 'args': ['18ID_DMC_E01:7'],
+            'motor'             : {'name': 'air_inboard', 'args': ['18ID_DMC_E03:21'],
                                         'kwargs': {}},
             'default_dist'      : -7.0, # Default move distance
             }},
         {'name': 'Air Middle', 'args': [], 'kwargs': {
-            'motor'             : {'name': 'air_middle', 'args': ['18ID_DMC_E01:8'],
+            'motor'             : {'name': 'air_middle', 'args': ['18ID_DMC_E03:24'],
                                         'kwargs': {}},
             'default_dist'      : -7.0, # Default move distance
             }},

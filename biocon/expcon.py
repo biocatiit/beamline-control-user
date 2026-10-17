@@ -442,11 +442,12 @@ class ExpCommThread(threading.Thread):
         time.sleep(0.01)
         dio_out10.write( 0 )
 
-        status = ab_burst.get_status()
-
-        while (status & 0x1) != 0:
-            time.sleep(0.01)
+        while True:
             status = ab_burst.get_status()
+            if status is not None and (status & 0x1) == 0:
+                break
+            time.sleep(0.01)
+
 
         exp_start_num = '000001'
 
@@ -1779,10 +1780,16 @@ class ExpCommThread(threading.Thread):
         time.sleep(0.01)
         dio_out10.write( 0 )
 
-        while (ab_burst.get_status() & 0x1) != 0:
+        while True:
+            status = ab_burst.get_status()
+            if status is not None and (status & 0x1) == 0:
+                break
             time.sleep(0.01)
 
-        while (ab_burst_2.get_status() & 0x1) != 0:
+        while True:
+            status = ab_burst_2.get_status()
+            if status is not None and (status & 0x1) == 0:
+                break
             time.sleep(0.01)
 
         if exp_period - 0.5 > 0:
@@ -1889,7 +1896,11 @@ class ExpCommThread(threading.Thread):
             while waiting:
                 # logger.debug(ab_burst.get_status())
                 if self._settings['use_epics_dg645']:
-                    waiting = not ab_burst.get_status() & 1
+                    status = ab_burst.get_status()
+                    if status is not None and status & 1:
+                        waiting = False
+                    else:
+                        waiting = True
                 else:
                     waiting = np.any([ab_burst.get_status() == 16777216 for i in range(5)])
                 time.sleep(0.01)
@@ -1911,67 +1922,65 @@ class ExpCommThread(threading.Thread):
     def get_experiment_status(self, ab_burst, ab_burst_2, det, timeouts):
         # logger.debug('getting experiment status')
         try:
-            status = ab_burst.get_status()
+            dg_status = ab_burst.get_status()
             timeouts=0
+
+            if dg_status is None:
+                raise ValueError('DG645 status is None')
+
+            if self._settings['use_epics_dg645']:
+                # Works for EPICS
+                if dg_status is not None:
+                    if (dg_status >> 3 & 1) or (dg_status >> 5 & 1):
+                        # DG645 done
+                        ret_status_1 = True
+                    elif (dg_status == 0 and not ab_burst.get_burst_active()):
+                        # DG645 done
+                        ret_status_1 = True
+                    else:
+                        # DG645 running
+                        ret_status_1 = False
+                else:
+                    ret_status_1 = False
+
+            else:
+                # Works for MX
+                if dg_status is not None:
+                    if (dg_status & 0x1) == 0:
+                        ret_status_1 = True
+                    else:
+                        ret_status_1 = False
+                else:
+                    ret_status_1 = False
 
         except Exception:
             logger.debug('Timed out getting DG645 status')
 
-            try:
-                status = det.get_status()
-                timeouts = 0
+            ret_status_1 = False
 
-            except Exception:
-                timeouts = timeouts + 1
-                logger.debug('Timed out getting detector status')
+        try:
+            det_status = det.get_status()
+            timeouts = 0
 
-        if self._settings['use_epics_dg645']:
-            # Works for EPICS
-            if (status >> 3 & 1) or (status >> 5 & 1):
-                ret_status_1 = True
-            elif (status == 0 and not ab_burst.get_burst_active()):
-                ret_status_1 = True
+            if det_status is None:
+                raise ValueError('Detector status is None')
+
+            if det_status == 1:
+                # Detector running
+                ret_status_2 = False
             else:
-                ret_status_1 = False
+                # Detector done
+                ret_status_2 = True
 
-        else:
-            # Works for MX
-            if (status & 0x1) == 0:
-                ret_status_1 = True
-            else:
-                ret_status_1 = False
+        except Exception:
+            timeouts = timeouts + 1
+            logger.debug('Timed out getting detector status')
 
-        # if ab_burst_2 is not None:
-        #     try:
-        #         status_2 = ab_burst_2.get_status()
+            ret_status_2 = False
 
-        #         if self._settings['use_epics_dg645']:
-        #             # Works for EPICS
-        #             if (status_2 >> 3 & 1) or (status_2 >> 5 & 1):
-        #                 ret_status_2 = True
-        #             elif (status_2 == 0 and not ab_burst_2.get_burst_active()):
-        #                 ret_status_2 = True
-        #             else:
-        #                 ret_status_2 = False
+        exp_done = ret_status_1 or ret_status_2
 
-        #         else:
-        #             # Works for MX
-        #             if (status_2 & 0x1) == 0:
-        #                 ret_status_2 = True
-        #             else:
-        #                 ret_status_2 = False
-
-        #     except Exception:
-        #         ret_status_2 = True
-
-        # else:
-        #     ret_status_2 = True
-
-        # ret_status = ret_status_1 and ret_status_2
-
-        ret_status = ret_status_1
-
-        return ret_status, timeouts
+        return exp_done, timeouts
 
     def _inner_fast_exp(self, det, struck, ab_burst,
         ab_burst_2, slow_shutter, dio_out9, dio_out10, continuous_exp, wait_for_trig,
@@ -2172,9 +2181,11 @@ class ExpCommThread(threading.Thread):
                 cur_fprefix, struck_meas_time, dark_counts, log_vals,
                 kwargs['metadata'])
 
+        ab_burst.stop() # In case detector aborts/stops before DG645
         ab_burst.get_status() #Maybe need to clear this status?
 
         if ab_burst_2 is not None:
+            ab_burst_2.stop() # In case detector aborts/stops before DG645
             ab_burst_2.get_status() #Maybe need to clear this status?
 
         start = time.monotonic()
@@ -2242,7 +2253,10 @@ class ExpCommThread(threading.Thread):
             time.sleep(0.2) #Wait to be sure slow shutter is closed
             det.arm()
 
-            while det.get_status():
+            while True:
+                status = det.get_status()
+                if status is not None and not status:
+                    break
                 time.sleep(0.1)
                 if self._abort_event.is_set() and not aborted:
                     self.mar_abort_cleanup(det, dio_out9, slow_shutter,
@@ -2251,7 +2265,10 @@ class ExpCommThread(threading.Thread):
                     break
 
             start = time.monotonic()
-            while not det.get_status() and time.monotonic() - start < 3:
+            while True:
+                status = det.get_status()
+                if (status is not None and status) or time.monotonic() - start >= 3:
+                    break
                 time.sleep(0.1)
                 if self._abort_event.is_set() and not aborted:
                     self.mar_abort_cleanup(det, dio_out9, slow_shutter,
@@ -2259,7 +2276,10 @@ class ExpCommThread(threading.Thread):
                     aborted = True
                     break
 
-            while det.get_status():
+            while True:
+                status = det.get_status()
+                if status is not None and not status:
+                    break
                 time.sleep(0.1)
                 if self._abort_event.is_set() and not aborted:
                     self.mar_abort_cleanup(det, dio_out9, slow_shutter,
@@ -2455,14 +2475,19 @@ class ExpCommThread(threading.Thread):
             returned_motors = False
 
             while True:
-                scan_done = not det.scan.get_status()
+                scan_status = det.scan.get_status()
+                if scan_status is not None and not scan_status:
+                    scan_done = True
+                else:
+                    scan_done = False
 
                 if scan_done:
                     break
 
                 exp_status = det.get_status()
 
-                if exp_status > 1 and num_frames == 1 and not returned_motors:
+                if (exp_status is not None and exp_status > 1 and num_frames == 1
+                    and not returned_motors):
                     returned_motors = True
                     if 'airshot' in kwargs:
                         logger.debug('Moving in-air shot motors back to starting position')
@@ -5212,7 +5237,7 @@ detector_settings = {
         'remote_dir_root'   : '/nas_data/Eiger2x',
         'detector'          : '18ID:EIG2:_epics',
         'det_args'          :  {'use_tiff_writer': False, 'use_file_writer': True,
-                                'photon_energy' : 12.0, 'images_per_file': 1000}, #1 image/file for TR, 300 for equilibrium
+                                'photon_energy' : 12.0, 'images_per_file': 300}, #1 image/file for TR, 300 for equilibrium, 1000 for muscle
         'add_file_postfix'  : False,
         'monitor_dark'      : False,
         'scan_rearm'        : False, #Rearm the detector between scans. If True may slow down scans
@@ -5347,7 +5372,7 @@ default_exposure_settings = {
         {'sc_chan': 4, 'name': 'I1', 'scale': 1, 'offset': 0, 'use_dark': False,
             'norm_time': False},
         ],},
-    'warnings'              : {'shutter' : True, 'col_vac' : {'check': True,
+    'warnings'              : {'shutter' : False, 'col_vac' : {'check': True,
         'thresh': 0.04}, 'guard_vac' : {'check': True, 'thresh': 0.04},
         'sample_vac': {'check': True, 'thresh': 0.04}, 'sc_vac':
         {'check': True, 'thresh':0.04}},
