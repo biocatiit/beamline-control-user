@@ -3392,10 +3392,11 @@ default_autosampler_settings = {
     'home_settings'         : {'plate_x': {'dir': -1, 'step': 0.1, 'pos': 0},
                                 'plate_z': {'dir': 1, 'step': 0.1, 'pos': 0},
                                 'needle_y': {'dir': -1, 'step': 0.01, 'pos': -2.70}}, #Direction 1/-1 for positive/negative. step is step size off limit, pos is what to set the home position as.
-    'base_position'         : {'plate_x': 326.5, 'plate_z': -68.1, 'needle_y': 102.35}, # A1 well position, needle height at chiller plate top
+    # 'base_position'         : {'plate_x': 326.55, 'plate_z': -81.3, 'needle_y': 104.6}, # A1 well position, needle height at chiller plate top
+    'base_position'         : {'plate_x': 326.05, 'plate_z': -81.8, 'needle_y': 104.6}, # A1 well position, needle height at chiller plate top, Corning/Axygen plates
     'clean_offsets'         : {'plate_x': 99.4, 'plate_z': -21.4, 'needle_y': -10}, # Relative to base position
     'needle_out_offset'     : 5, # mm
-    'needle_in_position'    : -2.3,
+    'needle_in_position'    : 0,
     'plate_out_position'    : {'plate_x': -31, 'plate_z': 0}, # Relative
     'plate_load_position'   : {'plate_x': 0, 'plate_z': -80.4}, # Absolute
     'coflow_y_ref_position' : 0, # Position for coflow y motor when base position was set
@@ -3411,9 +3412,9 @@ default_autosampler_settings = {
                                 # ('clean2', 'move_y', 7, 0), #distance in mm relative to y position
                                 ('clean4', 'wait', 90, 0), #wait time in s, N/A
                                 ('clean5', 'move_y', 31.2, 0), #distance in mm relative to y position
-                                ('clean5', 'move_x', 10, 0), #distance in mm relative to y position
+                                ('clean5', 'move_x', 4.75, 0), #distance in mm relative to x position
                                 ('clean4', 'wait', 10, 0),
-                                ('clean5', 'move_x', -10, 0), #distance in mm relative to y position
+                                ('clean5', 'move_x', -4.75, 0), #distance in mm relative to x position
 
                                 ],
     'pump_rates'            : {'sample': (0.1, 0.1), 'buffer': (0.05, 0.1), 'purge': (1, 1)}, # (refill, infuse) rates in ml/min
