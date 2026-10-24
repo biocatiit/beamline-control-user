@@ -1401,6 +1401,96 @@ class Autosampler(object):
 
         return success
 
+    def clean_in_cell(self, thread=True):
+        if not thread:
+            success = self._inner_clean_in_cell()
+        else:
+            self._cmd_queue.append([self._inner_clean_in_cell, [], {}])
+            success = True
+
+        return success
+
+    def _inner_clean_in_cell(self):
+        self._inc_active()
+        logger.info('Starting cleaning in cell sequence')
+
+        self._status = 'Cleaning needle in cell'
+
+        cur_needle_y = self.needle_y_motor.position
+        success = True
+
+        if round(cur_needle_y, 2) != round(self.needle_in_position, 2):
+            success = self.move_needle_in(False)
+
+        self.sample_pump.set_valve_position(
+            self.settings['syringe_valve_positions']['purge'])
+
+        while self.sample_pump.is_moving():
+            abort = self._sleep(0.02)
+            if abort:
+                break
+
+        if success:
+            rate = self.settings['pump_rates']['purge'][1]
+            self.set_pump_dispense_rates(rate, 'mL/min', 'sample')
+            self.sample_pump.dispense_all(blocking=False)
+
+            while self.sample_pump.is_moving():
+                abort = self._sleep(0.02)
+                if abort:
+                    success = not abort
+                    break
+
+            self.sample_pump.set_valve_position(
+                self.settings['syringe_valve_positions']['clean'])
+
+        if success:
+            for clean_step in self.settings['clean_in_cell_seq']:
+                pump = clean_step[0]
+                cmd = clean_step[1]
+                self.set_valve_position(self.settings['clean_valve_positions'][pump])
+
+                if cmd == 'dispense':
+                    rate = clean_step[2]
+                    vol = clean_step[3]
+                    self.set_pump_dispense_rates(rate, 'mL/min', pump)
+                    success = self.dispense(vol, pump, units='mL')
+
+                elif cmd == 'wait':
+                    logger.info('Drying needle')
+                    wait_time = clean_step[2]
+                    abort = self._sleep(wait_time)
+                    success = not abort
+
+                elif cmd == 'move_to_clean':
+                    success = self.move_to_clean(False)
+
+                elif cmd == 'move_y':
+                    dist = clean_step[2]
+                    success = self.move_motors_relative(dist, 'needle_y')
+
+                elif cmd == 'move_x':
+                    dist = clean_step[2]
+                    success = self.move_motors_relative(dist, 'plate_x')
+
+                elif cmd == 'move_z':
+                    dist = clean_step[2]
+                    success = self.move_motors_relative(dist, 'plate_z')
+
+                if not success:
+                    break
+
+            self.set_valve_position(self.settings['clean_valve_positions']['empty'])
+
+        if success:
+            self.sample_pump.set_valve_position('Input')
+
+            self.move_needle_out(False)
+
+        self._dec_active()
+
+        return success
+
     def get_status(self):
         if self._active_count == 0 and self._status != 'Error':
             self._status = 'Idle'
@@ -1467,6 +1557,7 @@ class ASCommThread(utils.CommManager):
             'load_and_inject'       : self._load_and_inject,
             'load_and_move_to_inject': self._load_and_move_to_inject,
             'clean'                 : self._clean,
+            'clean_in_cell'         : self._clean_in_cell,
             'get_status'            : self._get_status,
             'stop'                  : self._stop_autosampler,
         }
@@ -1968,6 +2059,19 @@ class ASCommThread(utils.CommManager):
 
         logger.debug("%s cleaned needle", name)
 
+    def _clean_in_cell(self, name, **kwargs):
+        logger.debug("%s cleaning needle", name)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        success = device.clean_in_cell(**kwargs)
+
+        self._return_value((name, cmd, success), comm_name)
+
+        logger.debug("%s cleaned needle", name)
+
     def _get_status(self, name, **kwargs):
         logger.debug("Getting %s status", name)
 
@@ -2217,10 +2321,13 @@ class AutosamplerPanel(utils.DevicePanel):
         self.move_needle_out.Bind(wx.EVT_BUTTON, self._on_move_needle_out)
         self.clean_btn = wx.Button(needle_box, label='Clean needle')
         self.clean_btn.Bind(wx.EVT_BUTTON, self._on_clean)
+        self.clean_in_cell_btn = wx.Button(needle_box, label='Clean needle in cell')
+        self.clean_in_cell_btn.Bind(wx.EVT_BUTTON, self._on_clean_in_cell)
 
         needle_sub_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(5),
             hgap=self._FromDIP(5))
         needle_sub_sizer.Add(self.clean_btn, flag=wx.ALIGN_CENTER_VERTICAL)
+        needle_sub_sizer.Add(self.clean_in_cell_btn, flag=wx.ALIGN_CENTER_VERTICAL)
         needle_sub_sizer.Add(self.move_needle_load, flag=wx.ALIGN_CENTER_VERTICAL)
         needle_sub_sizer.Add(self.move_needle_clean, flag=wx.ALIGN_CENTER_VERTICAL)
         needle_sub_sizer.Add(self.move_needle_in, flag=wx.ALIGN_CENTER_VERTICAL)
@@ -2568,6 +2675,12 @@ class AutosamplerPanel(utils.DevicePanel):
 
     def _clean_needle(self):
         self._send_cmd(['clean', [self.name,], {}], False)
+
+    def _on_clean_in_cell(self, evt):
+        self._clean_needle_in_cell()
+
+    def _clean_needle_in_cell(self):
+        self._send_cmd(['clean_in_cell', [self.name,], {}], False)
 
     def _on_change_plate(self, evt):
         self._change_plate()
@@ -3409,12 +3522,24 @@ default_autosampler_settings = {
                                 ('clean3', 'dispense', 1, 0.3),
                                 ('clean1', 'dispense', 1, 0.3),
                                 ('clean2', 'dispense', 1, 0.3), # rate, volume in ml/min and ml
-                                # ('clean2', 'move_y', 7, 0), #distance in mm relative to y position
                                 ('clean4', 'wait', 90, 0), #wait time in s, N/A
                                 ('clean5', 'move_y', 31.2, 0), #distance in mm relative to y position
                                 ('clean5', 'move_x', 4.75, 0), #distance in mm relative to x position
                                 ('clean4', 'wait', 10, 0),
                                 ('clean5', 'move_x', -4.75, 0), #distance in mm relative to x position
+
+                                ],
+    'clean_in_cell_seq'     : [
+                                ('clean1', 'dispense', 1, 0.3), #A set of (a, b, c, d) a is the valve position, b is the command, and c and d are input params for the command
+                                ('clean3', 'dispense', 1, 0.3),
+                                ('clean1', 'dispense', 1, 0.3),
+                                ('clean2', 'dispense', 1, 0.3), # rate, volume in ml/min and ml
+                                ('clean4', 'wait', 90, 0), #wait time in s, N/A
+                                ('clean5', 'move_to_clean', 0, 0) #Move to clean position, N/A, N/A
+                                ('clean5', 'move_y', 0, 0), #distance in mm relative to y position
+                                ('clean5', 'move_x', 0, 0), #distance in mm relative to x position
+                                ('clean4', 'wait', 10, 0),
+                                ('clean5', 'move_x', 0, 0), #distance in mm relative to x position
 
                                 ],
     'pump_rates'            : {'sample': (0.1, 0.1), 'buffer': (0.05, 0.1), 'purge': (1, 1)}, # (refill, infuse) rates in ml/min
