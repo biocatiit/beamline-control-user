@@ -222,7 +222,10 @@ known_well_plates = {
 
 class Autosampler(object):
 
-    def __init__(self, name, device, settings={}):
+    def __init__(self, name, device, settings=None):
+
+        if settings is None:
+            settings = {}
 
         self.name = name
         self.device = device #Note: None, here for consistency with other devices
@@ -265,14 +268,13 @@ class Autosampler(object):
 
     def _run_cmds(self):
         while not self._cmd_stop_event.is_set():
+            cmd_func = None
+
             if len(self._cmd_queue) > 0:
                 try:
                     cmd_func, args, kwargs = self._cmd_queue.popleft()
                 except Exception:
                     pass
-
-            else:
-                cmd_func = None
 
             if self._cmd_stop_event.is_set():
                 break
@@ -840,7 +842,7 @@ class Autosampler(object):
 
         cur_plate_x = self.plate_x_motor.position
 
-        if cur_plate_x != self.plate_x_load:
+        if abs(cur_plate_x - self.plate_x_load) > 0.005:
             success = self.move_needle_out(False)
         else:
             success =  True
@@ -875,7 +877,7 @@ class Autosampler(object):
 
         cur_plate_x = self.plate_x_motor.position
 
-        if cur_plate_x != self.plate_x_out:
+        if abs(cur_plate_x - self.plate_x_out) > 0.005:
             success = self.move_motors_absolute(self.needle_out_position, 'needle_y')
         else:
             success = True
@@ -1227,17 +1229,31 @@ class Autosampler(object):
 
         load_vol = pumpcon.convert_volume(volume, vol_units, 'uL')
 
+        dispense_vol = load_vol - self.settings['reserve_vol']
+
+        if dispense_vol < 0:
+            abort = True
+            logger.error('Reserve volume greater than loaded volume, so no '
+                'volume can be dispensed.')
+
         if not abort:
-            self.dispense(load_vol - self.settings['reserve_vol'], 'sample',
+            self.dispense(dispense_vol, 'sample',
                 trigger=trigger, delay=start_delay, units='uL', blocking=False)
 
+            timeout = 2
+            start = time.monotonic()
             while not self.sample_pump.is_moving():
-                self._sleep(0.02)
-
-            while self.sample_pump.is_moving():
                 abort = self._sleep(0.02)
-                if abort:
+
+                if time.monotonic() - start > timeout:
+                    abort = True
                     break
+
+            if not abort:
+                while self.sample_pump.is_moving():
+                    abort = self._sleep(0.02)
+                    if abort:
+                        break
 
         if not abort:
             start_time = time.monotonic()
@@ -2191,6 +2207,7 @@ class AutosamplerPanel(utils.DevicePanel):
             self.change_plate_btn,
             self.move_plate_out_btn,
             self.move_plate_well_btn,
+            self.move_plate_change_btn,
             self.move_needle_load,
             self.move_needle_clean,
             self.move_needle_in,
@@ -2279,6 +2296,8 @@ class AutosamplerPanel(utils.DevicePanel):
         self.move_plate_out_btn.Bind(wx.EVT_BUTTON, self._on_move_plate_out)
         self.move_plate_well_btn = wx.Button(plate_box, label='Move to well')
         self.move_plate_well_btn.Bind(wx.EVT_BUTTON, self._on_move_plate_well)
+        self.move_plate_change_btn = wx.Button(plate_box, label='Move to change')
+        self.move_plate_change_btn.Bind(wx.EVT_BUTTON, self._on_move_plate_change)
 
         plate_sub_sizer = wx.FlexGridSizer(cols=2, vgap=self._FromDIP(5),
             hgap=self._FromDIP(5))
@@ -2287,6 +2306,7 @@ class AutosamplerPanel(utils.DevicePanel):
         plate_sub_sizer.Add(self.plate_types, flag=wx.ALIGN_CENTER_VERTICAL)
         plate_sub_sizer.Add(self.move_plate_out_btn, flag=wx.ALIGN_CENTER_VERTICAL)
         plate_sub_sizer.Add(self.move_plate_well_btn, flag=wx.ALIGN_CENTER_VERTICAL)
+        plate_sub_sizer.Add(self.move_plate_change_btn, flag=wx.ALIGN_CENTER_VERTICAL)
 
         plate_sizer = wx.StaticBoxSizer(plate_box, wx.VERTICAL)
         plate_sizer.Add(plate_sub_sizer, flag=wx.ALL, border=self._FromDIP(5))
@@ -2716,6 +2736,9 @@ class AutosamplerPanel(utils.DevicePanel):
         else:
             wx.CallAfter(wx.MessageBox, error, 'Invalid well selected',
                 style=wx.OK|wx.ICON_ERROR)
+
+    def _on_move_plate_change(self, evt):
+        self._send_cmd(['move_plate_change', [self.name,], {}], False)
 
     def _on_move_needle_in(self, evt):
         self._move_needle_in()
