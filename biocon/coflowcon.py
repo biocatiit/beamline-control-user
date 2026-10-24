@@ -3721,7 +3721,7 @@ default_coflow_settings = {
                                         'ctrl_args': {}},
         'sheath_fm'                 : {'name': 'sheath', 'args': ['BFS', 'COM14'],
                                         'kwargs':{}},
-        'outlet_fm'                 : {'name': 'outlet', 'args': ['BFS', 'COM4'],
+        'outlet_fm'                 : {'name': 'outlet', 'args': ['BFS', 'COM5'],
                                         'kwargs':{}},
         'sheath_valve'              : {'name': 'Coflow Sheath',
                                         'args':['Cheminert', 'COM7'],
