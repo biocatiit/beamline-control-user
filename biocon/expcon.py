@@ -5372,7 +5372,7 @@ default_exposure_settings = {
         {'sc_chan': 4, 'name': 'I1', 'scale': 1, 'offset': 0, 'use_dark': False,
             'norm_time': False},
         ],},
-    'warnings'              : {'shutter' : False, 'col_vac' : {'check': True,
+    'warnings'              : {'shutter' : True, 'col_vac' : {'check': True,
         'thresh': 0.04}, 'guard_vac' : {'check': True, 'thresh': 0.04},
         'sample_vac': {'check': True, 'thresh': 0.04}, 'sc_vac':
         {'check': True, 'thresh':0.04}},
