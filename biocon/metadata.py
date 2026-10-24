@@ -393,10 +393,10 @@ class SAXSPanel(wx.Panel):
             self.af4_channel_choice.SetStringSelection(new_metadata['Channel:'])
 
         if 'Membrane:' in new_metadata:
-            self.af4_channel_choice.SetStringSelection(new_metadata['Membrane:'])
+            self.af4_membrane_choice.SetStringSelection(new_metadata['Membrane:'])
 
         if 'Spacer height [um]:' in new_metadata:
-            self.af4_channel_choice.SetStringSelection(new_metadata['Spacer height [um]:'])
+            self.af4_spacer_choice.SetStringSelection(new_metadata['Spacer height [um]:'])
 
 class MusclePanel(wx.Panel):
     def __init__(self, settings, *args, **kwargs):

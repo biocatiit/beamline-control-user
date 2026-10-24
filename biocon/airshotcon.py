@@ -162,13 +162,14 @@ class AirShotMotorPanel(utils.DevicePanel):
             except Exception:
                 valid = False
 
+        cur_pos = self.motor.position
         if auto_move and valid:
-            out_pos = self.motor.position + dist
-            in_pos = self.motor.position
+            out_pos = cur_pos + dist
+            in_pos = cur_pos
         else:
             # In case it still somehow tries to move it doesn't go anywhere
-            out_pos = self.motor.position
-            in_pos = self.motor.position
+            out_pos = cur_pos
+            in_pos = cur_pos
 
         return valid, auto_move, out_pos, in_pos, self.motor
 

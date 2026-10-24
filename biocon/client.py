@@ -178,6 +178,7 @@ class ControlClient(threading.Thread):
             else:
                 self.connect_error = 0
                 self.hb_scale = 1
+                self.timeout_event.clear()
 
             # logger.debug('Command response: %s', answer)
 
@@ -193,7 +194,6 @@ class ControlClient(threading.Thread):
                 ', '.join(['{}'.format(a) for a in device_cmd[1]]),
                 ', '.join(['{}:{}'.format(kw, item) for kw, item in device_cmd[2].items()])))
             logger.exception(msg)
-            self.connect_error += 1
             self._ping()
             if not self.timeout_event.is_set():
                 self.answer_queue.append(None)
@@ -278,6 +278,7 @@ class ControlClient(threading.Thread):
                     retry = False
                     self.connect_error = 0
                     self.hb_scale = 1
+                    self.timeout_event.clear()
                 else:
                     logger.error("Could not get a response from the server on ping")
 

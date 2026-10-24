@@ -197,11 +197,13 @@ class SerialComm(object):
             data = data.encode()
 
         out = ''
+        timeout = 1
+        start_time = time.monotonic()
         try:
             with self.ser as s:
                 s.write(data)
                 if get_response:
-                    while not out.endswith(term_char):
+                    while not out.endswith(term_char) and time.monotonic()-start_time<timeout:
                         if s.in_waiting > 0:
                             ret = s.read(s.in_waiting)
                             out += ret.decode('ascii')
@@ -2508,8 +2510,9 @@ class SSINextGenPump(Pump):
                     time.sleep(0.01)
 
                     if time.monotonic() - start > self.timeout:
-                        break
                         logger.error('Timed out waiting for pump %s to start', self.name)
+                        break
+
 
             self._flow_dir = 1
             ramp_thread = threading.Thread(target=self._ramp_flow, args=(self.flow_rate,
@@ -2526,8 +2529,8 @@ class SSINextGenPump(Pump):
                     time.sleep(0.01)
 
                     if time.monotonic() - start > self.timeout:
-                        break
                         logger.error('Timed out waiting for pump %s to start', self.name)
+                        break
 
                     self._flow_dir = 1
 
@@ -2544,8 +2547,8 @@ class SSINextGenPump(Pump):
                 self.get_status()
 
                 if time.monotonic() - start > self.timeout:
-                    break
                     logger.error('Timed out waiting for pump %s to start', self.name)
+                    break
 
                 self._flow_dir = 1
 
@@ -2573,8 +2576,8 @@ class SSINextGenPump(Pump):
                     self.get_status()
 
                     if time.monotonic() - start > self.timeout:
-                        break
                         logger.error('Timed out waiting for pump %s to stop', self.name)
+                        break
 
                     self.flow_rate = 0
                     self._flow_dir = 0
@@ -6234,7 +6237,7 @@ class PumpPanel(utils.DevicePanel):
                         pump_dir = 'Aspirate'
                     self._set_status_label(pump_dir.capitalize())
 
-                self._current_move_status = val
+                self._current_move_status = is_moving
 
             elif is_moving is not None and not is_moving and self._current_move_status:
                 wx.CallAfter(self.run_button.SetLabel, 'Start')

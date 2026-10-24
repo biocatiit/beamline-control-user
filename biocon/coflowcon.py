@@ -56,7 +56,10 @@ import utils
 
 class CoflowControl(object):
 
-    def __init__(self, name, device, settings={}):
+    def __init__(self, name, device, settings=None):
+        if settings is None:
+            settings = {}
+
         self.name = name
         self.device = device
 
@@ -638,7 +641,7 @@ class CoflowControl(object):
 
         else:
             logger.error('Failed to set {} position, no response from the '
-                'server.'.format(ret[1].replace('_', ' ')))
+                'server.'.format('sheath_valve'))
             success = False
 
         if success:
@@ -926,7 +929,7 @@ class CoflowControl(object):
                     if sheath_density < self.settings['air_density_thresh']:
                         self._sheath_air_error = True
 
-                    elif outlet_density < self.settings['air_density_thresh']:
+                    if outlet_density < self.settings['air_density_thresh']:
                         self._outlet_air_error = True
 
             if not self._terminate_monitor_flow.is_set():
@@ -1118,6 +1121,9 @@ class CoflowControl(object):
 
         return True
 
+    def set_outlet_pump_pressure(self, pressure):
+        self._send_pumpcmd(('set_pressure', (self.outlet_pump_name, pressure), {}))
+
     def _send_pumpcmd(self, cmd, response=False):
         self.coflow_pump_status_q.clear() #For now, do nothing with the status
         ret_val = utils.send_cmd(cmd, self.coflow_pump_cmd_q,
@@ -1295,6 +1301,7 @@ class CoflowCommThread(utils.CommManager):
             'get_buffer_info'       : self._get_buffer_info,
             'get_bc_time_remaining' : self._get_bc_time_remaining,
             'get_plot_data'         : self._get_plot_data,
+            'set_outlet_pressure'   : self._set_outlet_pressure
         }
 
         self._connected_devices = OrderedDict()
@@ -1694,6 +1701,20 @@ class CoflowCommThread(utils.CommManager):
         self._return_value((name, cmd, ret), comm_name)
 
         logger.debug("%s got plot data", name)
+
+    def _set_outlet_pressure(self, name, val, **kwargs):
+
+        logger.debug("%s setting outlet pump pressure to %s", name, val)
+
+        comm_name = kwargs.pop('comm_name', None)
+        cmd = kwargs.pop('cmd', None)
+
+        device = self._connected_devices[name]
+        device.set_outlet_pump_pressure(val)
+
+        self._return_value((name, cmd, True), comm_name)
+
+        logger.debug("%s outlet pump pressure changed", name)
 
     def _additional_abort(self):
         for name in self._connected_devices:
@@ -3236,6 +3257,12 @@ class CoflowPanel(utils.DevicePanel):
             self._send_cmd(stop_overflow_cmd, get_response=False)
             state = self._get_automator_state()
 
+        elif cmd_name == 'set_outlet_pressure':
+            pressure = float(cmd_kwargs['pressure'])
+            set_pressure_cmd = ['set_outlet_pressure', [self.name, pressure], {}]
+            self._send_cmd(set_pressure_cmd, get_response=False)
+            state = self._get_automator_state()
+
         elif cmd_name == 'full_status':
             if self._status.lower() == 'coflow on':
                 status = 'Flowing'
@@ -3721,7 +3748,7 @@ default_coflow_settings = {
                                         'ctrl_args': {}},
         'sheath_fm'                 : {'name': 'sheath', 'args': ['BFS', 'COM14'],
                                         'kwargs':{}},
-        'outlet_fm'                 : {'name': 'outlet', 'args': ['BFS', 'COM4'],
+        'outlet_fm'                 : {'name': 'outlet', 'args': ['BFS', 'COM5'],
                                         'kwargs':{}},
         'sheath_valve'              : {'name': 'Coflow Sheath',
                                         'args':['Cheminert', 'COM7'],

@@ -99,59 +99,61 @@ class MonoAutoTune(object):
         return val
 
     def optimize_intensity(self):
-        self.ct_time_pv.put(self.settings['optimize_ct_time'], wait=True)
-        self.i0_shutter_pv.put(0, wait=True)
-        time.sleep(0.2) #Waits for shutter to open
+        try:
+            self.ct_time_pv.put(self.settings['optimize_ct_time'], wait=True)
+            self.i0_shutter_pv.put(0, wait=True)
+            time.sleep(0.2) #Waits for shutter to open
 
-        v_start = self.ao_pv.get()
-        i_start = self._measure_intensity()
+            v_start = self.ao_pv.get()
+            i_start = self._measure_intensity()
 
-        logger.info('Starting optimizing I0 intensity. Initial: %s cts/s at %s V',
-            i_start/self.settings['optimize_ct_time'], v_start)
+            logger.info('Starting optimizing I0 intensity. Initial: %s cts/s at %s V',
+                i_start/self.settings['optimize_ct_time'], v_start)
 
-        logger.debug("Initial step %s V", self.step_start)
+            logger.debug("Initial step %s V", self.step_start)
 
-        i_best, v_best, improved = self._search_up(self.step_start, i_start, v_start)
+            i_best, v_best, improved = self._search_up(self.step_start, i_start, v_start)
 
-        logger.debug('Search improved: %s, V new: %s V, I0 new: %s ct/s',
-                improved, v_best, i_best/self.settings['optimize_ct_time'])
-
-        if not improved:
-            i_best, v_best, improved = self._search_down(self.step_start, i_start, v_start)
-            search_dir = 'up'
             logger.debug('Search improved: %s, V new: %s V, I0 new: %s ct/s',
-                improved, v_best, i_best/self.settings['optimize_ct_time'])
-        else:
-            search_dir = 'down'
+                    improved, v_best, i_best/self.settings['optimize_ct_time'])
 
-        logger.debug('Initial search direction: %s', search_dir)
-
-        step = self.step_start
-
-        while step > self.step_min:
-            step = max(self.step_min, step/self.step_scale)
-
-            logger.debug('Step %s V', step)
-
-            if step == self.step_min:
-                final = True
-            else:
-                final = False
-
-            if search_dir == 'up':
-                i_best, v_best, improved = self._search_up(step, i_best, v_best, final)
-                search_dir = 'down'
-            else:
-                i_best, v_best, improved = self._search_down(step, i_best, v_best, final)
+            if not improved:
+                i_best, v_best, improved = self._search_down(self.step_start, i_start, v_start)
                 search_dir = 'up'
+                logger.debug('Search improved: %s, V new: %s V, I0 new: %s ct/s',
+                    improved, v_best, i_best/self.settings['optimize_ct_time'])
+            else:
+                search_dir = 'down'
 
-            logger.debug('Search improved: %s, V new: %s V, I0 new: %s ct/s',
-                improved, v_best, i_best/self.settings['optimize_ct_time'])
+            logger.debug('Initial search direction: %s', search_dir)
 
-        self.i0_shutter_pv.put(1)
+            step = self.step_start
 
-        logger.info('Finished optimizing I0 intensity. Final: %s cts/s at %s V',
-            i_best/self.settings['optimize_ct_time'], v_best)
+            while step > self.step_min:
+                step = max(self.step_min, step/self.step_scale)
+
+                logger.debug('Step %s V', step)
+
+                if step == self.step_min:
+                    final = True
+                else:
+                    final = False
+
+                if search_dir == 'up':
+                    i_best, v_best, improved = self._search_up(step, i_best, v_best, final)
+                    search_dir = 'down'
+                else:
+                    i_best, v_best, improved = self._search_down(step, i_best, v_best, final)
+                    search_dir = 'up'
+
+                logger.debug('Search improved: %s, V new: %s V, I0 new: %s ct/s',
+                    improved, v_best, i_best/self.settings['optimize_ct_time'])
+
+            logger.info('Finished optimizing I0 intensity. Final: %s cts/s at %s V',
+                i_best/self.settings['optimize_ct_time'], v_best)
+
+        finally:
+            self.i0_shutter_pv.put(1)
 
     def _search_up(self, step, i_start, v_start, final=False):
         i_new = np.inf
@@ -180,7 +182,7 @@ class MonoAutoTune(object):
             # logger.debug(i_prev)
             # logger.debug(v_new)
 
-        if v_new == v_start + step:
+        if abs(v_new - (v_start + step)) < 1e-6:
             improved = False
             i_ret = i_start
             v_ret = v_start
@@ -227,7 +229,7 @@ class MonoAutoTune(object):
             # logger.debug(i_prev)
             # logger.debug(v_new)
 
-        if v_new == v_start - step:
+        if abs(v_new - (v_start - step)) < 1e-6:
             improved = False
             i_ret = i_start
             v_ret = v_start
