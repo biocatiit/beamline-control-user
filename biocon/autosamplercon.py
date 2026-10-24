@@ -2214,6 +2214,7 @@ class AutosamplerPanel(utils.DevicePanel):
             self.move_needle_in,
             self.move_needle_out,
             self.clean_btn,
+            self.clean_in_cell_btn,
             self.move_to_inject,
             self.inject_sample,
             self.aspirate_sample,
@@ -3530,16 +3531,17 @@ default_autosampler_settings = {
 
                                 ],
     'clean_in_cell_seq'     : [
-                                ('clean1', 'dispense', 1, 0.3), #A set of (a, b, c, d) a is the valve position, b is the command, and c and d are input params for the command
-                                ('clean3', 'dispense', 1, 0.3),
-                                ('clean1', 'dispense', 1, 0.3),
-                                ('clean2', 'dispense', 1, 0.3), # rate, volume in ml/min and ml
-                                ('clean4', 'wait', 90, 0), #wait time in s, N/A
-                                ('clean5', 'move_to_clean', 0, 0) #Move to clean position, N/A, N/A
-                                ('clean5', 'move_y', 0, 0), #distance in mm relative to y position
-                                ('clean5', 'move_x', 0, 0), #distance in mm relative to x position
+                                ('clean1', 'dispense', 2, 1.2), #A set of (a, b, c, d) a is the valve position, b is the command, and c and d are input params for the command
+                                ('clean3', 'dispense', 2, 1.2),
+                                ('clean1', 'dispense', 2, 1.2),
+                                ('clean2', 'dispense', 1, 1.5), # rate, volume in ml/min and ml
+                                ('clean5', 'move_y', 20, 0), #distance in mm relative to y position
+                                ('clean4', 'wait', 120, 0), #wait time in s, N/A
+                                ('clean5', 'move_to_clean', 0, 0), #Move to clean position, N/A, N/A
+                                ('clean5', 'move_y', 31.2, 0), #distance in mm relative to y position
+                                ('clean5', 'move_x', 4.75, 0), #distance in mm relative to x position
                                 ('clean4', 'wait', 10, 0),
-                                ('clean5', 'move_x', 0, 0), #distance in mm relative to x position
+                                ('clean5', 'move_x', -4.75, 0), #distance in mm relative to x position
 
                                 ],
     'pump_rates'            : {'sample': (0.1, 0.1), 'buffer': (0.05, 0.1), 'purge': (1, 1)}, # (refill, infuse) rates in ml/min
