@@ -1185,7 +1185,7 @@ class EPICSSRSDG645(object):
         self.burst_active_pv.put(1, wait=True)
 
     def stop(self):
-        self.burst_active_pv.put(0)
+        self.burst_active_pv.put(0, wait=True)
         """
         Do I need more here?
         """
@@ -1264,7 +1264,7 @@ class EPICSPVWrapper(object):
         self.pv.put(val, wait=wait)
 
     def read(self):
-        self.pv.get()
+        return self.pv.get()
 
 class Attenuator(object):
     """

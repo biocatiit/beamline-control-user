@@ -3368,7 +3368,7 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
                     elif flow_path == 2:
                         stop_before_purge = stop_flow2
                         stop_after_purge = stop_flow2
-                        restore_flow_after_purge = restore_flow1
+                        restore_flow_after_purge = restore_flow2
 
                     self.purge_flow_path(flow_path, purge_volume, purge_rate,
                         purge_accel, restore_flow_after_purge, switch_with_sample,
@@ -6472,8 +6472,8 @@ class HPLCPanel(utils.DevicePanel):
                 and default_sp_method != 'None'):
                 default_sp_method = os.path.splitext(default_sp_method)[0]+'.smx'
 
-                if default_method not in default_sample_settings['all_sample_methods']:
-                    default_method ='.\\{}'.format(default_method)
+                if default_sp_method not in default_sample_settings['all_sample_methods']:
+                    default_sp_method ='.\\{}'.format(default_sp_method)
             else:
                 default_sp_method = 'None'
 

@@ -56,7 +56,10 @@ import utils
 
 class CoflowControl(object):
 
-    def __init__(self, name, device, settings={}):
+    def __init__(self, name, device, settings=None):
+        if settings is None:
+            settings = {}
+
         self.name = name
         self.device = device
 
@@ -638,7 +641,7 @@ class CoflowControl(object):
 
         else:
             logger.error('Failed to set {} position, no response from the '
-                'server.'.format(ret[1].replace('_', ' ')))
+                'server.'.format('sheath_valve'))
             success = False
 
         if success:
@@ -926,7 +929,7 @@ class CoflowControl(object):
                     if sheath_density < self.settings['air_density_thresh']:
                         self._sheath_air_error = True
 
-                    elif outlet_density < self.settings['air_density_thresh']:
+                    if outlet_density < self.settings['air_density_thresh']:
                         self._outlet_air_error = True
 
             if not self._terminate_monitor_flow.is_set():
