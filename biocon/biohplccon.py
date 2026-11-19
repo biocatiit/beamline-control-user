@@ -884,7 +884,7 @@ class AgilentHPLCStandard(AgilentHPLC):
         if ((flow_path == 1 and (self._purging_flow1 or self._equil_flow1)) or
             (flow_path == 2 and (self._purging_flow2 or self._equil_flow2))):
             logger.error('HPLC %s flow path %s is already equilibrating or '
-                'puring, so a new equilibration cannot be started', self.name,
+                'purging, so a new equilibration cannot be started', self.name,
                 flow_path)
             success = False
 
@@ -896,7 +896,7 @@ class AgilentHPLCStandard(AgilentHPLC):
             success = False
 
         elif (flow_path == self._active_flow_path and self._switching_mals_valve):
-            logger.error('HPLC is switching the MALS valve, so a new '
+            logger.error('HPLC %s is switching the MALS valve, so a new '
                 'equilibration on the active flow path cannot be started', self.name)
             success = False
 
@@ -1215,7 +1215,7 @@ class AgilentHPLCStandard(AgilentHPLC):
             success = False
 
         elif (flow_path == self._active_flow_path and self._switching_mals_valve):
-            logger.error('HPLC is switching the MALS valve, so a new '
+            logger.error('HPLC %s is switching the MALS valve, so a new '
                 'purge on the active flow path cannot be started', self.name)
             success = False
 
@@ -2736,7 +2736,7 @@ class AgilentHPLCStandard(AgilentHPLC):
         """
         if self._switching_flow_path:
             self._abort_switch.set()
-            logger.info('HPLC %s stoping switching of active flow path', self.name)
+            logger.info('HPLC %s stopping switching of active flow path', self.name)
 
     def stop_switch_buffer_bottle(self, flow_path):
         """
@@ -3231,7 +3231,7 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
                 'is already underway.', self.name)
             success = False
         elif self._switching_mals_valve:
-            logger.error('HPLC is switching the MALS valve, so the flow path '
+            logger.error('HPLC %s is switching the MALS valve, so the flow path '
                 'cannot be switched.', self.name)
             success = False
         elif (self._switching_buffer_bottle1 or self._switching_buffer_bottle2):
@@ -3533,7 +3533,7 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
         """
         if self._switching_flow_path:
             self._abort_switch.set()
-            logger.info('HPLC %s stoping switching of active flow path', self.name)
+            logger.info('HPLC %s stopping switching of active flow path', self.name)
 
     def stop_all(self):
         """
@@ -4375,7 +4375,7 @@ class HPLCCommThread(utils.CommManager):
 
         self._return_value((name, cmd, True), comm_name)
 
-        logger.info("Stopped %s all actions immeidately", name)
+        logger.info("Stopped %s all actions immediately", name)
 
     def _stop_pump1(self, name, **kwargs):
         logger.debug("Stopping %s pump1 actions", name)
@@ -4401,7 +4401,7 @@ class HPLCCommThread(utils.CommManager):
 
         self._return_value((name, cmd, True), comm_name)
 
-        logger.info("Stopped %s pump1 actions immeidately", name)
+        logger.info("Stopped %s pump1 actions immediately", name)
 
     def _stop_pump2(self, name, **kwargs):
         logger.debug("Stopping %s pump2 actions", name)
@@ -4427,7 +4427,7 @@ class HPLCCommThread(utils.CommManager):
 
         self._return_value((name, cmd, True), comm_name)
 
-        logger.info("Stopped %s pump2 actions immeidately", name)
+        logger.info("Stopped %s pump2 actions immediately", name)
 
     def _abort_current_run(self, name, **kwargs):
         logger.debug("Aborting %s current run", name)
