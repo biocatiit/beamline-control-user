@@ -5028,7 +5028,7 @@ class ExpPanel(wx.Panel):
             elif cmd_kwargs['item_type'] == 'exposure':
                 exp_type = cmd_kwargs['exp_type']
 
-            elif cmd_kwargs['item_type'] == 'batch_sample':
+            elif cmd_kwargs['item_type'] == 'batch_sample' or cmd_kwargs['item_type'] == 'batch_no_coflow_sample':
                 exp_type = 'Batch mode SAXS'
 
             elif cmd_kwargs['item_type'] == 'af4_sample':

@@ -2475,13 +2475,15 @@ def create_info_sizer(layout_settings, top_level, parent, read_only=False):
             top_sizer.Add(labeltxt, (row, 0), flag=wx.ALIGN_CENTER_VERTICAL)
             top_sizer.Add(ctrl, (row, 1), flag=wx.ALIGN_CENTER_VERTICAL)
 
-        elif itemType == 'text' or itemType == 'int' or itemType =='float':
+        elif itemType == 'text' or itemType == 'int' or itemType =='float' or itemType == 'float_neg':
             labeltxt = wx.StaticText(parent, -1, label)
 
             if itemType == 'int':
                 valid = utils.CharValidator('int')
             elif itemType == 'float':
                 valid=utils.CharValidator('float')
+            elif itemType == 'float_neg':
+                valid=utils.CharValidator('float_neg')
             else:
                 valid = None
 
@@ -2945,7 +2947,7 @@ def make_batch_no_coflow_saxs_info_panel(top_level, parent, ctrl_ids, cmd_sizer_
         'draw_rate'     : ['Sample draw rate [ul/min]:', ctrl_ids['draw_rate'], 'float'],
         'dwell_time'    : ['Wait time after draw [s]:', ctrl_ids['dwell_time'], 'float'],
         'rate'          : ['Injection rate [ul/min]:', ctrl_ids['rate'], 'float'],
-        'pressure'      : ['Outlet pump pressure [mbar]:', ctrl_ids['pressure'], 'float'],
+        'pressure'      : ['Outlet pump pressure [mbar]:', ctrl_ids['pressure'], 'float_neg'],
         'start_delay'   : ['Delay after trigger [s]:', ctrl_ids['start_delay'], 'float'],
         'end_delay'     : ['Delay after injection [s]:', ctrl_ids['end_delay'], 'float'],
         }
