@@ -2934,9 +2934,9 @@ class AgilentHPLC2Pumps(AgilentHPLCStandard):
             }
 
         self._mals_positions = {
-                1   : True,
-                2   : False,
-                }
+            1   : False,
+            2   : True,
+            }
 
         self._active_flow_path = None
         self._purging_flow1 = False
@@ -7788,6 +7788,11 @@ class SwitchDialog(wx.Dialog):
 
         self.SetSize(self._FromDIP((325, 325)))
 
+        if 'mals_valve_pos' in settings and settings['mals_valve_pos'] is not None:
+            self._use_mals = True
+        else:
+            self._use_mals = False
+
         self._create_layout(settings)
 
         self.Fit()
@@ -7863,7 +7868,7 @@ class SwitchDialog(wx.Dialog):
             flag=wx.ALIGN_CENTER_VERTICAL)
         purge_sizer1.Add(self._purge_accel_ctrl, flag=wx.ALIGN_CENTER_VERTICAL)
 
-        if 'mals_valve_pos' in settings:
+        if self._use_mals:
             self._mals_valve_ctrl = wx.Choice(parent, choices=['1', '2'])
             self._mals_valve_ctrl.SetStringSelection(str(settings['mals_valve_pos']))
 
@@ -7880,7 +7885,7 @@ class SwitchDialog(wx.Dialog):
         top_sizer.Add(purge_sizer1, flag=wx.LEFT|wx.RIGHT|wx.BOTTOM,
             border=self._FromDIP(5))
 
-        if 'mals_valve_pos' in settings:
+        if self._use_mals:
             top_sizer.Add(mals_sizer, flag=wx.LEFT|wx.RIGHT|wx.BOTTOM,
             border=self._FromDIP(5))
 
@@ -7912,7 +7917,7 @@ class SwitchDialog(wx.Dialog):
             'purge_active'              : purge_active,
             }
 
-        if 'mals_valve_pos' in self._input_settings:
+        if self._use_mals:
             mals_valve_pos = int(self._mals_valve_ctrl.GetStringSelection())
             settings['mals_valve_pos'] = mals_valve_pos
 
