@@ -333,7 +333,7 @@ default_airshot_settings = {
             'default_dist'      : -7.0, # Default move distance
             }},
         {'name': 'Air Outboard', 'args': [], 'kwargs': {
-            'motor'             : {'name': 'air_outboard', 'args': ['18ID_DMC_E02:14'],
+            'motor'             : {'name': 'air_outboard', 'args': ['18ID_DMC_E05:38'],
                                         'kwargs': {}},
             'default_dist'      : -7.0, # Default move distance
             }},
